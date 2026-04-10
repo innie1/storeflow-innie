@@ -5,6 +5,7 @@ import Dashboard from '@/components/Dashboard';
 import Inventory from '@/components/Inventory';
 import Sales from '@/components/Sales';
 import SalesHistory from '@/components/SalesHistory';
+import ReceiptScanner from '@/components/ReceiptScanner';
 import { ToastContainer } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
@@ -19,6 +20,7 @@ export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
   const [tab, setTab] = useState<TabId>('dashboard');
   const [filterLowStock, setFilterLowStock] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const handleNavigate = useCallback((targetTab: TabId, lowStock?: boolean) => {
     setTab(targetTab);
@@ -46,6 +48,12 @@ export default function Index() {
           <p className="text-xs text-muted-foreground">{store.storeName}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowScanner(true)}
+            className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors font-display font-semibold"
+          >
+            📷 Scan
+          </button>
           <span className="text-xs text-muted-foreground font-mono">{store.accessCode}</span>
           <button onClick={handleLock} className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
             🔒 Lock
@@ -85,6 +93,15 @@ export default function Index() {
           ))}
         </div>
       </nav>
+
+      {/* Receipt Scanner Modal */}
+      {showScanner && (
+        <ReceiptScanner
+          store={store}
+          onUpdate={setStore}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
 
       <ToastContainer />
       <InstallPrompt />
