@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { updateProduct, addProduct, recordSale } from '@/lib/store-data';
+import { updateProduct, addProduct, recordSale, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 
