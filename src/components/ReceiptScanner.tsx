@@ -109,9 +109,8 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
       stocked++;
     }
 
-    // Save
-    const { saveStore } = require('@/lib/store-data');
     saveStore(updated);
+    onUpdate(updated);
     onUpdate(updated);
     showToast(`${stocked} items stocked`);
     onClose();
