@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { StoreData } from '@/types/store';
+import { StoreData, Sale } from '@/types/store';
 import { clearSales } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
+import SaleReceipt from '@/components/SaleReceipt';
 
 interface SalesHistoryProps {
   store: StoreData;
@@ -10,6 +11,7 @@ interface SalesHistoryProps {
 
 export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   const [search, setSearch] = useState('');
+  const [viewReceipt, setViewReceipt] = useState<Sale | null>(null);
 
   const filtered = search
     ? store.sales.filter(s => s.productName.toLowerCase().includes(search.toLowerCase()))
@@ -39,7 +41,11 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
 
       <div className="space-y-2">
         {filtered.map(s => (
-          <div key={s.id} className="p-3 rounded-lg bg-card border border-border flex flex-wrap items-center gap-3">
+          <div
+            key={s.id}
+            onClick={() => setViewReceipt(s)}
+            className="p-3 rounded-lg bg-card border border-border flex flex-wrap items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors"
+          >
             <div className="flex-1 min-w-[150px]">
               <p className="font-display font-semibold text-sm">{s.productName}</p>
               <p className="text-xs text-muted-foreground">{new Date(s.date).toLocaleString()}</p>
@@ -51,6 +57,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             <div className="text-success text-sm font-bold">
               +₦{s.profit.toLocaleString()}
             </div>
+            <span className="text-muted-foreground text-xs">🧾</span>
           </div>
         ))}
         {filtered.length === 0 && (
@@ -59,6 +66,10 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
           </p>
         )}
       </div>
+
+      {viewReceipt && (
+        <SaleReceipt store={store} sale={viewReceipt} onClose={() => setViewReceipt(null)} />
+      )}
     </div>
   );
 }

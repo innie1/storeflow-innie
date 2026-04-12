@@ -99,7 +99,7 @@ export default function Index() {
         )}
         {tab === 'sales' && <Sales store={store} onUpdate={setStore} />}
         {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
-        {tab === 'settings' && <Settings store={store} onLock={handleLock} />}
+        {tab === 'settings' && <Settings store={store} onUpdate={setStore} onLock={handleLock} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">

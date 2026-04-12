@@ -18,12 +18,20 @@ export interface Sale {
   date: string;
 }
 
+export interface StoreProfile {
+  storeType: string;
+  location: string;
+  phone: string;
+  email: string;
+}
+
 export interface StoreData {
   storeName: string;
   accessCode: string;
   products: Product[];
   sales: Sale[];
   createdAt: string;
+  profile?: StoreProfile;
 }
 
 export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'settings';
