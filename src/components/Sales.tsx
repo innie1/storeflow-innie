@@ -11,8 +11,8 @@ interface SalesProps {
 export default function Sales({ store, onUpdate }: SalesProps) {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [search, setSearch] = useState('');
 
-  // Sort by top sellers
   const topSellerIds = new Set(getTopSellers(store, 100).map(t => {
     const p = store.products.find(p => p.name === t.name);
     return p?.id;
@@ -23,6 +23,11 @@ export default function Sales({ store, onUpdate }: SalesProps) {
     const bTop = topSellerIds.has(b.id) ? 0 : 1;
     return aTop - bTop || a.name.localeCompare(b.name);
   }).filter(p => p.quantity > 0);
+
+  const filteredProducts = sortedProducts.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.category.toLowerCase().includes(search.toLowerCase())
+  );
 
   const selected = store.products.find(p => p.id === selectedProduct);
 
@@ -35,6 +40,7 @@ export default function Sales({ store, onUpdate }: SalesProps) {
     onUpdate(updated);
     setSelectedProduct('');
     setQuantity('1');
+    setSearch('');
     showToast(`Sale recorded: ${selected?.name} × ${qty}`);
   };
 
@@ -42,6 +48,16 @@ export default function Sales({ store, onUpdate }: SalesProps) {
     <div className="animate-fade-in max-w-md mx-auto">
       <div className="bg-card border border-border rounded-xl p-5 space-y-4">
         <h3 className="font-display font-bold text-lg text-center">Record Sale</h3>
+
+        {/* Search */}
+        <div>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="🔍 Search products..."
+            className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+          />
+        </div>
         
         <div>
           <label className="block text-sm text-muted-foreground mb-1">Product</label>
@@ -51,10 +67,13 @@ export default function Sales({ store, onUpdate }: SalesProps) {
             className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground focus:outline-none focus:border-primary text-sm"
           >
             <option value="">Select product...</option>
-            {sortedProducts.map(p => (
+            {filteredProducts.map(p => (
               <option key={p.id} value={p.id}>{p.name} (₦{p.sellingPrice.toLocaleString()} — {p.quantity} left)</option>
             ))}
           </select>
+          {search && (
+            <p className="text-xs text-muted-foreground mt-1">{filteredProducts.length} result{filteredProducts.length !== 1 ? 's' : ''}</p>
+          )}
         </div>
 
         <div>
