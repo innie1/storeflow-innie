@@ -26,4 +26,4 @@ export interface StoreData {
   createdAt: string;
 }
 
-export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history';
+export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'settings';

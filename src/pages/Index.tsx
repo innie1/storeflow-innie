@@ -1,11 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { StoreData, TabId } from '@/types/store';
+import { loadStore } from '@/lib/store-data';
 import StoreAccess from '@/components/StoreAccess';
 import Dashboard from '@/components/Dashboard';
 import Inventory from '@/components/Inventory';
 import Sales from '@/components/Sales';
 import SalesHistory from '@/components/SalesHistory';
 import ReceiptScanner from '@/components/ReceiptScanner';
+import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 import { ToastContainer } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
@@ -14,6 +16,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
   { id: 'history', label: 'History', icon: '📋' },
+  { id: 'settings', label: 'Settings', icon: '👤' },
 ];
 
 export default function Index() {
@@ -22,17 +25,35 @@ export default function Index() {
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
+  // Auto-restore session on mount
+  useEffect(() => {
+    const code = getActiveSession();
+    if (code) {
+      const restored = loadStore(code);
+      if (restored) setStore(restored);
+      else clearSession();
+    }
+  }, []);
+
+  const handleStoreLoaded = useCallback((s: StoreData) => {
+    setStore(s);
+    saveSession(s.accessCode);
+  }, []);
+
   const handleNavigate = useCallback((targetTab: TabId, lowStock?: boolean) => {
     setTab(targetTab);
     if (lowStock) setFilterLowStock(true);
   }, []);
 
-  const handleLock = () => setStore(null);
+  const handleLock = () => {
+    clearSession();
+    setStore(null);
+  };
 
   if (!store) {
     return (
       <>
-        <StoreAccess onStoreLoaded={setStore} />
+        <StoreAccess onStoreLoaded={handleStoreLoaded} />
         <ToastContainer />
         <InstallPrompt />
       </>
@@ -41,7 +62,6 @@ export default function Index() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
       <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-lg text-primary">StoreFlow</h1>
@@ -54,14 +74,12 @@ export default function Index() {
           >
             📷 Scan
           </button>
-          <span className="text-xs text-muted-foreground font-mono">{store.accessCode}</span>
           <button onClick={handleLock} className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
             🔒 Lock
           </button>
         </div>
       </header>
 
-      {/* Content */}
       <main className="flex-1 p-4 pb-20 container max-w-3xl">
         {tab === 'dashboard' && <Dashboard store={store} onNavigate={handleNavigate} />}
         {tab === 'inventory' && (
@@ -74,9 +92,9 @@ export default function Index() {
         )}
         {tab === 'sales' && <Sales store={store} onUpdate={setStore} />}
         {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
+        {tab === 'settings' && <Settings store={store} onLock={handleLock} />}
       </main>
 
-      {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
         <div className="flex justify-around max-w-3xl mx-auto">
           {TABS.map(t => (
@@ -94,7 +112,6 @@ export default function Index() {
         </div>
       </nav>
 
-      {/* Receipt Scanner Modal */}
       {showScanner && (
         <ReceiptScanner
           store={store}
