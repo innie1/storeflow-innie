@@ -16,7 +16,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
   { id: 'history', label: 'History', icon: '📋' },
-  { id: 'settings', label: 'Settings', icon: '👤' },
+];
 ];
 
 export default function Index() {
@@ -76,6 +76,14 @@ export default function Index() {
           </button>
           <button onClick={handleLock} className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
             🔒 Lock
+          </button>
+          <button
+            onClick={() => setTab('settings')}
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
+              tab === 'settings' ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
+            }`}
+          >
+            👤
           </button>
         </div>
       </header>
