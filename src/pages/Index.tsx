@@ -17,7 +17,6 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'sales', label: 'Sales', icon: '💰' },
   { id: 'history', label: 'History', icon: '📋' },
 ];
-];
 
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
