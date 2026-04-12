@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { StoreData } from '@/types/store';
+import { useState, useRef } from 'react';
+import { StoreData, Sale } from '@/types/store';
 import { recordSale, getTopSellers } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
+import { supabase } from '@/integrations/supabase/client';
+import SaleReceipt from '@/components/SaleReceipt';
 
 interface SalesProps {
   store: StoreData;
@@ -12,6 +14,10 @@ export default function Sales({ store, onUpdate }: SalesProps) {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [search, setSearch] = useState('');
+  const [lastSale, setLastSale] = useState<Sale | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanResults, setScanResults] = useState<{ name: string; quantity: number }[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const topSellerIds = new Set(getTopSellers(store, 100).map(t => {
     const p = store.products.find(p => p.name === t.name);
@@ -31,12 +37,23 @@ export default function Sales({ store, onUpdate }: SalesProps) {
 
   const selected = store.products.find(p => p.id === selectedProduct);
 
+  const doSale = (productId: string, qty: number): Sale | null => {
+    const product = store.products.find(p => p.id === productId);
+    if (!product || product.quantity < qty) return null;
+    const updated = recordSale(store, productId, qty);
+    onUpdate(updated);
+    // Return the latest sale
+    return updated.sales[0];
+  };
+
   const handleQuickSell = (productId: string) => {
     const product = store.products.find(p => p.id === productId);
     if (!product || product.quantity < 1) return showToast('Out of stock', 'error');
-    const updated = recordSale(store, productId, 1);
-    onUpdate(updated);
-    showToast(`Quick sale: ${product.name} × 1`);
+    const sale = doSale(productId, 1);
+    if (sale) {
+      setLastSale(sale);
+      showToast(`Quick sale: ${product.name} × 1`);
+    }
   };
 
   const handleSale = () => {
@@ -44,16 +61,96 @@ export default function Sales({ store, onUpdate }: SalesProps) {
     const qty = Number(quantity);
     if (qty < 1) return showToast('Invalid quantity', 'error');
     if (selected && qty > selected.quantity) return showToast('Not enough stock', 'error');
-    const updated = recordSale(store, selectedProduct, qty);
-    onUpdate(updated);
-    setSelectedProduct('');
-    setQuantity('1');
-    setSearch('');
-    showToast(`Sale recorded: ${selected?.name} × ${qty}`);
+    const sale = doSale(selectedProduct, qty);
+    if (sale) {
+      setLastSale(sale);
+      setSelectedProduct('');
+      setQuantity('1');
+      setSearch('');
+      showToast(`Sale recorded: ${selected?.name} × ${qty}`);
+    }
+  };
+
+  // Scan to sell
+  const handleScanToSell = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return showToast('Upload an image', 'error');
+
+    setScanning(true);
+    setScanResults([]);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const { data, error } = await supabase.functions.invoke('scan-receipt', {
+        body: { imageBase64: base64 },
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.items?.length) {
+        showToast('No items found', 'error');
+        return;
+      }
+
+      // Match scanned items to inventory and sell
+      let updated = store;
+      let sold = 0;
+      for (const item of data.items) {
+        const match = updated.products.find(
+          p => p.name.toLowerCase() === item.name.toLowerCase()
+        );
+        if (match && match.quantity >= (item.quantity || 1)) {
+          updated = recordSale(updated, match.id, item.quantity || 1);
+          sold++;
+        }
+      }
+
+      if (sold > 0) {
+        onUpdate(updated);
+        setLastSale(updated.sales[0]);
+        showToast(`${sold} items sold from scan`);
+      } else {
+        showToast('No matching products in stock', 'error');
+      }
+    } catch (err: any) {
+      showToast('Scan failed: ' + (err.message || ''), 'error');
+    } finally {
+      setScanning(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
   };
 
   return (
-    <div className="animate-fade-in max-w-md mx-auto">
+    <div className="animate-fade-in max-w-md mx-auto space-y-4">
+      {/* Scan to Sell */}
+      <div className="bg-card border border-border rounded-xl p-4">
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={scanning}
+          className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary font-display font-semibold hover:bg-primary/20 transition-colors disabled:opacity-50"
+        >
+          {scanning ? (
+            <span className="animate-pulse">Scanning...</span>
+          ) : (
+            <>📷 Scan Item to Sell</>
+          )}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleScanToSell}
+          className="hidden"
+        />
+        <p className="text-xs text-muted-foreground text-center mt-2">Upload a receipt/item image to auto-sell matching products</p>
+      </div>
+
+      {/* Manual Sale */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-4">
         <h3 className="font-display font-bold text-lg text-center">Record Sale</h3>
 
@@ -141,6 +238,15 @@ export default function Sales({ store, onUpdate }: SalesProps) {
           Record Sale
         </button>
       </div>
+
+      {/* Receipt Modal */}
+      {lastSale && (
+        <SaleReceipt
+          store={store}
+          sale={lastSale}
+          onClose={() => setLastSale(null)}
+        />
+      )}
     </div>
   );
 }
