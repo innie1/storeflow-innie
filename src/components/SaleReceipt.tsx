@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { StoreData, Sale } from '@/types/store';
 
 interface SaleReceiptProps {
@@ -9,17 +10,7 @@ interface SaleReceiptProps {
 export default function SaleReceipt({ store, sale, onClose }: SaleReceiptProps) {
   const profile = store.profile;
   const date = new Date(sale.date);
-
-  const handleShare = async () => {
-    const text = generateReceiptText();
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: `Receipt - ${store.storeName}`, text });
-      } catch { /* cancelled */ }
-    } else {
-      await navigator.clipboard.writeText(text);
-    }
-  };
+  const [buyerPhone, setBuyerPhone] = useState('');
 
   const generateReceiptText = () => {
     let receipt = `==============================\n`;
@@ -39,6 +30,25 @@ export default function SaleReceipt({ store, sale, onClose }: SaleReceiptProps) 
     receipt += `==============================\n`;
     receipt += `  Thank you for your patronage!\n`;
     return receipt;
+  };
+
+  const handleShare = async () => {
+    const text = generateReceiptText();
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Receipt - ${store.storeName}`, text });
+      } catch { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
+  };
+
+  const handleWhatsAppShare = () => {
+    if (!buyerPhone) return;
+    const text = encodeURIComponent(generateReceiptText());
+    const phone = buyerPhone.replace(/\D/g, ''); // Remove non-digits
+    const whatsappUrl = `https://wa.me/${phone}?text=${text}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   return (
@@ -84,17 +94,36 @@ export default function SaleReceipt({ store, sale, onClose }: SaleReceiptProps) 
           <p className="text-center text-muted-foreground">Thank you for your patronage! 🙏</p>
         </div>
 
+        {/* Buyer Phone Input for WhatsApp */}
+        <div className="mt-4">
+          <label className="block text-sm text-muted-foreground mb-1.5">Buyer&apos;s WhatsApp Number</label>
+          <input
+            type="tel"
+            value={buyerPhone}
+            onChange={e => setBuyerPhone(e.target.value)}
+            placeholder="e.g. +2348012345678"
+            className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+          />
+        </div>
+
         {/* Actions */}
-        <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="grid grid-cols-3 gap-2 mt-4">
           <button
             onClick={handleShare}
-            className="p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity text-sm"
+            className="p-3 rounded-lg bg-surface-2 border border-border text-foreground font-display font-semibold hover:bg-surface-3 transition-colors text-xs"
           >
-            📤 Share Receipt
+            📤 Share
+          </button>
+          <button
+            onClick={handleWhatsAppShare}
+            disabled={!buyerPhone}
+            className="p-3 rounded-lg bg-success text-success-foreground font-display font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+          >
+            💬 WhatsApp
           </button>
           <button
             onClick={onClose}
-            className="p-3 rounded-lg bg-surface-2 border border-border text-foreground font-display font-semibold hover:bg-surface-3 transition-colors text-sm"
+            className="p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity text-xs"
           >
             ✕ Close
           </button>
