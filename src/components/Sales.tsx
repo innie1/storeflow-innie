@@ -59,7 +59,7 @@ export default function Sales({ store, onUpdate }: SalesProps) {
   const handleSale = () => {
     if (!selectedProduct) return showToast('Select a product', 'error');
     const qty = Number(quantity);
-    if (qty < 1) return showToast('Invalid quantity', 'error');
+    if (isNaN(qty) || qty <= 0) return showToast('Quantity must be greater than 0', 'error');
     if (selected && qty > selected.quantity) return showToast('Not enough stock', 'error');
     const sale = doSale(selectedProduct, qty);
     if (sale) {
@@ -211,7 +211,8 @@ export default function Sales({ store, onUpdate }: SalesProps) {
             value={quantity}
             onChange={e => setQuantity(e.target.value)}
             type="number"
-            min="1"
+            step="any"
+            min="0.01"
             max={selected?.quantity || 999}
             className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground focus:outline-none focus:border-primary text-sm"
           />

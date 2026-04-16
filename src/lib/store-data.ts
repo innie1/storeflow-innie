@@ -95,21 +95,22 @@ export function deleteProduct(store: StoreData, id: string): StoreData {
 export function recordSale(store: StoreData, productId: string, quantity: number): StoreData {
   const product = store.products.find(p => p.id === productId);
   if (!product || product.quantity < quantity) return store;
+  if (quantity <= 0) return store;
   
   const sale: Sale = {
     id: generateId(),
     productId,
     productName: product.name,
-    quantity,
+    quantity: Math.round(quantity * 100) / 100, // Round to 2 decimal places
     unitPrice: product.sellingPrice,
-    total: product.sellingPrice * quantity,
-    profit: (product.sellingPrice - product.costPrice) * quantity,
+    total: Math.round(product.sellingPrice * quantity * 100) / 100,
+    profit: Math.round((product.sellingPrice - product.costPrice) * quantity * 100) / 100,
     date: new Date().toISOString(),
   };
 
   const updated = {
     ...store,
-    products: store.products.map(p => p.id === productId ? { ...p, quantity: p.quantity - quantity } : p),
+    products: store.products.map(p => p.id === productId ? { ...p, quantity: Math.round((p.quantity - quantity) * 100) / 100 } : p),
     sales: [sale, ...store.sales],
   };
   saveStore(updated);
