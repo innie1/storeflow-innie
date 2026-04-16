@@ -59,7 +59,7 @@ export default function Sales({ store, onUpdate }: SalesProps) {
   const handleSale = () => {
     if (!selectedProduct) return showToast('Select a product', 'error');
     const qty = Number(quantity);
-    if (qty < 1) return showToast('Invalid quantity', 'error');
+    if (isNaN(qty) || qty <= 0) return showToast('Quantity must be greater than 0', 'error');
     if (selected && qty > selected.quantity) return showToast('Not enough stock', 'error');
     const sale = doSale(selectedProduct, qty);
     if (sale) {
