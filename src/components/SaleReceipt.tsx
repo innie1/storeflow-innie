@@ -117,7 +117,7 @@ export default function SaleReceipt({ store, sale, onClose }: SaleReceiptProps) 
           <button
             onClick={handleWhatsAppShare}
             disabled={!buyerPhone}
-            className="p-3 rounded-lg bg-green-600 text-white font-display font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+            className="p-3 rounded-lg bg-success text-success-foreground font-display font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-xs"
           >
             💬 WhatsApp
           </button>
