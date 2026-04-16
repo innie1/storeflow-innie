@@ -211,7 +211,8 @@ export default function Sales({ store, onUpdate }: SalesProps) {
             value={quantity}
             onChange={e => setQuantity(e.target.value)}
             type="number"
-            min="1"
+            step="any"
+            min="0.01"
             max={selected?.quantity || 999}
             className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground focus:outline-none focus:border-primary text-sm"
           />
