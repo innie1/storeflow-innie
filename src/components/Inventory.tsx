@@ -10,6 +10,13 @@ interface InventoryProps {
   onClearFilter?: () => void;
 }
 
+interface ShoppingListItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  category: string;
+}
+
 export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter }: InventoryProps) {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -19,6 +26,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [newProduct, setNewProduct] = useState({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: '' });
+  const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
+  const [showShoppingList, setShowShoppingList] = useState(false);
 
   let products = store.products;
   if (filterLowStock) products = products.filter(p => p.quantity <= 5);
@@ -89,6 +98,74 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     }
   };
 
+  const addToShoppingList = (p: Product) => {
+    const existing = shoppingList.find(i => i.productId === p.id);
+    if (existing) {
+      setShoppingList(shoppingList.map(i => i.productId === p.id ? { ...i, quantity: i.quantity + 1 } : i));
+      showToast(`${p.name} qty +1`);
+    } else {
+      setShoppingList([...shoppingList, { productId: p.id, name: p.name, quantity: 1, category: p.category }]);
+      showToast(`${p.name} added to list`);
+    }
+  };
+
+  const updateListQty = (productId: string, qty: number) => {
+    if (qty <= 0) return removeFromList(productId);
+    setShoppingList(shoppingList.map(i => i.productId === productId ? { ...i, quantity: qty } : i));
+  };
+
+  const removeFromList = (productId: string) => {
+    setShoppingList(shoppingList.filter(i => i.productId !== productId));
+  };
+
+  const clearList = () => {
+    if (shoppingList.length === 0) return;
+    if (!confirm('Clear shopping list?')) return;
+    setShoppingList([]);
+    showToast('List cleared');
+  };
+
+  const generateListText = () => {
+    const storeName = store.storeName || 'Store';
+    const date = new Date().toLocaleDateString('en-GB');
+    let text = `🛒 *SHOPPING LIST*\n${storeName}\n${date}\n\n`;
+    shoppingList.forEach((item, idx) => {
+      text += `${idx + 1}. ${item.name} — *${item.quantity}* ${item.category ? `(${item.category})` : ''}\n`;
+    });
+    text += `\n_Total items: ${shoppingList.length}_`;
+    return text;
+  };
+
+  const handleCopyList = async () => {
+    if (shoppingList.length === 0) return showToast('List is empty', 'error');
+    try {
+      await navigator.clipboard.writeText(generateListText());
+      showToast('List copied to clipboard');
+    } catch {
+      showToast('Copy failed', 'error');
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    if (shoppingList.length === 0) return showToast('List is empty', 'error');
+    const text = encodeURIComponent(generateListText());
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const handleShareSystem = async () => {
+    if (shoppingList.length === 0) return showToast('List is empty', 'error');
+    const text = generateListText();
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Shopping List', text });
+      } catch {
+        // user cancelled
+      }
+    } else {
+      handleCopyList();
+    }
+  };
+
   const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm";
 
   return (
@@ -106,6 +183,17 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         <button onClick={() => setShowImportModal(true)} className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border">
           Import
         </button>
+        <button
+          onClick={() => setShowShoppingList(true)}
+          className="relative px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border"
+        >
+          🛒 List
+          {shoppingList.length > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+              {shoppingList.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {filterLowStock && (
@@ -116,27 +204,42 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       )}
 
       <div className="space-y-2">
-        {products.map(p => (
-          <div key={p.id} className="p-3 rounded-lg bg-card border border-border flex flex-wrap items-center gap-3 hover:border-primary/20 transition-colors">
-            <div className="flex-1 min-w-[150px]">
-              <p className="font-display font-semibold text-sm">{p.name}</p>
-              <p className="text-xs text-muted-foreground">{p.category}</p>
+        {products.map(p => {
+          const inList = shoppingList.find(i => i.productId === p.id);
+          return (
+            <div key={p.id} className="p-3 rounded-lg bg-card border border-border flex flex-wrap items-center gap-3 hover:border-primary/20 transition-colors">
+              <div className="flex-1 min-w-[150px]">
+                <p className="font-display font-semibold text-sm">{p.name}</p>
+                <p className="text-xs text-muted-foreground">{p.category}</p>
+              </div>
+              <div className="text-right text-xs space-y-0.5">
+                <p>Cost: <span className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</span></p>
+                <p>Sell: <span className="text-primary">₦{p.sellingPrice.toLocaleString()}</span></p>
+              </div>
+              <div className={`text-center min-w-[60px] ${p.quantity <= 5 ? 'text-destructive' : p.quantity <= 15 ? 'text-warning' : 'text-success'}`}>
+                <p className="text-lg font-bold">{p.quantity}</p>
+                <p className="text-[10px] text-muted-foreground">in stock</p>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => addToShoppingList(p)}
+                  title="Add to shopping list"
+                  className={`px-2 py-1 rounded text-xs hover:bg-surface-2 relative ${inList ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-foreground'}`}
+                >
+                  🛒
+                  {inList && (
+                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
+                      {inList.quantity}
+                    </span>
+                  )}
+                </button>
+                <button onClick={() => { setRestockProduct(p); setRestockQty(''); }} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success">↑</button>
+                <button onClick={() => setEditProduct({ ...p })} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary">✎</button>
+                <button onClick={() => handleDelete(p.id, p.name)} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive">✕</button>
+              </div>
             </div>
-            <div className="text-right text-xs space-y-0.5">
-              <p>Cost: <span className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</span></p>
-              <p>Sell: <span className="text-primary">₦{p.sellingPrice.toLocaleString()}</span></p>
-            </div>
-            <div className={`text-center min-w-[60px] ${p.quantity <= 5 ? 'text-destructive' : p.quantity <= 15 ? 'text-warning' : 'text-success'}`}>
-              <p className="text-lg font-bold">{p.quantity}</p>
-              <p className="text-[10px] text-muted-foreground">in stock</p>
-            </div>
-            <div className="flex gap-1">
-              <button onClick={() => { setRestockProduct(p); setRestockQty(''); }} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success">↑</button>
-              <button onClick={() => setEditProduct({ ...p })} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary">✎</button>
-              <button onClick={() => handleDelete(p.id, p.name)} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive">✕</button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {products.length === 0 && (
           <p className="text-center text-muted-foreground py-8">No products found</p>
         )}
@@ -202,6 +305,59 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               className={`${inputClass} resize-none`}
             />
             <button onClick={handleImport} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Import Products</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Shopping List Modal */}
+      {showShoppingList && (
+        <Modal title={`🛒 Shopping List (${shoppingList.length})`} onClose={() => setShowShoppingList(false)}>
+          <div className="space-y-3">
+            {shoppingList.length === 0 ? (
+              <p className="text-center text-muted-foreground py-6 text-sm">
+                Your list is empty.<br />
+                Tap 🛒 on any product to add it.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {shoppingList.map(item => (
+                    <div key={item.productId} className="flex items-center gap-2 p-2 rounded-lg bg-surface-2 border border-border">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-display font-semibold text-sm truncate">{item.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{item.category}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => updateListQty(item.productId, item.quantity - 1)} className="w-7 h-7 rounded bg-surface-3 hover:bg-surface-2 text-sm">−</button>
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={e => updateListQty(item.productId, Number(e.target.value))}
+                          className="w-12 text-center bg-surface-3 border border-border rounded p-1 text-sm"
+                        />
+                        <button onClick={() => updateListQty(item.productId, item.quantity + 1)} className="w-7 h-7 rounded bg-surface-3 hover:bg-surface-2 text-sm">+</button>
+                        <button onClick={() => removeFromList(item.productId)} className="w-7 h-7 rounded bg-surface-3 hover:bg-surface-2 text-destructive text-sm ml-1">✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <button onClick={handleShareWhatsApp} className="p-2.5 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90">
+                    💬 WhatsApp
+                  </button>
+                  <button onClick={handleShareSystem} className="p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90">
+                    📤 Share
+                  </button>
+                  <button onClick={handleCopyList} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">
+                    📋 Copy
+                  </button>
+                  <button onClick={clearList} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border text-destructive">
+                    🗑 Clear
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </Modal>
       )}
