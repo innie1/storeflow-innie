@@ -327,30 +327,52 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         </div>
       )}
 
-      {activeBreakdown === 'inventory' && (
-        <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
-          <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
-          <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground px-2 pb-1 border-b border-border uppercase tracking-wide">
-            <span className="col-span-1">Product</span>
-            <span className="text-center">Initial</span>
-            <span className="text-center text-success">+ Bought</span>
-            <span className="text-center text-primary">Current</span>
-          </div>
-          <div className="space-y-1.5 max-h-72 overflow-y-auto">
-            {getInventoryBreakdown().map((item, i) => (
-              <div key={i} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-surface-2 text-sm">
-                <div className="col-span-1 min-w-0">
-                  <p className="text-foreground font-medium truncate">{item.name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{item.category} • ₦{item.value.toLocaleString()}</p>
-                </div>
-                <span className="text-center text-muted-foreground">{item.initial}</span>
-                <span className="text-center text-success">{item.purchased > 0 ? `+${item.purchased}` : '—'}</span>
-                <span className={`text-center font-bold ${item.current <= 5 ? 'text-destructive' : 'text-primary'}`}>{item.current}</span>
+      {activeBreakdown === 'inventory' && (() => {
+        const items = getInventoryBreakdown();
+        const totalInitial = items.reduce((s, i) => s + i.initial, 0);
+        const totalCurrent = items.reduce((s, i) => s + i.current, 0);
+        const totalPurchased = items.reduce((s, i) => s + i.purchased, 0);
+        const totalValue = items.reduce((s, i) => s + i.value, 0);
+        return (
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3 animate-fade-in">
+            <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-2 rounded-lg bg-surface-2 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase">Initial</p>
+                <p className="font-display font-bold text-base text-foreground">{totalInitial.toLocaleString()}</p>
               </div>
-            ))}
+              <div className="p-2 rounded-lg bg-success/10 text-center">
+                <p className="text-[10px] text-success uppercase">Bought</p>
+                <p className="font-display font-bold text-base text-success">+{totalPurchased.toLocaleString()}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-primary/10 text-center">
+                <p className="text-[10px] text-primary uppercase">Current</p>
+                <p className="font-display font-bold text-base text-primary">{totalCurrent.toLocaleString()}</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground text-right">Total value: ₦{totalValue.toLocaleString()}</p>
+            <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground px-2 pb-1 border-b border-border uppercase tracking-wide">
+              <span className="col-span-1">Product</span>
+              <span className="text-center">Initial</span>
+              <span className="text-center text-success">+ Bought</span>
+              <span className="text-center text-primary">Current</span>
+            </div>
+            <div className="space-y-1.5 max-h-72 overflow-y-auto">
+              {items.map((item, i) => (
+                <div key={i} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-surface-2 text-sm">
+                  <div className="col-span-1 min-w-0">
+                    <p className="text-foreground font-medium truncate">{item.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{item.category} • ₦{item.value.toLocaleString()}</p>
+                  </div>
+                  <span className="text-center text-muted-foreground">{item.initial}</span>
+                  <span className="text-center text-success">{item.purchased > 0 ? `+${item.purchased}` : '—'}</span>
+                  <span className={`text-center font-bold ${item.current <= 5 ? 'text-destructive' : 'text-primary'}`}>{item.current}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {activeBreakdown === 'sales' && (() => {
         const breakdown = getSalesBreakdown();
