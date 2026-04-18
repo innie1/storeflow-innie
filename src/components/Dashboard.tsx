@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StoreData } from '@/types/store';
 import { getDashboardStats, getTopSellers } from '@/lib/store-data';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 
 interface DashboardProps {
   store: StoreData;
@@ -9,11 +9,15 @@ interface DashboardProps {
 }
 
 type BreakdownType = 'revenue' | 'profit' | 'inventory' | 'sales' | null;
+type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 
 export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const stats = getDashboardStats(store);
   const topSellers = getTopSellers(store, 5);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownType>(null);
+  const [salesRange, setSalesRange] = useState<DateRange>('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   const toggleBreakdown = (type: BreakdownType) => {
     setActiveBreakdown(prev => prev === type ? null : type);
@@ -151,18 +155,80 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       .sort((a, b) => b.value - a.value);
   };
 
+  const getDateRangeBounds = (): { start: Date | null; end: Date | null } => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+
+    if (salesRange === 'today') return { start, end };
+    if (salesRange === 'week') {
+      const wkStart = new Date(start);
+      wkStart.setDate(start.getDate() - 6);
+      return { start: wkStart, end };
+    }
+    if (salesRange === 'month') {
+      const mStart = new Date(start);
+      mStart.setDate(start.getDate() - 29);
+      return { start: mStart, end };
+    }
+    if (salesRange === 'custom') {
+      const s = customStart ? new Date(customStart + 'T00:00:00') : null;
+      const e = customEnd ? new Date(customEnd + 'T23:59:59') : null;
+      return { start: s, end: e };
+    }
+    return { start: null, end: null };
+  };
+
+  const filteredSales = useMemo(() => {
+    const { start, end } = getDateRangeBounds();
+    return store.sales.filter(s => {
+      const d = new Date(s.date);
+      if (start && d < start) return false;
+      if (end && d > end) return false;
+      return true;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.sales, salesRange, customStart, customEnd]);
+
   const getSalesBreakdown = () => {
-    // Group by date
-    const map = new Map<string, { date: string; count: number; total: number }>();
-    store.sales.forEach(s => {
-      const dateKey = new Date(s.date).toLocaleDateString();
-      const existing = map.get(dateKey) || { date: dateKey, count: 0, total: 0 };
+    const map = new Map<string, { date: string; count: number; total: number; ts: number }>();
+    filteredSales.forEach(s => {
+      const d = new Date(s.date);
+      const dateKey = d.toLocaleDateString();
+      const dayTs = new Date(d).setHours(0, 0, 0, 0);
+      const existing = map.get(dateKey) || { date: dateKey, count: 0, total: 0, ts: dayTs };
       existing.count += 1;
       existing.total += s.total;
       map.set(dateKey, existing);
     });
-    return Array.from(map.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return Array.from(map.values()).sort((a, b) => b.ts - a.ts);
   };
+
+  // Trend chart: last 14 days
+  const trendData = useMemo(() => {
+    const days = 14;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const buckets: { label: string; total: number; ts: number }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      buckets.push({
+        label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        total: 0,
+        ts: d.getTime(),
+      });
+    }
+    store.sales.forEach(s => {
+      const sd = new Date(s.date);
+      sd.setHours(0, 0, 0, 0);
+      const bucket = buckets.find(b => b.ts === sd.getTime());
+      if (bucket) bucket.total += s.total;
+    });
+    return buckets;
+  }, [store.sales]);
 
   const cards = [
     { label: 'Revenue', value: `₦${stats.totalRevenue.toLocaleString()}`, color: 'text-primary', type: 'revenue' as BreakdownType },
@@ -261,40 +327,122 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         </div>
       )}
 
-      {activeBreakdown === 'inventory' && (
-        <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
-          <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
-          <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground px-2 pb-1 border-b border-border uppercase tracking-wide">
-            <span className="col-span-1">Product</span>
-            <span className="text-center">Initial</span>
-            <span className="text-center text-success">+ Bought</span>
-            <span className="text-center text-primary">Current</span>
-          </div>
-          <div className="space-y-1.5 max-h-72 overflow-y-auto">
-            {getInventoryBreakdown().map((item, i) => (
-              <div key={i} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-surface-2 text-sm">
-                <div className="col-span-1 min-w-0">
-                  <p className="text-foreground font-medium truncate">{item.name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{item.category} • ₦{item.value.toLocaleString()}</p>
-                </div>
-                <span className="text-center text-muted-foreground">{item.initial}</span>
-                <span className="text-center text-success">{item.purchased > 0 ? `+${item.purchased}` : '—'}</span>
-                <span className={`text-center font-bold ${item.current <= 5 ? 'text-destructive' : 'text-primary'}`}>{item.current}</span>
+      {activeBreakdown === 'inventory' && (() => {
+        const items = getInventoryBreakdown();
+        const totalInitial = items.reduce((s, i) => s + i.initial, 0);
+        const totalCurrent = items.reduce((s, i) => s + i.current, 0);
+        const totalPurchased = items.reduce((s, i) => s + i.purchased, 0);
+        const totalValue = items.reduce((s, i) => s + i.value, 0);
+        return (
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3 animate-fade-in">
+            <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-2 rounded-lg bg-surface-2 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase">Initial</p>
+                <p className="font-display font-bold text-base text-foreground">{totalInitial.toLocaleString()}</p>
               </div>
-            ))}
+              <div className="p-2 rounded-lg bg-success/10 text-center">
+                <p className="text-[10px] text-success uppercase">Bought</p>
+                <p className="font-display font-bold text-base text-success">+{totalPurchased.toLocaleString()}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-primary/10 text-center">
+                <p className="text-[10px] text-primary uppercase">Current</p>
+                <p className="font-display font-bold text-base text-primary">{totalCurrent.toLocaleString()}</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground text-right">Total value: ₦{totalValue.toLocaleString()}</p>
+            <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground px-2 pb-1 border-b border-border uppercase tracking-wide">
+              <span className="col-span-1">Product</span>
+              <span className="text-center">Initial</span>
+              <span className="text-center text-success">+ Bought</span>
+              <span className="text-center text-primary">Current</span>
+            </div>
+            <div className="space-y-1.5 max-h-72 overflow-y-auto">
+              {items.map((item, i) => (
+                <div key={i} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-surface-2 text-sm">
+                  <div className="col-span-1 min-w-0">
+                    <p className="text-foreground font-medium truncate">{item.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{item.category} • ₦{item.value.toLocaleString()}</p>
+                  </div>
+                  <span className="text-center text-muted-foreground">{item.initial}</span>
+                  <span className="text-center text-success">{item.purchased > 0 ? `+${item.purchased}` : '—'}</span>
+                  <span className={`text-center font-bold ${item.current <= 5 ? 'text-destructive' : 'text-primary'}`}>{item.current}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {activeBreakdown === 'sales' && (() => {
         const breakdown = getSalesBreakdown();
         const maxTotal = Math.max(...breakdown.map(d => d.total), 0);
         const minTotal = breakdown.length > 1 ? Math.min(...breakdown.map(d => d.total)) : -1;
+        const rangeTotal = breakdown.reduce((s, d) => s + d.total, 0);
+        const rangeCount = breakdown.reduce((s, d) => s + d.count, 0);
+        const ranges: { key: DateRange; label: string }[] = [
+          { key: 'today', label: 'Today' },
+          { key: 'week', label: '7 Days' },
+          { key: 'month', label: '30 Days' },
+          { key: 'all', label: 'All' },
+          { key: 'custom', label: 'Custom' },
+        ];
         return (
-          <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3 animate-fade-in">
             <h3 className="font-display font-bold text-sm">Sales by Day</h3>
+
+            <div className="flex flex-wrap gap-1.5">
+              {ranges.map(r => (
+                <button
+                  key={r.key}
+                  onClick={() => setSalesRange(r.key)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-display font-semibold border transition-colors ${
+                    salesRange === r.key
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+
+            {salesRange === 'custom' && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase">From</label>
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={e => setCustomStart(e.target.value)}
+                    className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase">To</label>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={e => setCustomEnd(e.target.value)}
+                    className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 rounded-lg bg-primary/10 text-center">
+                <p className="text-[10px] text-primary uppercase">Range Revenue</p>
+                <p className="font-display font-bold text-sm text-primary">₦{rangeTotal.toLocaleString()}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-surface-2 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase">Transactions</p>
+                <p className="font-display font-bold text-sm text-foreground">{rangeCount}</p>
+              </div>
+            </div>
+
             {breakdown.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No sales yet</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No sales in this range</p>
             ) : (
               <>
                 {breakdown.length > 1 && (
@@ -334,6 +482,38 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           </div>
         );
       })()}
+
+      {/* Sales Trend Chart (last 14 days) */}
+      {store.sales.length > 0 && (
+        <div className="p-4 rounded-xl bg-card border border-border">
+          <div className="flex justify-between items-baseline mb-3">
+            <h3 className="font-display font-bold">Sales Trend</h3>
+            <span className="text-[10px] text-muted-foreground">Last 14 days</span>
+          </div>
+          <div className="h-[180px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData} margin={{ left: -10, right: 10, top: 5, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 8% 18%)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fill: 'hsl(240 5% 50%)', fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: 'hsl(240 5% 50%)', fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                <Tooltip
+                  contentStyle={{ background: 'hsl(240 10% 10%)', border: '1px solid hsl(240 8% 18%)', borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: 'hsl(45 90% 61%)' }}
+                  formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Revenue']}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  stroke="hsl(45, 90%, 61%)"
+                  strokeWidth={2}
+                  dot={{ fill: 'hsl(45, 90%, 61%)', r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {topSellers.length > 0 && (
         <div className="p-4 rounded-xl bg-card border border-border">
