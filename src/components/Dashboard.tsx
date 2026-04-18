@@ -155,18 +155,80 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       .sort((a, b) => b.value - a.value);
   };
 
+  const getDateRangeBounds = (): { start: Date | null; end: Date | null } => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+
+    if (salesRange === 'today') return { start, end };
+    if (salesRange === 'week') {
+      const wkStart = new Date(start);
+      wkStart.setDate(start.getDate() - 6);
+      return { start: wkStart, end };
+    }
+    if (salesRange === 'month') {
+      const mStart = new Date(start);
+      mStart.setDate(start.getDate() - 29);
+      return { start: mStart, end };
+    }
+    if (salesRange === 'custom') {
+      const s = customStart ? new Date(customStart + 'T00:00:00') : null;
+      const e = customEnd ? new Date(customEnd + 'T23:59:59') : null;
+      return { start: s, end: e };
+    }
+    return { start: null, end: null };
+  };
+
+  const filteredSales = useMemo(() => {
+    const { start, end } = getDateRangeBounds();
+    return store.sales.filter(s => {
+      const d = new Date(s.date);
+      if (start && d < start) return false;
+      if (end && d > end) return false;
+      return true;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.sales, salesRange, customStart, customEnd]);
+
   const getSalesBreakdown = () => {
-    // Group by date
-    const map = new Map<string, { date: string; count: number; total: number }>();
-    store.sales.forEach(s => {
-      const dateKey = new Date(s.date).toLocaleDateString();
-      const existing = map.get(dateKey) || { date: dateKey, count: 0, total: 0 };
+    const map = new Map<string, { date: string; count: number; total: number; ts: number }>();
+    filteredSales.forEach(s => {
+      const d = new Date(s.date);
+      const dateKey = d.toLocaleDateString();
+      const dayTs = new Date(d).setHours(0, 0, 0, 0);
+      const existing = map.get(dateKey) || { date: dateKey, count: 0, total: 0, ts: dayTs };
       existing.count += 1;
       existing.total += s.total;
       map.set(dateKey, existing);
     });
-    return Array.from(map.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return Array.from(map.values()).sort((a, b) => b.ts - a.ts);
   };
+
+  // Trend chart: last 14 days
+  const trendData = useMemo(() => {
+    const days = 14;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const buckets: { label: string; total: number; ts: number }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      buckets.push({
+        label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        total: 0,
+        ts: d.getTime(),
+      });
+    }
+    store.sales.forEach(s => {
+      const sd = new Date(s.date);
+      sd.setHours(0, 0, 0, 0);
+      const bucket = buckets.find(b => b.ts === sd.getTime());
+      if (bucket) bucket.total += s.total;
+    });
+    return buckets;
+  }, [store.sales]);
 
   const cards = [
     { label: 'Revenue', value: `₦${stats.totalRevenue.toLocaleString()}`, color: 'text-primary', type: 'revenue' as BreakdownType },
