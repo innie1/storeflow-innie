@@ -1,4 +1,4 @@
-import { Product, Sale, StoreData } from '@/types/store';
+import { Product, Sale, StoreData, Restock } from '@/types/store';
 
 const STORE_PREFIX = 'storeflow_';
 
@@ -53,8 +53,9 @@ export function createStore(storeName: string): StoreData {
   const store: StoreData = {
     storeName,
     accessCode: code,
-    products: DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId() })),
+    products: DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity })),
     sales: [],
+    restocks: [],
     createdAt: new Date().toISOString(),
   };
   localStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
@@ -72,7 +73,7 @@ export function saveStore(store: StoreData): void {
 }
 
 export function addProduct(store: StoreData, product: Omit<Product, 'id'>): StoreData {
-  const updated = { ...store, products: [...store.products, { ...product, id: generateId() }] };
+  const updated = { ...store, products: [...store.products, { ...product, id: generateId(), initialQuantity: product.quantity }] };
   saveStore(updated);
   return updated;
 }
@@ -124,8 +125,45 @@ export function clearSales(store: StoreData): StoreData {
 }
 
 export function importProducts(store: StoreData, products: Omit<Product, 'id'>[]): StoreData {
-  const newProducts = products.map(p => ({ ...p, id: generateId() }));
+  const newProducts = products.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity }));
   const updated = { ...store, products: [...store.products, ...newProducts] };
+  saveStore(updated);
+  return updated;
+}
+
+export interface RestockEntry {
+  productId: string;
+  quantity: number;
+  costPrice: number;
+}
+
+export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreData {
+  const now = new Date().toISOString();
+  const newRestocks: Restock[] = [];
+  const updatedProducts = store.products.map(p => {
+    const entry = entries.find(e => e.productId === p.id);
+    if (!entry || entry.quantity <= 0) return p;
+    newRestocks.push({
+      id: generateId(),
+      productId: p.id,
+      productName: p.name,
+      quantity: entry.quantity,
+      costPrice: entry.costPrice,
+      total: Math.round(entry.quantity * entry.costPrice * 100) / 100,
+      date: now,
+    });
+    return {
+      ...p,
+      quantity: Math.round((p.quantity + entry.quantity) * 100) / 100,
+      costPrice: entry.costPrice > 0 ? entry.costPrice : p.costPrice,
+      initialQuantity: p.initialQuantity ?? p.quantity,
+    };
+  });
+  const updated: StoreData = {
+    ...store,
+    products: updatedProducts,
+    restocks: [...newRestocks, ...(store.restocks || [])],
+  };
   saveStore(updated);
   return updated;
 }

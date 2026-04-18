@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 
 interface InventoryProps {
@@ -28,6 +28,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [newProduct, setNewProduct] = useState({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: '' });
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
+  const [receiveMode, setReceiveMode] = useState(false);
+  const [receiveData, setReceiveData] = useState<Record<string, { qty: string; cost: string }>>({});
 
   let products = store.products;
   if (filterLowStock) products = products.filter(p => p.quantity <= 5);
@@ -164,6 +166,42 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     } else {
       handleCopyList();
     }
+  };
+
+  const handleStartReceive = () => {
+    const initial: Record<string, { qty: string; cost: string }> = {};
+    shoppingList.forEach(item => {
+      const product = store.products.find(p => p.id === item.productId);
+      initial[item.productId] = {
+        qty: String(item.quantity),
+        cost: String(product?.costPrice ?? ''),
+      };
+    });
+    setReceiveData(initial);
+    setReceiveMode(true);
+  };
+
+  const handleConfirmReceive = () => {
+    const entries = shoppingList
+      .map(item => {
+        const data = receiveData[item.productId];
+        if (!data) return null;
+        const qty = Number(data.qty);
+        const cost = Number(data.cost);
+        if (!qty || qty <= 0) return null;
+        return { productId: item.productId, quantity: qty, costPrice: cost > 0 ? cost : 0 };
+      })
+      .filter((e): e is { productId: string; quantity: number; costPrice: number } => e !== null);
+
+    if (entries.length === 0) return showToast('Add quantities to confirm', 'error');
+
+    const updated = receiveStock(store, entries);
+    onUpdate(updated);
+    setShoppingList([]);
+    setReceiveData({});
+    setReceiveMode(false);
+    setShowShoppingList(false);
+    showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''}`);
   };
 
   const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm";
@@ -311,13 +349,82 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
       {/* Shopping List Modal */}
       {showShoppingList && (
-        <Modal title={`🛒 Shopping List (${shoppingList.length})`} onClose={() => setShowShoppingList(false)}>
+        <Modal
+          title={receiveMode ? '📥 Receive Stock' : `🛒 Shopping List (${shoppingList.length})`}
+          onClose={() => { setShowShoppingList(false); setReceiveMode(false); }}
+        >
           <div className="space-y-3">
             {shoppingList.length === 0 ? (
               <p className="text-center text-muted-foreground py-6 text-sm">
                 Your list is empty.<br />
                 Tap 🛒 on any product to add it.
               </p>
+            ) : receiveMode ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Confirm the actual quantity received and unit cost from your supplier. Stock will be added and cost prices updated.
+                </p>
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {shoppingList.map(item => {
+                    const product = store.products.find(p => p.id === item.productId);
+                    const data = receiveData[item.productId] || { qty: String(item.quantity), cost: String(product?.costPrice ?? '') };
+                    const lineTotal = (Number(data.qty) || 0) * (Number(data.cost) || 0);
+                    return (
+                      <div key={item.productId} className="p-2.5 rounded-lg bg-surface-2 border border-border space-y-2">
+                        <div className="flex justify-between items-baseline gap-2">
+                          <p className="font-display font-semibold text-sm truncate">{item.name}</p>
+                          <p className="text-xs text-muted-foreground shrink-0">In stock: {product?.quantity ?? 0}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Qty received</label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={data.qty}
+                              onChange={e => setReceiveData({ ...receiveData, [item.productId]: { ...data, qty: e.target.value } })}
+                              className="w-full text-sm bg-surface-3 border border-border rounded p-1.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Unit cost (₦)</label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={data.cost}
+                              onChange={e => setReceiveData({ ...receiveData, [item.productId]: { ...data, cost: e.target.value } })}
+                              className="w-full text-sm bg-surface-3 border border-border rounded p-1.5"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-right text-xs text-muted-foreground">
+                          Line total: <span className="text-primary font-semibold">₦{lineTotal.toLocaleString()}</span>
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between items-center px-1 pt-1 border-t border-border">
+                  <span className="text-sm text-muted-foreground">Grand total</span>
+                  <span className="font-display font-bold text-primary">
+                    ₦{shoppingList.reduce((sum, item) => {
+                      const product = store.products.find(p => p.id === item.productId);
+                      const data = receiveData[item.productId] || { qty: String(item.quantity), cost: String(product?.costPrice ?? 0) };
+                      return sum + (Number(data.qty) || 0) * (Number(data.cost) || 0);
+                    }, 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button onClick={() => setReceiveMode(false)} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">
+                    ← Back
+                  </button>
+                  <button onClick={handleConfirmReceive} className="p-2.5 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90">
+                    ✓ Confirm & Restock
+                  </button>
+                </div>
+              </>
             ) : (
               <>
                 <div className="space-y-2 max-h-[50vh] overflow-y-auto">
@@ -342,11 +449,18 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  onClick={handleStartReceive}
+                  className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90"
+                >
+                  📥 Receive Stock from Supplier
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
                   <button onClick={handleShareWhatsApp} className="p-2.5 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90">
                     💬 WhatsApp
                   </button>
-                  <button onClick={handleShareSystem} className="p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90">
+                  <button onClick={handleShareSystem} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">
                     📤 Share
                   </button>
                   <button onClick={handleCopyList} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">

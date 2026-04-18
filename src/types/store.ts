@@ -5,6 +5,17 @@ export interface Product {
   sellingPrice: number;
   quantity: number;
   category: string;
+  initialQuantity?: number;
+}
+
+export interface Restock {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  costPrice: number;
+  total: number;
+  date: string;
 }
 
 export interface Sale {
@@ -30,6 +41,7 @@ export interface StoreData {
   accessCode: string;
   products: Product[];
   sales: Sale[];
+  restocks?: Restock[];
   createdAt: string;
   profile?: StoreProfile;
 }
