@@ -168,6 +168,42 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     }
   };
 
+  const handleStartReceive = () => {
+    const initial: Record<string, { qty: string; cost: string }> = {};
+    shoppingList.forEach(item => {
+      const product = store.products.find(p => p.id === item.productId);
+      initial[item.productId] = {
+        qty: String(item.quantity),
+        cost: String(product?.costPrice ?? ''),
+      };
+    });
+    setReceiveData(initial);
+    setReceiveMode(true);
+  };
+
+  const handleConfirmReceive = () => {
+    const entries = shoppingList
+      .map(item => {
+        const data = receiveData[item.productId];
+        if (!data) return null;
+        const qty = Number(data.qty);
+        const cost = Number(data.cost);
+        if (!qty || qty <= 0) return null;
+        return { productId: item.productId, quantity: qty, costPrice: cost > 0 ? cost : 0 };
+      })
+      .filter((e): e is { productId: string; quantity: number; costPrice: number } => e !== null);
+
+    if (entries.length === 0) return showToast('Add quantities to confirm', 'error');
+
+    const updated = receiveStock(store, entries);
+    onUpdate(updated);
+    setShoppingList([]);
+    setReceiveData({});
+    setReceiveMode(false);
+    setShowShoppingList(false);
+    showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''}`);
+  };
+
   const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm";
 
   return (
