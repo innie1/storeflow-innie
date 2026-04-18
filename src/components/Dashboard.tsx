@@ -132,8 +132,22 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
   };
 
   const getInventoryBreakdown = () => {
+    const restocks = store.restocks || [];
     return [...store.products]
-      .map(p => ({ name: p.name, quantity: p.quantity, value: p.costPrice * p.quantity, category: p.category }))
+      .map(p => {
+        const purchased = restocks
+          .filter(r => r.productId === p.id)
+          .reduce((sum, r) => sum + r.quantity, 0);
+        const initial = p.initialQuantity ?? Math.max(0, p.quantity - purchased);
+        return {
+          name: p.name,
+          category: p.category,
+          initial,
+          purchased,
+          current: p.quantity,
+          value: p.costPrice * p.quantity,
+        };
+      })
       .sort((a, b) => b.value - a.value);
   };
 
@@ -250,40 +264,76 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       {activeBreakdown === 'inventory' && (
         <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
           <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
-          <div className="space-y-1.5 max-h-64 overflow-y-auto">
+          <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground px-2 pb-1 border-b border-border uppercase tracking-wide">
+            <span className="col-span-1">Product</span>
+            <span className="text-center">Initial</span>
+            <span className="text-center text-success">+ Bought</span>
+            <span className="text-center text-primary">Current</span>
+          </div>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
             {getInventoryBreakdown().map((item, i) => (
-              <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
-                <div>
-                  <span className="text-foreground font-medium">{item.name}</span>
-                  <span className="text-muted-foreground ml-2 text-xs">{item.quantity} units • {item.category}</span>
+              <div key={i} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-surface-2 text-sm">
+                <div className="col-span-1 min-w-0">
+                  <p className="text-foreground font-medium truncate">{item.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{item.category} • ₦{item.value.toLocaleString()}</p>
                 </div>
-                <span className="text-primary font-bold">₦{item.value.toLocaleString()}</span>
+                <span className="text-center text-muted-foreground">{item.initial}</span>
+                <span className="text-center text-success">{item.purchased > 0 ? `+${item.purchased}` : '—'}</span>
+                <span className={`text-center font-bold ${item.current <= 5 ? 'text-destructive' : 'text-primary'}`}>{item.current}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {activeBreakdown === 'sales' && (
-        <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
-          <h3 className="font-display font-bold text-sm">Sales by Day</h3>
-          {getSalesBreakdown().length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sales yet</p>
-          ) : (
-            <div className="space-y-1.5 max-h-64 overflow-y-auto">
-              {getSalesBreakdown().map((day, i) => (
-                <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
-                  <div>
-                    <span className="text-foreground font-medium">{day.date}</span>
-                    <span className="text-muted-foreground ml-2 text-xs">{day.count} transactions</span>
+      {activeBreakdown === 'sales' && (() => {
+        const breakdown = getSalesBreakdown();
+        const maxTotal = Math.max(...breakdown.map(d => d.total), 0);
+        const minTotal = breakdown.length > 1 ? Math.min(...breakdown.map(d => d.total)) : -1;
+        return (
+          <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
+            <h3 className="font-display font-bold text-sm">Sales by Day</h3>
+            {breakdown.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No sales yet</p>
+            ) : (
+              <>
+                {breakdown.length > 1 && (
+                  <div className="flex gap-2 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success" /> Best day</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" /> Lowest day</span>
                   </div>
-                  <span className="text-primary font-bold">₦{day.total.toLocaleString()}</span>
+                )}
+                <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                  {breakdown.map((day, i) => {
+                    const isBest = day.total === maxTotal && maxTotal > 0;
+                    const isWorst = day.total === minTotal && minTotal >= 0 && !isBest;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex justify-between items-center p-2 rounded-lg text-sm border ${
+                          isBest ? 'bg-success/10 border-success/40' :
+                          isWorst ? 'bg-destructive/10 border-destructive/40' :
+                          'bg-surface-2 border-transparent'
+                        }`}
+                      >
+                        <div>
+                          <span className="text-foreground font-medium">
+                            {day.date} {isBest && '🏆'} {isWorst && '📉'}
+                          </span>
+                          <span className="text-muted-foreground ml-2 text-xs">{day.count} transactions</span>
+                        </div>
+                        <span className={`font-bold ${isBest ? 'text-success' : isWorst ? 'text-destructive' : 'text-primary'}`}>
+                          ₦{day.total.toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {topSellers.length > 0 && (
         <div className="p-4 rounded-xl bg-card border border-border">
