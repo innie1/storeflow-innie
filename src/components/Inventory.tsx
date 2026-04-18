@@ -28,6 +28,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [newProduct, setNewProduct] = useState({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: '' });
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
+  const [receiveMode, setReceiveMode] = useState(false);
+  const [receiveData, setReceiveData] = useState<Record<string, { qty: string; cost: string }>>({});
 
   let products = store.products;
   if (filterLowStock) products = products.filter(p => p.quantity <= 5);
