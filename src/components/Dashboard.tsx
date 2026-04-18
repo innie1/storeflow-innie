@@ -378,11 +378,71 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         const breakdown = getSalesBreakdown();
         const maxTotal = Math.max(...breakdown.map(d => d.total), 0);
         const minTotal = breakdown.length > 1 ? Math.min(...breakdown.map(d => d.total)) : -1;
+        const rangeTotal = breakdown.reduce((s, d) => s + d.total, 0);
+        const rangeCount = breakdown.reduce((s, d) => s + d.count, 0);
+        const ranges: { key: DateRange; label: string }[] = [
+          { key: 'today', label: 'Today' },
+          { key: 'week', label: '7 Days' },
+          { key: 'month', label: '30 Days' },
+          { key: 'all', label: 'All' },
+          { key: 'custom', label: 'Custom' },
+        ];
         return (
-          <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3 animate-fade-in">
             <h3 className="font-display font-bold text-sm">Sales by Day</h3>
+
+            <div className="flex flex-wrap gap-1.5">
+              {ranges.map(r => (
+                <button
+                  key={r.key}
+                  onClick={() => setSalesRange(r.key)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-display font-semibold border transition-colors ${
+                    salesRange === r.key
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+
+            {salesRange === 'custom' && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase">From</label>
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={e => setCustomStart(e.target.value)}
+                    className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase">To</label>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={e => setCustomEnd(e.target.value)}
+                    className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 rounded-lg bg-primary/10 text-center">
+                <p className="text-[10px] text-primary uppercase">Range Revenue</p>
+                <p className="font-display font-bold text-sm text-primary">₦{rangeTotal.toLocaleString()}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-surface-2 text-center">
+                <p className="text-[10px] text-muted-foreground uppercase">Transactions</p>
+                <p className="font-display font-bold text-sm text-foreground">{rangeCount}</p>
+              </div>
+            </div>
+
             {breakdown.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No sales yet</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No sales in this range</p>
             ) : (
               <>
                 {breakdown.length > 1 && (
@@ -422,6 +482,38 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           </div>
         );
       })()}
+
+      {/* Sales Trend Chart (last 14 days) */}
+      {store.sales.length > 0 && (
+        <div className="p-4 rounded-xl bg-card border border-border">
+          <div className="flex justify-between items-baseline mb-3">
+            <h3 className="font-display font-bold">Sales Trend</h3>
+            <span className="text-[10px] text-muted-foreground">Last 14 days</span>
+          </div>
+          <div className="h-[180px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData} margin={{ left: -10, right: 10, top: 5, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 8% 18%)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fill: 'hsl(240 5% 50%)', fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: 'hsl(240 5% 50%)', fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                <Tooltip
+                  contentStyle={{ background: 'hsl(240 10% 10%)', border: '1px solid hsl(240 8% 18%)', borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: 'hsl(45 90% 61%)' }}
+                  formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Revenue']}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  stroke="hsl(45, 90%, 61%)"
+                  strokeWidth={2}
+                  dot={{ fill: 'hsl(45, 90%, 61%)', r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {topSellers.length > 0 && (
         <div className="p-4 rounded-xl bg-card border border-border">
