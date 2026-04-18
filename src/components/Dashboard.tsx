@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StoreData } from '@/types/store';
 import { getDashboardStats, getTopSellers } from '@/lib/store-data';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 
 interface DashboardProps {
   store: StoreData;
@@ -9,11 +9,15 @@ interface DashboardProps {
 }
 
 type BreakdownType = 'revenue' | 'profit' | 'inventory' | 'sales' | null;
+type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 
 export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const stats = getDashboardStats(store);
   const topSellers = getTopSellers(store, 5);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownType>(null);
+  const [salesRange, setSalesRange] = useState<DateRange>('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   const toggleBreakdown = (type: BreakdownType) => {
     setActiveBreakdown(prev => prev === type ? null : type);
