@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 
 interface InventoryProps {
