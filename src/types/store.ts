@@ -6,6 +6,7 @@ export interface Product {
   quantity: number;
   category: string;
   initialQuantity?: number;
+  addedAt?: string;
 }
 
 export interface Restock {
@@ -29,6 +30,18 @@ export interface Sale {
   date: string;
 }
 
+export type ExpenseCategory = 'Restock' | 'Rent' | 'Utilities' | 'Salaries' | 'Transport' | 'Other';
+
+export interface Expense {
+  id: string;
+  amount: number;
+  category: ExpenseCategory;
+  date: string; // ISO
+  note?: string;
+  source?: 'manual' | 'restock';
+  restockBatchId?: string; // to link expense to a restock event
+}
+
 export interface StoreProfile {
   storeType: string;
   location: string;
@@ -42,8 +55,9 @@ export interface StoreData {
   products: Product[];
   sales: Sale[];
   restocks?: Restock[];
+  expenses?: Expense[];
   createdAt: string;
   profile?: StoreProfile;
 }
 
-export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'settings';
+export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings';

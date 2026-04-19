@@ -1,4 +1,6 @@
-import { Product, Sale, StoreData, Restock } from '@/types/store';
+import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory } from '@/types/store';
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Restock', 'Rent', 'Utilities', 'Salaries', 'Transport', 'Other'];
 
 const STORE_PREFIX = 'storeflow_';
 
@@ -50,13 +52,15 @@ const DEFAULT_PRODUCTS: Omit<Product, 'id'>[] = [
 
 export function createStore(storeName: string): StoreData {
   const code = generateCode();
+  const now = new Date().toISOString();
   const store: StoreData = {
     storeName,
     accessCode: code,
-    products: DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity })),
+    products: DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now })),
     sales: [],
     restocks: [],
-    createdAt: new Date().toISOString(),
+    expenses: [],
+    createdAt: now,
   };
   localStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
   return store;
@@ -73,7 +77,7 @@ export function saveStore(store: StoreData): void {
 }
 
 export function addProduct(store: StoreData, product: Omit<Product, 'id'>): StoreData {
-  const updated = { ...store, products: [...store.products, { ...product, id: generateId(), initialQuantity: product.quantity }] };
+  const updated = { ...store, products: [...store.products, { ...product, id: generateId(), initialQuantity: product.quantity, addedAt: new Date().toISOString() }] };
   saveStore(updated);
   return updated;
 }
@@ -125,7 +129,8 @@ export function clearSales(store: StoreData): StoreData {
 }
 
 export function importProducts(store: StoreData, products: Omit<Product, 'id'>[]): StoreData {
-  const newProducts = products.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity }));
+  const now = new Date().toISOString();
+  const newProducts = products.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }));
   const updated = { ...store, products: [...store.products, ...newProducts] };
   saveStore(updated);
   return updated;
@@ -140,16 +145,21 @@ export interface RestockEntry {
 export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreData {
   const now = new Date().toISOString();
   const newRestocks: Restock[] = [];
+  let restockTotal = 0;
+  const itemNames: string[] = [];
   const updatedProducts = store.products.map(p => {
     const entry = entries.find(e => e.productId === p.id);
     if (!entry || entry.quantity <= 0) return p;
+    const lineTotal = Math.round(entry.quantity * entry.costPrice * 100) / 100;
+    restockTotal += lineTotal;
+    itemNames.push(`${p.name} ×${entry.quantity}`);
     newRestocks.push({
       id: generateId(),
       productId: p.id,
       productName: p.name,
       quantity: entry.quantity,
       costPrice: entry.costPrice,
-      total: Math.round(entry.quantity * entry.costPrice * 100) / 100,
+      total: lineTotal,
       date: now,
     });
     return {
@@ -159,10 +169,50 @@ export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreDa
       initialQuantity: p.initialQuantity ?? p.quantity,
     };
   });
+
+  // Auto-create a single Restock expense for the entire batch
+  const batchId = generateId();
+  const newExpenses: Expense[] = [];
+  if (restockTotal > 0) {
+    newExpenses.push({
+      id: generateId(),
+      amount: Math.round(restockTotal * 100) / 100,
+      category: 'Restock',
+      date: now,
+      note: `Stock from supplier: ${itemNames.slice(0, 4).join(', ')}${itemNames.length > 4 ? `, +${itemNames.length - 4} more` : ''}`,
+      source: 'restock',
+      restockBatchId: batchId,
+    });
+  }
+
   const updated: StoreData = {
     ...store,
     products: updatedProducts,
     restocks: [...newRestocks, ...(store.restocks || [])],
+    expenses: [...newExpenses, ...(store.expenses || [])],
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'source'>): StoreData {
+  const newExpense: Expense = {
+    ...expense,
+    id: generateId(),
+    source: 'manual',
+  };
+  const updated: StoreData = {
+    ...store,
+    expenses: [newExpense, ...(store.expenses || [])],
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteExpense(store: StoreData, id: string): StoreData {
+  const updated: StoreData = {
+    ...store,
+    expenses: (store.expenses || []).filter(e => e.id !== id),
   };
   saveStore(updated);
   return updated;
@@ -186,5 +236,7 @@ export function getDashboardStats(store: StoreData) {
   const lowStockProducts = store.products.filter(p => p.quantity <= 5);
   const totalSales = store.sales.length;
   const inventoryValue = store.products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
-  return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue };
+  const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+  const netIncome = totalRevenue - totalExpenses;
+  return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue, totalExpenses, netIncome };
 }
