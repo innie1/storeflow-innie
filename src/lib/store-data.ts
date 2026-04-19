@@ -145,16 +145,21 @@ export interface RestockEntry {
 export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreData {
   const now = new Date().toISOString();
   const newRestocks: Restock[] = [];
+  let restockTotal = 0;
+  const itemNames: string[] = [];
   const updatedProducts = store.products.map(p => {
     const entry = entries.find(e => e.productId === p.id);
     if (!entry || entry.quantity <= 0) return p;
+    const lineTotal = Math.round(entry.quantity * entry.costPrice * 100) / 100;
+    restockTotal += lineTotal;
+    itemNames.push(`${p.name} ×${entry.quantity}`);
     newRestocks.push({
       id: generateId(),
       productId: p.id,
       productName: p.name,
       quantity: entry.quantity,
       costPrice: entry.costPrice,
-      total: Math.round(entry.quantity * entry.costPrice * 100) / 100,
+      total: lineTotal,
       date: now,
     });
     return {
@@ -164,10 +169,50 @@ export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreDa
       initialQuantity: p.initialQuantity ?? p.quantity,
     };
   });
+
+  // Auto-create a single Restock expense for the entire batch
+  const batchId = generateId();
+  const newExpenses: Expense[] = [];
+  if (restockTotal > 0) {
+    newExpenses.push({
+      id: generateId(),
+      amount: Math.round(restockTotal * 100) / 100,
+      category: 'Restock',
+      date: now,
+      note: `Stock from supplier: ${itemNames.slice(0, 4).join(', ')}${itemNames.length > 4 ? `, +${itemNames.length - 4} more` : ''}`,
+      source: 'restock',
+      restockBatchId: batchId,
+    });
+  }
+
   const updated: StoreData = {
     ...store,
     products: updatedProducts,
     restocks: [...newRestocks, ...(store.restocks || [])],
+    expenses: [...newExpenses, ...(store.expenses || [])],
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'source'>): StoreData {
+  const newExpense: Expense = {
+    ...expense,
+    id: generateId(),
+    source: 'manual',
+  };
+  const updated: StoreData = {
+    ...store,
+    expenses: [newExpense, ...(store.expenses || [])],
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteExpense(store: StoreData, id: string): StoreData {
+  const updated: StoreData = {
+    ...store,
+    expenses: (store.expenses || []).filter(e => e.id !== id),
   };
   saveStore(updated);
   return updated;
