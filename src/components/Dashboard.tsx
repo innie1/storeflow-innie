@@ -258,6 +258,33 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         </button>
       </div>
 
+      {/* Income Summary: Gross Revenue / Expenses / Net Income */}
+      <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+        <div className="flex justify-between items-baseline">
+          <h3 className="font-display font-bold text-sm">Income Summary</h3>
+          <span className="text-[10px] text-muted-foreground uppercase">All time</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="p-2.5 rounded-lg bg-primary/10 text-center">
+            <p className="text-[10px] text-primary uppercase">Gross Revenue</p>
+            <p className="font-display font-bold text-sm text-primary">₦{stats.totalRevenue.toLocaleString()}</p>
+          </div>
+          <div className="p-2.5 rounded-lg bg-destructive/10 text-center">
+            <p className="text-[10px] text-destructive uppercase">Expenses</p>
+            <p className="font-display font-bold text-sm text-destructive">−₦{stats.totalExpenses.toLocaleString()}</p>
+          </div>
+          <div className={`p-2.5 rounded-lg text-center ${stats.netIncome >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
+            <p className={`text-[10px] uppercase ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>Net Income</p>
+            <p className={`font-display font-bold text-sm ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
+              ₦{stats.netIncome.toLocaleString()}
+            </p>
+          </div>
+        </div>
+        <p className="text-[10px] text-muted-foreground text-center">
+          Net Income = Gross Revenue − Total Expenses
+        </p>
+      </div>
+
       {/* Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {cards.map(c => (
