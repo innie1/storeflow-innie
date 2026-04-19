@@ -1,4 +1,6 @@
-import { Product, Sale, StoreData, Restock } from '@/types/store';
+import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory } from '@/types/store';
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Restock', 'Rent', 'Utilities', 'Salaries', 'Transport', 'Other'];
 
 const STORE_PREFIX = 'storeflow_';
 
@@ -50,13 +52,15 @@ const DEFAULT_PRODUCTS: Omit<Product, 'id'>[] = [
 
 export function createStore(storeName: string): StoreData {
   const code = generateCode();
+  const now = new Date().toISOString();
   const store: StoreData = {
     storeName,
     accessCode: code,
-    products: DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity })),
+    products: DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now })),
     sales: [],
     restocks: [],
-    createdAt: new Date().toISOString(),
+    expenses: [],
+    createdAt: now,
   };
   localStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
   return store;
@@ -73,7 +77,7 @@ export function saveStore(store: StoreData): void {
 }
 
 export function addProduct(store: StoreData, product: Omit<Product, 'id'>): StoreData {
-  const updated = { ...store, products: [...store.products, { ...product, id: generateId(), initialQuantity: product.quantity }] };
+  const updated = { ...store, products: [...store.products, { ...product, id: generateId(), initialQuantity: product.quantity, addedAt: new Date().toISOString() }] };
   saveStore(updated);
   return updated;
 }
@@ -125,7 +129,8 @@ export function clearSales(store: StoreData): StoreData {
 }
 
 export function importProducts(store: StoreData, products: Omit<Product, 'id'>[]): StoreData {
-  const newProducts = products.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity }));
+  const now = new Date().toISOString();
+  const newProducts = products.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }));
   const updated = { ...store, products: [...store.products, ...newProducts] };
   saveStore(updated);
   return updated;
