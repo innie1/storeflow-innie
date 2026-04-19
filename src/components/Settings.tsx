@@ -209,8 +209,43 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         )}
       </div>
 
+      {/* Theme Picker */}
+      <div className="bg-card shadow-card rounded-xl p-5 space-y-4">
+        <div>
+          <h3 className="font-display font-bold text-base">Appearance</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Pick a look that fits how you work.</p>
+        </div>
+        <div className="space-y-2">
+          {THEMES.map(t => (
+            <button
+              key={t.id}
+              onClick={() => handleThemeChange(t.id)}
+              className={`w-full p-3 rounded-lg border text-left transition-colors flex items-center gap-3 ${
+                theme === t.id
+                  ? 'bg-primary/10 border-primary/40'
+                  : 'bg-surface-2 border-border hover:border-primary/30'
+              }`}
+            >
+              <div
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 border border-border"
+                style={{ background: t.swatch }}
+              >
+                <span>{t.emoji}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-display font-semibold text-sm text-foreground">{t.label}</span>
+                  {theme === t.id && <span className="text-primary text-sm">✓</span>}
+                </div>
+                <p className="text-[11px] mt-0.5 text-muted-foreground">{t.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Lock Timer */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+      <div className="bg-card shadow-card rounded-xl p-5 space-y-4">
         <h3 className="font-display font-bold text-base">Lock Timer</h3>
         <p className="text-xs text-muted-foreground">Choose how long your store stays unlocked after login.</p>
         <div className="space-y-2">
