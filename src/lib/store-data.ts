@@ -236,5 +236,7 @@ export function getDashboardStats(store: StoreData) {
   const lowStockProducts = store.products.filter(p => p.quantity <= 5);
   const totalSales = store.sales.length;
   const inventoryValue = store.products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
-  return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue };
+  const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+  const netIncome = totalRevenue - totalExpenses;
+  return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue, totalExpenses, netIncome };
 }
