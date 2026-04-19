@@ -247,8 +247,16 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           return (
             <div key={p.id} className="p-3 rounded-lg bg-card border border-border flex flex-wrap items-center gap-3 hover:border-primary/20 transition-colors">
               <div className="flex-1 min-w-[150px]">
-                <p className="font-display font-semibold text-sm">{p.name}</p>
-                <p className="text-xs text-muted-foreground">{p.category}</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="font-display font-semibold text-sm">{p.name}</p>
+                  {p.addedAt && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
+                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {p.category}
+                  {p.addedAt && <span className="ml-1.5">• Added {new Date(p.addedAt).toLocaleDateString()}</span>}
+                </p>
               </div>
               <div className="text-right text-xs space-y-0.5">
                 <p>Cost: <span className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</span></p>
