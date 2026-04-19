@@ -263,7 +263,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       </div>
 
       {/* Income Summary: Gross Revenue / Expenses / Net Income */}
-      <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+      <div className="p-4 rounded-xl bg-card shadow-card space-y-3">
         <div className="flex justify-between items-baseline">
           <h3 className="font-display font-bold text-sm">Income Summary</h3>
           <span className="text-[10px] text-muted-foreground uppercase">All time</span>
@@ -319,7 +319,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
 
       {/* Breakdown Panel */}
       {activeBreakdown === 'revenue' && (
-        <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
+        <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
           <h3 className="font-display font-bold text-sm text-primary">Revenue Breakdown</h3>
           {getRevenueBreakdown().length === 0 ? (
             <p className="text-sm text-muted-foreground">No sales yet</p>
@@ -340,7 +340,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       )}
 
       {activeBreakdown === 'profit' && (
-        <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
+        <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
           <h3 className="font-display font-bold text-sm text-success">Profit Breakdown</h3>
           {getProfitBreakdown().length === 0 ? (
             <p className="text-sm text-muted-foreground">No sales yet</p>
@@ -367,7 +367,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         const totalPurchased = items.reduce((s, i) => s + i.purchased, 0);
         const totalValue = items.reduce((s, i) => s + i.value, 0);
         return (
-          <div className="p-4 rounded-xl bg-card border border-border space-y-3 animate-fade-in">
+          <div className="p-4 rounded-xl bg-card shadow-card space-y-3 animate-fade-in">
             <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
             <div className="grid grid-cols-3 gap-2">
               <div className="p-2 rounded-lg bg-surface-2 text-center">
@@ -421,7 +421,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           { key: 'custom', label: 'Custom' },
         ];
         return (
-          <div className="p-4 rounded-xl bg-card border border-border space-y-3 animate-fade-in">
+          <div className="p-4 rounded-xl bg-card shadow-card space-y-3 animate-fade-in">
             <h3 className="font-display font-bold text-sm">Sales by Day</h3>
 
             <div className="flex flex-wrap gap-1.5">
@@ -518,7 +518,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
 
       {/* Sales Trend Chart (last 14 days) */}
       {store.sales.length > 0 && (
-        <div className="p-4 rounded-xl bg-card border border-border">
+        <div className="p-4 rounded-xl bg-card shadow-card">
           <div className="flex justify-between items-baseline mb-2">
             <h3 className="font-display font-bold">Sales Trend</h3>
             <span className="text-[10px] text-muted-foreground">Last 14 days</span>
