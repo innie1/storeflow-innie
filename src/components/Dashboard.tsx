@@ -208,18 +208,19 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
     return Array.from(map.values()).sort((a, b) => b.ts - a.ts);
   };
 
-  // Trend chart: last 14 days
+  // Trend chart: last 14 days — revenue + profit
   const trendData = useMemo(() => {
     const days = 14;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const buckets: { label: string; total: number; ts: number }[] = [];
+    const buckets: { label: string; total: number; profit: number; ts: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       buckets.push({
         label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         total: 0,
+        profit: 0,
         ts: d.getTime(),
       });
     }
@@ -227,7 +228,10 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       const sd = new Date(s.date);
       sd.setHours(0, 0, 0, 0);
       const bucket = buckets.find(b => b.ts === sd.getTime());
-      if (bucket) bucket.total += s.total;
+      if (bucket) {
+        bucket.total += s.total;
+        bucket.profit += s.profit;
+      }
     });
     return buckets;
   }, [store.sales]);
@@ -515,11 +519,19 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       {/* Sales Trend Chart (last 14 days) */}
       {store.sales.length > 0 && (
         <div className="p-4 rounded-xl bg-card border border-border">
-          <div className="flex justify-between items-baseline mb-3">
+          <div className="flex justify-between items-baseline mb-2">
             <h3 className="font-display font-bold">Sales Trend</h3>
             <span className="text-[10px] text-muted-foreground">Last 14 days</span>
           </div>
-          <div className="h-[180px]">
+          <div className="flex gap-3 mb-2 text-[11px]">
+            <span className="flex items-center gap-1.5 text-primary">
+              <span className="w-3 h-0.5 bg-primary rounded" /> Revenue
+            </span>
+            <span className="flex items-center gap-1.5 text-success">
+              <span className="w-3 h-0.5 bg-success rounded" /> Profit
+            </span>
+          </div>
+          <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData} margin={{ left: -10, right: 10, top: 5, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 8% 18%)" vertical={false} />
@@ -528,14 +540,25 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
                 <Tooltip
                   contentStyle={{ background: 'hsl(240 10% 10%)', border: '1px solid hsl(240 8% 18%)', borderRadius: 8, fontSize: 12 }}
                   labelStyle={{ color: 'hsl(45 90% 61%)' }}
-                  formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Revenue']}
+                  formatter={(value: number, name: string) => [`₦${value.toLocaleString()}`, name === 'total' ? 'Revenue' : 'Profit']}
                 />
                 <Line
                   type="monotone"
                   dataKey="total"
+                  name="Revenue"
                   stroke="hsl(45, 90%, 61%)"
                   strokeWidth={2}
                   dot={{ fill: 'hsl(45, 90%, 61%)', r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="profit"
+                  name="Profit"
+                  stroke="hsl(142, 71%, 45%)"
+                  strokeWidth={2}
+                  strokeDasharray="4 3"
+                  dot={{ fill: 'hsl(142, 71%, 45%)', r: 3 }}
                   activeDot={{ r: 5 }}
                 />
               </LineChart>
