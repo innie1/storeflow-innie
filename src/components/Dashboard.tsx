@@ -34,8 +34,10 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
     report += `==============================\n\n`;
 
     report += `💰 OVERVIEW\n`;
-    report += `Revenue: ₦${stats.totalRevenue.toLocaleString()}\n`;
-    report += `Profit: ₦${stats.totalProfit.toLocaleString()}\n`;
+    report += `Gross Revenue: ₦${stats.totalRevenue.toLocaleString()}\n`;
+    report += `Total Expenses: ₦${stats.totalExpenses.toLocaleString()}\n`;
+    report += `Net Income: ₦${stats.netIncome.toLocaleString()}\n`;
+    report += `Profit (margin): ₦${stats.totalProfit.toLocaleString()}\n`;
     report += `Inventory Value: ₦${stats.inventoryValue.toLocaleString()}\n`;
     report += `Total Sales: ${stats.totalSales}\n`;
     report += `Products: ${stats.totalProducts}\n`;
