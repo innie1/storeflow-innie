@@ -8,6 +8,7 @@ import Sales from '@/components/Sales';
 import SalesHistory from '@/components/SalesHistory';
 import ReceiptScanner from '@/components/ReceiptScanner';
 import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
+import Expenses from '@/components/Expenses';
 import { ToastContainer } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
@@ -15,6 +16,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
+  { id: 'expenses', label: 'Expenses', icon: '🧾' },
   { id: 'history', label: 'History', icon: '📋' },
 ];
 
@@ -98,6 +100,7 @@ export default function Index() {
           />
         )}
         {tab === 'sales' && <Sales store={store} onUpdate={setStore} />}
+        {tab === 'expenses' && <Expenses store={store} onUpdate={setStore} />}
         {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
         {tab === 'settings' && <Settings store={store} onUpdate={setStore} onLock={handleLock} />}
       </main>
