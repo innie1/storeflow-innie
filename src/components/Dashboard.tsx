@@ -263,7 +263,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       </div>
 
       {/* Income Summary: Gross Revenue / Expenses / Net Income */}
-      <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+      <div className="p-4 rounded-xl bg-card shadow-card space-y-3">
         <div className="flex justify-between items-baseline">
           <h3 className="font-display font-bold text-sm">Income Summary</h3>
           <span className="text-[10px] text-muted-foreground uppercase">All time</span>
@@ -295,10 +295,10 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           <button
             key={c.label}
             onClick={() => c.type && toggleBreakdown(c.type)}
-            className={`p-4 rounded-xl bg-card border text-left transition-colors ${
+            className={`p-4 rounded-xl bg-card shadow-card text-left transition-all ${
               activeBreakdown === c.type && c.type
-                ? 'border-primary/50 bg-primary/5'
-                : 'border-border hover:border-primary/30'
+                ? 'ring-1 ring-primary/40 bg-primary/5'
+                : 'hover:bg-surface-2'
             }`}
           >
             <p className="text-xs text-muted-foreground mb-1">
@@ -309,7 +309,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         ))}
         <button
           onClick={() => onNavigate('inventory', true)}
-          className="p-4 rounded-xl bg-card border border-warning/30 hover:border-warning/60 transition-colors text-left"
+          className="p-4 rounded-xl bg-card shadow-card ring-1 ring-warning/30 hover:ring-warning/60 transition-all text-left"
         >
           <p className="text-xs text-muted-foreground mb-1">Low Stock ⚠</p>
           <p className="font-display font-bold text-xl text-warning">{stats.lowStockProducts.length}</p>
@@ -319,7 +319,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
 
       {/* Breakdown Panel */}
       {activeBreakdown === 'revenue' && (
-        <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
+        <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
           <h3 className="font-display font-bold text-sm text-primary">Revenue Breakdown</h3>
           {getRevenueBreakdown().length === 0 ? (
             <p className="text-sm text-muted-foreground">No sales yet</p>
@@ -340,7 +340,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       )}
 
       {activeBreakdown === 'profit' && (
-        <div className="p-4 rounded-xl bg-card border border-border space-y-2 animate-fade-in">
+        <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
           <h3 className="font-display font-bold text-sm text-success">Profit Breakdown</h3>
           {getProfitBreakdown().length === 0 ? (
             <p className="text-sm text-muted-foreground">No sales yet</p>
@@ -367,7 +367,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         const totalPurchased = items.reduce((s, i) => s + i.purchased, 0);
         const totalValue = items.reduce((s, i) => s + i.value, 0);
         return (
-          <div className="p-4 rounded-xl bg-card border border-border space-y-3 animate-fade-in">
+          <div className="p-4 rounded-xl bg-card shadow-card space-y-3 animate-fade-in">
             <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
             <div className="grid grid-cols-3 gap-2">
               <div className="p-2 rounded-lg bg-surface-2 text-center">
@@ -421,7 +421,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           { key: 'custom', label: 'Custom' },
         ];
         return (
-          <div className="p-4 rounded-xl bg-card border border-border space-y-3 animate-fade-in">
+          <div className="p-4 rounded-xl bg-card shadow-card space-y-3 animate-fade-in">
             <h3 className="font-display font-bold text-sm">Sales by Day</h3>
 
             <div className="flex flex-wrap gap-1.5">
@@ -518,7 +518,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
 
       {/* Sales Trend Chart (last 14 days) */}
       {store.sales.length > 0 && (
-        <div className="p-4 rounded-xl bg-card border border-border">
+        <div className="p-4 rounded-xl bg-card shadow-card">
           <div className="flex justify-between items-baseline mb-2">
             <h3 className="font-display font-bold">Sales Trend</h3>
             <span className="text-[10px] text-muted-foreground">Last 14 days</span>
@@ -534,31 +534,31 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData} margin={{ left: -10, right: 10, top: 5, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 8% 18%)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: 'hsl(240 5% 50%)', fontSize: 10 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: 'hsl(240 5% 50%)', fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" vertical={false} />
+                <XAxis dataKey="label" tick={{ fill: 'hsl(var(--chart-axis))', fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: 'hsl(var(--chart-axis))', fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
                 <Tooltip
-                  contentStyle={{ background: 'hsl(240 10% 10%)', border: '1px solid hsl(240 8% 18%)', borderRadius: 8, fontSize: 12 }}
-                  labelStyle={{ color: 'hsl(45 90% 61%)' }}
+                  contentStyle={{ background: 'hsl(var(--chart-tooltip-bg))', border: '1px solid hsl(var(--chart-tooltip-border))', borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: 'hsl(var(--primary))' }}
                   formatter={(value: number, name: string) => [`₦${value.toLocaleString()}`, name === 'total' ? 'Revenue' : 'Profit']}
                 />
                 <Line
                   type="monotone"
                   dataKey="total"
                   name="Revenue"
-                  stroke="hsl(45, 90%, 61%)"
+                  stroke="hsl(var(--chart-revenue))"
                   strokeWidth={2}
-                  dot={{ fill: 'hsl(45, 90%, 61%)', r: 3 }}
+                  dot={{ fill: 'hsl(var(--chart-revenue))', r: 3 }}
                   activeDot={{ r: 5 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="profit"
                   name="Profit"
-                  stroke="hsl(142, 71%, 45%)"
+                  stroke="hsl(var(--chart-profit))"
                   strokeWidth={2}
                   strokeDasharray="4 3"
-                  dot={{ fill: 'hsl(142, 71%, 45%)', r: 3 }}
+                  dot={{ fill: 'hsl(var(--chart-profit))', r: 3 }}
                   activeDot={{ r: 5 }}
                 />
               </LineChart>
@@ -568,24 +568,24 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       )}
 
       {topSellers.length > 0 && (
-        <div className="p-4 rounded-xl bg-card border border-border">
+        <div className="p-4 rounded-xl bg-card shadow-card">
           <h3 className="font-display font-bold mb-3">Top Sellers</h3>
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topSellers} layout="vertical" margin={{ left: 0, right: 10 }}>
-                <XAxis type="number" tick={{ fill: 'hsl(240 5% 50%)', fontSize: 11 }} />
+                <XAxis type="number" tick={{ fill: 'hsl(var(--chart-axis))', fontSize: 11 }} />
                 <YAxis
                   type="category"
                   dataKey="name"
                   width={120}
-                  tick={{ fill: 'hsl(45 5% 85%)', fontSize: 11 }}
+                  tick={{ fill: 'hsl(var(--foreground))', fontSize: 11 }}
                 />
                 <Tooltip
-                  contentStyle={{ background: 'hsl(240 10% 10%)', border: '1px solid hsl(240 8% 18%)', borderRadius: 8, fontSize: 12 }}
-                  labelStyle={{ color: 'hsl(45 90% 61%)' }}
+                  contentStyle={{ background: 'hsl(var(--chart-tooltip-bg))', border: '1px solid hsl(var(--chart-tooltip-border))', borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: 'hsl(var(--primary))' }}
                   formatter={(value: number) => [`${value} units`, 'Sold']}
                 />
-                <Bar dataKey="totalSold" fill="hsl(45, 90%, 61%)" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="totalSold" fill="hsl(var(--chart-revenue))" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

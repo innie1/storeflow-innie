@@ -1,50 +1,174 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   THEMES
+   - Default: Graphite (refined, quiet luxury)
+   - .theme-blue: Blue Sky (light, Apple-like)
+   - .theme-forest: Green Forest (premium, money-focused)
+   ============================================================ */
+
 @layer base {
+  /* ---------- GRAPHITE (default) ---------- */
   :root {
-    --background: 240 12% 5%;
-    --foreground: 45 5% 85%;
+    --background: 240 10% 5%;          /* #0D0D0F */
+    --foreground: 0 0% 93%;            /* #EDEDED */
 
-    --card: 240 10% 8%;
-    --card-foreground: 45 5% 85%;
+    --card: 225 13% 10%;               /* #16181D */
+    --card-foreground: 0 0% 93%;
 
-    --popover: 240 10% 10%;
-    --popover-foreground: 45 5% 85%;
+    --popover: 225 13% 11%;
+    --popover-foreground: 0 0% 93%;
 
-    --primary: 45 90% 61%;
-    --primary-foreground: 240 12% 5%;
+    --primary: 45 87% 62%;             /* #F2C94C */
+    --primary-foreground: 240 10% 5%;
 
-    --secondary: 240 8% 14%;
-    --secondary-foreground: 45 5% 85%;
+    --secondary: 225 10% 14%;
+    --secondary-foreground: 0 0% 93%;
 
-    --muted: 240 8% 14%;
-    --muted-foreground: 240 5% 50%;
+    --muted: 225 10% 14%;
+    --muted-foreground: 220 6% 57%;    /* #8A8F98 */
 
-    --accent: 45 90% 61%;
-    --accent-foreground: 240 12% 5%;
+    --accent: 45 87% 62%;
+    --accent-foreground: 240 10% 5%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 8% 18%;
-    --input: 240 8% 18%;
-    --ring: 45 90% 61%;
+    --border: 225 10% 16%;
+    --input: 225 10% 16%;
+    --ring: 45 87% 62%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
 
-    --gold: 45 90% 61%;
-    --gold-dim: 45 70% 40%;
-    --gold-glow: 45 90% 75%;
-    --surface-1: 240 10% 8%;
-    --surface-2: 240 8% 12%;
-    --surface-3: 240 8% 16%;
-    --success: 142 71% 45%;
+    --gold: 45 87% 62%;
+    --gold-dim: 45 60% 38%;
+    --gold-glow: 45 87% 75%;
+    --surface-1: 225 13% 10%;
+    --surface-2: 225 11% 13%;
+    --surface-3: 225 10% 17%;
+    --success: 145 63% 42%;            /* #27AE60 */
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
+    --warning: 45 87% 62%;
+
+    /* Chart-aware tokens (raw HSL channels for recharts) */
+    --chart-revenue: 45 87% 62%;
+    --chart-profit: 145 63% 49%;
+    --chart-grid: 225 10% 18%;
+    --chart-axis: 220 6% 50%;
+    --chart-tooltip-bg: 225 13% 11%;
+    --chart-tooltip-border: 225 10% 18%;
+
+    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.4), 0 8px 24px hsl(0 0% 0% / 0.25);
+    --font-body: 'DM Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  /* ---------- BLUE SKY ---------- */
+  .theme-blue {
+    --background: 210 100% 98%;        /* #F5FAFF */
+    --foreground: 0 0% 10%;            /* #1A1A1A */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 207 92% 60%;            /* #3BA4F7 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 0 0% 10%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 210 12% 54%;   /* #7A8A9A */
+
+    --accent: 207 92% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 358 100% 67%;       /* #FF5A5F */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 30% 92%;
+    --input: 210 30% 92%;
+    --ring: 207 92% 60%;
+
+    --gold: 207 92% 60%;               /* primary alias for legacy classes */
+    --gold-dim: 207 60% 70%;
+    --gold-glow: 207 92% 75%;
+    --surface-1: 0 0% 100%;
+    --surface-2: 210 40% 97%;
+    --surface-3: 210 30% 94%;
+    --success: 145 63% 49%;            /* #2ECC71 */
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+
+    --chart-revenue: 207 92% 60%;
+    --chart-profit: 145 63% 49%;
+    --chart-grid: 210 30% 90%;
+    --chart-axis: 210 12% 54%;
+    --chart-tooltip-bg: 0 0% 100%;
+    --chart-tooltip-border: 210 30% 88%;
+
+    --shadow-card: 0 1px 2px hsl(207 50% 70% / 0.08), 0 8px 24px hsl(207 50% 60% / 0.08);
+    --font-body: 'Inter', sans-serif;
+    --font-display: 'Inter', sans-serif;
+  }
+
+  /* ---------- GREEN FOREST ---------- */
+  .theme-forest {
+    --background: 162 35% 9%;          /* #0F1F1A */
+    --foreground: 120 30% 93%;         /* #E8F5E9 */
+
+    --card: 165 28% 13%;               /* #162A24 */
+    --card-foreground: 120 30% 93%;
+
+    --popover: 165 28% 14%;
+    --popover-foreground: 120 30% 93%;
+
+    --primary: 145 63% 42%;            /* #27AE60 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 165 22% 17%;
+    --secondary-foreground: 120 30% 93%;
+
+    --muted: 165 22% 17%;
+    --muted-foreground: 150 10% 60%;
+
+    --accent: 145 50% 60%;             /* #6FCF97 */
+    --accent-foreground: 162 35% 9%;
+
+    --destructive: 0 80% 63%;          /* #EB5757 */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 165 20% 19%;
+    --input: 165 20% 19%;
+    --ring: 145 63% 42%;
+
+    --gold: 145 63% 42%;
+    --gold-dim: 145 40% 30%;
+    --gold-glow: 145 60% 60%;
+    --surface-1: 165 28% 13%;
+    --surface-2: 165 24% 16%;
+    --surface-3: 165 20% 20%;
+    --success: 145 60% 55%;
+    --success-foreground: 0 0% 100%;
+    --warning: 45 87% 62%;             /* #F2C94C */
+
+    --chart-revenue: 145 50% 60%;      /* light green */
+    --chart-profit: 145 70% 50%;       /* brighter neon */
+    --chart-grid: 165 20% 20%;
+    --chart-axis: 150 10% 55%;
+    --chart-tooltip-bg: 165 28% 14%;
+    --chart-tooltip-border: 165 20% 22%;
+
+    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.4), 0 8px 24px hsl(145 50% 10% / 0.4);
+    --font-body: 'DM Mono', monospace;
+    --font-display: 'Syne', sans-serif;
   }
 }
 
@@ -53,27 +177,30 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-mono;
-    font-family: 'DM Mono', monospace;
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
   }
 }
 
 @layer utilities {
   .font-display {
-    font-family: 'Syne', sans-serif;
+    font-family: var(--font-display);
   }
   .font-mono {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font-body);
+  }
+  .shadow-card {
+    box-shadow: var(--shadow-card);
   }
   .gold-glow {
-    box-shadow: 0 0 20px hsl(var(--gold) / 0.15), 0 0 60px hsl(var(--gold) / 0.05);
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.12);
   }
   .gold-border-glow {
-    border-color: hsl(var(--gold) / 0.3);
-    box-shadow: 0 0 10px hsl(var(--gold) / 0.1);
+    border-color: hsl(var(--primary) / 0.25);
   }
 }
 
@@ -85,9 +212,9 @@
   background: hsl(var(--surface-1));
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--gold-dim));
+  background: hsl(var(--primary) / 0.4);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--gold));
+  background: hsl(var(--primary) / 0.7);
 }
