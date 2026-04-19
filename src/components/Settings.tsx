@@ -104,7 +104,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   return (
     <div className="animate-fade-in max-w-md mx-auto space-y-4">
       {/* Store Profile */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+      <div className="bg-card shadow-card rounded-xl p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xl">
