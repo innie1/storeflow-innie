@@ -295,10 +295,10 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           <button
             key={c.label}
             onClick={() => c.type && toggleBreakdown(c.type)}
-            className={`p-4 rounded-xl bg-card border text-left transition-colors ${
+            className={`p-4 rounded-xl bg-card shadow-card text-left transition-all ${
               activeBreakdown === c.type && c.type
-                ? 'border-primary/50 bg-primary/5'
-                : 'border-border hover:border-primary/30'
+                ? 'ring-1 ring-primary/40 bg-primary/5'
+                : 'hover:bg-surface-2'
             }`}
           >
             <p className="text-xs text-muted-foreground mb-1">
@@ -309,7 +309,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         ))}
         <button
           onClick={() => onNavigate('inventory', true)}
-          className="p-4 rounded-xl bg-card border border-warning/30 hover:border-warning/60 transition-colors text-left"
+          className="p-4 rounded-xl bg-card shadow-card ring-1 ring-warning/30 hover:ring-warning/60 transition-all text-left"
         >
           <p className="text-xs text-muted-foreground mb-1">Low Stock ⚠</p>
           <p className="font-display font-bold text-xl text-warning">{stats.lowStockProducts.length}</p>
