@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { StoreData, StoreProfile } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
+import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
 
 export type LockTimer = '1h' | '12h' | 'never';
 
@@ -62,9 +63,16 @@ interface SettingsProps {
 export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
   const [editing, setEditing] = useState(false);
+  const [theme, setTheme] = useState<ThemeId>(getTheme());
   const [profile, setProfile] = useState<StoreProfile>(
     store.profile || { storeType: '', location: '', phone: '', email: '' }
   );
+
+  const handleThemeChange = (t: ThemeId) => {
+    setTheme(t);
+    applyTheme(t);
+    showToast(`Theme: ${THEMES.find(x => x.id === t)?.label}`);
+  };
 
   useEffect(() => {
     saveLockTimer(timer);
