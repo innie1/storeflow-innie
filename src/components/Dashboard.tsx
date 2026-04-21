@@ -241,10 +241,6 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const profitAbs = Math.abs(stats.totalProfit);
 
 
-  const profitTone = stats.totalProfit >= 0 ? 'text-success' : 'text-destructive';
-  const profitSign = stats.totalProfit >= 0 ? '+' : '−';
-  const profitAbs = Math.abs(stats.totalProfit);
-
   return (
     <div className="animate-fade-in space-y-3">
       {/* HERO: Revenue */}
