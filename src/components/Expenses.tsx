@@ -218,6 +218,17 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
           </div>
         </div>
       )}
+
+      {confirmDel && (
+        <ConfirmAccessCode
+          expectedCode={store.accessCode}
+          title="Delete this expense?"
+          message={`${confirmDel.category} • ₦${confirmDel.amount.toLocaleString()}${confirmDel.source === 'restock' ? ' — auto-created from a restock' : ''}. Enter your store access code to confirm.`}
+          confirmLabel="Delete Expense"
+          onConfirm={doDelete}
+          onCancel={() => setConfirmDel(null)}
+        />
+      )}
     </div>
   );
 }
