@@ -157,7 +157,11 @@ export function recordSale(store: StoreData, productId: string, quantity: number
 }
 
 export function clearSales(store: StoreData): StoreData {
-  const updated = { ...store, sales: [] };
+  const trash = store.sales.reduce<TrashItem[]>((acc, s) => {
+    acc.unshift({ id: generateId(), kind: 'sale', deletedAt: new Date().toISOString(), payload: s });
+    return acc;
+  }, []);
+  const updated = { ...store, sales: [], trash: [...trash, ...(store.trash || [])] };
   saveStore(updated);
   return updated;
 }
