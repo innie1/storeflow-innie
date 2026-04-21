@@ -558,30 +558,48 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         </div>
       )}
 
-      {topSellers.length > 0 && (
-        <div className="p-4 rounded-xl bg-card shadow-card">
-          <h3 className="font-display font-bold mb-3">Top Sellers</h3>
-          <div className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topSellers} layout="vertical" margin={{ left: 0, right: 10 }}>
-                <XAxis type="number" tick={{ fill: 'hsl(var(--chart-axis))', fontSize: 11 }} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={120}
-                  tick={{ fill: 'hsl(var(--foreground))', fontSize: 11 }}
-                />
-                <Tooltip
-                  contentStyle={{ background: 'hsl(var(--chart-tooltip-bg))', border: '1px solid hsl(var(--chart-tooltip-border))', borderRadius: 8, fontSize: 12 }}
-                  labelStyle={{ color: 'hsl(var(--primary))' }}
-                  formatter={(value: number) => [`${value} units`, 'Sold']}
-                />
-                <Bar dataKey="totalSold" fill="hsl(var(--chart-revenue))" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      {topSellers.length > 0 && (() => {
+        const maxSold = Math.max(...topSellers.map(t => t.totalSold), 1);
+        return (
+          <div className="p-4 rounded-2xl bg-card shadow-card">
+            <h3 className="font-display font-bold mb-3">Top Sellers</h3>
+            <div className="space-y-3">
+              {topSellers.map(t => {
+                const pct = Math.max(6, Math.round((t.totalSold / maxSold) * 100));
+                return (
+                  <div key={t.name} className="flex items-center gap-3">
+                    <span className="text-sm text-foreground font-display font-semibold w-24 truncate shrink-0">{t.name}</span>
+                    <div className="flex-1 h-3 rounded-full bg-surface-2 overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-muted-foreground tabular-nums w-10 text-right shrink-0">{t.totalSold}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* Share report (compact footer) */}
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={handleShareReport}
+          className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors text-xs font-display font-semibold"
+        >
+          📤 Share Performance Report
+        </button>
+        <button
+          onClick={handleWhatsAppReport}
+          className="p-2.5 rounded-xl bg-success/10 border border-success/20 text-success hover:bg-success/20 transition-colors text-sm"
+          title="Share on WhatsApp"
+        >
+          💬
+        </button>
+      </div>
     </div>
   );
 }
