@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { StoreData } from '@/types/store';
 import { getDashboardStats, getTopSellers } from '@/lib/store-data';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 
 interface DashboardProps {
   store: StoreData;
