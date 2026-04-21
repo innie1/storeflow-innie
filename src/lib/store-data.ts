@@ -75,7 +75,21 @@ export function loadStore(code: string): StoreData | null {
 }
 
 export function saveStore(store: StoreData): void {
-  localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
+  // Auto-purge trash items older than 7 days on every save
+  const cutoff = Date.now() - TRASH_RETENTION_MS;
+  const trash = (store.trash || []).filter(t => new Date(t.deletedAt).getTime() > cutoff);
+  const cleaned = { ...store, trash };
+  localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(cleaned));
+}
+
+function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | Expense): TrashItem[] {
+  const item: TrashItem = {
+    id: generateId(),
+    kind,
+    deletedAt: new Date().toISOString(),
+    payload,
+  };
+  return [item, ...(store.trash || [])];
 }
 
 export function addProduct(store: StoreData, product: Omit<Product, 'id'>): StoreData {
@@ -94,7 +108,25 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
 }
 
 export function deleteProduct(store: StoreData, id: string): StoreData {
-  const updated = { ...store, products: store.products.filter(p => p.id !== id) };
+  const product = store.products.find(p => p.id === id);
+  if (!product) return store;
+  const updated = {
+    ...store,
+    products: store.products.filter(p => p.id !== id),
+    trash: pushTrash(store, 'product', product),
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteSale(store: StoreData, id: string): StoreData {
+  const sale = store.sales.find(s => s.id === id);
+  if (!sale) return store;
+  const updated = {
+    ...store,
+    sales: store.sales.filter(s => s.id !== id),
+    trash: pushTrash(store, 'sale', sale),
+  };
   saveStore(updated);
   return updated;
 }
