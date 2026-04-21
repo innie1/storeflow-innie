@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
+import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 
 interface InventoryProps {
   store: StoreData;
@@ -30,6 +31,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [receiveMode, setReceiveMode] = useState(false);
   const [receiveData, setReceiveData] = useState<Record<string, { qty: string; cost: string }>>({});
+  const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
 
   let products = store.products;
   if (filterLowStock) products = products.filter(p => p.quantity <= 5);
@@ -60,9 +62,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     showToast('Product updated');
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (!confirm(`Delete ${name}?`)) return;
-    onUpdate(deleteProduct(store, id));
+  const handleDelete = (p: Product) => {
+    setConfirmDelete(p);
+  };
+
+  const doDelete = () => {
+    if (!confirmDelete) return;
+    onUpdate(deleteProduct(store, confirmDelete.id));
+    setConfirmDelete(null);
     showToast('Product deleted');
   };
 
@@ -281,7 +288,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 </button>
                 <button onClick={() => { setRestockProduct(p); setRestockQty(''); }} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success">↑</button>
                 <button onClick={() => setEditProduct({ ...p })} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary">✎</button>
-                <button onClick={() => handleDelete(p.id, p.name)} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive">✕</button>
+                <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive">✕</button>
               </div>
             </div>
           );
@@ -482,6 +489,17 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             )}
           </div>
         </Modal>
+      )}
+
+      {confirmDelete && (
+        <ConfirmAccessCode
+          expectedCode={store.accessCode}
+          title={`Delete "${confirmDelete.name}"?`}
+          message="This will permanently remove the product from your inventory. Enter your store access code to confirm."
+          confirmLabel="Delete Product"
+          onConfirm={doDelete}
+          onCancel={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   );

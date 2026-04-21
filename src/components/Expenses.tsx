@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { StoreData, ExpenseCategory } from '@/types/store';
+import { StoreData, ExpenseCategory, Expense } from '@/types/store';
 import { addExpense, deleteExpense, EXPENSE_CATEGORIES } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
+import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 
 interface ExpensesProps {
   store: StoreData;
@@ -24,6 +25,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState('');
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
+  const [confirmDel, setConfirmDel] = useState<Expense | null>(null);
 
   const expenses = store.expenses || [];
 
@@ -50,11 +52,14 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
     showToast('Expense added');
   };
 
-  const handleDelete = (id: string, source?: string) => {
-    if (source === 'restock') {
-      if (!confirm('This expense was auto-created from a restock. Delete anyway?')) return;
-    } else if (!confirm('Delete this expense?')) return;
-    onUpdate(deleteExpense(store, id));
+  const handleDelete = (e: Expense) => {
+    setConfirmDel(e);
+  };
+
+  const doDelete = () => {
+    if (!confirmDel) return;
+    onUpdate(deleteExpense(store, confirmDel.id));
+    setConfirmDel(null);
     showToast('Expense deleted');
   };
 
@@ -139,7 +144,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
               <div className="text-right">
                 <p className="font-display font-bold text-destructive">₦{e.amount.toLocaleString()}</p>
                 <button
-                  onClick={() => handleDelete(e.id, e.source)}
+                  onClick={() => handleDelete(e)}
                   className="text-[10px] text-muted-foreground hover:text-destructive mt-0.5"
                 >
                   Delete
@@ -212,6 +217,17 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {confirmDel && (
+        <ConfirmAccessCode
+          expectedCode={store.accessCode}
+          title="Delete this expense?"
+          message={`${confirmDel.category} • ₦${confirmDel.amount.toLocaleString()}${confirmDel.source === 'restock' ? ' — auto-created from a restock' : ''}. Enter your store access code to confirm.`}
+          confirmLabel="Delete Expense"
+          onConfirm={doDelete}
+          onCancel={() => setConfirmDel(null)}
+        />
       )}
     </div>
   );
