@@ -244,78 +244,76 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
     { label: 'Products', value: stats.totalProducts.toString(), color: 'text-foreground', type: null },
   ];
 
+  const profitTone = stats.totalProfit >= 0 ? 'text-success' : 'text-destructive';
+  const profitSign = stats.totalProfit >= 0 ? '+' : '−';
+  const profitAbs = Math.abs(stats.totalProfit);
+
   return (
-    <div className="animate-fade-in space-y-4">
-      {/* Share Report Button */}
-      <div className="flex gap-2">
-        <button
-          onClick={handleShareReport}
-          className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary font-display font-semibold hover:bg-primary/20 transition-colors text-sm"
-        >
-          📤 Share Performance Report
-        </button>
-        <button
-          onClick={handleWhatsAppReport}
-          className="p-3 rounded-lg bg-success/10 border border-success/20 text-success font-display font-semibold hover:bg-success/20 transition-colors text-sm"
-        >
-          💬
-        </button>
-      </div>
-
-      {/* Income Summary: Gross Revenue / Expenses / Net Income */}
-      <div className="p-4 rounded-xl bg-card shadow-card space-y-3">
-        <div className="flex justify-between items-baseline">
-          <h3 className="font-display font-bold text-sm">Income Summary</h3>
-          <span className="text-[10px] text-muted-foreground uppercase">All time</span>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="p-2.5 rounded-lg bg-primary/10 text-center">
-            <p className="text-[10px] text-primary uppercase">Gross Revenue</p>
-            <p className="font-display font-bold text-sm text-primary">₦{stats.totalRevenue.toLocaleString()}</p>
-          </div>
-          <div className="p-2.5 rounded-lg bg-destructive/10 text-center">
-            <p className="text-[10px] text-destructive uppercase">Expenses</p>
-            <p className="font-display font-bold text-sm text-destructive">−₦{stats.totalExpenses.toLocaleString()}</p>
-          </div>
-          <div className={`p-2.5 rounded-lg text-center ${stats.netIncome >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
-            <p className={`text-[10px] uppercase ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>Net Income</p>
-            <p className={`font-display font-bold text-sm ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
-              ₦{stats.netIncome.toLocaleString()}
-            </p>
-          </div>
-        </div>
-        <p className="text-[10px] text-muted-foreground text-center">
-          Net Income = Gross Revenue − Total Expenses
+    <div className="animate-fade-in space-y-3">
+      {/* HERO: Revenue */}
+      <button
+        onClick={() => toggleBreakdown('revenue')}
+        className={`w-full p-5 rounded-2xl bg-card shadow-card text-left transition-all ${
+          activeBreakdown === 'revenue' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
+        }`}
+      >
+        <p className="text-sm text-muted-foreground font-display">Revenue</p>
+        <p className="font-display font-bold text-[2.4rem] leading-tight text-primary tracking-tight">
+          ₦{stats.totalRevenue.toLocaleString()}
         </p>
+        <p className={`text-sm font-display font-semibold mt-1 ${profitTone}`}>
+          {profitSign}₦{profitAbs.toLocaleString()}
+        </p>
+      </button>
+
+      {/* Sales / Products grid */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => toggleBreakdown('sales')}
+          className={`p-4 rounded-2xl bg-card shadow-card text-left transition-all ${
+            activeBreakdown === 'sales' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
+          }`}
+        >
+          <p className="text-xs text-muted-foreground font-display">Sales</p>
+          <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalSales}</p>
+        </button>
+        <div className="p-4 rounded-2xl bg-card shadow-card">
+          <p className="text-xs text-muted-foreground font-display">Products</p>
+          <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
+        </div>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {cards.map(c => (
-          <button
-            key={c.label}
-            onClick={() => c.type && toggleBreakdown(c.type)}
-            className={`p-4 rounded-xl bg-card shadow-card text-left transition-all ${
-              activeBreakdown === c.type && c.type
-                ? 'ring-1 ring-primary/40 bg-primary/5'
-                : 'hover:bg-surface-2'
-            }`}
-          >
-            <p className="text-xs text-muted-foreground mb-1">
-              {c.label} {c.type && (activeBreakdown === c.type ? '▲' : '▼')}
-            </p>
-            <p className={`font-display font-bold text-xl ${c.color}`}>{c.value}</p>
-          </button>
-        ))}
+      {/* Inventory card with Now badge */}
+      <button
+        onClick={() => toggleBreakdown('inventory')}
+        className={`w-full p-4 rounded-2xl bg-card shadow-card text-left transition-all ${
+          activeBreakdown === 'inventory' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs text-muted-foreground font-display">Inventory</p>
+            <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
+          </div>
+          <div className="text-right">
+            <p className="font-display font-bold text-xl text-success">₦{stats.inventoryValue.toLocaleString()}</p>
+            <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-display font-bold uppercase tracking-wide">
+              Now
+            </span>
+          </div>
+        </div>
+      </button>
+
+      {/* Low stock chip (only if any) */}
+      {stats.lowStockProducts.length > 0 && (
         <button
           onClick={() => onNavigate('inventory', true)}
-          className="p-4 rounded-xl bg-card shadow-card ring-1 ring-warning/30 hover:ring-warning/60 transition-all text-left"
+          className="w-full p-3 rounded-xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/20 transition-colors flex items-center justify-between"
         >
-          <p className="text-xs text-muted-foreground mb-1">Low Stock ⚠</p>
-          <p className="font-display font-bold text-xl text-warning">{stats.lowStockProducts.length}</p>
-          <p className="text-[10px] text-muted-foreground mt-1">Tap to view →</p>
+          <span className="text-sm font-display font-semibold text-warning">⚠ {stats.lowStockProducts.length} low-stock product{stats.lowStockProducts.length === 1 ? '' : 's'}</span>
+          <span className="text-warning text-xs">View →</span>
         </button>
-      </div>
+      )}
 
       {/* Breakdown Panel */}
       {activeBreakdown === 'revenue' && (
