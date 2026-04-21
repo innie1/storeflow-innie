@@ -144,7 +144,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
               <div className="text-right">
                 <p className="font-display font-bold text-destructive">₦{e.amount.toLocaleString()}</p>
                 <button
-                  onClick={() => handleDelete(e.id, e.source)}
+                  onClick={() => handleDelete(e)}
                   className="text-[10px] text-muted-foreground hover:text-destructive mt-0.5"
                 >
                   Delete
