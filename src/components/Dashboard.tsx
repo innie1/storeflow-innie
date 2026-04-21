@@ -236,13 +236,10 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
     return buckets;
   }, [store.sales]);
 
-  const cards = [
-    { label: 'Revenue', value: `₦${stats.totalRevenue.toLocaleString()}`, color: 'text-primary', type: 'revenue' as BreakdownType },
-    { label: 'Profit', value: `₦${stats.totalProfit.toLocaleString()}`, color: 'text-success', type: 'profit' as BreakdownType },
-    { label: 'Inventory Value', value: `₦${stats.inventoryValue.toLocaleString()}`, color: 'text-primary', type: 'inventory' as BreakdownType },
-    { label: 'Total Sales', value: stats.totalSales.toString(), color: 'text-foreground', type: 'sales' as BreakdownType },
-    { label: 'Products', value: stats.totalProducts.toString(), color: 'text-foreground', type: null },
-  ];
+  const profitTone = stats.totalProfit >= 0 ? 'text-success' : 'text-destructive';
+  const profitSign = stats.totalProfit >= 0 ? '+' : '−';
+  const profitAbs = Math.abs(stats.totalProfit);
+
 
   const profitTone = stats.totalProfit >= 0 ? 'text-success' : 'text-destructive';
   const profitSign = stats.totalProfit >= 0 ? '+' : '−';
