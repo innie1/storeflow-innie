@@ -1,4 +1,6 @@
-import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory } from '@/types/store';
+import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind } from '@/types/store';
+
+const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Restock', 'Rent', 'Utilities', 'Salaries', 'Transport', 'Other'];
 
@@ -73,7 +75,21 @@ export function loadStore(code: string): StoreData | null {
 }
 
 export function saveStore(store: StoreData): void {
-  localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
+  // Auto-purge trash items older than 7 days on every save
+  const cutoff = Date.now() - TRASH_RETENTION_MS;
+  const trash = (store.trash || []).filter(t => new Date(t.deletedAt).getTime() > cutoff);
+  const cleaned = { ...store, trash };
+  localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(cleaned));
+}
+
+function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | Expense): TrashItem[] {
+  const item: TrashItem = {
+    id: generateId(),
+    kind,
+    deletedAt: new Date().toISOString(),
+    payload,
+  };
+  return [item, ...(store.trash || [])];
 }
 
 export function addProduct(store: StoreData, product: Omit<Product, 'id'>): StoreData {
@@ -92,7 +108,25 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
 }
 
 export function deleteProduct(store: StoreData, id: string): StoreData {
-  const updated = { ...store, products: store.products.filter(p => p.id !== id) };
+  const product = store.products.find(p => p.id === id);
+  if (!product) return store;
+  const updated = {
+    ...store,
+    products: store.products.filter(p => p.id !== id),
+    trash: pushTrash(store, 'product', product),
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteSale(store: StoreData, id: string): StoreData {
+  const sale = store.sales.find(s => s.id === id);
+  if (!sale) return store;
+  const updated = {
+    ...store,
+    sales: store.sales.filter(s => s.id !== id),
+    trash: pushTrash(store, 'sale', sale),
+  };
   saveStore(updated);
   return updated;
 }
@@ -123,7 +157,11 @@ export function recordSale(store: StoreData, productId: string, quantity: number
 }
 
 export function clearSales(store: StoreData): StoreData {
-  const updated = { ...store, sales: [] };
+  const trash = store.sales.reduce<TrashItem[]>((acc, s) => {
+    acc.unshift({ id: generateId(), kind: 'sale', deletedAt: new Date().toISOString(), payload: s });
+    return acc;
+  }, []);
+  const updated = { ...store, sales: [], trash: [...trash, ...(store.trash || [])] };
   saveStore(updated);
   return updated;
 }
@@ -210,10 +248,63 @@ export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'sour
 }
 
 export function deleteExpense(store: StoreData, id: string): StoreData {
+  const expense = (store.expenses || []).find(e => e.id === id);
+  if (!expense) return store;
   const updated: StoreData = {
     ...store,
     expenses: (store.expenses || []).filter(e => e.id !== id),
+    trash: pushTrash(store, 'expense', expense),
   };
+  saveStore(updated);
+  return updated;
+}
+
+// ---------- Trash ----------
+
+export function getTrash(store: StoreData): TrashItem[] {
+  const cutoff = Date.now() - TRASH_RETENTION_MS;
+  return (store.trash || [])
+    .filter(t => new Date(t.deletedAt).getTime() > cutoff)
+    .sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+}
+
+export function restoreTrashItem(store: StoreData, trashId: string): StoreData {
+  const item = (store.trash || []).find(t => t.id === trashId);
+  if (!item) return store;
+  const remaining = (store.trash || []).filter(t => t.id !== trashId);
+  let updated: StoreData = { ...store, trash: remaining };
+  if (item.kind === 'product') {
+    const p = item.payload as Product;
+    if (!updated.products.some(x => x.id === p.id)) {
+      updated = { ...updated, products: [...updated.products, p] };
+    }
+  } else if (item.kind === 'sale') {
+    const s = item.payload as Sale;
+    if (!updated.sales.some(x => x.id === s.id)) {
+      updated = { ...updated, sales: [s, ...updated.sales] };
+    }
+  } else if (item.kind === 'expense') {
+    const e = item.payload as Expense;
+    const list = updated.expenses || [];
+    if (!list.some(x => x.id === e.id)) {
+      updated = { ...updated, expenses: [e, ...list] };
+    }
+  }
+  saveStore(updated);
+  return updated;
+}
+
+export function purgeTrashItem(store: StoreData, trashId: string): StoreData {
+  const updated: StoreData = {
+    ...store,
+    trash: (store.trash || []).filter(t => t.id !== trashId),
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function emptyTrash(store: StoreData): StoreData {
+  const updated: StoreData = { ...store, trash: [] };
   saveStore(updated);
   return updated;
 }
