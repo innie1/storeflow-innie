@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { StoreData, StoreProfile } from '@/types/store';
-import { saveStore } from '@/lib/store-data';
+import { saveStore, getTrash } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
+import RecentlyDeleted from '@/components/RecentlyDeleted';
 
 export type LockTimer = '1h' | '12h' | 'never';
 
@@ -64,9 +65,11 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
   const [editing, setEditing] = useState(false);
   const [theme, setTheme] = useState<ThemeId>(getTheme());
+  const [showTrash, setShowTrash] = useState(false);
   const [profile, setProfile] = useState<StoreProfile>(
     store.profile || { storeType: '', location: '', phone: '', email: '' }
   );
+  const trashCount = getTrash(store).length;
 
   const handleThemeChange = (t: ThemeId) => {
     setTheme(t);
@@ -269,12 +272,33 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         </div>
       </div>
 
+      {/* Recently Deleted */}
+      <button
+        onClick={() => setShowTrash(true)}
+        className="w-full p-3 rounded-xl bg-card shadow-card flex items-center justify-between hover:ring-1 hover:ring-primary/30 transition-all"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🗑</span>
+          <div className="text-left">
+            <p className="font-display font-semibold text-sm">Recently Deleted</p>
+            <p className="text-[11px] text-muted-foreground">Restore items deleted in the last 7 days</p>
+          </div>
+        </div>
+        <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-display font-semibold">
+          {trashCount}
+        </span>
+      </button>
+
       <button
         onClick={handleLock}
         className="w-full p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive font-display font-semibold hover:bg-destructive/20 transition-colors"
       >
         🔒 Lock Store Now
       </button>
+
+      {showTrash && (
+        <RecentlyDeleted store={store} onUpdate={onUpdate} onClose={() => setShowTrash(false)} />
+      )}
     </div>
   );
 }
