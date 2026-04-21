@@ -3,6 +3,7 @@ import { StoreData, Sale } from '@/types/store';
 import { clearSales } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
+import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 
 interface SalesHistoryProps {
   store: StoreData;
@@ -12,14 +13,20 @@ interface SalesHistoryProps {
 export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   const [search, setSearch] = useState('');
   const [viewReceipt, setViewReceipt] = useState<Sale | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const filtered = search
     ? store.sales.filter(s => s.productName.toLowerCase().includes(search.toLowerCase()))
     : store.sales;
 
   const handleClear = () => {
-    if (!confirm('Clear all sales history? This cannot be undone.')) return;
+    if (store.sales.length === 0) return;
+    setConfirmClear(true);
+  };
+
+  const doClear = () => {
     onUpdate(clearSales(store));
+    setConfirmClear(false);
     showToast('Sales history cleared');
   };
 
@@ -69,6 +76,17 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
 
       {viewReceipt && (
         <SaleReceipt store={store} sale={viewReceipt} onClose={() => setViewReceipt(null)} />
+      )}
+
+      {confirmClear && (
+        <ConfirmAccessCode
+          expectedCode={store.accessCode}
+          title="Clear all sales history?"
+          message={`This will permanently delete all ${store.sales.length} sale record${store.sales.length === 1 ? '' : 's'}. This cannot be undone. Enter your store access code to confirm.`}
+          confirmLabel="Clear History"
+          onConfirm={doClear}
+          onCancel={() => setConfirmClear(false)}
+        />
       )}
     </div>
   );
