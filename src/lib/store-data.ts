@@ -248,10 +248,63 @@ export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'sour
 }
 
 export function deleteExpense(store: StoreData, id: string): StoreData {
+  const expense = (store.expenses || []).find(e => e.id === id);
+  if (!expense) return store;
   const updated: StoreData = {
     ...store,
     expenses: (store.expenses || []).filter(e => e.id !== id),
+    trash: pushTrash(store, 'expense', expense),
   };
+  saveStore(updated);
+  return updated;
+}
+
+// ---------- Trash ----------
+
+export function getTrash(store: StoreData): TrashItem[] {
+  const cutoff = Date.now() - TRASH_RETENTION_MS;
+  return (store.trash || [])
+    .filter(t => new Date(t.deletedAt).getTime() > cutoff)
+    .sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+}
+
+export function restoreTrashItem(store: StoreData, trashId: string): StoreData {
+  const item = (store.trash || []).find(t => t.id === trashId);
+  if (!item) return store;
+  const remaining = (store.trash || []).filter(t => t.id !== trashId);
+  let updated: StoreData = { ...store, trash: remaining };
+  if (item.kind === 'product') {
+    const p = item.payload as Product;
+    if (!updated.products.some(x => x.id === p.id)) {
+      updated = { ...updated, products: [...updated.products, p] };
+    }
+  } else if (item.kind === 'sale') {
+    const s = item.payload as Sale;
+    if (!updated.sales.some(x => x.id === s.id)) {
+      updated = { ...updated, sales: [s, ...updated.sales] };
+    }
+  } else if (item.kind === 'expense') {
+    const e = item.payload as Expense;
+    const list = updated.expenses || [];
+    if (!list.some(x => x.id === e.id)) {
+      updated = { ...updated, expenses: [e, ...list] };
+    }
+  }
+  saveStore(updated);
+  return updated;
+}
+
+export function purgeTrashItem(store: StoreData, trashId: string): StoreData {
+  const updated: StoreData = {
+    ...store,
+    trash: (store.trash || []).filter(t => t.id !== trashId),
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function emptyTrash(store: StoreData): StoreData {
+  const updated: StoreData = { ...store, trash: [] };
   saveStore(updated);
   return updated;
 }
