@@ -49,6 +49,15 @@ export interface StoreProfile {
   email: string;
 }
 
+export type TrashKind = 'product' | 'sale' | 'expense';
+
+export interface TrashItem {
+  id: string;          // trash entry id
+  kind: TrashKind;
+  deletedAt: string;   // ISO
+  payload: Product | Sale | Expense;
+}
+
 export interface StoreData {
   storeName: string;
   accessCode: string;
@@ -56,6 +65,7 @@ export interface StoreData {
   sales: Sale[];
   restocks?: Restock[];
   expenses?: Expense[];
+  trash?: TrashItem[];
   createdAt: string;
   profile?: StoreProfile;
 }

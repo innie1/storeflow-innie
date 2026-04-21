@@ -1,4 +1,6 @@
-import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory } from '@/types/store';
+import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind } from '@/types/store';
+
+const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Restock', 'Rent', 'Utilities', 'Salaries', 'Transport', 'Other'];
 
