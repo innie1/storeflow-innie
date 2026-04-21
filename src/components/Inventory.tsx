@@ -490,6 +490,17 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           </div>
         </Modal>
       )}
+
+      {confirmDelete && (
+        <ConfirmAccessCode
+          expectedCode={store.accessCode}
+          title={`Delete "${confirmDelete.name}"?`}
+          message="This will permanently remove the product from your inventory. Enter your store access code to confirm."
+          confirmLabel="Delete Product"
+          onConfirm={doDelete}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 }
