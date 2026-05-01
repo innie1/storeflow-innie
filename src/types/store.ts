@@ -79,4 +79,4 @@ export interface StoreData {
   profile?: StoreProfile;
 }
 
-export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings';
+export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi';
