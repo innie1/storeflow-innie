@@ -82,10 +82,10 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
     saveSession(store.accessCode);
   }, [timer, store.accessCode]);
 
-  const timerOptions: { value: LockTimer; label: string; desc: string }[] = [
-    { value: '1h', label: '1 Hour', desc: 'Auto-lock after 1 hour of inactivity' },
-    { value: '12h', label: '12 Hours', desc: 'Auto-lock after 12 hours' },
-    { value: 'never', label: 'Always Open', desc: 'Stay logged in until you lock manually' },
+  const timerOptions: { value: LockTimer; label: string; desc: string; icon: string }[] = [
+    { value: '1h', label: '1 Hour', desc: 'Auto-lock after 1 hour', icon: '🕐' },
+    { value: '12h', label: '12 Hours', desc: 'Auto-lock after 12 hours', icon: '🕐' },
+    { value: 'never', label: 'Always Open', desc: 'Stay logged in until you lock manually', icon: '🔓' },
   ];
 
   const handleSaveProfile = () => {
@@ -106,60 +106,33 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
 
   return (
     <div className="animate-fade-in max-w-md mx-auto space-y-4">
-      {/* Store Profile */}
-      <div className="bg-card shadow-card rounded-xl p-5 space-y-4">
+      {/* Store Profile Card */}
+      <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xl">
+            <div className="w-14 h-14 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center text-2xl">
               🏪
             </div>
             <div>
               <h3 className="font-display font-bold text-lg">{store.storeName}</h3>
               <p className="text-xs text-muted-foreground font-mono">{store.accessCode}</p>
+              {store.profile?.storeType && store.profile?.location && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  📍 {store.profile.storeType} • {store.profile.location}
+                </p>
+              )}
             </div>
           </div>
           <button
             onClick={() => setEditing(!editing)}
-            className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors font-display font-semibold"
+            className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors font-display font-semibold"
           >
             {editing ? '✕ Cancel' : '✏️ Edit'}
           </button>
         </div>
 
-        {!editing && store.profile && (
-          <div className="space-y-2 text-sm">
-            {store.profile.storeType && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Type:</span>
-                <span className="text-foreground">{store.profile.storeType}</span>
-              </div>
-            )}
-            {store.profile.location && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Location:</span>
-                <span className="text-foreground">{store.profile.location}</span>
-              </div>
-            )}
-            {store.profile.phone && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Phone:</span>
-                <span className="text-foreground">{store.profile.phone}</span>
-              </div>
-            )}
-            {store.profile.email && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Email:</span>
-                <span className="text-foreground">{store.profile.email}</span>
-              </div>
-            )}
-            {!store.profile.storeType && !store.profile.location && !store.profile.phone && !store.profile.email && (
-              <p className="text-xs text-muted-foreground text-center">No profile info yet. Tap Edit to add.</p>
-            )}
-          </div>
-        )}
-
         {editing && (
-          <div className="space-y-3">
+          <div className="space-y-3 pt-2 border-t border-border">
             <div>
               <label className="block text-xs text-muted-foreground mb-1">Store Type</label>
               <select
@@ -212,61 +185,68 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         )}
       </div>
 
-      {/* Theme Picker */}
-      <div className="bg-card shadow-card rounded-xl p-5 space-y-4">
+      {/* Appearance - Compact horizontal theme cards */}
+      <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
         <div>
           <h3 className="font-display font-bold text-base">Appearance</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Pick a look that fits how you work.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Choose your preferred theme</p>
         </div>
-        <div className="space-y-2">
+        <div className="grid grid-cols-3 gap-2">
           {THEMES.map(t => (
             <button
               key={t.id}
               onClick={() => handleThemeChange(t.id)}
-              className={`w-full p-3 rounded-lg border text-left transition-colors flex items-center gap-3 ${
+              className={`relative p-3 rounded-xl border text-center transition-all ${
                 theme === t.id
-                  ? 'bg-primary/10 border-primary/40'
+                  ? 'bg-primary/10 border-primary/50 ring-1 ring-primary/30'
                   : 'bg-surface-2 border-border hover:border-primary/30'
               }`}
             >
+              {theme === t.id && (
+                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">✓</span>
+              )}
               <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 border border-border"
+                className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center text-lg border border-border"
                 style={{ background: t.swatch }}
               >
-                <span>{t.emoji}</span>
+                {t.emoji}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="font-display font-semibold text-sm text-foreground">{t.label}</span>
-                  {theme === t.id && <span className="text-primary text-sm">✓</span>}
-                </div>
-                <p className="text-[11px] mt-0.5 text-muted-foreground">{t.desc}</p>
-              </div>
+              <p className="font-display font-semibold text-xs text-foreground">{t.label}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{t.desc}</p>
             </button>
           ))}
         </div>
       </div>
 
       {/* Lock Timer */}
-      <div className="bg-card shadow-card rounded-xl p-5 space-y-4">
-        <h3 className="font-display font-bold text-base">Lock Timer</h3>
-        <p className="text-xs text-muted-foreground">Choose how long your store stays unlocked after login.</p>
+      <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
+        <div>
+          <h3 className="font-display font-bold text-base">Lock Timer</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Choose how long your store stays unlocked</p>
+        </div>
         <div className="space-y-2">
           {timerOptions.map(opt => (
             <button
               key={opt.value}
               onClick={() => setTimer(opt.value)}
-              className={`w-full p-3 rounded-lg border text-left transition-colors ${
+              className={`w-full p-3 rounded-lg border text-left transition-colors flex items-center gap-3 ${
                 timer === opt.value
-                  ? 'bg-primary/10 border-primary/40 text-foreground'
-                  : 'bg-surface-2 border-border text-muted-foreground hover:border-primary/20'
+                  ? 'bg-primary/10 border-primary/40'
+                  : 'bg-surface-2 border-border hover:border-primary/20'
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="font-display font-semibold text-sm">{opt.label}</span>
-                {timer === opt.value && <span className="text-primary text-sm">✓</span>}
+              <span className="text-lg">{opt.icon}</span>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-display font-semibold text-sm text-foreground">{opt.label}</span>
+                </div>
+                <p className="text-[11px] mt-0.5 text-muted-foreground">{opt.desc}</p>
               </div>
-              <p className="text-xs mt-0.5 opacity-70">{opt.desc}</p>
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                timer === opt.value ? 'border-primary bg-primary' : 'border-muted-foreground'
+              }`}>
+                {timer === opt.value && <span className="text-primary-foreground text-[10px]">✓</span>}
+              </div>
             </button>
           ))}
         </div>
@@ -284,9 +264,14 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
             <p className="text-[11px] text-muted-foreground">Restore items deleted in the last 7 days</p>
           </div>
         </div>
-        <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-display font-semibold">
-          {trashCount}
-        </span>
+        <div className="flex items-center gap-2">
+          {trashCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-display font-semibold">
+              {trashCount}
+            </span>
+          )}
+          <span className="text-muted-foreground">›</span>
+        </div>
       </button>
 
       <button
