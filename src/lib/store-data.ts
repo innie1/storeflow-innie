@@ -1,4 +1,4 @@
-import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind } from '@/types/store';
+import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, Investment } from '@/types/store';
 
 const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
