@@ -9,24 +9,32 @@ import SalesHistory from '@/components/SalesHistory';
 import ReceiptScanner from '@/components/ReceiptScanner';
 import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 import Expenses from '@/components/Expenses';
+import ROITracker from '@/components/ROITracker';
 import { ToastContainer } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
-const TABS: { id: TabId; label: string; icon: string }[] = [
+const MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
   { id: 'expenses', label: 'Expenses', icon: '🧾' },
-  { id: 'history', label: 'History', icon: '📋' },
 ];
+
+const MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'history', label: 'History', icon: '📋' },
+  { id: 'roi', label: 'ROI Tracker', icon: '📈' },
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
+];
+
+const isMoreTab = (tab: TabId) => MORE_ITEMS.some(m => m.id === tab);
 
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
   const [tab, setTab] = useState<TabId>('dashboard');
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-  // Auto-restore session on mount
   useEffect(() => {
     const code = getActiveSession();
     if (code) {
@@ -79,7 +87,7 @@ export default function Index() {
             🔒 Lock
           </button>
           <button
-            onClick={() => setTab('settings')}
+            onClick={() => { setTab('settings'); setShowMoreMenu(false); }}
             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
               tab === 'settings' ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
             }`}
@@ -102,15 +110,17 @@ export default function Index() {
         {tab === 'sales' && <Sales store={store} onUpdate={setStore} />}
         {tab === 'expenses' && <Expenses store={store} onUpdate={setStore} />}
         {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
+        {tab === 'roi' && <ROITracker store={store} onUpdate={setStore} />}
         {tab === 'settings' && <Settings store={store} onUpdate={setStore} onLock={handleLock} />}
       </main>
 
+      {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
         <div className="flex justify-around max-w-3xl mx-auto">
-          {TABS.map(t => (
+          {MAIN_TABS.map(t => (
             <button
               key={t.id}
-              onClick={() => { setTab(t.id); if (t.id !== 'inventory') setFilterLowStock(false); }}
+              onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
               className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
                 tab === t.id ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               }`}
@@ -119,6 +129,37 @@ export default function Index() {
               <span className="font-display font-semibold">{t.label}</span>
             </button>
           ))}
+          {/* More button */}
+          <div className="relative">
+            <button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
+                isMoreTab(tab) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span className="text-lg mb-0.5">•••</span>
+              <span className="font-display font-semibold">More</span>
+            </button>
+            {showMoreMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
+                <div className="absolute bottom-full right-0 mb-2 w-44 bg-card shadow-card border border-border rounded-xl overflow-hidden z-50 animate-fade-in">
+                  {MORE_ITEMS.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => { setTab(m.id); setShowMoreMenu(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-display font-semibold transition-colors ${
+                        tab === m.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
+                      }`}
+                    >
+                      <span>{m.icon}</span>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </nav>
 
