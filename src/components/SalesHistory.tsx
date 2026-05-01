@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { StoreData, Sale } from '@/types/store';
-import { clearSales, deleteSale, getTrash } from '@/lib/store-data';
+import { useState, useMemo } from 'react';
+import { StoreData, Sale, Expense, Restock } from '@/types/store';
+import { clearSales, deleteSale, deleteExpense, getTrash } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
@@ -11,18 +11,88 @@ interface SalesHistoryProps {
   onUpdate: (store: StoreData) => void;
 }
 
+type HistoryFilter = 'all' | 'sales' | 'restocks' | 'expenses';
+
+interface HistoryEntry {
+  id: string;
+  type: 'sale' | 'restock' | 'expense';
+  date: string;
+  title: string;
+  subtitle: string;
+  amount: number;
+  amountColor: string;
+  icon: string;
+  raw: Sale | Restock | Expense;
+}
+
 export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<HistoryFilter>('all');
   const [viewReceipt, setViewReceipt] = useState<Sale | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [confirmDelSale, setConfirmDelSale] = useState<Sale | null>(null);
+  const [confirmDelId, setConfirmDelId] = useState<HistoryEntry | null>(null);
   const [showTrash, setShowTrash] = useState(false);
 
-  const filtered = search
-    ? store.sales.filter(s => s.productName.toLowerCase().includes(search.toLowerCase()))
-    : store.sales;
-
   const trashCount = getTrash(store).length;
+
+  const entries = useMemo<HistoryEntry[]>(() => {
+    const items: HistoryEntry[] = [];
+
+    if (filter === 'all' || filter === 'sales') {
+      store.sales.forEach(s => {
+        items.push({
+          id: s.id,
+          type: 'sale',
+          date: s.date,
+          title: s.productName,
+          subtitle: `${s.quantity} × ₦${s.unitPrice.toLocaleString()}`,
+          amount: s.total,
+          amountColor: 'text-primary',
+          icon: '💰',
+          raw: s,
+        });
+      });
+    }
+
+    if (filter === 'all' || filter === 'restocks') {
+      (store.restocks || []).forEach(r => {
+        items.push({
+          id: r.id,
+          type: 'restock',
+          date: r.date,
+          title: r.productName,
+          subtitle: `Restocked ${r.quantity} units @ ₦${r.costPrice.toLocaleString()}`,
+          amount: -r.total,
+          amountColor: 'text-warning',
+          icon: '📦',
+          raw: r,
+        });
+      });
+    }
+
+    if (filter === 'all' || filter === 'expenses') {
+      (store.expenses || []).forEach(e => {
+        items.push({
+          id: e.id,
+          type: 'expense',
+          date: e.date,
+          title: e.category,
+          subtitle: e.note || 'Manual expense',
+          amount: -e.amount,
+          amountColor: 'text-destructive',
+          icon: '🧾',
+          raw: e,
+        });
+      });
+    }
+
+    items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return items;
+  }, [store, filter]);
+
+  const filtered = search
+    ? entries.filter(e => e.title.toLowerCase().includes(search.toLowerCase()) || e.subtitle.toLowerCase().includes(search.toLowerCase()))
+    : entries;
 
   const handleClear = () => {
     if (store.sales.length === 0) return;
@@ -35,21 +105,33 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
     showToast('Sales history cleared (recoverable for 7 days)');
   };
 
-  const doDeleteSale = () => {
-    if (!confirmDelSale) return;
-    onUpdate(deleteSale(store, confirmDelSale.id));
-    setConfirmDelSale(null);
-    showToast('Sale deleted (recoverable for 7 days)');
+  const doDeleteEntry = () => {
+    if (!confirmDelId) return;
+    if (confirmDelId.type === 'sale') {
+      onUpdate(deleteSale(store, confirmDelId.id));
+    } else if (confirmDelId.type === 'expense') {
+      onUpdate(deleteExpense(store, confirmDelId.id));
+    }
+    setConfirmDelId(null);
+    showToast('Item deleted (recoverable for 7 days)');
   };
 
+  const filters: { key: HistoryFilter; label: string; icon: string }[] = [
+    { key: 'all', label: 'All', icon: '📋' },
+    { key: 'sales', label: 'Sales', icon: '💰' },
+    { key: 'restocks', label: 'Restocks', icon: '📦' },
+    { key: 'expenses', label: 'Expenses', icon: '🧾' },
+  ];
+
   return (
-    <div className="animate-fade-in">
-      <div className="flex flex-wrap gap-2 mb-4">
+    <div className="animate-fade-in space-y-3">
+      {/* Search + actions */}
+      <div className="flex flex-wrap gap-2">
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search sales..."
-          className="flex-1 min-w-[180px] p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+          placeholder="Search history..."
+          className="flex-1 min-w-[160px] p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
         />
         <button
           onClick={() => setShowTrash(true)}
@@ -64,53 +146,68 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
           )}
         </button>
         {store.sales.length > 0 && (
-          <button onClick={handleClear} className="px-4 py-2.5 rounded-lg bg-destructive/10 text-destructive text-sm font-display font-semibold hover:bg-destructive/20 border border-destructive/20">
-            Clear All
+          <button onClick={handleClear} className="px-3 py-2.5 rounded-lg bg-destructive/10 text-destructive text-xs font-display font-semibold hover:bg-destructive/20 border border-destructive/20">
+            Clear Sales
           </button>
         )}
       </div>
 
-      <div className="space-y-2">
-        {filtered.map(s => (
-          <div
-            key={s.id}
-            className="p-3 rounded-lg bg-card border border-border flex flex-wrap items-center gap-3 hover:border-primary/30 transition-colors"
+      {/* Filter chips */}
+      <div className="flex gap-1.5">
+        {filters.map(f => (
+          <button
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-display font-semibold border transition-colors ${
+              filter === f.key
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+            }`}
           >
+            <span>{f.icon}</span> {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Entries */}
+      <div className="space-y-2">
+        {filtered.map(entry => (
+          <div
+            key={`${entry.type}-${entry.id}`}
+            className="p-3 rounded-xl bg-card shadow-card border border-border flex items-center gap-3 hover:border-primary/30 transition-colors"
+          >
+            <div className="w-9 h-9 rounded-lg bg-surface-2 flex items-center justify-center text-lg shrink-0">
+              {entry.icon}
+            </div>
             <div
-              className="flex-1 min-w-[140px] cursor-pointer"
-              onClick={() => setViewReceipt(s)}
+              className="flex-1 min-w-0 cursor-pointer"
+              onClick={() => {
+                if (entry.type === 'sale') setViewReceipt(entry.raw as Sale);
+              }}
             >
-              <p className="font-display font-semibold text-sm">{s.productName}</p>
-              <p className="text-xs text-muted-foreground">{new Date(s.date).toLocaleString()}</p>
+              <p className="font-display font-semibold text-sm text-foreground truncate">{entry.title}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{entry.subtitle}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(entry.date).toLocaleString()}</p>
             </div>
-            <div className="text-right text-xs space-y-0.5 cursor-pointer" onClick={() => setViewReceipt(s)}>
-              <p>Qty: <span className="text-foreground">{s.quantity}</span></p>
-              <p>Total: <span className="text-primary">₦{s.total.toLocaleString()}</span></p>
+            <div className="text-right shrink-0">
+              <p className={`font-display font-bold text-sm ${entry.amountColor}`}>
+                {entry.amount >= 0 ? '+' : '−'}₦{Math.abs(entry.amount).toLocaleString()}
+              </p>
             </div>
-            <div className="text-success text-sm font-bold cursor-pointer" onClick={() => setViewReceipt(s)}>
-              +₦{s.profit.toLocaleString()}
-            </div>
-            <div className="flex items-center gap-1">
+            {(entry.type === 'sale' || entry.type === 'expense') && (
               <button
-                onClick={() => setViewReceipt(s)}
-                title="View receipt"
-                className="w-8 h-8 rounded-lg bg-surface-2 hover:bg-surface-3 text-sm flex items-center justify-center"
-              >
-                🧾
-              </button>
-              <button
-                onClick={() => setConfirmDelSale(s)}
-                title="Delete sale"
-                className="w-8 h-8 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm flex items-center justify-center border border-destructive/20"
+                onClick={() => setConfirmDelId(entry)}
+                title="Delete"
+                className="w-7 h-7 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs flex items-center justify-center border border-destructive/20 shrink-0"
               >
                 ✕
               </button>
-            </div>
+            )}
           </div>
         ))}
         {filtered.length === 0 && (
           <p className="text-center text-muted-foreground py-8">
-            {store.sales.length === 0 ? 'No sales recorded yet' : 'No matching sales'}
+            {entries.length === 0 ? 'No history yet' : 'No matching items'}
           </p>
         )}
       </div>
@@ -123,21 +220,21 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         <ConfirmAccessCode
           expectedCode={store.accessCode}
           title="Clear all sales history?"
-          message={`This will move all ${store.sales.length} sale record${store.sales.length === 1 ? '' : 's'} to the trash (recoverable for 7 days). Enter your store access code to confirm.`}
+          message={`This will move all ${store.sales.length} sale record${store.sales.length === 1 ? '' : 's'} to the trash (recoverable for 7 days).`}
           confirmLabel="Clear History"
           onConfirm={doClear}
           onCancel={() => setConfirmClear(false)}
         />
       )}
 
-      {confirmDelSale && (
+      {confirmDelId && (
         <ConfirmAccessCode
           expectedCode={store.accessCode}
-          title="Delete this sale?"
-          message={`${confirmDelSale.productName} • ₦${confirmDelSale.total.toLocaleString()}. The sale will be moved to trash and recoverable for 7 days. Enter your store access code to confirm.`}
-          confirmLabel="Delete Sale"
-          onConfirm={doDeleteSale}
-          onCancel={() => setConfirmDelSale(null)}
+          title={`Delete this ${confirmDelId.type}?`}
+          message={`${confirmDelId.title} — ₦${Math.abs(confirmDelId.amount).toLocaleString()}. It will be recoverable for 7 days.`}
+          confirmLabel="Delete"
+          onConfirm={doDeleteEntry}
+          onCancel={() => setConfirmDelId(null)}
         />
       )}
 
