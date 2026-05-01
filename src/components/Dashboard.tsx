@@ -255,8 +255,20 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           ₦{stats.totalRevenue.toLocaleString()}
         </p>
         <p className={`text-sm font-display font-semibold mt-1 ${profitTone}`}>
-          {profitSign}₦{profitAbs.toLocaleString()}
+          {profitSign}₦{profitAbs.toLocaleString()} profit
         </p>
+        <div className="mt-2 pt-2 border-t border-border flex items-end justify-between">
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Net Income</p>
+            <p className={`font-display font-bold text-lg ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {stats.netIncome >= 0 ? '' : '−'}₦{Math.abs(stats.netIncome).toLocaleString()}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expenses</p>
+            <p className="font-display font-semibold text-sm text-destructive">₦{stats.totalExpenses.toLocaleString()}</p>
+          </div>
+        </div>
       </button>
 
       {/* Sales / Products grid */}

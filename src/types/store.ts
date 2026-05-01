@@ -58,6 +58,14 @@ export interface TrashItem {
   payload: Product | Sale | Expense;
 }
 
+export interface Investment {
+  id: string;
+  amount: number;
+  note: string;
+  date: string; // ISO
+  type: 'initial' | 'additional'; // initial = first investment, additional = new money in
+}
+
 export interface StoreData {
   storeName: string;
   accessCode: string;
@@ -66,8 +74,9 @@ export interface StoreData {
   restocks?: Restock[];
   expenses?: Expense[];
   trash?: TrashItem[];
+  investments?: Investment[];
   createdAt: string;
   profile?: StoreProfile;
 }
 
-export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings';
+export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi';
