@@ -1,12 +1,29 @@
 import { useState, useMemo } from 'react';
 import { StoreData, Investment } from '@/types/store';
-import { addInvestment, deleteInvestment, getTotalInvestment, getDashboardStats, saveStore } from '@/lib/store-data';
+import { addInvestment, deleteInvestment, getTotalInvestment, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
+
+type TimeRange = 7 | 30 | 90 | 'all';
 
 interface ROITrackerProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
+}
+
+function getFilteredStats(store: StoreData, range: TimeRange) {
+  const now = Date.now();
+  const cutoff = range === 'all' ? 0 : now - range * 24 * 60 * 60 * 1000;
+
+  const sales = store.sales.filter(s => new Date(s.date).getTime() >= cutoff);
+  const expenses = (store.expenses || []).filter(e => new Date(e.date).getTime() >= cutoff);
+
+  const totalRevenue = sales.reduce((sum, s) => sum + s.total, 0);
+  const totalProfit = sales.reduce((sum, s) => sum + s.profit, 0);
+  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const netIncome = totalRevenue - totalExpenses;
+
+  return { totalRevenue, totalProfit, totalExpenses, netIncome, salesCount: sales.length };
 }
 
 export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
@@ -15,8 +32,9 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
   const [note, setNote] = useState('');
   const [type, setType] = useState<'initial' | 'additional'>('additional');
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [range, setRange] = useState<TimeRange>('all');
 
-  const stats = getDashboardStats(store);
+  const stats = useMemo(() => getFilteredStats(store, range), [store, range]);
   const totalInvested = getTotalInvestment(store);
   const investments = store.investments || [];
 
@@ -25,11 +43,12 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
     return ((stats.netIncome) / totalInvested) * 100;
   }, [stats.netIncome, totalInvested]);
 
-  // Calculate estimated time to reach milestones
   const milestones = useMemo(() => {
-    const storeDays = Math.max(1, (Date.now() - new Date(store.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-    const dailyProfit = stats.netIncome / storeDays;
-    
+    const rangeDays = range === 'all'
+      ? Math.max(1, (Date.now() - new Date(store.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+      : range;
+    const dailyProfit = stats.netIncome / rangeDays;
+
     const targets = [
       { label: 'Break Even', amount: totalInvested },
       { label: '2× Investment', amount: totalInvested * 2 },
@@ -45,7 +64,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
       if (dailyProfit <= 0) return { ...t, daysLeft: Infinity, reached: false };
       return { ...t, daysLeft: Math.ceil(remaining / dailyProfit), reached: false };
     });
-  }, [store, stats, totalInvested]);
+  }, [store, stats, totalInvested, range]);
 
   const handleAdd = () => {
     const amt = parseFloat(amount);
@@ -73,6 +92,13 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
   const roiColor = roi >= 100 ? 'text-success' : roi >= 0 ? 'text-primary' : 'text-destructive';
   const roiEmoji = roi >= 100 ? '🚀' : roi >= 50 ? '📈' : roi >= 0 ? '📊' : '📉';
 
+  const ranges: { label: string; value: TimeRange }[] = [
+    { label: '7d', value: 7 },
+    { label: '30d', value: 30 },
+    { label: '90d', value: 90 },
+    { label: 'All', value: 'all' },
+  ];
+
   return (
     <div className="animate-fade-in space-y-3">
       {/* ROI Overview Card */}
@@ -89,6 +115,24 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
             <p className="font-display font-bold text-lg text-foreground">₦{totalInvested.toLocaleString()}</p>
           </div>
         </div>
+
+        {/* Time Range Selector */}
+        <div className="flex gap-1 mb-3 p-1 rounded-lg bg-surface-2">
+          {ranges.map(r => (
+            <button
+              key={r.label}
+              onClick={() => setRange(r.value)}
+              className={`flex-1 py-1.5 rounded-md text-xs font-display font-semibold transition-colors ${
+                range === r.value
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-3 gap-2">
           <div className="p-2 rounded-lg bg-surface-2 text-center">
             <p className="text-[10px] text-muted-foreground uppercase">Revenue</p>
@@ -110,7 +154,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
       {/* Milestones */}
       {totalInvested > 0 && (
         <div className="bg-card shadow-card rounded-2xl p-4 space-y-3">
-          <h3 className="font-display font-bold text-sm">🏆 Milestones & Projections</h3>
+          <h3 className="font-display font-bold text-sm">🏆 Milestones & Projections <span className="text-muted-foreground font-normal text-xs">(based on {range === 'all' ? 'all time' : `last ${range}d`} pace)</span></h3>
           <div className="space-y-2">
             {milestones.filter(m => m.amount > 0).map((m, i) => (
               <div key={i} className={`flex items-center gap-3 p-2.5 rounded-lg border ${
