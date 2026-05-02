@@ -52,26 +52,67 @@ const DEFAULT_PRODUCTS: Omit<Product, 'id'>[] = [
   { name: "Tissue Paper (Roll)", costPrice: 150, sellingPrice: 250, quantity: 50, category: "Toiletries" },
 ];
 
+const STORE_INDEX_KEY = 'storeflow_index';
+
+export interface StoreIndexEntry {
+  code: string;
+  name: string;
+  createdAt: string;
+}
+
+export function getStoreIndex(): StoreIndexEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem(STORE_INDEX_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function upsertStoreIndex(store: StoreData) {
+  const idx = getStoreIndex().filter(s => s.code !== store.accessCode);
+  idx.unshift({ code: store.accessCode, name: store.storeName, createdAt: store.createdAt });
+  localStorage.setItem(STORE_INDEX_KEY, JSON.stringify(idx));
+}
+
+export function removeStoreFromIndex(code: string) {
+  const idx = getStoreIndex().filter(s => s.code !== code);
+  localStorage.setItem(STORE_INDEX_KEY, JSON.stringify(idx));
+  localStorage.removeItem(STORE_PREFIX + code);
+}
+
 export function createStore(storeName: string): StoreData {
   const code = generateCode();
   const now = new Date().toISOString();
+  const products = DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }));
+  const inventoryValue = products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
+  const investments: Investment[] = inventoryValue > 0 ? [{
+    id: generateId(),
+    amount: Math.round(inventoryValue * 100) / 100,
+    note: 'Auto: starting inventory value',
+    date: now,
+    type: 'initial',
+  }] : [];
   const store: StoreData = {
     storeName,
     accessCode: code,
-    products: DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now })),
+    products,
     sales: [],
     restocks: [],
     expenses: [],
+    investments,
     createdAt: now,
   };
   localStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
+  upsertStoreIndex(store);
   return store;
 }
 
 export function loadStore(code: string): StoreData | null {
   const data = localStorage.getItem(STORE_PREFIX + code.toUpperCase());
   if (!data) return null;
-  return JSON.parse(data);
+  const store = JSON.parse(data);
+  upsertStoreIndex(store);
+  return store;
 }
 
 export function saveStore(store: StoreData): void {
