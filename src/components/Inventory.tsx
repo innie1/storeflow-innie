@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
+import BarcodeScanner from '@/components/BarcodeScanner';
 
 interface InventoryProps {
   store: StoreData;
@@ -32,6 +33,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [receiveMode, setReceiveMode] = useState(false);
   const [receiveData, setReceiveData] = useState<Record<string, { qty: string; cost: string }>>({});
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
+  const [scanForProduct, setScanForProduct] = useState<Product | null>(null);
+  const [funding, setFunding] = useState<RestockFunding>('balance');
+  const [singleRestockFunding, setSingleRestockFunding] = useState<RestockFunding>('balance');
 
   let products = store.products;
   if (filterLowStock) products = products.filter(p => p.quantity <= 5);
@@ -75,11 +79,18 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   const handleRestock = () => {
     if (!restockProduct || !restockQty) return;
-    const updated = updateProduct(store, restockProduct.id, { quantity: restockProduct.quantity + Number(restockQty) });
+    const qty = Number(restockQty);
+    if (qty <= 0) return showToast('Enter a quantity', 'error');
+    const updated = receiveStock(
+      store,
+      [{ productId: restockProduct.id, quantity: qty, costPrice: restockProduct.costPrice }],
+      singleRestockFunding,
+    );
     onUpdate(updated);
     setRestockProduct(null);
     setRestockQty('');
-    showToast('Stock updated');
+    setSingleRestockFunding('balance');
+    showToast(singleRestockFunding === 'new_money' ? 'Stock added (new money)' : 'Stock added (from balance)');
   };
 
   const handleImport = () => {
@@ -202,13 +213,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
     if (entries.length === 0) return showToast('Add quantities to confirm', 'error');
 
-    const updated = receiveStock(store, entries);
+    const updated = receiveStock(store, entries, funding);
     onUpdate(updated);
     setShoppingList([]);
     setReceiveData({});
     setReceiveMode(false);
     setShowShoppingList(false);
-    showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''}`);
+    setFunding('balance');
+    showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''} ${funding === 'new_money' ? '(new money)' : '(from balance)'}`);
   };
 
   const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm";
@@ -252,12 +264,15 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         {products.map(p => {
           const inList = shoppingList.find(i => i.productId === p.id);
           return (
-            <div key={p.id} className="p-3 rounded-lg bg-card border border-border flex flex-wrap items-center gap-3 hover:border-primary/20 transition-colors">
+            <div key={p.id} className={`p-3 rounded-lg bg-card border flex flex-wrap items-center gap-3 transition-colors ${p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'}`}>
               <div className="flex-1 min-w-[150px]">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <p className="font-display font-semibold text-sm">{p.name}</p>
                   {p.addedAt && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
                     <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
+                  )}
+                  {p.barcode && (
+                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold" title={`Barcode: ${p.barcode}`}>✓ Scanned</span>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -275,6 +290,13 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               </div>
               <div className="flex gap-1">
                 <button
+                  onClick={() => setScanForProduct(p)}
+                  title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
+                  className={`px-2 py-1 rounded text-xs hover:bg-surface-2 ${p.barcode ? 'bg-success/20 text-success' : 'bg-surface-3 text-foreground'}`}
+                >
+                  📷
+                </button>
+                <button
                   onClick={() => addToShoppingList(p)}
                   title="Add to shopping list"
                   className={`px-2 py-1 rounded text-xs hover:bg-surface-2 relative ${inList ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-foreground'}`}
@@ -286,7 +308,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     </span>
                   )}
                 </button>
-                <button onClick={() => { setRestockProduct(p); setRestockQty(''); }} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success">↑</button>
+                <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success">↑</button>
                 <button onClick={() => setEditProduct({ ...p })} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary">✎</button>
                 <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive">✕</button>
               </div>
@@ -340,6 +362,32 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Current stock: <span className="text-foreground">{restockProduct.quantity}</span></p>
             <input value={restockQty} onChange={e => setRestockQty(e.target.value)} placeholder="Quantity to add" type="number" className={inputClass} />
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase">Funding</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button
+                  onClick={() => setSingleRestockFunding('balance')}
+                  className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                    singleRestockFunding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
+                  }`}
+                >
+                  💰 From Balance
+                </button>
+                <button
+                  onClick={() => setSingleRestockFunding('new_money')}
+                  className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                    singleRestockFunding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
+                  }`}
+                >
+                  💵 New Money
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {singleRestockFunding === 'new_money'
+                  ? 'Recorded as expense + new investment (ROI base grows, cash neutral).'
+                  : 'Recorded as expense only — net income / available cash drops.'}
+              </p>
+            </div>
             <button onClick={handleRestock} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Restock</button>
           </div>
         </Modal>
@@ -431,6 +479,32 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     }, 0).toLocaleString()}
                   </span>
                 </div>
+                <div className="p-2.5 rounded-lg bg-surface-2 border border-border space-y-1.5">
+                  <p className="text-[10px] uppercase text-muted-foreground font-display font-bold">How is this restock funded?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setFunding('balance')}
+                      className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                        funding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border'
+                      }`}
+                    >
+                      💰 From Balance
+                    </button>
+                    <button
+                      onClick={() => setFunding('new_money')}
+                      className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                        funding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border'
+                      }`}
+                    >
+                      💵 New Money
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {funding === 'new_money'
+                      ? 'New investment recorded → ROI base grows, available cash unchanged.'
+                      : 'Subtracted from net income / available cash.'}
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <button onClick={() => setReceiveMode(false)} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">
                     ← Back
@@ -499,6 +573,26 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           confirmLabel="Delete Product"
           onConfirm={doDelete}
           onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {scanForProduct && (
+        <BarcodeScanner
+          title={`Scan barcode for: ${scanForProduct.name}`}
+          subtitle="Hold the product's barcode steady inside the frame"
+          onClose={() => setScanForProduct(null)}
+          onDetected={(code) => {
+            const existing = store.products.find(p => p.barcode === code && p.id !== scanForProduct.id);
+            if (existing) {
+              showToast(`Already linked to ${existing.name}`, 'error');
+              setScanForProduct(null);
+              return;
+            }
+            const updated = updateProduct(store, scanForProduct.id, { barcode: code });
+            onUpdate(updated);
+            showToast(`✓ Saved barcode for ${scanForProduct.name}`);
+            setScanForProduct(null);
+          }}
         />
       )}
     </div>

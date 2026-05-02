@@ -7,6 +7,7 @@ export interface Product {
   category: string;
   initialQuantity?: number;
   addedAt?: string;
+  barcode?: string;
 }
 
 export interface Restock {

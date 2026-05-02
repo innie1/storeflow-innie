@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { StoreData, Sale, Expense, Restock } from '@/types/store';
 import { clearSales, deleteSale, deleteExpense, getTrash } from '@/lib/store-data';
+import { exportHistoryCSV, exportHistoryPDF } from '@/lib/export-data';
 import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
@@ -144,6 +145,20 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
               {trashCount}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => exportHistoryPDF(store)}
+          className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground"
+          title="Export PDF"
+        >
+          📄 PDF
+        </button>
+        <button
+          onClick={() => exportHistoryCSV(store)}
+          className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground"
+          title="Export CSV"
+        >
+          📊 CSV
         </button>
         {store.sales.length > 0 && (
           <button onClick={handleClear} className="px-3 py-2.5 rounded-lg bg-destructive/10 text-destructive text-xs font-display font-semibold hover:bg-destructive/20 border border-destructive/20">

@@ -52,26 +52,67 @@ const DEFAULT_PRODUCTS: Omit<Product, 'id'>[] = [
   { name: "Tissue Paper (Roll)", costPrice: 150, sellingPrice: 250, quantity: 50, category: "Toiletries" },
 ];
 
+const STORE_INDEX_KEY = 'storeflow_index';
+
+export interface StoreIndexEntry {
+  code: string;
+  name: string;
+  createdAt: string;
+}
+
+export function getStoreIndex(): StoreIndexEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem(STORE_INDEX_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function upsertStoreIndex(store: StoreData) {
+  const idx = getStoreIndex().filter(s => s.code !== store.accessCode);
+  idx.unshift({ code: store.accessCode, name: store.storeName, createdAt: store.createdAt });
+  localStorage.setItem(STORE_INDEX_KEY, JSON.stringify(idx));
+}
+
+export function removeStoreFromIndex(code: string) {
+  const idx = getStoreIndex().filter(s => s.code !== code);
+  localStorage.setItem(STORE_INDEX_KEY, JSON.stringify(idx));
+  localStorage.removeItem(STORE_PREFIX + code);
+}
+
 export function createStore(storeName: string): StoreData {
   const code = generateCode();
   const now = new Date().toISOString();
+  const products = DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }));
+  const inventoryValue = products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
+  const investments: Investment[] = inventoryValue > 0 ? [{
+    id: generateId(),
+    amount: Math.round(inventoryValue * 100) / 100,
+    note: 'Auto: starting inventory value',
+    date: now,
+    type: 'initial',
+  }] : [];
   const store: StoreData = {
     storeName,
     accessCode: code,
-    products: DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now })),
+    products,
     sales: [],
     restocks: [],
     expenses: [],
+    investments,
     createdAt: now,
   };
   localStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
+  upsertStoreIndex(store);
   return store;
 }
 
 export function loadStore(code: string): StoreData | null {
   const data = localStorage.getItem(STORE_PREFIX + code.toUpperCase());
   if (!data) return null;
-  return JSON.parse(data);
+  const store = JSON.parse(data);
+  upsertStoreIndex(store);
+  return store;
 }
 
 export function saveStore(store: StoreData): void {
@@ -180,7 +221,9 @@ export interface RestockEntry {
   costPrice: number;
 }
 
-export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreData {
+export type RestockFunding = 'balance' | 'new_money';
+
+export function receiveStock(store: StoreData, entries: RestockEntry[], funding: RestockFunding = 'balance'): StoreData {
   const now = new Date().toISOString();
   const newRestocks: Restock[] = [];
   let restockTotal = 0;
@@ -208,19 +251,31 @@ export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreDa
     };
   });
 
-  // Auto-create a single Restock expense for the entire batch
+  // Auto-create a single Restock expense for the entire batch (always — reduces net income / cash)
   const batchId = generateId();
   const newExpenses: Expense[] = [];
+  const newInvestments: Investment[] = [];
   if (restockTotal > 0) {
+    const fundingLabel = funding === 'new_money' ? ' (new money invested)' : ' (from balance)';
     newExpenses.push({
       id: generateId(),
       amount: Math.round(restockTotal * 100) / 100,
       category: 'Restock',
       date: now,
-      note: `Stock from supplier: ${itemNames.slice(0, 4).join(', ')}${itemNames.length > 4 ? `, +${itemNames.length - 4} more` : ''}`,
+      note: `Stock from supplier${fundingLabel}: ${itemNames.slice(0, 4).join(', ')}${itemNames.length > 4 ? `, +${itemNames.length - 4} more` : ''}`,
       source: 'restock',
       restockBatchId: batchId,
     });
+    // If new money was injected, also record an Investment so ROI base grows
+    if (funding === 'new_money') {
+      newInvestments.push({
+        id: generateId(),
+        amount: Math.round(restockTotal * 100) / 100,
+        note: `Restock capital injection (${itemNames.length} item${itemNames.length === 1 ? '' : 's'})`,
+        date: now,
+        type: 'additional',
+      });
+    }
   }
 
   const updated: StoreData = {
@@ -228,9 +283,14 @@ export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreDa
     products: updatedProducts,
     restocks: [...newRestocks, ...(store.restocks || [])],
     expenses: [...newExpenses, ...(store.expenses || [])],
+    investments: [...newInvestments, ...(store.investments || [])],
   };
   saveStore(updated);
   return updated;
+}
+
+export function findProductByBarcode(store: StoreData, barcode: string): Product | undefined {
+  return store.products.find(p => p.barcode === barcode);
 }
 
 export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'source'>): StoreData {

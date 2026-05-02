@@ -1,16 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
-import { StoreData, TabId } from '@/types/store';
-import { loadStore } from '@/lib/store-data';
+import { StoreData, TabId, Product } from '@/types/store';
+import { loadStore, findProductByBarcode, addProduct, recordSale } from '@/lib/store-data';
 import StoreAccess from '@/components/StoreAccess';
 import Dashboard from '@/components/Dashboard';
 import Inventory from '@/components/Inventory';
 import Sales from '@/components/Sales';
 import SalesHistory from '@/components/SalesHistory';
 import ReceiptScanner from '@/components/ReceiptScanner';
+import BarcodeScanner from '@/components/BarcodeScanner';
 import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 import Expenses from '@/components/Expenses';
 import ROITracker from '@/components/ROITracker';
-import { ToastContainer } from '@/components/Toast';
+import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
 const MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
@@ -33,7 +34,10 @@ export default function Index() {
   const [tab, setTab] = useState<TabId>('dashboard');
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [scanCart, setScanCart] = useState<{ product: Product; qty: number }[]>([]);
+  const [newProductPrompt, setNewProductPrompt] = useState<{ barcode: string; name: string; costPrice: string; sellingPrice: string; quantity: string } | null>(null);
 
   useEffect(() => {
     const code = getActiveSession();
@@ -59,6 +63,71 @@ export default function Index() {
     setStore(null);
   };
 
+  const handleBarcodeDetected = useCallback((code: string) => {
+    if (!store) return;
+    const existing = findProductByBarcode(store, code);
+    if (existing) {
+      // Sell mode: add to scan cart
+      if (existing.quantity <= 0) {
+        showToast(`${existing.name} is out of stock`, 'error');
+        return;
+      }
+      setScanCart(prev => {
+        const idx = prev.findIndex(c => c.product.id === existing.id);
+        if (idx >= 0) {
+          const used = prev[idx].qty;
+          if (used + 1 > existing.quantity) {
+            showToast('No more stock available', 'error');
+            return prev;
+          }
+          const next = [...prev];
+          next[idx] = { ...next[idx], qty: used + 1 };
+          showToast(`${existing.name} × ${next[idx].qty}`);
+          return next;
+        }
+        showToast(`✓ ${existing.name} added to cart`);
+        return [...prev, { product: existing, qty: 1 }];
+      });
+    } else {
+      // Save mode
+      setShowBarcodeScanner(false);
+      setNewProductPrompt({ barcode: code, name: '', costPrice: '', sellingPrice: '', quantity: '1' });
+    }
+  }, [store]);
+
+  const handleCheckoutScanCart = () => {
+    if (!store || scanCart.length === 0) return;
+    let updated = store;
+    for (const item of scanCart) {
+      updated = recordSale(updated, item.product.id, item.qty);
+    }
+    setStore(updated);
+    const total = scanCart.reduce((s, c) => s + c.product.sellingPrice * c.qty, 0);
+    showToast(`Sold ${scanCart.length} item${scanCart.length === 1 ? '' : 's'} — ₦${total.toLocaleString()}`);
+    setScanCart([]);
+    setShowBarcodeScanner(false);
+  };
+
+  const handleSaveNewProduct = () => {
+    if (!store || !newProductPrompt) return;
+    const { barcode, name, costPrice, sellingPrice, quantity } = newProductPrompt;
+    if (!name.trim() || !sellingPrice || !quantity) {
+      showToast('Fill name, selling price and quantity', 'error');
+      return;
+    }
+    const updated = addProduct(store, {
+      name: name.trim(),
+      costPrice: Number(costPrice) || 0,
+      sellingPrice: Number(sellingPrice),
+      quantity: Number(quantity),
+      category: 'Scanned',
+      barcode,
+    });
+    setStore(updated);
+    showToast(`✓ Saved ${name}`);
+    setNewProductPrompt(null);
+  };
+
   if (!store) {
     return (
       <>
@@ -78,10 +147,18 @@ export default function Index() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowScanner(true)}
+            onClick={() => { setScanCart([]); setShowBarcodeScanner(true); }}
             className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors font-display font-semibold"
+            title="Scan barcode to save or sell"
           >
-            📷 Scan
+            🔳 Scan
+          </button>
+          <button
+            onClick={() => setShowScanner(true)}
+            className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground transition-colors font-display font-semibold"
+            title="Scan receipt"
+          >
+            📷
           </button>
           <button onClick={handleLock} className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
             🔒 Lock
@@ -169,6 +246,86 @@ export default function Index() {
           onUpdate={setStore}
           onClose={() => setShowScanner(false)}
         />
+      )}
+
+      {showBarcodeScanner && (
+        <>
+          <BarcodeScanner
+            title={scanCart.length > 0 ? `Scan more · ${scanCart.length} item${scanCart.length === 1 ? '' : 's'} in cart` : 'Scan to Save or Sell'}
+            subtitle="Existing barcodes are added to cart · new ones open a save form"
+            onClose={() => setShowBarcodeScanner(false)}
+            onDetected={handleBarcodeDetected}
+          />
+          {scanCart.length > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 z-[60] bg-card border-t border-success/40 p-3 space-y-2 max-h-[40vh] overflow-y-auto shadow-card">
+              <div className="flex items-center justify-between">
+                <span className="font-display font-bold text-sm text-success">
+                  🛒 Scan Cart · ₦{scanCart.reduce((s, c) => s + c.product.sellingPrice * c.qty, 0).toLocaleString()}
+                </span>
+                <button onClick={() => setScanCart([])} className="text-xs text-destructive hover:underline">Clear</button>
+              </div>
+              <div className="space-y-1">
+                {scanCart.map((c, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs p-1.5 rounded bg-surface-2">
+                    <span className="truncate">{c.product.name} × {c.qty}</span>
+                    <span className="text-primary font-semibold">₦{(c.product.sellingPrice * c.qty).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={handleCheckoutScanCart}
+                className="w-full p-2.5 rounded-lg bg-success text-white font-display font-bold text-sm hover:opacity-90"
+              >
+                ✓ Complete Sale
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {newProductPrompt && (
+        <div className="fixed inset-0 z-[70] bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNewProductPrompt(null)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-3" onClick={e => e.stopPropagation()}>
+            <div>
+              <h3 className="font-display font-bold text-lg">New Product</h3>
+              <p className="text-xs text-muted-foreground">Barcode <span className="font-mono text-primary">{newProductPrompt.barcode}</span> not found. Save it to your inventory.</p>
+            </div>
+            <input
+              autoFocus
+              placeholder="Product name"
+              value={newProductPrompt.name}
+              onChange={e => setNewProductPrompt({ ...newProductPrompt, name: e.target.value })}
+              className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                placeholder="Cost price (₦)"
+                value={newProductPrompt.costPrice}
+                onChange={e => setNewProductPrompt({ ...newProductPrompt, costPrice: e.target.value })}
+                className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary"
+              />
+              <input
+                type="number"
+                placeholder="Selling price (₦)"
+                value={newProductPrompt.sellingPrice}
+                onChange={e => setNewProductPrompt({ ...newProductPrompt, sellingPrice: e.target.value })}
+                className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary"
+              />
+            </div>
+            <input
+              type="number"
+              placeholder="Quantity"
+              value={newProductPrompt.quantity}
+              onChange={e => setNewProductPrompt({ ...newProductPrompt, quantity: e.target.value })}
+              className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setNewProductPrompt(null)} className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold">Cancel</button>
+              <button onClick={handleSaveNewProduct} className="flex-1 p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold">Save Product</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <ToastContainer />

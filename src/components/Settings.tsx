@@ -4,6 +4,7 @@ import { saveStore, getTrash } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
+import StoreSwitcher from '@/components/StoreSwitcher';
 
 export type LockTimer = '1h' | '12h' | 'never';
 
@@ -66,6 +67,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [editing, setEditing] = useState(false);
   const [theme, setTheme] = useState<ThemeId>(getTheme());
   const [showTrash, setShowTrash] = useState(false);
+  const [showSwitcher, setShowSwitcher] = useState(false);
   const [profile, setProfile] = useState<StoreProfile>(
     store.profile || { storeType: '', location: '', phone: '', email: '' }
   );
@@ -252,6 +254,21 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         </div>
       </div>
 
+      {/* Switch Store */}
+      <button
+        onClick={() => setShowSwitcher(true)}
+        className="w-full p-3 rounded-xl bg-card shadow-card flex items-center justify-between hover:ring-1 hover:ring-primary/30 transition-all"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🔄</span>
+          <div className="text-left">
+            <p className="font-display font-semibold text-sm">Switch Store</p>
+            <p className="text-[11px] text-muted-foreground">Manage and switch between your stores on this device</p>
+          </div>
+        </div>
+        <span className="text-muted-foreground">›</span>
+      </button>
+
       {/* Recently Deleted */}
       <button
         onClick={() => setShowTrash(true)}
@@ -283,6 +300,13 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
 
       {showTrash && (
         <RecentlyDeleted store={store} onUpdate={onUpdate} onClose={() => setShowTrash(false)} />
+      )}
+      {showSwitcher && (
+        <StoreSwitcher
+          currentCode={store.accessCode}
+          onSwitch={onUpdate}
+          onClose={() => setShowSwitcher(false)}
+        />
       )}
     </div>
   );

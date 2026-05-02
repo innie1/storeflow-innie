@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { StoreData, Investment } from '@/types/store';
 import { addInvestment, deleteInvestment, getTotalInvestment, saveStore } from '@/lib/store-data';
+import { exportROICSV, exportROIPDF } from '@/lib/export-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 
@@ -101,6 +102,16 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
 
   return (
     <div className="animate-fade-in space-y-3">
+      {/* Export bar */}
+      <div className="flex gap-2">
+        <button onClick={() => exportROIPDF(store)} className="flex-1 p-2 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold hover:border-primary/30">
+          📄 Export PDF
+        </button>
+        <button onClick={() => exportROICSV(store)} className="flex-1 p-2 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold hover:border-primary/30">
+          📊 Export CSV
+        </button>
+      </div>
+
       {/* ROI Overview Card */}
       <div className="bg-card shadow-card rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
