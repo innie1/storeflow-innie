@@ -79,11 +79,18 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   const handleRestock = () => {
     if (!restockProduct || !restockQty) return;
-    const updated = updateProduct(store, restockProduct.id, { quantity: restockProduct.quantity + Number(restockQty) });
+    const qty = Number(restockQty);
+    if (qty <= 0) return showToast('Enter a quantity', 'error');
+    const updated = receiveStock(
+      store,
+      [{ productId: restockProduct.id, quantity: qty, costPrice: restockProduct.costPrice }],
+      singleRestockFunding,
+    );
     onUpdate(updated);
     setRestockProduct(null);
     setRestockQty('');
-    showToast('Stock updated');
+    setSingleRestockFunding('balance');
+    showToast(singleRestockFunding === 'new_money' ? 'Stock added (new money)' : 'Stock added (from balance)');
   };
 
   const handleImport = () => {
@@ -206,13 +213,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
     if (entries.length === 0) return showToast('Add quantities to confirm', 'error');
 
-    const updated = receiveStock(store, entries);
+    const updated = receiveStock(store, entries, funding);
     onUpdate(updated);
     setShoppingList([]);
     setReceiveData({});
     setReceiveMode(false);
     setShowShoppingList(false);
-    showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''}`);
+    setFunding('balance');
+    showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''} ${funding === 'new_money' ? '(new money)' : '(from balance)'}`);
   };
 
   const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm";
