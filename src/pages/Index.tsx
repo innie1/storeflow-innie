@@ -1,16 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
-import { StoreData, TabId } from '@/types/store';
-import { loadStore } from '@/lib/store-data';
+import { StoreData, TabId, Product } from '@/types/store';
+import { loadStore, findProductByBarcode, addProduct, recordSale } from '@/lib/store-data';
 import StoreAccess from '@/components/StoreAccess';
 import Dashboard from '@/components/Dashboard';
 import Inventory from '@/components/Inventory';
 import Sales from '@/components/Sales';
 import SalesHistory from '@/components/SalesHistory';
 import ReceiptScanner from '@/components/ReceiptScanner';
+import BarcodeScanner from '@/components/BarcodeScanner';
 import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 import Expenses from '@/components/Expenses';
 import ROITracker from '@/components/ROITracker';
-import { ToastContainer } from '@/components/Toast';
+import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
 const MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
@@ -33,7 +34,10 @@ export default function Index() {
   const [tab, setTab] = useState<TabId>('dashboard');
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [scanCart, setScanCart] = useState<{ product: Product; qty: number }[]>([]);
+  const [newProductPrompt, setNewProductPrompt] = useState<{ barcode: string; name: string; costPrice: string; sellingPrice: string; quantity: string } | null>(null);
 
   useEffect(() => {
     const code = getActiveSession();
