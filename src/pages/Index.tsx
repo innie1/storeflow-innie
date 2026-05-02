@@ -147,10 +147,18 @@ export default function Index() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowScanner(true)}
+            onClick={() => { setScanCart([]); setShowBarcodeScanner(true); }}
             className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors font-display font-semibold"
+            title="Scan barcode to save or sell"
           >
-            📷 Scan
+            🔳 Scan
+          </button>
+          <button
+            onClick={() => setShowScanner(true)}
+            className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground transition-colors font-display font-semibold"
+            title="Scan receipt"
+          >
+            📷
           </button>
           <button onClick={handleLock} className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
             🔒 Lock
