@@ -63,6 +63,71 @@ export default function Index() {
     setStore(null);
   };
 
+  const handleBarcodeDetected = useCallback((code: string) => {
+    if (!store) return;
+    const existing = findProductByBarcode(store, code);
+    if (existing) {
+      // Sell mode: add to scan cart
+      if (existing.quantity <= 0) {
+        showToast(`${existing.name} is out of stock`, 'error');
+        return;
+      }
+      setScanCart(prev => {
+        const idx = prev.findIndex(c => c.product.id === existing.id);
+        if (idx >= 0) {
+          const used = prev[idx].qty;
+          if (used + 1 > existing.quantity) {
+            showToast('No more stock available', 'error');
+            return prev;
+          }
+          const next = [...prev];
+          next[idx] = { ...next[idx], qty: used + 1 };
+          showToast(`${existing.name} × ${next[idx].qty}`);
+          return next;
+        }
+        showToast(`✓ ${existing.name} added to cart`);
+        return [...prev, { product: existing, qty: 1 }];
+      });
+    } else {
+      // Save mode
+      setShowBarcodeScanner(false);
+      setNewProductPrompt({ barcode: code, name: '', costPrice: '', sellingPrice: '', quantity: '1' });
+    }
+  }, [store]);
+
+  const handleCheckoutScanCart = () => {
+    if (!store || scanCart.length === 0) return;
+    let updated = store;
+    for (const item of scanCart) {
+      updated = recordSale(updated, item.product.id, item.qty);
+    }
+    setStore(updated);
+    const total = scanCart.reduce((s, c) => s + c.product.sellingPrice * c.qty, 0);
+    showToast(`Sold ${scanCart.length} item${scanCart.length === 1 ? '' : 's'} — ₦${total.toLocaleString()}`);
+    setScanCart([]);
+    setShowBarcodeScanner(false);
+  };
+
+  const handleSaveNewProduct = () => {
+    if (!store || !newProductPrompt) return;
+    const { barcode, name, costPrice, sellingPrice, quantity } = newProductPrompt;
+    if (!name.trim() || !sellingPrice || !quantity) {
+      showToast('Fill name, selling price and quantity', 'error');
+      return;
+    }
+    const updated = addProduct(store, {
+      name: name.trim(),
+      costPrice: Number(costPrice) || 0,
+      sellingPrice: Number(sellingPrice),
+      quantity: Number(quantity),
+      category: 'Scanned',
+      barcode,
+    });
+    setStore(updated);
+    showToast(`✓ Saved ${name}`);
+    setNewProductPrompt(null);
+  };
+
   if (!store) {
     return (
       <>
