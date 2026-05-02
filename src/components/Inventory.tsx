@@ -264,12 +264,15 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         {products.map(p => {
           const inList = shoppingList.find(i => i.productId === p.id);
           return (
-            <div key={p.id} className="p-3 rounded-lg bg-card border border-border flex flex-wrap items-center gap-3 hover:border-primary/20 transition-colors">
+            <div key={p.id} className={`p-3 rounded-lg bg-card border flex flex-wrap items-center gap-3 transition-colors ${p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'}`}>
               <div className="flex-1 min-w-[150px]">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <p className="font-display font-semibold text-sm">{p.name}</p>
                   {p.addedAt && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
                     <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
+                  )}
+                  {p.barcode && (
+                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold" title={`Barcode: ${p.barcode}`}>✓ Scanned</span>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -287,6 +290,13 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               </div>
               <div className="flex gap-1">
                 <button
+                  onClick={() => setScanForProduct(p)}
+                  title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
+                  className={`px-2 py-1 rounded text-xs hover:bg-surface-2 ${p.barcode ? 'bg-success/20 text-success' : 'bg-surface-3 text-foreground'}`}
+                >
+                  📷
+                </button>
+                <button
                   onClick={() => addToShoppingList(p)}
                   title="Add to shopping list"
                   className={`px-2 py-1 rounded text-xs hover:bg-surface-2 relative ${inList ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-foreground'}`}
@@ -298,7 +308,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     </span>
                   )}
                 </button>
-                <button onClick={() => { setRestockProduct(p); setRestockQty(''); }} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success">↑</button>
+                <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success">↑</button>
                 <button onClick={() => setEditProduct({ ...p })} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary">✎</button>
                 <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive">✕</button>
               </div>
