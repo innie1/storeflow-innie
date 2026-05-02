@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { StoreData, Investment } from '@/types/store';
 import { addInvestment, deleteInvestment, getTotalInvestment, saveStore } from '@/lib/store-data';
+import { exportROICSV, exportROIPDF } from '@/lib/export-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 
