@@ -575,6 +575,26 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           onCancel={() => setConfirmDelete(null)}
         />
       )}
+
+      {scanForProduct && (
+        <BarcodeScanner
+          title={`Scan barcode for: ${scanForProduct.name}`}
+          subtitle="Hold the product's barcode steady inside the frame"
+          onClose={() => setScanForProduct(null)}
+          onDetected={(code) => {
+            const existing = store.products.find(p => p.barcode === code && p.id !== scanForProduct.id);
+            if (existing) {
+              showToast(`Already linked to ${existing.name}`, 'error');
+              setScanForProduct(null);
+              return;
+            }
+            const updated = updateProduct(store, scanForProduct.id, { barcode: code });
+            onUpdate(updated);
+            showToast(`✓ Saved barcode for ${scanForProduct.name}`);
+            setScanForProduct(null);
+          }}
+        />
+      )}
     </div>
   );
 }
