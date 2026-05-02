@@ -479,6 +479,32 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     }, 0).toLocaleString()}
                   </span>
                 </div>
+                <div className="p-2.5 rounded-lg bg-surface-2 border border-border space-y-1.5">
+                  <p className="text-[10px] uppercase text-muted-foreground font-display font-bold">How is this restock funded?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setFunding('balance')}
+                      className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                        funding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border'
+                      }`}
+                    >
+                      💰 From Balance
+                    </button>
+                    <button
+                      onClick={() => setFunding('new_money')}
+                      className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                        funding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border'
+                      }`}
+                    >
+                      💵 New Money
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {funding === 'new_money'
+                      ? 'New investment recorded → ROI base grows, available cash unchanged.'
+                      : 'Subtracted from net income / available cash.'}
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <button onClick={() => setReceiveMode(false)} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">
                     ← Back
