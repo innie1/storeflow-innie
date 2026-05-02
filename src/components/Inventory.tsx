@@ -362,6 +362,32 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">Current stock: <span className="text-foreground">{restockProduct.quantity}</span></p>
             <input value={restockQty} onChange={e => setRestockQty(e.target.value)} placeholder="Quantity to add" type="number" className={inputClass} />
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase">Funding</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button
+                  onClick={() => setSingleRestockFunding('balance')}
+                  className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                    singleRestockFunding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
+                  }`}
+                >
+                  💰 From Balance
+                </button>
+                <button
+                  onClick={() => setSingleRestockFunding('new_money')}
+                  className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                    singleRestockFunding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
+                  }`}
+                >
+                  💵 New Money
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {singleRestockFunding === 'new_money'
+                  ? 'Recorded as expense + new investment (ROI base grows, cash neutral).'
+                  : 'Recorded as expense only — net income / available cash drops.'}
+              </p>
+            </div>
             <button onClick={handleRestock} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Restock</button>
           </div>
         </Modal>
