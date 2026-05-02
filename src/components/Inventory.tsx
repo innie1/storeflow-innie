@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
+import BarcodeScanner from '@/components/BarcodeScanner';
 
 interface InventoryProps {
   store: StoreData;
