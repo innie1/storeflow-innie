@@ -248,6 +248,86 @@ export default function Index() {
         />
       )}
 
+      {showBarcodeScanner && (
+        <>
+          <BarcodeScanner
+            title={scanCart.length > 0 ? `Scan more · ${scanCart.length} item${scanCart.length === 1 ? '' : 's'} in cart` : 'Scan to Save or Sell'}
+            subtitle="Existing barcodes are added to cart · new ones open a save form"
+            onClose={() => setShowBarcodeScanner(false)}
+            onDetected={handleBarcodeDetected}
+          />
+          {scanCart.length > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 z-[60] bg-card border-t border-success/40 p-3 space-y-2 max-h-[40vh] overflow-y-auto shadow-card">
+              <div className="flex items-center justify-between">
+                <span className="font-display font-bold text-sm text-success">
+                  🛒 Scan Cart · ₦{scanCart.reduce((s, c) => s + c.product.sellingPrice * c.qty, 0).toLocaleString()}
+                </span>
+                <button onClick={() => setScanCart([])} className="text-xs text-destructive hover:underline">Clear</button>
+              </div>
+              <div className="space-y-1">
+                {scanCart.map((c, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs p-1.5 rounded bg-surface-2">
+                    <span className="truncate">{c.product.name} × {c.qty}</span>
+                    <span className="text-primary font-semibold">₦{(c.product.sellingPrice * c.qty).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={handleCheckoutScanCart}
+                className="w-full p-2.5 rounded-lg bg-success text-white font-display font-bold text-sm hover:opacity-90"
+              >
+                ✓ Complete Sale
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {newProductPrompt && (
+        <div className="fixed inset-0 z-[70] bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNewProductPrompt(null)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-3" onClick={e => e.stopPropagation()}>
+            <div>
+              <h3 className="font-display font-bold text-lg">New Product</h3>
+              <p className="text-xs text-muted-foreground">Barcode <span className="font-mono text-primary">{newProductPrompt.barcode}</span> not found. Save it to your inventory.</p>
+            </div>
+            <input
+              autoFocus
+              placeholder="Product name"
+              value={newProductPrompt.name}
+              onChange={e => setNewProductPrompt({ ...newProductPrompt, name: e.target.value })}
+              className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                placeholder="Cost price (₦)"
+                value={newProductPrompt.costPrice}
+                onChange={e => setNewProductPrompt({ ...newProductPrompt, costPrice: e.target.value })}
+                className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary"
+              />
+              <input
+                type="number"
+                placeholder="Selling price (₦)"
+                value={newProductPrompt.sellingPrice}
+                onChange={e => setNewProductPrompt({ ...newProductPrompt, sellingPrice: e.target.value })}
+                className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary"
+              />
+            </div>
+            <input
+              type="number"
+              placeholder="Quantity"
+              value={newProductPrompt.quantity}
+              onChange={e => setNewProductPrompt({ ...newProductPrompt, quantity: e.target.value })}
+              className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setNewProductPrompt(null)} className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold">Cancel</button>
+              <button onClick={handleSaveNewProduct} className="flex-1 p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold">Save Product</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ToastContainer />
       <InstallPrompt />
     </div>
