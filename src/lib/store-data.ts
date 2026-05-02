@@ -221,7 +221,9 @@ export interface RestockEntry {
   costPrice: number;
 }
 
-export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreData {
+export type RestockFunding = 'balance' | 'new_money';
+
+export function receiveStock(store: StoreData, entries: RestockEntry[], funding: RestockFunding = 'balance'): StoreData {
   const now = new Date().toISOString();
   const newRestocks: Restock[] = [];
   let restockTotal = 0;
@@ -249,19 +251,31 @@ export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreDa
     };
   });
 
-  // Auto-create a single Restock expense for the entire batch
+  // Auto-create a single Restock expense for the entire batch (always — reduces net income / cash)
   const batchId = generateId();
   const newExpenses: Expense[] = [];
+  const newInvestments: Investment[] = [];
   if (restockTotal > 0) {
+    const fundingLabel = funding === 'new_money' ? ' (new money invested)' : ' (from balance)';
     newExpenses.push({
       id: generateId(),
       amount: Math.round(restockTotal * 100) / 100,
       category: 'Restock',
       date: now,
-      note: `Stock from supplier: ${itemNames.slice(0, 4).join(', ')}${itemNames.length > 4 ? `, +${itemNames.length - 4} more` : ''}`,
+      note: `Stock from supplier${fundingLabel}: ${itemNames.slice(0, 4).join(', ')}${itemNames.length > 4 ? `, +${itemNames.length - 4} more` : ''}`,
       source: 'restock',
       restockBatchId: batchId,
     });
+    // If new money was injected, also record an Investment so ROI base grows
+    if (funding === 'new_money') {
+      newInvestments.push({
+        id: generateId(),
+        amount: Math.round(restockTotal * 100) / 100,
+        note: `Restock capital injection (${itemNames.length} item${itemNames.length === 1 ? '' : 's'})`,
+        date: now,
+        type: 'additional',
+      });
+    }
   }
 
   const updated: StoreData = {
@@ -269,9 +283,14 @@ export function receiveStock(store: StoreData, entries: RestockEntry[]): StoreDa
     products: updatedProducts,
     restocks: [...newRestocks, ...(store.restocks || [])],
     expenses: [...newExpenses, ...(store.expenses || [])],
+    investments: [...newInvestments, ...(store.investments || [])],
   };
   saveStore(updated);
   return updated;
+}
+
+export function findProductByBarcode(store: StoreData, barcode: string): Product | undefined {
+  return store.products.find(p => p.barcode === barcode);
 }
 
 export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'source'>): StoreData {
