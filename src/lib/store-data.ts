@@ -256,7 +256,6 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
   });
 
   // Auto-create a single Restock expense for the entire batch (always — reduces net income / cash)
-  const batchId = generateId();
   const newExpenses: Expense[] = [];
   const newInvestments: Investment[] = [];
   if (restockTotal > 0) {
