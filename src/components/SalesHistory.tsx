@@ -228,6 +228,13 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
               className="flex-1 min-w-0 cursor-pointer"
               onClick={() => {
                 if (entry.type === 'sale') setViewReceipt(entry.raw as Sale);
+                else if (entry.type === 'restock') {
+                  const r = entry.raw as Restock;
+                  const batch = r.batchId
+                    ? (store.restocks || []).filter(x => x.batchId === r.batchId)
+                    : [r];
+                  setViewBatch(batch);
+                }
               }}
             >
               <p className="font-display font-semibold text-sm text-foreground truncate">{entry.title}</p>
