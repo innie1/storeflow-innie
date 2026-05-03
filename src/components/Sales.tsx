@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { StoreData, Sale } from '@/types/store';
-import { recordSale, getTopSellers } from '@/lib/store-data';
+import { recordSale, getTopSellers, findProductByBarcode } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
-import { supabase } from '@/integrations/supabase/client';
 import SaleReceipt from '@/components/SaleReceipt';
+import BarcodeScanner from '@/components/BarcodeScanner';
 
 interface CartItem {
   productId: string;
@@ -25,7 +25,6 @@ export default function Sales({ store, onUpdate }: SalesProps) {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [scanning, setScanning] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const topSellerIds = new Set(getTopSellers(store, 100).map(t => {
     const p = store.products.find(p => p.name === t.name);
@@ -120,55 +119,20 @@ export default function Sales({ store, onUpdate }: SalesProps) {
     setCart([]);
   };
 
-  // Scan to sell
-  const handleScanToSell = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !file.type.startsWith('image/')) return showToast('Upload an image', 'error');
-
-    setScanning(true);
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const { data, error } = await supabase.functions.invoke('scan-receipt', {
-        body: { imageBase64: base64 },
-      });
-
-      if (error) throw new Error(error.message);
-      if (!data?.items?.length) {
-        showToast('No items found', 'error');
-        return;
-      }
-
-      let updated = store;
-      let sold = 0;
-      for (const item of data.items) {
-        const match = updated.products.find(
-          p => p.name.toLowerCase() === item.name.toLowerCase()
-        );
-        if (match && match.quantity >= (item.quantity || 1)) {
-          updated = recordSale(updated, match.id, item.quantity || 1);
-          sold++;
-        }
-      }
-
-      if (sold > 0) {
-        onUpdate(updated);
-        setLastSale(updated.sales[0]);
-        showToast(`${sold} items sold from scan`);
-      } else {
-        showToast('No matching products in stock', 'error');
-      }
-    } catch (err: any) {
-      showToast('Scan failed: ' + (err.message || ''), 'error');
-    } finally {
-      setScanning(false);
-      if (fileRef.current) fileRef.current.value = '';
+  // Scan barcode to sell — adds matching product to cart
+  const handleBarcodeDetected = (code: string) => {
+    const product = findProductByBarcode(store, code);
+    if (!product) {
+      showToast('Barcode not linked to any product', 'error');
+      return;
     }
+    const available = getAvailableQty(product.id);
+    if (available < 1) {
+      showToast(`${product.name} is out of stock`, 'error');
+      return;
+    }
+    addToCart(product.id, 1);
+    setScanning(false);
   };
 
   const cartTotal = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
@@ -176,29 +140,25 @@ export default function Sales({ store, onUpdate }: SalesProps) {
 
   return (
     <div className="animate-fade-in max-w-md mx-auto space-y-4">
-      {/* Scan to Sell */}
+      {/* Scan to Sell (barcode) */}
       <div className="bg-card border border-border rounded-xl p-4">
         <button
-          onClick={() => fileRef.current?.click()}
-          disabled={scanning}
-          className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary font-display font-semibold hover:bg-primary/20 transition-colors disabled:opacity-50"
+          onClick={() => setScanning(true)}
+          className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary font-display font-semibold hover:bg-primary/20 transition-colors"
         >
-          {scanning ? (
-            <span className="animate-pulse">Scanning...</span>
-          ) : (
-            <>📷 Scan Item to Sell</>
-          )}
+          🔳 Scan Barcode to Sell
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleScanToSell}
-          className="hidden"
-        />
-        <p className="text-xs text-muted-foreground text-center mt-2">Upload a receipt/item image to auto-sell matching products</p>
+        <p className="text-xs text-muted-foreground text-center mt-2">Scan a product's barcode to add it to the cart</p>
       </div>
+
+      {scanning && (
+        <BarcodeScanner
+          title="Scan to Sell"
+          subtitle="Aim at the product's barcode"
+          onClose={() => setScanning(false)}
+          onDetected={handleBarcodeDetected}
+        />
+      )}
 
       {/* Cart */}
       {cart.length > 0 && (
