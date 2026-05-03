@@ -33,6 +33,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDelId, setConfirmDelId] = useState<HistoryEntry | null>(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [viewBatch, setViewBatch] = useState<Restock[] | null>(null);
 
   const trashCount = getTrash(store).length;
 
