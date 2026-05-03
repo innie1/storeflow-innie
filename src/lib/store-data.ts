@@ -1,4 +1,5 @@
 import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, Investment } from '@/types/store';
+import { getLowStockThreshold } from '@/lib/settings';
 
 const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -384,7 +385,8 @@ export function getDashboardStats(store: StoreData) {
   const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
   const totalProfit = store.sales.reduce((sum, s) => sum + s.profit, 0);
   const totalProducts = store.products.length;
-  const lowStockProducts = store.products.filter(p => p.quantity <= 5);
+  const threshold = getLowStockThreshold();
+  const lowStockProducts = store.products.filter(p => p.quantity <= threshold);
   const totalSales = store.sales.length;
   const inventoryValue = store.products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
   const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);

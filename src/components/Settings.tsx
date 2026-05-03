@@ -5,6 +5,7 @@ import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
 import StoreSwitcher from '@/components/StoreSwitcher';
+import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
 
 export type LockTimer = '1h' | '12h' | 'never';
 
@@ -68,6 +69,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [theme, setTheme] = useState<ThemeId>(getTheme());
   const [showTrash, setShowTrash] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [lowStock, setLowStock] = useState<string>(String(getLowStockThreshold()));
   const [profile, setProfile] = useState<StoreProfile>(
     store.profile || { storeType: '', location: '', phone: '', email: '' }
   );
@@ -217,6 +219,34 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
               <p className="text-[10px] text-muted-foreground mt-0.5">{t.desc}</p>
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Low Stock Threshold */}
+      <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
+        <div>
+          <h3 className="font-display font-bold text-base">Low Stock Alert</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Items at or below this quantity are flagged as low stock</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            value={lowStock}
+            onChange={e => setLowStock(e.target.value)}
+            className={inputClass + ' flex-1'}
+          />
+          <button
+            onClick={() => {
+              const n = Number(lowStock);
+              if (!Number.isFinite(n) || n < 0) return showToast('Enter a valid number', 'error');
+              saveLowStockThreshold(n);
+              showToast(`Low-stock threshold set to ${Math.floor(n)}`);
+            }}
+            className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-display font-bold hover:opacity-90"
+          >
+            Save
+          </button>
         </div>
       </div>
 
