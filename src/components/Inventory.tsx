@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding } from '@/lib/store-data';
+import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import BarcodeScanner from '@/components/BarcodeScanner';
@@ -37,8 +38,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [funding, setFunding] = useState<RestockFunding>('balance');
   const [singleRestockFunding, setSingleRestockFunding] = useState<RestockFunding>('balance');
 
+  const lowThreshold = getLowStockThreshold();
   let products = store.products;
-  if (filterLowStock) products = products.filter(p => p.quantity <= 5);
+  if (filterLowStock) products = products.filter(p => p.quantity <= lowThreshold);
   if (search) products = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
   const handleAdd = () => {
@@ -284,7 +286,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 <p>Cost: <span className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</span></p>
                 <p>Sell: <span className="text-primary">₦{p.sellingPrice.toLocaleString()}</span></p>
               </div>
-              <div className={`text-center min-w-[60px] ${p.quantity <= 5 ? 'text-destructive' : p.quantity <= 15 ? 'text-warning' : 'text-success'}`}>
+              <div className={`text-center min-w-[60px] ${p.quantity <= lowThreshold ? 'text-destructive' : p.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
                 <p className="text-lg font-bold">{p.quantity}</p>
                 <p className="text-[10px] text-muted-foreground">in stock</p>
               </div>
