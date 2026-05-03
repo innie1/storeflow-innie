@@ -57,7 +57,36 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
     }
 
     if (filter === 'all' || filter === 'restocks') {
-      (store.restocks || []).forEach(r => {
+      const restocks = store.restocks || [];
+      const grouped = new Map<string, Restock[]>();
+      const singles: Restock[] = [];
+      restocks.forEach(r => {
+        if (r.batchId) {
+          const arr = grouped.get(r.batchId) || [];
+          arr.push(r);
+          grouped.set(r.batchId, arr);
+        } else {
+          singles.push(r);
+        }
+      });
+      grouped.forEach((batch, batchId) => {
+        const total = batch.reduce((s, r) => s + r.total, 0);
+        const totalQty = batch.reduce((s, r) => s + r.quantity, 0);
+        const funding = batch[0].funding;
+        const fundingLabel = funding === 'new_money' ? '💵 new money' : funding === 'balance' ? '🏦 from balance' : '';
+        items.push({
+          id: batchId,
+          type: 'restock',
+          date: batch[0].date,
+          title: batch.length === 1 ? batch[0].productName : `Restock — ${batch.length} items`,
+          subtitle: `${totalQty} units${fundingLabel ? ' • ' + fundingLabel : ''}`,
+          amount: -total,
+          amountColor: 'text-warning',
+          icon: '📦',
+          raw: batch[0],
+        });
+      });
+      singles.forEach(r => {
         items.push({
           id: r.id,
           type: 'restock',
