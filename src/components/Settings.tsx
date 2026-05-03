@@ -5,6 +5,7 @@ import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
 import StoreSwitcher from '@/components/StoreSwitcher';
+import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
 
 export type LockTimer = '1h' | '12h' | 'never';
 
@@ -68,6 +69,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [theme, setTheme] = useState<ThemeId>(getTheme());
   const [showTrash, setShowTrash] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [lowStock, setLowStock] = useState<string>(String(getLowStockThreshold()));
   const [profile, setProfile] = useState<StoreProfile>(
     store.profile || { storeType: '', location: '', phone: '', email: '' }
   );
