@@ -33,6 +33,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDelId, setConfirmDelId] = useState<HistoryEntry | null>(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [viewBatch, setViewBatch] = useState<Restock[] | null>(null);
 
   const trashCount = getTrash(store).length;
 
@@ -56,7 +57,36 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
     }
 
     if (filter === 'all' || filter === 'restocks') {
-      (store.restocks || []).forEach(r => {
+      const restocks = store.restocks || [];
+      const grouped = new Map<string, Restock[]>();
+      const singles: Restock[] = [];
+      restocks.forEach(r => {
+        if (r.batchId) {
+          const arr = grouped.get(r.batchId) || [];
+          arr.push(r);
+          grouped.set(r.batchId, arr);
+        } else {
+          singles.push(r);
+        }
+      });
+      grouped.forEach((batch, batchId) => {
+        const total = batch.reduce((s, r) => s + r.total, 0);
+        const totalQty = batch.reduce((s, r) => s + r.quantity, 0);
+        const funding = batch[0].funding;
+        const fundingLabel = funding === 'new_money' ? '💵 new money' : funding === 'balance' ? '🏦 from balance' : '';
+        items.push({
+          id: batchId,
+          type: 'restock',
+          date: batch[0].date,
+          title: batch.length === 1 ? batch[0].productName : `Restock — ${batch.length} items`,
+          subtitle: `${totalQty} units${fundingLabel ? ' • ' + fundingLabel : ''}`,
+          amount: -total,
+          amountColor: 'text-warning',
+          icon: '📦',
+          raw: batch[0],
+        });
+      });
+      singles.forEach(r => {
         items.push({
           id: r.id,
           type: 'restock',
@@ -198,6 +228,13 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
               className="flex-1 min-w-0 cursor-pointer"
               onClick={() => {
                 if (entry.type === 'sale') setViewReceipt(entry.raw as Sale);
+                else if (entry.type === 'restock') {
+                  const r = entry.raw as Restock;
+                  const batch = r.batchId
+                    ? (store.restocks || []).filter(x => x.batchId === r.batchId)
+                    : [r];
+                  setViewBatch(batch);
+                }
               }}
             >
               <p className="font-display font-semibold text-sm text-foreground truncate">{entry.title}</p>
@@ -255,6 +292,64 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
 
       {showTrash && (
         <RecentlyDeleted store={store} onUpdate={onUpdate} onClose={() => setShowTrash(false)} />
+      )}
+
+      {viewBatch && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 animate-fade-in"
+          onClick={() => setViewBatch(null)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-display font-bold text-foreground">📦 Restock details</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {new Date(viewBatch[0].date).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewBatch(null)}
+                className="w-8 h-8 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-surface-2 border border-border">
+                <span className="text-xs text-muted-foreground font-display">Funded by</span>
+                <span className="text-xs font-display font-semibold text-foreground">
+                  {viewBatch[0].funding === 'new_money'
+                    ? '💵 New money invested'
+                    : viewBatch[0].funding === 'balance'
+                    ? '🏦 From balance'
+                    : '—'}
+                </span>
+              </div>
+              {viewBatch.map(r => (
+                <div key={r.id} className="p-3 rounded-lg bg-surface-2 border border-border">
+                  <div className="flex items-center justify-between">
+                    <p className="font-display font-semibold text-sm text-foreground">{r.productName}</p>
+                    <p className="font-display font-bold text-sm text-warning">
+                      −₦{r.total.toLocaleString()}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {r.quantity} units × ₦{r.costPrice.toLocaleString()}
+                  </p>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                <span className="font-display font-semibold text-sm text-foreground">Total</span>
+                <span className="font-display font-bold text-base text-warning">
+                  −₦{viewBatch.reduce((s, r) => s + r.total, 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

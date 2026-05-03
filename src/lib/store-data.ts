@@ -226,6 +226,7 @@ export type RestockFunding = 'balance' | 'new_money';
 
 export function receiveStock(store: StoreData, entries: RestockEntry[], funding: RestockFunding = 'balance'): StoreData {
   const now = new Date().toISOString();
+  const batchId = generateId();
   const newRestocks: Restock[] = [];
   let restockTotal = 0;
   const itemNames: string[] = [];
@@ -243,6 +244,8 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
       costPrice: entry.costPrice,
       total: lineTotal,
       date: now,
+      batchId,
+      funding,
     });
     return {
       ...p,
@@ -253,7 +256,6 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
   });
 
   // Auto-create a single Restock expense for the entire batch (always — reduces net income / cash)
-  const batchId = generateId();
   const newExpenses: Expense[] = [];
   const newInvestments: Investment[] = [];
   if (restockTotal > 0) {
