@@ -293,6 +293,64 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
       {showTrash && (
         <RecentlyDeleted store={store} onUpdate={onUpdate} onClose={() => setShowTrash(false)} />
       )}
+
+      {viewBatch && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 animate-fade-in"
+          onClick={() => setViewBatch(null)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-display font-bold text-foreground">📦 Restock details</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {new Date(viewBatch[0].date).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewBatch(null)}
+                className="w-8 h-8 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-surface-2 border border-border">
+                <span className="text-xs text-muted-foreground font-display">Funded by</span>
+                <span className="text-xs font-display font-semibold text-foreground">
+                  {viewBatch[0].funding === 'new_money'
+                    ? '💵 New money invested'
+                    : viewBatch[0].funding === 'balance'
+                    ? '🏦 From balance'
+                    : '—'}
+                </span>
+              </div>
+              {viewBatch.map(r => (
+                <div key={r.id} className="p-3 rounded-lg bg-surface-2 border border-border">
+                  <div className="flex items-center justify-between">
+                    <p className="font-display font-semibold text-sm text-foreground">{r.productName}</p>
+                    <p className="font-display font-bold text-sm text-warning">
+                      −₦{r.total.toLocaleString()}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {r.quantity} units × ₦{r.costPrice.toLocaleString()}
+                  </p>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                <span className="font-display font-semibold text-sm text-foreground">Total</span>
+                <span className="font-display font-bold text-base text-warning">
+                  −₦{viewBatch.reduce((s, r) => s + r.total, 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
