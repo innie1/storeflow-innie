@@ -18,6 +18,8 @@ export interface Restock {
   costPrice: number;
   total: number;
   date: string;
+  batchId?: string;
+  funding?: 'balance' | 'new_money';
 }
 
 export interface Sale {
