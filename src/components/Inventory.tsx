@@ -147,6 +147,28 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     showToast('List cleared');
   };
 
+  const generateBuyList = () => {
+    // Items needing restock: out of stock first, then low stock, sorted by quantity ascending
+    const needing = store.products
+      .filter(p => p.quantity <= lowThreshold)
+      .sort((a, b) => a.quantity - b.quantity);
+    if (needing.length === 0) {
+      showToast('No items below threshold', 'error');
+      return;
+    }
+    const items: ShoppingListItem[] = needing.map(p => {
+      const target = Math.max(lowThreshold * 4, 10);
+      const suggested = Math.max(1, target - p.quantity);
+      return { productId: p.id, name: p.name, quantity: suggested, category: p.category };
+    });
+    // Merge with any existing list (replace duplicates with suggested qty)
+    const existingIds = new Set(items.map(i => i.productId));
+    const merged = [...items, ...shoppingList.filter(i => !existingIds.has(i.productId))];
+    setShoppingList(merged);
+    setShowShoppingList(true);
+    showToast(`${items.length} items added to buy list`);
+  };
+
   const generateListText = () => {
     const storeName = store.storeName || 'Store';
     const date = new Date().toLocaleDateString('en-GB');
@@ -252,6 +274,13 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               {shoppingList.length}
             </span>
           )}
+        </button>
+        <button
+          onClick={generateBuyList}
+          className="px-4 py-2.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-sm font-display font-semibold hover:bg-warning/20"
+          title="Auto-generate buy list from low/out-of-stock items"
+        >
+          📝 Buy List
         </button>
       </div>
 
