@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { StoreData, ExpenseCategory, Expense } from '@/types/store';
-import { addExpense, deleteExpense, EXPENSE_CATEGORIES } from '@/lib/store-data';
+import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 
