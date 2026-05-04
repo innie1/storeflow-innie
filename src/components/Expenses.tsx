@@ -129,13 +129,21 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
         </div>
       </div>
 
-      {/* Add button */}
-      <button
-        onClick={() => setShowAdd(true)}
-        className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90"
-      >
-        + New Expense
-      </button>
+      {/* Add buttons */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setShowAdd(true)}
+          className="p-3 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90"
+        >
+          + New Expense
+        </button>
+        <button
+          onClick={() => setShowRestock(true)}
+          className="p-3 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90"
+        >
+          📦 Restock Items
+        </button>
+      </div>
 
       {/* Filter chips */}
       <div className="flex flex-wrap gap-1.5">
