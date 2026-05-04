@@ -295,61 +295,63 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         {products.map(p => {
           const inList = shoppingList.find(i => i.productId === p.id);
           return (
-            <div key={p.id} className={`p-3 rounded-lg bg-card border flex flex-wrap items-center gap-3 transition-colors ${p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'}`}>
-              <div className="flex-1 min-w-[150px]">
+            <div key={p.id} className={`p-3 rounded-lg bg-card border flex items-center gap-3 transition-colors ${p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'}`}>
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className="font-display font-semibold text-sm">{p.name}</p>
+                  <p className="font-display font-semibold text-sm truncate">{p.name}</p>
                   {p.addedAt && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
                     <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
                   )}
                   {p.barcode && (
-                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold" title={`Barcode: ${p.barcode}`}>✓ Scanned</span>
+                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold" title={`Barcode: ${p.barcode}`}>✓</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground truncate">
                   {p.category}
-                  {p.addedAt && <span className="ml-1.5">• Added {new Date(p.addedAt).toLocaleDateString()}</span>}
+                  {p.addedAt && <span className="ml-1.5">• {new Date(p.addedAt).toLocaleDateString()}</span>}
                 </p>
               </div>
-              <div className="text-right text-xs space-y-0.5">
-                <p>Cost: <span className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</span></p>
-                <p>Sell: <span className="text-primary">₦{p.sellingPrice.toLocaleString()}</span></p>
+              <div className="w-20 shrink-0 text-right text-xs space-y-0.5">
+                <p className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</p>
+                <p className="text-primary">₦{p.sellingPrice.toLocaleString()}</p>
                 {(() => {
                   const margin = p.sellingPrice - p.costPrice;
                   const pct = p.costPrice > 0 ? (margin / p.costPrice) * 100 : 0;
                   const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
-                  return (
-                    <p>Margin: <span className={cls}>₦{margin.toLocaleString()} ({pct.toFixed(0)}%)</span></p>
-                  );
+                  return <p className={cls}>+{pct.toFixed(0)}%</p>;
                 })()}
               </div>
-              <div className={`text-center min-w-[60px] ${p.quantity <= lowThreshold ? 'text-destructive' : p.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
-                <p className="text-lg font-bold">{p.quantity}</p>
-                <p className="text-[10px] text-muted-foreground">in stock</p>
+              <div className={`w-12 shrink-0 text-center ${p.quantity <= lowThreshold ? 'text-destructive' : p.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
+                <p className="text-lg font-bold leading-none">{p.quantity}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">stock</p>
               </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setScanForProduct(p)}
-                  title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
-                  className={`px-2 py-1 rounded text-xs hover:bg-surface-2 ${p.barcode ? 'bg-success/20 text-success' : 'bg-surface-3 text-foreground'}`}
-                >
-                  📷
-                </button>
-                <button
-                  onClick={() => addToShoppingList(p)}
-                  title="Add to shopping list"
-                  className={`px-2 py-1 rounded text-xs hover:bg-surface-2 relative ${inList ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-foreground'}`}
-                >
-                  🛒
-                  {inList && (
-                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
-                      {inList.quantity}
-                    </span>
-                  )}
-                </button>
-                <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success">↑</button>
-                <button onClick={() => setEditProduct({ ...p })} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary">✎</button>
-                <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive">✕</button>
+              <div className="flex flex-col gap-1 shrink-0">
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setScanForProduct(p)}
+                    title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
+                    className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center ${p.barcode ? 'bg-success/20 text-success' : 'bg-surface-3 text-foreground'}`}
+                  >
+                    📷
+                  </button>
+                  <button
+                    onClick={() => addToShoppingList(p)}
+                    title="Add to shopping list"
+                    className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center relative ${inList ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-foreground'}`}
+                  >
+                    🛒
+                    {inList && (
+                      <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
+                        {inList.quantity}
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center">↑</button>
+                  <button onClick={() => setEditProduct({ ...p })} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center">✎</button>
+                  <button onClick={() => handleDelete(p)} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive flex items-center justify-center">✕</button>
+                </div>
               </div>
             </div>
           );
