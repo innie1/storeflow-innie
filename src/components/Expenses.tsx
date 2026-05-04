@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { StoreData, ExpenseCategory, Expense } from '@/types/store';
-import { addExpense, deleteExpense, EXPENSE_CATEGORIES } from '@/lib/store-data';
+import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 
@@ -26,8 +26,53 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
   const [note, setNote] = useState('');
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
   const [confirmDel, setConfirmDel] = useState<Expense | null>(null);
+  const [showRestock, setShowRestock] = useState(false);
+  const [restockQtys, setRestockQtys] = useState<Record<string, string>>({});
+  const [restockFunding, setRestockFunding] = useState<RestockFunding>('balance');
+  const [restockSearch, setRestockSearch] = useState('');
 
   const expenses = store.expenses || [];
+
+  const sortedProducts = useMemo(
+    () => [...store.products].sort((a, b) => a.quantity - b.quantity),
+    [store.products],
+  );
+
+  const filteredRestockProducts = useMemo(() => {
+    const q = restockSearch.trim().toLowerCase();
+    if (!q) return sortedProducts;
+    return sortedProducts.filter(p => p.name.toLowerCase().includes(q));
+  }, [sortedProducts, restockSearch]);
+
+  const restockTotal = useMemo(() => {
+    return Object.entries(restockQtys).reduce((sum, [pid, qStr]) => {
+      const q = Number(qStr);
+      if (!q || q <= 0) return sum;
+      const p = store.products.find(x => x.id === pid);
+      return sum + q * (p?.costPrice || 0);
+    }, 0);
+  }, [restockQtys, store.products]);
+
+  const handleSaveRestock = () => {
+    const entries = Object.entries(restockQtys)
+      .map(([productId, qStr]) => {
+        const q = Number(qStr);
+        if (!q || q <= 0) return null;
+        const p = store.products.find(x => x.id === productId);
+        if (!p) return null;
+        return { productId, quantity: q, costPrice: p.costPrice };
+      })
+      .filter((e): e is { productId: string; quantity: number; costPrice: number } => e !== null);
+    if (entries.length === 0) return showToast('Add at least one quantity', 'error');
+    const updated = receiveStock(store, entries, restockFunding);
+    onUpdate(updated);
+    setRestockQtys({});
+    setRestockSearch('');
+    setRestockFunding('balance');
+    setShowRestock(false);
+    showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''}`);
+  };
+
 
   const { total, byCategory, filtered } = useMemo(() => {
     const total = expenses.reduce((s, e) => s + e.amount, 0);
@@ -84,13 +129,21 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
         </div>
       </div>
 
-      {/* Add button */}
-      <button
-        onClick={() => setShowAdd(true)}
-        className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90"
-      >
-        + New Expense
-      </button>
+      {/* Add buttons */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setShowAdd(true)}
+          className="p-3 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90"
+        >
+          + New Expense
+        </button>
+        <button
+          onClick={() => setShowRestock(true)}
+          className="p-3 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90"
+        >
+          📦 Restock Items
+        </button>
+      </div>
 
       {/* Filter chips */}
       <div className="flex flex-wrap gap-1.5">
@@ -228,6 +281,109 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
           onConfirm={doDelete}
           onCancel={() => setConfirmDel(null)}
         />
+      )}
+
+      {/* Restock Modal */}
+      {showRestock && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setShowRestock(false)}>
+          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-5 animate-slide-up max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-display font-bold text-lg">📦 Restock Items</h3>
+              <button onClick={() => setShowRestock(false)} className="text-muted-foreground hover:text-foreground text-xl">×</button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-2">
+              Items sorted by stock level — lowest first. Add quantities to restock.
+            </p>
+            <input
+              value={restockSearch}
+              onChange={e => setRestockSearch(e.target.value)}
+              placeholder="Search products..."
+              className={`${inputClass} mb-2`}
+            />
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+              {filteredRestockProducts.map(p => {
+                const qStr = restockQtys[p.id] || '';
+                const q = Number(qStr) || 0;
+                const lineTotal = q * p.costPrice;
+                const isLow = p.quantity <= 5;
+                const isEmpty = p.quantity <= 0;
+                return (
+                  <div key={p.id} className={`p-2 rounded-lg border ${isEmpty ? 'bg-destructive/10 border-destructive/30' : isLow ? 'bg-warning/10 border-warning/30' : 'bg-surface-2 border-border'}`}>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-display font-semibold text-sm truncate">{p.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Stock: <span className={isEmpty ? 'text-destructive font-bold' : isLow ? 'text-warning font-bold' : 'text-foreground'}>{p.quantity}</span>
+                          {' • '}Cost: ₦{p.costPrice.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => setRestockQtys({ ...restockQtys, [p.id]: String(Math.max(0, q - 1)) })}
+                          className="w-7 h-7 rounded bg-surface-3 hover:bg-surface-2 text-sm"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          value={qStr}
+                          onChange={e => setRestockQtys({ ...restockQtys, [p.id]: e.target.value })}
+                          placeholder="0"
+                          className="w-14 text-center text-sm bg-surface-3 border border-border rounded p-1"
+                        />
+                        <button
+                          onClick={() => setRestockQtys({ ...restockQtys, [p.id]: String(q + 1) })}
+                          className="w-7 h-7 rounded bg-surface-3 hover:bg-surface-2 text-sm"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    {q > 0 && (
+                      <p className="text-[10px] text-right text-primary mt-1">+ ₦{lineTotal.toLocaleString()}</p>
+                    )}
+                  </div>
+                );
+              })}
+              {filteredRestockProducts.length === 0 && (
+                <p className="text-center text-muted-foreground text-sm py-6">No products found</p>
+              )}
+            </div>
+
+            <div className="pt-3 mt-2 border-t border-border space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Grand total</span>
+                <span className="font-display font-bold text-primary">₦{restockTotal.toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setRestockFunding('balance')}
+                  className={`p-2 rounded-lg text-xs font-display font-semibold border ${
+                    restockFunding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
+                  }`}
+                >
+                  💰 From Balance
+                </button>
+                <button
+                  onClick={() => setRestockFunding('new_money')}
+                  className={`p-2 rounded-lg text-xs font-display font-semibold border ${
+                    restockFunding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
+                  }`}
+                >
+                  💵 New Money
+                </button>
+              </div>
+              <button
+                onClick={handleSaveRestock}
+                disabled={restockTotal <= 0}
+                className="w-full p-2.5 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90 disabled:opacity-40"
+              >
+                ✓ Save Restock
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

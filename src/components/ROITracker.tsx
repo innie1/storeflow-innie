@@ -39,16 +39,18 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
   const totalInvested = getTotalInvestment(store);
   const investments = store.investments || [];
 
+  // ROI is based on PROFIT (not net income) so that restocking from balance
+  // does not artificially reset ROI. Only "new money" investments grow the base.
   const roi = useMemo(() => {
     if (totalInvested === 0) return 0;
-    return ((stats.netIncome) / totalInvested) * 100;
-  }, [stats.netIncome, totalInvested]);
+    return (stats.totalProfit / totalInvested) * 100;
+  }, [stats.totalProfit, totalInvested]);
 
   const milestones = useMemo(() => {
     const rangeDays = range === 'all'
       ? Math.max(1, (Date.now() - new Date(store.createdAt).getTime()) / (1000 * 60 * 60 * 24))
       : range;
-    const dailyProfit = stats.netIncome / rangeDays;
+    const dailyProfit = stats.totalProfit / rangeDays;
 
     const targets = [
       { label: 'Break Even', amount: totalInvested },
@@ -60,7 +62,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
     ];
 
     return targets.map(t => {
-      const remaining = t.amount - stats.netIncome;
+      const remaining = t.amount - stats.totalProfit;
       if (remaining <= 0) return { ...t, daysLeft: 0, reached: true };
       if (dailyProfit <= 0) return { ...t, daysLeft: Infinity, reached: false };
       return { ...t, daysLeft: Math.ceil(remaining / dailyProfit), reached: false };

@@ -314,6 +314,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               <div className="text-right text-xs space-y-0.5">
                 <p>Cost: <span className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</span></p>
                 <p>Sell: <span className="text-primary">₦{p.sellingPrice.toLocaleString()}</span></p>
+                {(() => {
+                  const margin = p.sellingPrice - p.costPrice;
+                  const pct = p.costPrice > 0 ? (margin / p.costPrice) * 100 : 0;
+                  const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
+                  return (
+                    <p>Margin: <span className={cls}>₦{margin.toLocaleString()} ({pct.toFixed(0)}%)</span></p>
+                  );
+                })()}
               </div>
               <div className={`text-center min-w-[60px] ${p.quantity <= lowThreshold ? 'text-destructive' : p.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
                 <p className="text-lg font-bold">{p.quantity}</p>
