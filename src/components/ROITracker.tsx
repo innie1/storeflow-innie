@@ -62,7 +62,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
     ];
 
     return targets.map(t => {
-      const remaining = t.amount - stats.netIncome;
+      const remaining = t.amount - stats.totalProfit;
       if (remaining <= 0) return { ...t, daysLeft: 0, reached: true };
       if (dailyProfit <= 0) return { ...t, daysLeft: Infinity, reached: false };
       return { ...t, daysLeft: Math.ceil(remaining / dailyProfit), reached: false };
