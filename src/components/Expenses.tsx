@@ -26,8 +26,53 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
   const [note, setNote] = useState('');
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
   const [confirmDel, setConfirmDel] = useState<Expense | null>(null);
+  const [showRestock, setShowRestock] = useState(false);
+  const [restockQtys, setRestockQtys] = useState<Record<string, string>>({});
+  const [restockFunding, setRestockFunding] = useState<RestockFunding>('balance');
+  const [restockSearch, setRestockSearch] = useState('');
 
   const expenses = store.expenses || [];
+
+  const sortedProducts = useMemo(
+    () => [...store.products].sort((a, b) => a.quantity - b.quantity),
+    [store.products],
+  );
+
+  const filteredRestockProducts = useMemo(() => {
+    const q = restockSearch.trim().toLowerCase();
+    if (!q) return sortedProducts;
+    return sortedProducts.filter(p => p.name.toLowerCase().includes(q));
+  }, [sortedProducts, restockSearch]);
+
+  const restockTotal = useMemo(() => {
+    return Object.entries(restockQtys).reduce((sum, [pid, qStr]) => {
+      const q = Number(qStr);
+      if (!q || q <= 0) return sum;
+      const p = store.products.find(x => x.id === pid);
+      return sum + q * (p?.costPrice || 0);
+    }, 0);
+  }, [restockQtys, store.products]);
+
+  const handleSaveRestock = () => {
+    const entries = Object.entries(restockQtys)
+      .map(([productId, qStr]) => {
+        const q = Number(qStr);
+        if (!q || q <= 0) return null;
+        const p = store.products.find(x => x.id === productId);
+        if (!p) return null;
+        return { productId, quantity: q, costPrice: p.costPrice };
+      })
+      .filter((e): e is { productId: string; quantity: number; costPrice: number } => e !== null);
+    if (entries.length === 0) return showToast('Add at least one quantity', 'error');
+    const updated = receiveStock(store, entries, restockFunding);
+    onUpdate(updated);
+    setRestockQtys({});
+    setRestockSearch('');
+    setRestockFunding('balance');
+    setShowRestock(false);
+    showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''}`);
+  };
+
 
   const { total, byCategory, filtered } = useMemo(() => {
     const total = expenses.reduce((s, e) => s + e.amount, 0);
