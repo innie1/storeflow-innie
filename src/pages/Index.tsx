@@ -153,13 +153,6 @@ export default function Index() {
           >
             🔳 Scan
           </button>
-          <button
-            onClick={() => setShowScanner(true)}
-            className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground transition-colors font-display font-semibold"
-            title="Scan receipt"
-          >
-            📷
-          </button>
           <button onClick={handleLock} className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
             🔒 Lock
           </button>

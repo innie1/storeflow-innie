@@ -191,10 +191,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
 
       {/* Appearance - Compact horizontal theme cards */}
       <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
-        <div>
-          <h3 className="font-display font-bold text-base">Appearance</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Choose your preferred theme</p>
-        </div>
+        <h3 className="font-display font-bold text-base">Appearance</h3>
         <div className="grid grid-cols-3 gap-2">
           {THEMES.map(t => (
             <button
@@ -216,7 +213,6 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
                 {t.emoji}
               </div>
               <p className="font-display font-semibold text-xs text-foreground">{t.label}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{t.desc}</p>
             </button>
           ))}
         </div>
