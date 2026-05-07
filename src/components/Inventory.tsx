@@ -265,18 +265,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           Import
         </button>
         <button
-          onClick={() => setShowShoppingList(true)}
-          className="relative px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border"
-        >
-          🛒 List
-          {shoppingList.length > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-              {shoppingList.length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={generateBuyList}
+          onClick={() => { generateBuyList(); }}
           className="px-4 py-2.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-sm font-display font-semibold hover:bg-warning/20"
           title="Auto-generate buy list from low/out-of-stock items"
         >
