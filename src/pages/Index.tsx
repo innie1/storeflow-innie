@@ -195,12 +195,18 @@ export default function Index() {
         {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
         {tab === 'roi' && <ROITracker store={store} onUpdate={setStore} />}
         {tab === 'settings' && <Settings store={store} onUpdate={setStore} onLock={handleLock} />}
+        {tab === 'games-dashboard' && (
+          <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} />
+        )}
+        {tab === 'games-history' && <GamesHistory store={store} onUpdate={setStore} />}
+        {tab === 'games-analytics' && <GamesAnalytics store={store} />}
+        {tab === 'games-settings' && <GamesSettings store={store} onUpdate={setStore} />}
       </main>
 
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
         <div className="flex justify-around max-w-3xl mx-auto">
-          {MAIN_TABS.map(t => (
+          {mainTabs.map(t => (
             <button
               key={t.id}
               onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
@@ -217,7 +223,7 @@ export default function Index() {
             <button
               onClick={() => setShowMoreMenu(!showMoreMenu)}
               className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
-                isMoreTab(tab) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                moreItems.some(m => m.id === tab) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <span className="text-lg mb-0.5">•••</span>
@@ -227,7 +233,7 @@ export default function Index() {
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
                 <div className="absolute bottom-full right-0 mb-2 w-44 bg-card shadow-card border border-border rounded-xl overflow-hidden z-50 animate-fade-in">
-                  {MORE_ITEMS.map(m => (
+                  {moreItems.map(m => (
                     <button
                       key={m.id}
                       onClick={() => { setTab(m.id); setShowMoreMenu(false); }}
