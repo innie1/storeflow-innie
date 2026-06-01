@@ -112,6 +112,21 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
           <div className="space-y-3">
             <label className="block text-xs text-muted-foreground">Store Name</label>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Side Shop" className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm" autoFocus />
+            <label className="block text-xs text-muted-foreground">Business Category</label>
+            <div className="grid grid-cols-2 gap-2">
+              {CATEGORIES.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setCategory(c.id)}
+                  className={`p-2.5 rounded-xl border text-left transition-colors ${
+                    category === c.id ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border hover:border-primary/30'
+                  }`}
+                >
+                  <div className="text-lg">{c.icon}</div>
+                  <p className="font-display font-semibold text-xs mt-0.5">{c.label}</p>
+                </button>
+              ))}
+            </div>
             <div className="flex gap-2">
               <button onClick={() => setMode('list')} className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold">Cancel</button>
               <button onClick={handleCreate} className="flex-1 p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold">Create & Switch</button>
