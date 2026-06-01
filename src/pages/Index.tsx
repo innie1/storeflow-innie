@@ -52,6 +52,18 @@ export default function Index() {
   const [scanCart, setScanCart] = useState<{ product: Product; qty: number }[]>([]);
   const [newProductPrompt, setNewProductPrompt] = useState<{ barcode: string; name: string; costPrice: string; sellingPrice: string; quantity: string } | null>(null);
 
+  const isGames = store?.category === 'games';
+  const mainTabs = isGames ? GAMES_MAIN_TABS : RETAIL_MAIN_TABS;
+  const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;
+
+  // When switching to a games store, ensure the active tab is valid for it
+  useEffect(() => {
+    if (!store) return;
+    const all = [...mainTabs, ...moreItems].map(t => t.id);
+    if (!all.includes(tab)) setTab(mainTabs[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store?.accessCode, store?.category]);
+
   useEffect(() => {
     const code = getActiveSession();
     if (code) {
