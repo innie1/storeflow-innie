@@ -11,23 +11,36 @@ import BarcodeScanner from '@/components/BarcodeScanner';
 import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 import Expenses from '@/components/Expenses';
 import ROITracker from '@/components/ROITracker';
+import GamesDashboard from '@/components/games/GamesDashboard';
+import GamesSettings from '@/components/games/GamesSettings';
+import GamesHistory from '@/components/games/GamesHistory';
+import GamesAnalytics from '@/components/games/GamesAnalytics';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
-const MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
+const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
   { id: 'expenses', label: 'Expenses', icon: '🧾' },
 ];
 
-const MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
+const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'history', label: 'History', icon: '📋' },
   { id: 'roi', label: 'ROI Tracker', icon: '📈' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
-const isMoreTab = (tab: TabId) => MORE_ITEMS.some(m => m.id === tab);
+const GAMES_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'games-dashboard', label: 'Dashboard', icon: '🎮' },
+  { id: 'games-history', label: 'History', icon: '📋' },
+  { id: 'games-analytics', label: 'Analytics', icon: '📈' },
+  { id: 'games-settings', label: 'Games', icon: '🕹️' },
+];
+
+const GAMES_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
+];
 
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
@@ -38,6 +51,18 @@ export default function Index() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [scanCart, setScanCart] = useState<{ product: Product; qty: number }[]>([]);
   const [newProductPrompt, setNewProductPrompt] = useState<{ barcode: string; name: string; costPrice: string; sellingPrice: string; quantity: string } | null>(null);
+
+  const isGames = store?.category === 'games';
+  const mainTabs = isGames ? GAMES_MAIN_TABS : RETAIL_MAIN_TABS;
+  const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;
+
+  // When switching to a games store, ensure the active tab is valid for it
+  useEffect(() => {
+    if (!store) return;
+    const all = [...mainTabs, ...moreItems].map(t => t.id);
+    if (!all.includes(tab)) setTab(mainTabs[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store?.accessCode, store?.category]);
 
   useEffect(() => {
     const code = getActiveSession();
@@ -146,13 +171,15 @@ export default function Index() {
           <p className="text-xs text-muted-foreground">{store.storeName}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setScanCart([]); setShowBarcodeScanner(true); }}
-            className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors font-display font-semibold"
-            title="Scan barcode to save or sell"
-          >
-            🔳 Scan
-          </button>
+          {!isGames && (
+            <button
+              onClick={() => { setScanCart([]); setShowBarcodeScanner(true); }}
+              className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors font-display font-semibold"
+              title="Scan barcode to save or sell"
+            >
+              🔳 Scan
+            </button>
+          )}
           <button onClick={handleLock} className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
             🔒 Lock
           </button>
@@ -182,12 +209,18 @@ export default function Index() {
         {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
         {tab === 'roi' && <ROITracker store={store} onUpdate={setStore} />}
         {tab === 'settings' && <Settings store={store} onUpdate={setStore} onLock={handleLock} />}
+        {tab === 'games-dashboard' && (
+          <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} />
+        )}
+        {tab === 'games-history' && <GamesHistory store={store} onUpdate={setStore} />}
+        {tab === 'games-analytics' && <GamesAnalytics store={store} />}
+        {tab === 'games-settings' && <GamesSettings store={store} onUpdate={setStore} />}
       </main>
 
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
         <div className="flex justify-around max-w-3xl mx-auto">
-          {MAIN_TABS.map(t => (
+          {mainTabs.map(t => (
             <button
               key={t.id}
               onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
@@ -204,7 +237,7 @@ export default function Index() {
             <button
               onClick={() => setShowMoreMenu(!showMoreMenu)}
               className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
-                isMoreTab(tab) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                moreItems.some(m => m.id === tab) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <span className="text-lg mb-0.5">•••</span>
@@ -214,7 +247,7 @@ export default function Index() {
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
                 <div className="absolute bottom-full right-0 mb-2 w-44 bg-card shadow-card border border-border rounded-xl overflow-hidden z-50 animate-fade-in">
-                  {MORE_ITEMS.map(m => (
+                  {moreItems.map(m => (
                     <button
                       key={m.id}
                       onClick={() => { setTab(m.id); setShowMoreMenu(false); }}

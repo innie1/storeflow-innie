@@ -1,21 +1,29 @@
 import { useState } from 'react';
 import { createStore, loadStore } from '@/lib/store-data';
-import { StoreData } from '@/types/store';
+import { StoreData, StoreCategory } from '@/types/store';
 import { showToast } from '@/components/Toast';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
 }
 
+const CATEGORIES: { id: StoreCategory; label: string; icon: string; desc: string }[] = [
+  { id: 'retail', label: 'Retail Store', icon: '🛒', desc: 'Products, inventory and sales' },
+  { id: 'restaurant', label: 'Restaurant', icon: '🍽️', desc: 'Menu items and orders' },
+  { id: 'games', label: 'Games & Entertainment', icon: '🎮', desc: 'PlayStation, Snooker, etc.' },
+  { id: 'other', label: 'Other', icon: '🏪', desc: 'Custom setup' },
+];
+
 export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [mode, setMode] = useState<'choose' | 'create' | 'access'>('choose');
   const [storeName, setStoreName] = useState('');
+  const [category, setCategory] = useState<StoreCategory>('retail');
   const [accessCode, setAccessCode] = useState('');
   const [newCode, setNewCode] = useState('');
 
   const handleCreate = () => {
     if (!storeName.trim()) return showToast('Enter a store name', 'error');
-    const store = createStore(storeName.trim());
+    const store = createStore(storeName.trim(), category);
     setNewCode(store.accessCode);
   };
 
@@ -66,6 +74,26 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 placeholder="e.g. Blessed Nnamdi Store"
                 className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
               />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-2">Business Category</label>
+              <div className="grid grid-cols-2 gap-2">
+                {CATEGORIES.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setCategory(c.id)}
+                    className={`p-3 rounded-xl border text-left transition-colors ${
+                      category === c.id
+                        ? 'bg-primary/10 border-primary/40'
+                        : 'bg-surface-2 border-border hover:border-primary/30'
+                    }`}
+                  >
+                    <div className="text-xl mb-1">{c.icon}</div>
+                    <p className="font-display font-semibold text-xs">{c.label}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{c.desc}</p>
+                  </button>
+                ))}
+              </div>
             </div>
             <button onClick={handleCreate} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90 transition-opacity">
               Create Store

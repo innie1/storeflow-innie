@@ -1,8 +1,15 @@
 import { useState } from 'react';
-import { StoreData } from '@/types/store';
+import { StoreData, StoreCategory } from '@/types/store';
 import { getStoreIndex, loadStore, createStore, removeStoreFromIndex } from '@/lib/store-data';
 import { saveSession } from '@/components/Settings';
 import { showToast } from '@/components/Toast';
+
+const CATEGORIES: { id: StoreCategory; label: string; icon: string }[] = [
+  { id: 'retail', label: 'Retail', icon: '🛒' },
+  { id: 'restaurant', label: 'Restaurant', icon: '🍽️' },
+  { id: 'games', label: 'Games', icon: '🎮' },
+  { id: 'other', label: 'Other', icon: '🏪' },
+];
 
 interface StoreSwitcherProps {
   currentCode: string;
@@ -14,6 +21,7 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
   const [mode, setMode] = useState<'list' | 'add' | 'create'>('list');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [category, setCategory] = useState<StoreCategory>('retail');
   const [stores, setStores] = useState(getStoreIndex());
 
   const switchTo = (storeCode: string) => {
@@ -35,7 +43,7 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
 
   const handleCreate = () => {
     if (!name.trim()) return showToast('Enter a store name', 'error');
-    const store = createStore(name.trim());
+    const store = createStore(name.trim(), category);
     saveSession(store.accessCode);
     showToast(`Created "${store.storeName}" — code ${store.accessCode}`);
     onSwitch(store);
@@ -104,6 +112,21 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
           <div className="space-y-3">
             <label className="block text-xs text-muted-foreground">Store Name</label>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Side Shop" className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm" autoFocus />
+            <label className="block text-xs text-muted-foreground">Business Category</label>
+            <div className="grid grid-cols-2 gap-2">
+              {CATEGORIES.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setCategory(c.id)}
+                  className={`p-2.5 rounded-xl border text-left transition-colors ${
+                    category === c.id ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border hover:border-primary/30'
+                  }`}
+                >
+                  <div className="text-lg">{c.icon}</div>
+                  <p className="font-display font-semibold text-xs mt-0.5">{c.label}</p>
+                </button>
+              ))}
+            </div>
             <div className="flex gap-2">
               <button onClick={() => setMode('list')} className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold">Cancel</button>
               <button onClick={handleCreate} className="flex-1 p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold">Create & Switch</button>
