@@ -1,8 +1,15 @@
 import { useState } from 'react';
-import { StoreData } from '@/types/store';
+import { StoreData, StoreCategory } from '@/types/store';
 import { getStoreIndex, loadStore, createStore, removeStoreFromIndex } from '@/lib/store-data';
 import { saveSession } from '@/components/Settings';
 import { showToast } from '@/components/Toast';
+
+const CATEGORIES: { id: StoreCategory; label: string; icon: string }[] = [
+  { id: 'retail', label: 'Retail', icon: '🛒' },
+  { id: 'restaurant', label: 'Restaurant', icon: '🍽️' },
+  { id: 'games', label: 'Games', icon: '🎮' },
+  { id: 'other', label: 'Other', icon: '🏪' },
+];
 
 interface StoreSwitcherProps {
   currentCode: string;
@@ -14,6 +21,7 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
   const [mode, setMode] = useState<'list' | 'add' | 'create'>('list');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [category, setCategory] = useState<StoreCategory>('retail');
   const [stores, setStores] = useState(getStoreIndex());
 
   const switchTo = (storeCode: string) => {
@@ -35,7 +43,7 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
 
   const handleCreate = () => {
     if (!name.trim()) return showToast('Enter a store name', 'error');
-    const store = createStore(name.trim());
+    const store = createStore(name.trim(), category);
     saveSession(store.accessCode);
     showToast(`Created "${store.storeName}" — code ${store.accessCode}`);
     onSwitch(store);
