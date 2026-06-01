@@ -69,17 +69,44 @@ export interface Investment {
   type: 'initial' | 'additional'; // initial = first investment, additional = new money in
 }
 
+export type StoreCategory = 'retail' | 'restaurant' | 'games' | 'other';
+
+export interface GameService {
+  id: string;
+  name: string;
+  icon: string;
+  price: number;
+  enabled: boolean;
+  order: number;
+}
+
+export interface GameSession {
+  id: string;
+  gameId: string;
+  gameName: string;
+  amount: number;
+  players: number;
+  duration?: number; // minutes
+  notes?: string;
+  date: string; // ISO
+}
+
 export interface StoreData {
   storeName: string;
   accessCode: string;
+  category?: StoreCategory;
   products: Product[];
   sales: Sale[];
   restocks?: Restock[];
   expenses?: Expense[];
   trash?: TrashItem[];
   investments?: Investment[];
+  games?: GameService[];
+  gameSessions?: GameSession[];
   createdAt: string;
   profile?: StoreProfile;
 }
 
-export type TabId = 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi';
+export type TabId =
+  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi'
+  | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings';
