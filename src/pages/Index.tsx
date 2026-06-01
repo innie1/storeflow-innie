@@ -11,23 +11,36 @@ import BarcodeScanner from '@/components/BarcodeScanner';
 import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 import Expenses from '@/components/Expenses';
 import ROITracker from '@/components/ROITracker';
+import GamesDashboard from '@/components/games/GamesDashboard';
+import GamesSettings from '@/components/games/GamesSettings';
+import GamesHistory from '@/components/games/GamesHistory';
+import GamesAnalytics from '@/components/games/GamesAnalytics';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
-const MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
+const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
   { id: 'expenses', label: 'Expenses', icon: '🧾' },
 ];
 
-const MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
+const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'history', label: 'History', icon: '📋' },
   { id: 'roi', label: 'ROI Tracker', icon: '📈' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
-const isMoreTab = (tab: TabId) => MORE_ITEMS.some(m => m.id === tab);
+const GAMES_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'games-dashboard', label: 'Dashboard', icon: '🎮' },
+  { id: 'games-history', label: 'History', icon: '📋' },
+  { id: 'games-analytics', label: 'Analytics', icon: '📈' },
+  { id: 'games-settings', label: 'Games', icon: '🕹️' },
+];
+
+const GAMES_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
+];
 
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
