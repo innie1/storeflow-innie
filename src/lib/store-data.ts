@@ -1,4 +1,4 @@
-import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, Investment } from '@/types/store';
+import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, Investment, StoreCategory, GameService, GameSession } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 
 const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -81,10 +81,23 @@ export function removeStoreFromIndex(code: string) {
   localStorage.removeItem(STORE_PREFIX + code);
 }
 
-export function createStore(storeName: string): StoreData {
+const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
+  { name: 'PlayStation', icon: '🎮', price: 500, enabled: false, order: 0 },
+  { name: 'Snooker', icon: '🎱', price: 1000, enabled: false, order: 1 },
+  { name: 'Xbox', icon: '🎮', price: 500, enabled: false, order: 2 },
+  { name: 'Table Tennis', icon: '🏓', price: 300, enabled: false, order: 3 },
+  { name: 'Darts', icon: '🎯', price: 200, enabled: false, order: 4 },
+  { name: 'Karaoke', icon: '🎤', price: 1500, enabled: false, order: 5 },
+  { name: 'VR Games', icon: '🥽', price: 2000, enabled: false, order: 6 },
+];
+
+export function createStore(storeName: string, category: StoreCategory = 'retail'): StoreData {
   const code = generateCode();
   const now = new Date().toISOString();
-  const products = DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }));
+  const isRetail = category === 'retail';
+  const products = isRetail
+    ? DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }))
+    : [];
   const inventoryValue = products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
   const investments: Investment[] = inventoryValue > 0 ? [{
     id: generateId(),
@@ -93,14 +106,20 @@ export function createStore(storeName: string): StoreData {
     date: now,
     type: 'initial',
   }] : [];
+  const games: GameService[] | undefined = category === 'games'
+    ? DEFAULT_GAMES.map(g => ({ ...g, id: generateId() }))
+    : undefined;
   const store: StoreData = {
     storeName,
     accessCode: code,
+    category,
     products,
     sales: [],
     restocks: [],
     expenses: [],
     investments,
+    games,
+    gameSessions: category === 'games' ? [] : undefined,
     createdAt: now,
   };
   localStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
