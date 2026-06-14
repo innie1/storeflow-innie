@@ -264,6 +264,100 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         </div>
       </div>
 
+      {/* Store Manager */}
+      <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-display font-bold text-base text-primary">Store Manager</h3>
+        </div>
+        <div className="flex items-center justify-between p-2 rounded-lg bg-surface-2">
+          <span className="text-sm font-display font-semibold">Enable Store Manager</span>
+          <button onClick={() => updateMgr({ enabled: !mgr.enabled })}
+            className={`w-11 h-6 rounded-full transition-colors relative ${mgr.enabled ? 'bg-success' : 'bg-border'}`}>
+            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${mgr.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground pt-1">Features</p>
+        {([
+          ['revenueForecasts', 'Revenue Forecasts'],
+          ['profitForecasts', 'Profit Forecasts'],
+          ['inventoryForecasts', 'Inventory Forecasts'],
+          ['expenseAnalysis', 'Expense Analysis'],
+          ['smartPricing', 'Smart Pricing'],
+          ['productSuggestions', 'Product Suggestions'],
+          ['savingsPlanner', 'Savings Planner'],
+          ['voiceFeatures', 'Voice Features'],
+          ['weeklyRecap', 'Weekly Recap'],
+          ['customerRequests', 'Customer Request Tracking'],
+        ] as [keyof ManagerSettings, string][]).map(([key, label]) => (
+          <div key={key} className="flex items-center justify-between py-1.5">
+            <span className="text-sm">{label}</span>
+            <button onClick={() => updateMgr({ [key]: !mgr[key] } as Partial<ManagerSettings>)}
+              className={`w-10 h-5 rounded-full transition-colors relative ${mgr[key] ? 'bg-success' : 'bg-border'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${mgr[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Pricing Settings */}
+      <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
+        <h3 className="font-display font-bold text-base text-primary">Pricing Settings</h3>
+        <div className="flex items-center justify-between">
+          <span className="text-sm">Default Profit Margin</span>
+          <div className="flex items-center gap-1">
+            <input type="number" value={mgr.defaultMargin}
+              onChange={e => updateMgr({ defaultMargin: Math.max(0, Number(e.target.value) || 0) })}
+              className="w-16 p-1.5 rounded-lg bg-surface-2 border border-border text-sm text-right focus:outline-none focus:border-primary" />
+            <span className="text-sm text-muted-foreground">%</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between py-1.5">
+          <span className="text-sm">Auto-Suggest Prices</span>
+          <button onClick={() => updateMgr({ autoSuggestPrices: !mgr.autoSuggestPrices })}
+            className={`w-10 h-5 rounded-full transition-colors relative ${mgr.autoSuggestPrices ? 'bg-success' : 'bg-border'}`}>
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${mgr.autoSuggestPrices ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+        <div className="flex items-center justify-between py-1.5">
+          <span className="text-sm">Auto-Apply Suggested Prices</span>
+          <button onClick={() => updateMgr({ autoApplyPrices: !mgr.autoApplyPrices })}
+            className={`w-10 h-5 rounded-full transition-colors relative ${mgr.autoApplyPrices ? 'bg-success' : 'bg-border'}`}>
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${mgr.autoApplyPrices ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Savings Settings */}
+      <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
+        <h3 className="font-display font-bold text-base text-primary">Savings Settings</h3>
+        <div className="flex items-center justify-between">
+          <span className="text-sm">Savings Goal (₦)</span>
+          <input type="number" value={savings.amount}
+            onChange={e => updateSavings({ amount: Math.max(0, Number(e.target.value) || 0) })}
+            className="w-32 p-1.5 rounded-lg bg-surface-2 border border-border text-sm text-right focus:outline-none focus:border-primary" />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm">Save From</span>
+          <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden">
+            {(['profit','revenue'] as const).map(s => (
+              <button key={s} onClick={() => updateSavings({ source: s })}
+                className={`px-3 py-1.5 text-xs font-display font-semibold capitalize ${savings.source === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm">Savings Percentage</span>
+          <div className="flex items-center gap-1">
+            <input type="number" value={savings.percentage}
+              onChange={e => updateSavings({ percentage: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+              className="w-16 p-1.5 rounded-lg bg-surface-2 border border-border text-sm text-right focus:outline-none focus:border-primary" />
+            <span className="text-sm text-muted-foreground">%</span>
+          </div>
+        </div>
+      </div>
+
       {/* Lock Timer */}
       <div className="bg-card shadow-card rounded-xl p-4 space-y-3">
         <div>
