@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { StoreData } from '@/types/store';
 import { getDashboardStats, getTopSellers } from '@/lib/store-data';
+import { healthScore, generateInsights } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 
 interface DashboardProps {
@@ -241,9 +242,50 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const profitAbs = Math.abs(stats.totalProfit);
 
 
+  const health = healthScore(store);
+  const insights = generateInsights(store, '7d');
+  const healthTone = health.overall >= 80 ? 'hsl(var(--success))' : health.overall >= 60 ? 'hsl(var(--primary))' : health.overall >= 40 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))';
+  const healthSize = 70;
+  const healthR = (healthSize - 8) / 2;
+  const healthC = 2 * Math.PI * healthR;
+  const healthDash = (Math.min(100, health.overall) / 100) * healthC;
+
   return (
     <div className="animate-fade-in space-y-3">
-      {/* HERO: Revenue */}
+      {/* Store Health + Store Manager Active */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-4 rounded-2xl bg-card shadow-card">
+          <p className="text-xs text-muted-foreground font-display">Store Health</p>
+          <p className="font-display font-bold text-3xl text-foreground mt-1">{health.overall}<span className="text-sm text-muted-foreground">/100</span></p>
+          <p className="text-[10px] text-muted-foreground mt-1">{health.label}</p>
+          <div className="flex justify-center mt-2">
+            <svg width={healthSize} height={healthSize} viewBox={`0 0 ${healthSize} ${healthSize}`} className="-rotate-90">
+              <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke="hsl(var(--surface-2))" strokeWidth={8} fill="none" />
+              <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke={healthTone} strokeWidth={8} fill="none"
+                strokeDasharray={`${healthDash} ${healthC}`} strokeLinecap="round" style={{ transition: 'stroke-dasharray 800ms ease-out' }} />
+            </svg>
+          </div>
+        </div>
+        <div className="p-4 rounded-2xl bg-card shadow-card">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-base">🤖</div>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
+              <p className="text-[10px] text-success">Active</p>
+            </div>
+          </div>
+          <div className="space-y-1">
+            {insights.length === 0 && <p className="text-[11px] text-muted-foreground">Insights appear as you record sales.</p>}
+            {insights.slice(0, 4).map(i => (
+              <p key={i.id} className="text-[11px] text-foreground/90 leading-snug flex gap-1.5">
+                <span>{i.icon}</span><span className="flex-1">{i.text}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+
+
       <button
         onClick={() => toggleBreakdown('revenue')}
         className={`w-full p-5 rounded-2xl bg-card shadow-card text-left transition-all ${

@@ -91,6 +91,55 @@ export interface GameSession {
   date: string; // ISO
 }
 
+export interface CustomerRequest {
+  id: string;
+  text: string;
+  date: string;
+  fulfilled?: boolean;
+}
+
+export interface SavingsGoal {
+  amount: number;
+  label?: string;
+  source: 'revenue' | 'profit';
+  percentage: number;
+  saved: number;
+}
+
+export interface ManagerSettings {
+  enabled: boolean;
+  revenueForecasts: boolean;
+  profitForecasts: boolean;
+  inventoryForecasts: boolean;
+  expenseAnalysis: boolean;
+  smartPricing: boolean;
+  productSuggestions: boolean;
+  savingsPlanner: boolean;
+  voiceFeatures: boolean;
+  weeklyRecap: boolean;
+  customerRequests: boolean;
+  defaultMargin: number;
+  autoSuggestPrices: boolean;
+  autoApplyPrices: boolean;
+}
+
+export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
+  enabled: true,
+  revenueForecasts: true,
+  profitForecasts: true,
+  inventoryForecasts: true,
+  expenseAnalysis: true,
+  smartPricing: true,
+  productSuggestions: true,
+  savingsPlanner: true,
+  voiceFeatures: true,
+  weeklyRecap: true,
+  customerRequests: true,
+  defaultMargin: 30,
+  autoSuggestPrices: true,
+  autoApplyPrices: false,
+};
+
 export interface StoreData {
   storeName: string;
   accessCode: string;
@@ -103,10 +152,13 @@ export interface StoreData {
   investments?: Investment[];
   games?: GameService[];
   gameSessions?: GameSession[];
+  customerRequests?: CustomerRequest[];
+  savingsGoal?: SavingsGoal;
+  managerSettings?: ManagerSettings;
   createdAt: string;
   profile?: StoreProfile;
 }
 
 export type TabId =
-  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi'
+  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings';
