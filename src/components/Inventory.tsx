@@ -351,22 +351,63 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       </div>
 
       {/* Add Modal */}
-      {showAddModal && (
+      {showAddModal && (() => {
+        const settings = store.managerSettings;
+        const showSmartPricing = !settings || settings.smartPricing;
+        const cost = Number(newProduct.costPrice) || 0;
+        const margins = [20, 30, 40, 50];
+        const defaultMargin = settings?.defaultMargin ?? 30;
+        return (
         <Modal title="Add Product" onClose={() => setShowAddModal(false)}>
           <div className="space-y-3">
             <input value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Product name" className={inputClass} />
             <div className="grid grid-cols-2 gap-3">
-              <input value={newProduct.costPrice} onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value })} placeholder="Cost price" type="number" className={inputClass} />
-              <input value={newProduct.sellingPrice} onChange={e => setNewProduct({ ...newProduct, sellingPrice: e.target.value })} placeholder="Selling price" type="number" className={inputClass} />
+              <input value={newProduct.costPrice} onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value })} placeholder="Cost price (₦)" type="number" className={inputClass} />
+              <input value={newProduct.sellingPrice} onChange={e => setNewProduct({ ...newProduct, sellingPrice: e.target.value })} placeholder="Selling price (₦)" type="number" className={inputClass} />
             </div>
+            {showSmartPricing && cost > 0 && (
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-display font-bold text-primary">🤖 Smart Pricing <span className="text-muted-foreground font-normal">(Recommended)</span></p>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Based on your {defaultMargin}% default profit margin</p>
+                <div className="space-y-1.5">
+                  {margins.map(m => {
+                    const price = Math.round((cost * (1 + m / 100)) / 5) * 5;
+                    const profit = price - cost;
+                    const isDefault = m === defaultMargin;
+                    const isSelected = Number(newProduct.sellingPrice) === price;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setNewProduct({ ...newProduct, sellingPrice: String(price) })}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg border text-xs font-display font-semibold transition-colors ${
+                          isSelected || (isDefault && !newProduct.sellingPrice)
+                            ? 'bg-primary/20 border-primary text-primary'
+                            : 'bg-surface-2 border-border text-foreground hover:border-primary/30'
+                        }`}
+                      >
+                        <span>{m}% Margin</span>
+                        <span>₦{price.toLocaleString()}</span>
+                        <span className="text-success">Profit: ₦{profit.toLocaleString()}{isSelected ? ' ✓' : ''}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <input value={newProduct.quantity} onChange={e => setNewProduct({ ...newProduct, quantity: e.target.value })} placeholder="Quantity" type="number" className={inputClass} />
               <input value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })} placeholder="Category" className={inputClass} />
             </div>
-            <button onClick={handleAdd} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Add Product</button>
+            <button onClick={handleAdd} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Item</button>
           </div>
         </Modal>
-      )}
+        );
+      })()}
+
+
 
       {/* Edit Modal */}
       {editProduct && (
