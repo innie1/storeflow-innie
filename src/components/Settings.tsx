@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StoreData, StoreProfile } from '@/types/store';
+import { StoreData, StoreProfile, ManagerSettings, DEFAULT_MANAGER_SETTINGS, SavingsGoal } from '@/types/store';
 import { saveStore, getTrash } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
@@ -73,7 +73,25 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [profile, setProfile] = useState<StoreProfile>(
     store.profile || { storeType: '', location: '', phone: '', email: '' }
   );
+  const [mgr, setMgr] = useState<ManagerSettings>(store.managerSettings || DEFAULT_MANAGER_SETTINGS);
+  const [savings, setSavings] = useState<SavingsGoal>(store.savingsGoal || {
+    amount: 500000, label: 'Emergency Fund', source: 'profit', percentage: 10, saved: 0,
+  });
   const trashCount = getTrash(store).length;
+
+  const updateMgr = (patch: Partial<ManagerSettings>) => {
+    const next = { ...mgr, ...patch };
+    setMgr(next);
+    const updated = { ...store, managerSettings: next };
+    saveStore(updated); onUpdate(updated);
+  };
+  const updateSavings = (patch: Partial<SavingsGoal>) => {
+    const next = { ...savings, ...patch };
+    setSavings(next);
+    const updated = { ...store, savingsGoal: next };
+    saveStore(updated); onUpdate(updated);
+  };
+
 
   const handleThemeChange = (t: ThemeId) => {
     setTheme(t);
