@@ -11,6 +11,7 @@ import BarcodeScanner from '@/components/BarcodeScanner';
 import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 import Expenses from '@/components/Expenses';
 import ROITracker from '@/components/ROITracker';
+import Manager from '@/components/Manager';
 import GamesDashboard from '@/components/games/GamesDashboard';
 import GamesSettings from '@/components/games/GamesSettings';
 import GamesHistory from '@/components/games/GamesHistory';
@@ -22,10 +23,11 @@ const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
-  { id: 'expenses', label: 'Expenses', icon: '🧾' },
+  { id: 'manager', label: 'Manager', icon: '🤖' },
 ];
 
 const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'expenses', label: 'Expenses', icon: '🧾' },
   { id: 'history', label: 'History', icon: '📋' },
   { id: 'roi', label: 'ROI Tracker', icon: '📈' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -206,6 +208,7 @@ export default function Index() {
         )}
         {tab === 'sales' && <Sales store={store} onUpdate={setStore} />}
         {tab === 'expenses' && <Expenses store={store} onUpdate={setStore} />}
+        {tab === 'manager' && <Manager store={store} onUpdate={setStore} />}
         {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
         {tab === 'roi' && <ROITracker store={store} onUpdate={setStore} />}
         {tab === 'settings' && <Settings store={store} onUpdate={setStore} onLock={handleLock} />}
