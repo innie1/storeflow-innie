@@ -368,7 +368,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             {showSmartPricing && cost > 0 && (
               <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-display font-bold text-primary">🤖 Smart Pricing <span className="text-muted-foreground font-normal">(Recommended)</span></p>
+                  <p className="text-xs font-display font-bold text-primary">✨ Smart Pricing <span className="text-muted-foreground font-normal">(Recommended)</span></p>
                 </div>
                 <p className="text-[10px] text-muted-foreground">Based on your {defaultMargin}% default profit margin</p>
                 <div className="space-y-1.5">

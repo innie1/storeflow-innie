@@ -20,11 +20,12 @@ import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 
 const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
-  { id: 'manager', label: 'Manager', icon: '🤖' },
+  { id: 'manager', label: 'Manager', icon: '📦' },
 ];
+
 
 const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'expenses', label: 'Expenses', icon: '🧾' },
