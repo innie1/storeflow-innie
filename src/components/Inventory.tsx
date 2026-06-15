@@ -366,7 +366,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center">↑</button>
-                  <button onClick={() => setEditProduct({ ...p })} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center">✎</button>
+                  <button onClick={() => { setEditProduct({ ...p }); setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center">✎</button>
                   <button onClick={() => handleDelete(p)} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive flex items-center justify-center">✕</button>
                 </div>
               </div>
@@ -438,22 +438,47 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
 
       {/* Edit Modal */}
-      {editProduct && (
-        <Modal title="Edit Product" onClose={() => setEditProduct(null)}>
+      {editProduct && editDraft && (() => {
+        const cost = Number(editDraft.costPrice) || 0;
+        const settings = store.managerSettings;
+        const showSmart = !settings || settings.smartPricing;
+        const margins = [20, 30, 40, 50];
+        const defaultMargin = settings?.defaultMargin ?? 30;
+        return (
+        <Modal title="Edit Product" onClose={() => { setEditProduct(null); setEditDraft(null); }}>
           <div className="space-y-3">
-            <input value={editProduct.name} onChange={e => setEditProduct({ ...editProduct, name: e.target.value })} className={inputClass} />
+            <input value={editDraft.name} onChange={e => setEditDraft({ ...editDraft, name: e.target.value })} className={inputClass} />
             <div className="grid grid-cols-2 gap-3">
-              <input value={editProduct.costPrice} onChange={e => setEditProduct({ ...editProduct, costPrice: Number(e.target.value) })} type="number" className={inputClass} />
-              <input value={editProduct.sellingPrice} onChange={e => setEditProduct({ ...editProduct, sellingPrice: Number(e.target.value) })} type="number" className={inputClass} />
+              <input value={editDraft.costPrice} onChange={e => setEditDraft({ ...editDraft, costPrice: e.target.value })} type="number" placeholder="Cost (₦)" className={inputClass} />
+              <input value={editDraft.sellingPrice} onChange={e => setEditDraft({ ...editDraft, sellingPrice: e.target.value })} type="number" placeholder="Selling (₦)" className={inputClass} />
             </div>
+            {showSmart && cost > 0 && (
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+                <p className="text-xs font-display font-bold text-primary">✨ Smart Pricing</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {margins.map(m => {
+                    const price = Math.round((cost * (1 + m / 100)) / 5) * 5;
+                    const selected = Number(editDraft.sellingPrice) === price;
+                    return (
+                      <button key={m} type="button" onClick={() => setEditDraft({ ...editDraft, sellingPrice: String(price) })}
+                        className={`p-2 rounded-lg border text-xs font-display font-semibold ${selected || m === defaultMargin && !editDraft.sellingPrice ? 'bg-primary/20 border-primary text-primary' : 'bg-surface-2 border-border'}`}>
+                        {m}% → ₦{price.toLocaleString()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
-              <input value={editProduct.quantity} onChange={e => setEditProduct({ ...editProduct, quantity: Number(e.target.value) })} type="number" className={inputClass} />
-              <input value={editProduct.category} onChange={e => setEditProduct({ ...editProduct, category: e.target.value })} className={inputClass} />
+              <input value={editDraft.quantity} onChange={e => setEditDraft({ ...editDraft, quantity: e.target.value })} type="number" placeholder="Quantity" className={inputClass} />
+              <input value={editDraft.category} onChange={e => setEditDraft({ ...editDraft, category: e.target.value })} placeholder="Category" className={inputClass} />
             </div>
             <button onClick={handleEdit} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Changes</button>
           </div>
         </Modal>
-      )}
+        );
+      })()}
+
 
       {/* Restock Modal */}
       {restockProduct && (
