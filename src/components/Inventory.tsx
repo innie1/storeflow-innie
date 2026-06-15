@@ -24,10 +24,12 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string } | null>(null);
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
   const [restockQty, setRestockQty] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
+  const [importPreview, setImportPreview] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] | null>(null);
   const [newProduct, setNewProduct] = useState({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: '' });
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
@@ -35,6 +37,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [receiveData, setReceiveData] = useState<Record<string, { qty: string; cost: string }>>({});
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [scanForProduct, setScanForProduct] = useState<Product | null>(null);
+
   const [funding, setFunding] = useState<RestockFunding>('balance');
   const [singleRestockFunding, setSingleRestockFunding] = useState<RestockFunding>('balance');
 
@@ -61,12 +64,20 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   };
 
   const handleEdit = () => {
-    if (!editProduct) return;
-    const updated = updateProduct(store, editProduct.id, editProduct);
+    if (!editProduct || !editDraft) return;
+    const updates: Partial<Product> = {
+      name: editDraft.name,
+      costPrice: Number(editDraft.costPrice) || 0,
+      sellingPrice: Number(editDraft.sellingPrice) || 0,
+      quantity: Number(editDraft.quantity) || 0,
+      category: editDraft.category,
+    };
+    const updated = updateProduct(store, editProduct.id, updates);
     onUpdate(updated);
-    setEditProduct(null);
-    showToast('Product updated');
+    setEditProduct(null); setEditDraft(null);
+    showToast('Product updated — inventory value recalculated');
   };
+
 
   const handleDelete = (p: Product) => {
     setConfirmDelete(p);
@@ -95,30 +106,47 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     showToast(singleRestockFunding === 'new_money' ? 'Stock added (new money)' : 'Stock added (from balance)');
   };
 
-  const handleImport = () => {
+  const handleImportParse = () => {
     try {
       const lines = importText.trim().split('\n').filter(Boolean);
-      const imported: { name: string; costPrice: number; sellingPrice: number; quantity: number; category: string }[] = [];
+      const parsed: { name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] = [];
       for (const line of lines) {
         const parts = line.split(',').map(s => s.trim());
         if (parts.length < 4) continue;
-        imported.push({
+        parsed.push({
           name: parts[0],
-          costPrice: Number(parts[1]),
-          sellingPrice: Number(parts[2]),
-          quantity: Number(parts[3]),
+          costPrice: parts[1] || '0',
+          sellingPrice: parts[2] || '0',
+          quantity: parts[3] || '0',
           category: parts[4] || 'General',
         });
       }
-      if (imported.length === 0) return showToast('No valid products found', 'error');
-      onUpdate(importProducts(store, imported));
-      setShowImportModal(false);
-      setImportText('');
-      showToast(`${imported.length} products imported`);
+      if (parsed.length === 0) return showToast('No valid products found', 'error');
+      setImportPreview(parsed);
     } catch {
       showToast('Import failed — check format', 'error');
     }
   };
+
+  const handleImportApprove = () => {
+    if (!importPreview) return;
+    const cleaned = importPreview
+      .filter(p => p.name.trim())
+      .map(p => ({
+        name: p.name.trim(),
+        costPrice: Number(p.costPrice) || 0,
+        sellingPrice: Number(p.sellingPrice) || 0,
+        quantity: Number(p.quantity) || 0,
+        category: p.category.trim() || 'General',
+      }));
+    if (cleaned.length === 0) return showToast('No items to import', 'error');
+    onUpdate(importProducts(store, cleaned));
+    setShowImportModal(false);
+    setImportText('');
+    setImportPreview(null);
+    showToast(`${cleaned.length} products imported`);
+  };
+
 
   const addToShoppingList = (p: Product) => {
     const existing = shoppingList.find(i => i.productId === p.id);
@@ -338,7 +366,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center">↑</button>
-                  <button onClick={() => setEditProduct({ ...p })} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center">✎</button>
+                  <button onClick={() => { setEditProduct({ ...p }); setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center">✎</button>
                   <button onClick={() => handleDelete(p)} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive flex items-center justify-center">✕</button>
                 </div>
               </div>
@@ -368,7 +396,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             {showSmartPricing && cost > 0 && (
               <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-display font-bold text-primary">🤖 Smart Pricing <span className="text-muted-foreground font-normal">(Recommended)</span></p>
+                  <p className="text-xs font-display font-bold text-primary">✨ Smart Pricing <span className="text-muted-foreground font-normal">(Recommended)</span></p>
                 </div>
                 <p className="text-[10px] text-muted-foreground">Based on your {defaultMargin}% default profit margin</p>
                 <div className="space-y-1.5">
@@ -410,22 +438,47 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
 
       {/* Edit Modal */}
-      {editProduct && (
-        <Modal title="Edit Product" onClose={() => setEditProduct(null)}>
+      {editProduct && editDraft && (() => {
+        const cost = Number(editDraft.costPrice) || 0;
+        const settings = store.managerSettings;
+        const showSmart = !settings || settings.smartPricing;
+        const margins = [20, 30, 40, 50];
+        const defaultMargin = settings?.defaultMargin ?? 30;
+        return (
+        <Modal title="Edit Product" onClose={() => { setEditProduct(null); setEditDraft(null); }}>
           <div className="space-y-3">
-            <input value={editProduct.name} onChange={e => setEditProduct({ ...editProduct, name: e.target.value })} className={inputClass} />
+            <input value={editDraft.name} onChange={e => setEditDraft({ ...editDraft, name: e.target.value })} className={inputClass} />
             <div className="grid grid-cols-2 gap-3">
-              <input value={editProduct.costPrice} onChange={e => setEditProduct({ ...editProduct, costPrice: Number(e.target.value) })} type="number" className={inputClass} />
-              <input value={editProduct.sellingPrice} onChange={e => setEditProduct({ ...editProduct, sellingPrice: Number(e.target.value) })} type="number" className={inputClass} />
+              <input value={editDraft.costPrice} onChange={e => setEditDraft({ ...editDraft, costPrice: e.target.value })} type="number" placeholder="Cost (₦)" className={inputClass} />
+              <input value={editDraft.sellingPrice} onChange={e => setEditDraft({ ...editDraft, sellingPrice: e.target.value })} type="number" placeholder="Selling (₦)" className={inputClass} />
             </div>
+            {showSmart && cost > 0 && (
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+                <p className="text-xs font-display font-bold text-primary">✨ Smart Pricing</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {margins.map(m => {
+                    const price = Math.round((cost * (1 + m / 100)) / 5) * 5;
+                    const selected = Number(editDraft.sellingPrice) === price;
+                    return (
+                      <button key={m} type="button" onClick={() => setEditDraft({ ...editDraft, sellingPrice: String(price) })}
+                        className={`p-2 rounded-lg border text-xs font-display font-semibold ${selected || m === defaultMargin && !editDraft.sellingPrice ? 'bg-primary/20 border-primary text-primary' : 'bg-surface-2 border-border'}`}>
+                        {m}% → ₦{price.toLocaleString()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
-              <input value={editProduct.quantity} onChange={e => setEditProduct({ ...editProduct, quantity: Number(e.target.value) })} type="number" className={inputClass} />
-              <input value={editProduct.category} onChange={e => setEditProduct({ ...editProduct, category: e.target.value })} className={inputClass} />
+              <input value={editDraft.quantity} onChange={e => setEditDraft({ ...editDraft, quantity: e.target.value })} type="number" placeholder="Quantity" className={inputClass} />
+              <input value={editDraft.category} onChange={e => setEditDraft({ ...editDraft, category: e.target.value })} placeholder="Category" className={inputClass} />
             </div>
             <button onClick={handleEdit} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Changes</button>
           </div>
         </Modal>
-      )}
+        );
+      })()}
+
 
       {/* Restock Modal */}
       {restockProduct && (
@@ -466,20 +519,43 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
       {/* Import Modal */}
       {showImportModal && (
-        <Modal title="Bulk Import" onClose={() => setShowImportModal(false)}>
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Format: Name, Cost, Selling Price, Quantity, Category (one per line)</p>
-            <textarea
-              value={importText}
-              onChange={e => setImportText(e.target.value)}
-              placeholder={"Rice 5kg, 3000, 4500, 20, Groceries\nSugar 1kg, 500, 700, 30, Groceries"}
-              rows={6}
-              className={`${inputClass} resize-none`}
-            />
-            <button onClick={handleImport} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Import Products</button>
-          </div>
+        <Modal title={importPreview ? `Review (${importPreview.length})` : 'Bulk Import'} onClose={() => { setShowImportModal(false); setImportPreview(null); }}>
+          {!importPreview ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Format: Name, Cost, Selling Price, Quantity, Category (one per line)</p>
+              <textarea value={importText} onChange={e => setImportText(e.target.value)}
+                placeholder={"Rice 5kg, 3000, 4500, 20, Groceries\nSugar 1kg, 500, 700, 30, Groceries"}
+                rows={6} className={`${inputClass} resize-none`} />
+              <button onClick={handleImportParse} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Preview Items →</button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Review and edit each item before saving.</p>
+              <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+                {importPreview.map((it, i) => (
+                  <div key={i} className="p-2 rounded-lg bg-surface-2 border border-border space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <input value={it.name} onChange={e => { const next=[...importPreview]; next[i]={...it,name:e.target.value}; setImportPreview(next); }} placeholder="Name" className="flex-1 text-sm bg-surface-3 border border-border rounded p-1.5" />
+                      <button onClick={() => setImportPreview(importPreview.filter((_,k)=>k!==i))} className="w-7 h-7 rounded text-destructive bg-destructive/10 text-sm">✕</button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <input value={it.costPrice} onChange={e => { const n=[...importPreview]; n[i]={...it,costPrice:e.target.value}; setImportPreview(n); }} type="number" placeholder="Cost" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
+                      <input value={it.sellingPrice} onChange={e => { const n=[...importPreview]; n[i]={...it,sellingPrice:e.target.value}; setImportPreview(n); }} type="number" placeholder="Sell" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
+                      <input value={it.quantity} onChange={e => { const n=[...importPreview]; n[i]={...it,quantity:e.target.value}; setImportPreview(n); }} type="number" placeholder="Qty" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
+                      <input value={it.category} onChange={e => { const n=[...importPreview]; n[i]={...it,category:e.target.value}; setImportPreview(n); }} placeholder="Cat" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setImportPreview(null)} className="p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-display font-semibold">← Back</button>
+                <button onClick={handleImportApprove} className="p-2.5 rounded-lg bg-success text-white text-sm font-display font-bold">✓ Approve & Save</button>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
+
 
       {/* Shopping List Modal */}
       {showShoppingList && (

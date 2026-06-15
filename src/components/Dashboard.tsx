@@ -1,13 +1,15 @@
 import { useState, useMemo } from 'react';
-import { StoreData } from '@/types/store';
+import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { getDashboardStats, getTopSellers } from '@/lib/store-data';
-import { healthScore, generateInsights } from '@/lib/manager-intel';
+import { healthScore, generateInsights, generateRecommendations } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
+import Mascot, { MascotBadge } from '@/components/Mascot';
 
 interface DashboardProps {
   store: StoreData;
-  onNavigate: (tab: 'inventory', lowStock?: boolean) => void;
+  onNavigate: (tab: 'inventory' | 'manager' | 'settings', lowStock?: boolean) => void;
 }
+
 
 type BreakdownType = 'revenue' | 'profit' | 'inventory' | 'sales' | null;
 type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
@@ -242,8 +244,11 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const profitAbs = Math.abs(stats.totalProfit);
 
 
+  const managerEnabled = (store.managerSettings ?? DEFAULT_MANAGER_SETTINGS).enabled;
   const health = healthScore(store);
-  const insights = generateInsights(store, '7d');
+  const insights = managerEnabled ? generateInsights(store, '7d') : [];
+  const recs = managerEnabled ? generateRecommendations(store) : [];
+  const insightCount = insights.length + recs.length;
   const healthTone = health.overall >= 80 ? 'hsl(var(--success))' : health.overall >= 60 ? 'hsl(var(--primary))' : health.overall >= 40 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))';
   const healthSize = 70;
   const healthR = (healthSize - 8) / 2;
@@ -252,38 +257,55 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
 
   return (
     <div className="animate-fade-in space-y-3">
-      {/* Store Health + Store Manager Active */}
+      {/* Store Health + Store Manager */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="p-4 rounded-2xl bg-card shadow-card">
-          <p className="text-xs text-muted-foreground font-display">Store Health</p>
-          <p className="font-display font-bold text-3xl text-foreground mt-1">{health.overall}<span className="text-sm text-muted-foreground">/100</span></p>
-          <p className="text-[10px] text-muted-foreground mt-1">{health.label}</p>
-          <div className="flex justify-center mt-2">
-            <svg width={healthSize} height={healthSize} viewBox={`0 0 ${healthSize} ${healthSize}`} className="-rotate-90">
-              <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke="hsl(var(--surface-2))" strokeWidth={8} fill="none" />
-              <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke={healthTone} strokeWidth={8} fill="none"
-                strokeDasharray={`${healthDash} ${healthC}`} strokeLinecap="round" style={{ transition: 'stroke-dasharray 800ms ease-out' }} />
-            </svg>
-          </div>
-        </div>
-        <div className="p-4 rounded-2xl bg-card shadow-card">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-base">🤖</div>
-            <div className="flex-1 min-w-0">
-              <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
-              <p className="text-[10px] text-success">Active</p>
+        {managerEnabled ? (
+          <div className="p-4 rounded-2xl bg-card shadow-card">
+            <p className="text-xs text-muted-foreground font-display">Store Health</p>
+            <p className="font-display font-bold text-3xl text-foreground mt-1">{health.overall}<span className="text-sm text-muted-foreground">/100</span></p>
+            <p className="text-[10px] text-muted-foreground mt-1">{health.label}</p>
+            <div className="flex justify-center mt-2">
+              <svg width={healthSize} height={healthSize} viewBox={`0 0 ${healthSize} ${healthSize}`} className="-rotate-90">
+                <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke="hsl(var(--surface-2))" strokeWidth={8} fill="none" />
+                <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke={healthTone} strokeWidth={8} fill="none"
+                  strokeDasharray={`${healthDash} ${healthC}`} strokeLinecap="round" style={{ transition: 'stroke-dasharray 800ms ease-out' }} />
+              </svg>
             </div>
           </div>
-          <div className="space-y-1">
-            {insights.length === 0 && <p className="text-[11px] text-muted-foreground">Insights appear as you record sales.</p>}
-            {insights.slice(0, 4).map(i => (
+        ) : (
+          <button onClick={() => onNavigate('manager')} className="p-4 rounded-2xl bg-card shadow-card text-left">
+            <div className="flex justify-center mb-1"><Mascot size={56} mood="sleeping" /></div>
+            <p className="text-xs text-muted-foreground text-center">Store Manager is off</p>
+            <p className="text-[10px] text-primary text-center mt-1 font-display font-semibold">Tap to enable →</p>
+          </button>
+        )}
+        <div className="p-4 rounded-2xl bg-card shadow-card flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <Mascot size={36} mood={managerEnabled ? 'thinking' : 'sleeping'} />
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
+              <MascotBadge on={managerEnabled} />
+            </div>
+          </div>
+          <div className="space-y-1 flex-1">
+            {!managerEnabled && (
+              <p className="text-[11px] text-muted-foreground">Turn on Store Manager to receive insights, forecasts, recommendations and alerts.</p>
+            )}
+            {managerEnabled && insights.length === 0 && <p className="text-[11px] text-muted-foreground">Insights appear as you record sales.</p>}
+            {managerEnabled && insights.slice(0, 4).map(i => (
               <p key={i.id} className="text-[11px] text-foreground/90 leading-snug flex gap-1.5">
                 <span>{i.icon}</span><span className="flex-1">{i.text}</span>
               </p>
             ))}
           </div>
+          {managerEnabled && insightCount > 0 && (
+            <button onClick={() => onNavigate('manager')} className="mt-2 text-[10px] text-primary font-display font-semibold text-left">
+              View all insights ({insightCount}) →
+            </button>
+          )}
         </div>
       </div>
+
 
 
       <button
@@ -585,8 +607,9 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
                 <Tooltip
                   contentStyle={{ background: 'hsl(var(--chart-tooltip-bg))', border: '1px solid hsl(var(--chart-tooltip-border))', borderRadius: 8, fontSize: 12 }}
                   labelStyle={{ color: 'hsl(var(--primary))' }}
-                  formatter={(value: number, name: string) => [`₦${value.toLocaleString()}`, name === 'total' ? 'Revenue' : 'Profit']}
+                  formatter={(value: number, name: string) => [`₦${value.toLocaleString()}`, name]}
                 />
+
                 <Line
                   type="monotone"
                   dataKey="total"

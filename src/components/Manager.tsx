@@ -3,10 +3,12 @@ import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS } from '@/types/st
 import { saveStore } from '@/lib/store-data';
 import { healthScore, forecast, generateRecommendations, generateInsights, topCustomerRequests } from '@/lib/manager-intel';
 import { showToast } from '@/components/Toast';
+import Mascot, { MascotBadge } from '@/components/Mascot';
 
 interface ManagerProps {
   store: StoreData;
   onUpdate: (s: StoreData) => void;
+  onEnable?: () => void;
 }
 
 type ManagerTab = 'overview' | 'insights' | 'recommendations' | 'alerts';
@@ -31,11 +33,42 @@ function Ring({ value, size = 90, stroke = 8, tone = 'primary' }: { value: numbe
   );
 }
 
-export default function Manager({ store, onUpdate }: ManagerProps) {
+export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const [tab, setTab] = useState<ManagerTab>('overview');
   const [requestText, setRequestText] = useState('');
 
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
+
+  // --- OFF state: premium empty state ---
+  if (!settings.enabled) {
+    const enable = () => {
+      const updated = { ...store, managerSettings: { ...settings, enabled: true } };
+      saveStore(updated); onUpdate(updated);
+      showToast('Store Manager enabled');
+      onEnable?.();
+    };
+    return (
+      <div className="animate-fade-in space-y-4">
+        <div className="p-6 rounded-2xl bg-card shadow-card text-center space-y-4">
+          <div className="flex justify-center"><Mascot size={120} mood="sleeping" /></div>
+          <MascotBadge on={false} />
+          <h2 className="font-display font-bold text-xl text-foreground">Store Manager is sleeping</h2>
+          <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+            Wake Flow up to unlock insights, forecasts, recommendations and savings plans tailored to your store.
+          </p>
+          <ul className="text-left text-sm text-muted-foreground max-w-xs mx-auto space-y-1.5">
+            {['Business Insights','Revenue Forecasts','Expense Analysis','Product Suggestions','Savings Plans'].map(x => (
+              <li key={x} className="flex items-center gap-2"><span className="text-success">✓</span>{x}</li>
+            ))}
+          </ul>
+          <button onClick={enable} className="w-full max-w-xs mx-auto p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity">
+            Enable Store Manager
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const health = healthScore(store);
   const insights = generateInsights(store, '7d');
   const recs = generateRecommendations(store);
@@ -45,6 +78,7 @@ export default function Manager({ store, onUpdate }: ManagerProps) {
   const f180 = forecast(store, 180);
   const requests = topCustomerRequests(store, 6);
   const savings = store.savingsGoal;
+  const alertCount = recs.filter(r => r.tone === 'danger' || r.tone === 'warning').length;
 
   const healthTone: 'success' | 'primary' | 'warning' | 'danger' =
     health.overall >= 80 ? 'success' : health.overall >= 60 ? 'primary' : health.overall >= 40 ? 'warning' : 'danger';
@@ -59,31 +93,34 @@ export default function Manager({ store, onUpdate }: ManagerProps) {
     showToast('Request recorded');
   };
 
-  const tabs: { id: ManagerTab; label: string }[] = [
+  const tabs: { id: ManagerTab; label: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview' },
-    { id: 'insights', label: 'Insights' },
-    { id: 'recommendations', label: 'Recommendations' },
-    { id: 'alerts', label: 'Alerts' },
+    { id: 'insights', label: 'Insights', badge: insights.length || undefined },
+    { id: 'recommendations', label: 'Recommendations', badge: recs.length || undefined },
+    { id: 'alerts', label: 'Alerts', badge: alertCount || undefined },
   ];
 
   return (
     <div className="animate-fade-in space-y-4">
       <div className="p-4 rounded-2xl bg-card shadow-card flex items-center gap-3">
-        <div className="w-14 h-14 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-2xl">🤖</div>
+        <Mascot size={56} mood="thinking" />
         <div className="flex-1 min-w-0">
           <h2 className="font-display font-bold text-lg">Store Manager</h2>
-          <p className="text-xs text-muted-foreground">Your AI Business Assistant</p>
+          <p className="text-xs text-muted-foreground">Flow is analyzing your business performance</p>
         </div>
-        <span className="px-2.5 py-1 rounded-full bg-success/15 text-success text-[10px] font-display font-bold uppercase tracking-wide">Active</span>
+        <MascotBadge on={true} />
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-display font-semibold whitespace-nowrap transition-colors ${
+            className={`relative px-3.5 py-1.5 rounded-full text-xs font-display font-semibold whitespace-nowrap transition-colors ${
               tab === t.id ? 'bg-primary text-primary-foreground' : 'bg-surface-2 text-muted-foreground border border-border'
             }`}>
             {t.label}
+            {t.badge ? (
+              <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-destructive text-white text-[9px] font-bold">{t.badge}</span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -177,9 +214,13 @@ export default function Manager({ store, onUpdate }: ManagerProps) {
                   <p className="text-xs text-muted-foreground">Goal: {savings.label || 'Savings Goal'}</p>
                   <p className="font-display font-bold text-xl text-foreground">₦{savings.amount.toLocaleString()}</p>
                   <p className="text-xs text-success">Saved ₦{savings.saved.toLocaleString()}</p>
-                  <p className="text-[10px] text-muted-foreground">{savings.percentage}% of {savings.source}</p>
+                  <p className="text-[10px] text-muted-foreground">{savings.percentage}% of {savings.source}{savings.frequency ? ` · ${savings.frequency}` : ''}</p>
+                  {savings.bankName && <p className="text-[10px] text-muted-foreground">Bank: {savings.bankName}</p>}
                 </div>
               </div>
+              <p className="text-[11px] text-warning/90 mt-3 p-2 rounded bg-warning/10 border border-warning/30">
+                💡 Set up an automated save plan in your banking app (Opay, PalmPay, Kuda, etc.) to actually move this money.
+              </p>
             </div>
           )}
 
@@ -246,7 +287,7 @@ export default function Manager({ store, onUpdate }: ManagerProps) {
 
       {tab === 'alerts' && (
         <div className="space-y-2 animate-fade-in">
-          {recs.filter(r => r.tone === 'danger' || r.tone === 'warning').length === 0 && (
+          {alertCount === 0 && (
             <p className="text-sm text-muted-foreground p-4 text-center">No critical alerts. 🎉</p>
           )}
           {recs.filter(r => r.tone === 'danger' || r.tone === 'warning').map(r => (
