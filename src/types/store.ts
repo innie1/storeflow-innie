@@ -50,6 +50,14 @@ export interface StoreProfile {
   location: string;
   phone: string;
   email: string;
+  photo?: string;        // base64 data URL of store logo / profile photo
+  payment?: PaymentInfo; // how customers can pay this store
+}
+
+export interface PaymentInfo {
+  bankName?: string;
+  accountName?: string;
+  accountNumber?: string;
 }
 
 export type TrashKind = 'product' | 'sale' | 'expense';
@@ -98,12 +106,16 @@ export interface CustomerRequest {
   fulfilled?: boolean;
 }
 
+export type SavingsFrequency = 'daily' | 'weekly' | 'monthly';
+
 export interface SavingsGoal {
   amount: number;
   label?: string;
   source: 'revenue' | 'profit';
   percentage: number;
   saved: number;
+  bankName?: string;
+  frequency?: SavingsFrequency;
 }
 
 export interface ManagerSettings {
