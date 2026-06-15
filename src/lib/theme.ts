@@ -2,10 +2,10 @@ export type ThemeId = 'graphite' | 'blue' | 'forest';
 
 const THEME_KEY = 'storeflow_theme';
 
-export const THEMES: { id: ThemeId; label: string; emoji: string; desc: string; swatch: string }[] = [
-  { id: 'graphite', label: 'Graphite', emoji: '⚫', desc: 'Sleek, premium dark — quiet luxury', swatch: '#F2C94C' },
-  { id: 'blue',     label: 'Blue Sky', emoji: '🌤️', desc: 'Clean, fresh, Apple-like light',    swatch: '#3BA4F7' },
-  { id: 'forest',   label: 'Green Forest', emoji: '🌲', desc: 'Premium, money-focused dark',    swatch: '#27AE60' },
+export const THEMES: { id: ThemeId; label: string; emoji: string; desc: string; swatch: string; quote: string }[] = [
+  { id: 'graphite', label: 'Graphite', emoji: '⚫', desc: 'Sleek, premium dark — quiet luxury', swatch: '#F2C94C', quote: 'This is my style 😉' },
+  { id: 'blue',     label: 'Blue Sky', emoji: '🌤️', desc: 'Clean, fresh, Apple-like light',     swatch: '#3BA4F7', quote: 'Blue this is pure 😌' },
+  { id: 'forest',   label: 'Green Forest', emoji: '🌲', desc: 'Premium, money-focused dark',     swatch: '#27AE60', quote: 'Green fits me best 😎' },
 ];
 
 export function getTheme(): ThemeId {
