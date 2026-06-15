@@ -607,8 +607,9 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
                 <Tooltip
                   contentStyle={{ background: 'hsl(var(--chart-tooltip-bg))', border: '1px solid hsl(var(--chart-tooltip-border))', borderRadius: 8, fontSize: 12 }}
                   labelStyle={{ color: 'hsl(var(--primary))' }}
-                  formatter={(value: number, name: string) => [`₦${value.toLocaleString()}`, name === 'total' ? 'Revenue' : 'Profit']}
+                  formatter={(value: number, name: string) => [`₦${value.toLocaleString()}`, name]}
                 />
+
                 <Line
                   type="monotone"
                   dataKey="total"
