@@ -24,10 +24,12 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string } | null>(null);
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
   const [restockQty, setRestockQty] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
+  const [importPreview, setImportPreview] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] | null>(null);
   const [newProduct, setNewProduct] = useState({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: '' });
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
@@ -35,6 +37,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [receiveData, setReceiveData] = useState<Record<string, { qty: string; cost: string }>>({});
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [scanForProduct, setScanForProduct] = useState<Product | null>(null);
+
   const [funding, setFunding] = useState<RestockFunding>('balance');
   const [singleRestockFunding, setSingleRestockFunding] = useState<RestockFunding>('balance');
 
@@ -61,12 +64,20 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   };
 
   const handleEdit = () => {
-    if (!editProduct) return;
-    const updated = updateProduct(store, editProduct.id, editProduct);
+    if (!editProduct || !editDraft) return;
+    const updates: Partial<Product> = {
+      name: editDraft.name,
+      costPrice: Number(editDraft.costPrice) || 0,
+      sellingPrice: Number(editDraft.sellingPrice) || 0,
+      quantity: Number(editDraft.quantity) || 0,
+      category: editDraft.category,
+    };
+    const updated = updateProduct(store, editProduct.id, updates);
     onUpdate(updated);
-    setEditProduct(null);
-    showToast('Product updated');
+    setEditProduct(null); setEditDraft(null);
+    showToast('Product updated — inventory value recalculated');
   };
+
 
   const handleDelete = (p: Product) => {
     setConfirmDelete(p);
@@ -95,30 +106,47 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     showToast(singleRestockFunding === 'new_money' ? 'Stock added (new money)' : 'Stock added (from balance)');
   };
 
-  const handleImport = () => {
+  const handleImportParse = () => {
     try {
       const lines = importText.trim().split('\n').filter(Boolean);
-      const imported: { name: string; costPrice: number; sellingPrice: number; quantity: number; category: string }[] = [];
+      const parsed: { name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] = [];
       for (const line of lines) {
         const parts = line.split(',').map(s => s.trim());
         if (parts.length < 4) continue;
-        imported.push({
+        parsed.push({
           name: parts[0],
-          costPrice: Number(parts[1]),
-          sellingPrice: Number(parts[2]),
-          quantity: Number(parts[3]),
+          costPrice: parts[1] || '0',
+          sellingPrice: parts[2] || '0',
+          quantity: parts[3] || '0',
           category: parts[4] || 'General',
         });
       }
-      if (imported.length === 0) return showToast('No valid products found', 'error');
-      onUpdate(importProducts(store, imported));
-      setShowImportModal(false);
-      setImportText('');
-      showToast(`${imported.length} products imported`);
+      if (parsed.length === 0) return showToast('No valid products found', 'error');
+      setImportPreview(parsed);
     } catch {
       showToast('Import failed — check format', 'error');
     }
   };
+
+  const handleImportApprove = () => {
+    if (!importPreview) return;
+    const cleaned = importPreview
+      .filter(p => p.name.trim())
+      .map(p => ({
+        name: p.name.trim(),
+        costPrice: Number(p.costPrice) || 0,
+        sellingPrice: Number(p.sellingPrice) || 0,
+        quantity: Number(p.quantity) || 0,
+        category: p.category.trim() || 'General',
+      }));
+    if (cleaned.length === 0) return showToast('No items to import', 'error');
+    onUpdate(importProducts(store, cleaned));
+    setShowImportModal(false);
+    setImportText('');
+    setImportPreview(null);
+    showToast(`${cleaned.length} products imported`);
+  };
+
 
   const addToShoppingList = (p: Product) => {
     const existing = shoppingList.find(i => i.productId === p.id);
