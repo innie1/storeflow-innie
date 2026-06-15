@@ -519,20 +519,43 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
       {/* Import Modal */}
       {showImportModal && (
-        <Modal title="Bulk Import" onClose={() => setShowImportModal(false)}>
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Format: Name, Cost, Selling Price, Quantity, Category (one per line)</p>
-            <textarea
-              value={importText}
-              onChange={e => setImportText(e.target.value)}
-              placeholder={"Rice 5kg, 3000, 4500, 20, Groceries\nSugar 1kg, 500, 700, 30, Groceries"}
-              rows={6}
-              className={`${inputClass} resize-none`}
-            />
-            <button onClick={handleImport} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Import Products</button>
-          </div>
+        <Modal title={importPreview ? `Review (${importPreview.length})` : 'Bulk Import'} onClose={() => { setShowImportModal(false); setImportPreview(null); }}>
+          {!importPreview ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Format: Name, Cost, Selling Price, Quantity, Category (one per line)</p>
+              <textarea value={importText} onChange={e => setImportText(e.target.value)}
+                placeholder={"Rice 5kg, 3000, 4500, 20, Groceries\nSugar 1kg, 500, 700, 30, Groceries"}
+                rows={6} className={`${inputClass} resize-none`} />
+              <button onClick={handleImportParse} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Preview Items →</button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Review and edit each item before saving.</p>
+              <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+                {importPreview.map((it, i) => (
+                  <div key={i} className="p-2 rounded-lg bg-surface-2 border border-border space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <input value={it.name} onChange={e => { const next=[...importPreview]; next[i]={...it,name:e.target.value}; setImportPreview(next); }} placeholder="Name" className="flex-1 text-sm bg-surface-3 border border-border rounded p-1.5" />
+                      <button onClick={() => setImportPreview(importPreview.filter((_,k)=>k!==i))} className="w-7 h-7 rounded text-destructive bg-destructive/10 text-sm">✕</button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <input value={it.costPrice} onChange={e => { const n=[...importPreview]; n[i]={...it,costPrice:e.target.value}; setImportPreview(n); }} type="number" placeholder="Cost" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
+                      <input value={it.sellingPrice} onChange={e => { const n=[...importPreview]; n[i]={...it,sellingPrice:e.target.value}; setImportPreview(n); }} type="number" placeholder="Sell" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
+                      <input value={it.quantity} onChange={e => { const n=[...importPreview]; n[i]={...it,quantity:e.target.value}; setImportPreview(n); }} type="number" placeholder="Qty" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
+                      <input value={it.category} onChange={e => { const n=[...importPreview]; n[i]={...it,category:e.target.value}; setImportPreview(n); }} placeholder="Cat" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setImportPreview(null)} className="p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-display font-semibold">← Back</button>
+                <button onClick={handleImportApprove} className="p-2.5 rounded-lg bg-success text-white text-sm font-display font-bold">✓ Approve & Save</button>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
+
 
       {/* Shopping List Modal */}
       {showShoppingList && (
