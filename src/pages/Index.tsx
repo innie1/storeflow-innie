@@ -170,9 +170,10 @@ export default function Index() {
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-lg text-primary">StoreFlow</h1>
-          <p className="text-xs text-muted-foreground">{store.storeName}</p>
+          <h1 className="font-display font-bold text-lg"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
+          <p className="text-xs text-muted-foreground">{tab === 'settings' ? 'Settings' : store.storeName}</p>
         </div>
+
         <div className="flex items-center gap-2">
           {!isGames && (
             <button
