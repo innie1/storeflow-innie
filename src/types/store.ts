@@ -152,9 +152,33 @@ export interface ManagerSettings {
   voiceFeatures: boolean;
   weeklyRecap: boolean;
   customerRequests: boolean;
+  businessAdvice: boolean;
+  businessExpansion: boolean;
+  businessQuestions: boolean;
   defaultMargin: number;
   autoSuggestPrices: boolean;
   autoApplyPrices: boolean;
+  showProductProfit: boolean;
+  // Inventory
+  criticalStockThreshold: number;
+  restockSuggestions: boolean;
+  inventoryAlerts: boolean;
+  // Notifications
+  notifyInsights: boolean;
+  notifyRecommendations: boolean;
+  notifyAlerts: boolean;
+  notifyWeeklyRecap: boolean;
+  notifyMonthlyReports: boolean;
+  notifySavingsReminders: boolean;
+  notifyCustomerRequests: boolean;
+  notifyLowStock: boolean;
+  // Appearance
+  mascotAnimations: boolean;
+  reduceMotion: boolean;
+  compactMode: boolean;
+  // Security
+  biometricLock: boolean;
+  pinLock: boolean;
 }
 
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
@@ -169,9 +193,29 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   voiceFeatures: true,
   weeklyRecap: true,
   customerRequests: true,
+  businessAdvice: true,
+  businessExpansion: true,
+  businessQuestions: true,
   defaultMargin: 30,
   autoSuggestPrices: true,
   autoApplyPrices: false,
+  showProductProfit: true,
+  criticalStockThreshold: 2,
+  restockSuggestions: true,
+  inventoryAlerts: true,
+  notifyInsights: true,
+  notifyRecommendations: true,
+  notifyAlerts: true,
+  notifyWeeklyRecap: true,
+  notifyMonthlyReports: false,
+  notifySavingsReminders: true,
+  notifyCustomerRequests: true,
+  notifyLowStock: true,
+  mascotAnimations: true,
+  reduceMotion: false,
+  compactMode: false,
+  biometricLock: false,
+  pinLock: false,
 };
 
 export interface StoreData {
@@ -192,6 +236,7 @@ export interface StoreData {
   createdAt: string;
   profile?: StoreProfile;
 }
+
 
 export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager'
