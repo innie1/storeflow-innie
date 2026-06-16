@@ -23,7 +23,7 @@ const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
-  { id: 'manager', label: 'Manager', icon: '📦' },
+  { id: 'manager', label: 'Flow', icon: '✨' },
 ];
 
 
