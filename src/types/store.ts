@@ -52,13 +52,35 @@ export interface StoreProfile {
   email: string;
   photo?: string;        // base64 data URL of store logo / profile photo
   payment?: PaymentInfo; // how customers can pay this store
+  website?: string;
+  openingTime?: string;  // "07:00"
+  closingTime?: string;  // "21:00"
+  openingDate?: string;  // YYYY-MM-DD
+  employees?: number;
+  ownerName?: string;
+  rent?: RentInfo;
+}
+
+export type RentFrequency = 'monthly' | 'quarterly' | 'yearly';
+
+export interface RentInfo {
+  isRented: boolean;
+  amount?: number;
+  frequency?: RentFrequency;
+  dueDate?: string;      // ISO date of next due
+  landlordName?: string;
+  landlordContact?: string;
 }
 
 export interface PaymentInfo {
   bankName?: string;
   accountName?: string;
   accountNumber?: string;
+  paymentLink?: string;
+  acceptWebsiteOrders?: boolean;
+  acceptWebsitePayments?: boolean;
 }
+
 
 export type TrashKind = 'product' | 'sale' | 'expense';
 
