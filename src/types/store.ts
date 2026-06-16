@@ -52,13 +52,35 @@ export interface StoreProfile {
   email: string;
   photo?: string;        // base64 data URL of store logo / profile photo
   payment?: PaymentInfo; // how customers can pay this store
+  website?: string;
+  openingTime?: string;  // "07:00"
+  closingTime?: string;  // "21:00"
+  openingDate?: string;  // YYYY-MM-DD
+  employees?: number;
+  ownerName?: string;
+  rent?: RentInfo;
+}
+
+export type RentFrequency = 'monthly' | 'quarterly' | 'yearly';
+
+export interface RentInfo {
+  isRented: boolean;
+  amount?: number;
+  frequency?: RentFrequency;
+  dueDate?: string;      // ISO date of next due
+  landlordName?: string;
+  landlordContact?: string;
 }
 
 export interface PaymentInfo {
   bankName?: string;
   accountName?: string;
   accountNumber?: string;
+  paymentLink?: string;
+  acceptWebsiteOrders?: boolean;
+  acceptWebsitePayments?: boolean;
 }
+
 
 export type TrashKind = 'product' | 'sale' | 'expense';
 
@@ -130,9 +152,33 @@ export interface ManagerSettings {
   voiceFeatures: boolean;
   weeklyRecap: boolean;
   customerRequests: boolean;
+  businessAdvice: boolean;
+  businessExpansion: boolean;
+  businessQuestions: boolean;
   defaultMargin: number;
   autoSuggestPrices: boolean;
   autoApplyPrices: boolean;
+  showProductProfit: boolean;
+  // Inventory
+  criticalStockThreshold: number;
+  restockSuggestions: boolean;
+  inventoryAlerts: boolean;
+  // Notifications
+  notifyInsights: boolean;
+  notifyRecommendations: boolean;
+  notifyAlerts: boolean;
+  notifyWeeklyRecap: boolean;
+  notifyMonthlyReports: boolean;
+  notifySavingsReminders: boolean;
+  notifyCustomerRequests: boolean;
+  notifyLowStock: boolean;
+  // Appearance
+  mascotAnimations: boolean;
+  reduceMotion: boolean;
+  compactMode: boolean;
+  // Security
+  biometricLock: boolean;
+  pinLock: boolean;
 }
 
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
@@ -147,9 +193,29 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   voiceFeatures: true,
   weeklyRecap: true,
   customerRequests: true,
+  businessAdvice: true,
+  businessExpansion: true,
+  businessQuestions: true,
   defaultMargin: 30,
   autoSuggestPrices: true,
   autoApplyPrices: false,
+  showProductProfit: true,
+  criticalStockThreshold: 2,
+  restockSuggestions: true,
+  inventoryAlerts: true,
+  notifyInsights: true,
+  notifyRecommendations: true,
+  notifyAlerts: true,
+  notifyWeeklyRecap: true,
+  notifyMonthlyReports: false,
+  notifySavingsReminders: true,
+  notifyCustomerRequests: true,
+  notifyLowStock: true,
+  mascotAnimations: true,
+  reduceMotion: false,
+  compactMode: false,
+  biometricLock: false,
+  pinLock: false,
 };
 
 export interface StoreData {
@@ -170,6 +236,7 @@ export interface StoreData {
   createdAt: string;
   profile?: StoreProfile;
 }
+
 
 export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager'
