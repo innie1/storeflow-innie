@@ -533,7 +533,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
                   </div>
                 </div>
                 {latestInsight && (
-                  <p className="text-[11px] text-success mt-1 line-clamp-2">💡 {latestInsight.title}</p>
+                  <p className="text-[11px] text-success mt-1 line-clamp-2">{latestInsight.icon} {latestInsight.text}</p>
                 )}
               </>
             ) : (
