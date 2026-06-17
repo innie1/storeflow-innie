@@ -307,3 +307,89 @@ export function topCustomerRequests(store: StoreData, limit = 5) {
     .sort((a,b) => b.count - a.count)
     .slice(0, limit);
 }
+
+export type ActivityRange = 'today' | '7d' | '30d' | '1y' | 'lifetime';
+
+export interface ActivityBucket {
+  /** minute-of-day at bucket start, 0..1410 step 30 */
+  minute: number;
+  label: string;       // "12:00 AM"
+  shortLabel: string;  // "12 AM" / blank for in-between
+  sales: number;
+  revenue: number;
+  profit: number;
+}
+
+export interface MostActivePeriods {
+  buckets: ActivityBucket[];
+  peakWindow?: { startLabel: string; endLabel: string };
+  totalSales: number;
+}
+
+function fmtMin(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+}
+
+export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d'): MostActivePeriods {
+  let cutoff = 0;
+  const now = Date.now();
+  if (range === 'today') {
+    const d = new Date(); d.setHours(0,0,0,0); cutoff = d.getTime();
+  } else if (range === '7d') cutoff = now - 7 * 86400000;
+  else if (range === '30d') cutoff = now - 30 * 86400000;
+  else if (range === '1y') cutoff = now - 365 * 86400000;
+  else cutoff = 0;
+
+  const buckets: ActivityBucket[] = [];
+  for (let i = 0; i < 48; i++) {
+    const minute = i * 30;
+    const h = Math.floor(minute / 60);
+    buckets.push({
+      minute,
+      label: fmtMin(minute),
+      shortLabel: minute % 180 === 0 ? `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}` : '',
+      sales: 0, revenue: 0, profit: 0,
+    });
+  }
+
+  let totalSales = 0;
+  store.sales.forEach(s => {
+    const t = new Date(s.date).getTime();
+    if (t < cutoff) return;
+    const d = new Date(t);
+    const min = d.getHours() * 60 + d.getMinutes();
+    const idx = Math.floor(min / 30);
+    const b = buckets[idx];
+    if (!b) return;
+    b.sales += 1; b.revenue += s.total; b.profit += s.profit;
+    totalSales += 1;
+  });
+
+  // peak window: contiguous run of top-quartile buckets
+  let peakWindow: MostActivePeriods['peakWindow'];
+  if (totalSales > 0) {
+    const sorted = [...buckets].map(b => b.sales).sort((a,b)=>b-a);
+    const cut = sorted[Math.min(8, sorted.length - 1)] || 1;
+    let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+    buckets.forEach((b, i) => {
+      if (b.sales >= cut && b.sales > 0) {
+        if (curStart < 0) curStart = i;
+        curLen++;
+        if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
+      } else { curStart = -1; curLen = 0; }
+    });
+    if (bestStart >= 0) {
+      peakWindow = {
+        startLabel: buckets[bestStart].label,
+        endLabel: fmtMin(Math.min(1440, (bestStart + bestLen) * 30)),
+      };
+    }
+  }
+
+  return { buckets, peakWindow, totalSales };
+}
+
