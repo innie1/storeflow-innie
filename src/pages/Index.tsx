@@ -176,28 +176,45 @@ export default function Index() {
         </div>
 
         <div className="flex items-center gap-2">
-          {!isGames && (
-            <button
-              onClick={() => { setScanCart([]); setShowBarcodeScanner(true); }}
-              className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors font-display font-semibold"
-              title="Scan barcode to save or sell"
-            >
-              🔳 Scan
-            </button>
-          )}
-          <button onClick={handleLock} className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
-            🔒 Lock
+          <button
+            onClick={() => setShowLockConfirm(true)}
+            className="px-3 py-1.5 rounded-full bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors flex items-center gap-1.5"
+          >
+            <span>🔒</span> Lock Store
           </button>
           <button
             onClick={() => { setTab('settings'); setShowMoreMenu(false); }}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
-              tab === 'settings' ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
+            className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center transition-all border-2 ${
+              tab === 'settings' ? 'border-primary' : 'border-border hover:border-primary/40'
             }`}
+            aria-label="Profile"
           >
-            👤
+            {store.profile?.photo ? (
+              <img src={store.profile.photo} alt={store.storeName} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-surface-2 flex items-center justify-center">
+                <span className="text-sm">👤</span>
+              </div>
+            )}
           </button>
         </div>
       </header>
+
+      {showLockConfirm && (
+        <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowLockConfirm(false)}>
+          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="text-center space-y-2">
+              <div className="text-3xl">🔒</div>
+              <h3 className="font-display font-bold text-lg">Lock your store?</h3>
+              <p className="text-sm text-muted-foreground">You'll need to re-enter your access code to get back in.</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowLockConfirm(false)} className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm">Cancel</button>
+              <button onClick={() => { setShowLockConfirm(false); handleLock(); }} className="flex-1 p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm">Lock Store</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 p-4 pb-20 container max-w-3xl">
         {tab === 'dashboard' && <Dashboard store={store} onNavigate={handleNavigate} />}
