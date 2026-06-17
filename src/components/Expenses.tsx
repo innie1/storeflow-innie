@@ -86,6 +86,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
     const amt = Number(amount);
     if (!amt || amt <= 0) return showToast('Enter a valid amount', 'error');
     if (!date) return showToast('Pick a date', 'error');
+    if (category === 'Other' && !note.trim()) return showToast('A note is required for "Other" expenses', 'error');
     const iso = new Date(date + 'T12:00:00').toISOString();
     const updated = addExpense(store, { amount: amt, category, date: iso, note: note.trim() || undefined });
     onUpdate(updated);
