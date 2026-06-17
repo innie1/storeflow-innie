@@ -81,7 +81,7 @@ export function MascotBadge({ on }: { on: boolean }) {
       on ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'
     }`}>
       <span className={`w-1.5 h-1.5 rounded-full ${on ? 'bg-success' : 'bg-muted-foreground'}`} />
-      Store Manager • {on ? 'ON' : 'OFF'}
+      Flow • {on ? 'Active' : 'Disabled'}
     </span>
   );
 }
