@@ -52,6 +52,7 @@ export default function Index() {
   const [showScanner, setShowScanner] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showLockConfirm, setShowLockConfirm] = useState(false);
   const [scanCart, setScanCart] = useState<{ product: Product; qty: number }[]>([]);
   const [newProductPrompt, setNewProductPrompt] = useState<{ barcode: string; name: string; costPrice: string; sellingPrice: string; quantity: string } | null>(null);
 
