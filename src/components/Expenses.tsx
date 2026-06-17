@@ -257,13 +257,18 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-muted-foreground uppercase">Note (optional)</label>
+                <label className="text-[10px] text-muted-foreground uppercase">
+                  Note {category === 'Other' ? <span className="text-destructive">(required)</span> : '(optional)'}
+                </label>
                 <input
                   value={note}
                   onChange={e => setNote(e.target.value)}
-                  placeholder="e.g. October rent"
+                  placeholder={category === 'Other' ? 'Explain what this expense is for' : 'e.g. October rent'}
                   className={inputClass}
                 />
+                {category === 'Other' && !note.trim() && (
+                  <p className="text-[10px] text-destructive mt-1">This expense must be explained.</p>
+                )}
               </div>
               <button onClick={handleAdd} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">
                 Save Expense
