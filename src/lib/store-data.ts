@@ -443,3 +443,140 @@ export function deleteInvestment(store: StoreData, id: string): StoreData {
 export function getTotalInvestment(store: StoreData): number {
   return (store.investments || []).reduce((sum, i) => sum + i.amount, 0);
 }
+
+// ---------- Pending Payments ----------
+
+import type { PendingPayment, PendingPaymentEvent, PendingPaymentItem, PaymentMethod } from '@/types/store';
+
+function pid(): string { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+/**
+ * Records the sale (decrements stock, creates Sale rows) AND creates a PendingPayment
+ * if `paid < total`. If paid >= total it just records a normal paid sale.
+ */
+export function recordCheckout(
+  store: StoreData,
+  items: { productId: string; quantity: number }[],
+  opts: {
+    paid: number;
+    method: PaymentMethod;
+    customerName?: string;
+    customerPhone?: string;
+    customerNote?: string;
+    dueDate?: string;
+    discount?: number;
+  }
+): { store: StoreData; sales: Sale[]; pending?: PendingPayment } {
+  let updated = store;
+  const newSales: Sale[] = [];
+  const pendingItems: PendingPaymentItem[] = [];
+
+  for (const it of items) {
+    const p = updated.products.find(p => p.id === it.productId);
+    if (!p || p.quantity < it.quantity) continue;
+    updated = recordSale(updated, it.productId, it.quantity);
+    const created = updated.sales[0];
+    newSales.push(created);
+    pendingItems.push({
+      productId: p.id,
+      productName: p.name,
+      quantity: it.quantity,
+      unitPrice: created.unitPrice,
+    });
+  }
+
+  const total = Math.max(0, newSales.reduce((s, x) => s + x.total, 0) - (opts.discount || 0));
+  const paid = Math.min(opts.paid, total);
+  const balance = Math.max(0, total - paid);
+
+  let pending: PendingPayment | undefined;
+  if (balance > 0 && opts.customerName) {
+    const id = pid();
+    const event: PendingPaymentEvent = { date: new Date().toISOString(), amount: paid, method: opts.method };
+    pending = {
+      id,
+      customerName: opts.customerName,
+      customerPhone: opts.customerPhone,
+      customerNote: opts.customerNote,
+      items: pendingItems,
+      total,
+      paid,
+      balance,
+      dueDate: opts.dueDate,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      events: paid > 0 ? [event] : [],
+      saleIds: newSales.map(s => s.id),
+    };
+    // tag sales
+    updated = {
+      ...updated,
+      sales: updated.sales.map(s => pending!.saleIds.includes(s.id) ? { ...s, pendingPaymentId: id, paymentMethod: opts.method } : s),
+      pendingPayments: [pending, ...(updated.pendingPayments || [])],
+    };
+  } else {
+    updated = {
+      ...updated,
+      sales: updated.sales.map(s => newSales.some(x => x.id === s.id) ? { ...s, paymentMethod: opts.method } : s),
+    };
+  }
+  saveStore(updated);
+  return { store: updated, sales: newSales, pending };
+}
+
+export function addPaymentToPending(store: StoreData, id: string, amount: number, method: PaymentMethod = 'cash'): StoreData {
+  const list = store.pendingPayments || [];
+  const updated: StoreData = {
+    ...store,
+    pendingPayments: list.map(p => {
+      if (p.id !== id) return p;
+      const newPaid = Math.min(p.total, p.paid + Math.max(0, amount));
+      const balance = Math.max(0, p.total - newPaid);
+      const event: PendingPaymentEvent = { date: new Date().toISOString(), amount, method };
+      return {
+        ...p,
+        paid: newPaid,
+        balance,
+        status: balance <= 0 ? 'paid' : 'pending',
+        events: [event, ...(p.events || [])],
+      };
+    }),
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function markPendingPaid(store: StoreData, id: string, method: PaymentMethod = 'cash'): StoreData {
+  const p = (store.pendingPayments || []).find(x => x.id === id);
+  if (!p) return store;
+  return addPaymentToPending(store, id, p.balance, method);
+}
+
+export function deletePendingPayment(store: StoreData, id: string): StoreData {
+  const updated: StoreData = {
+    ...store,
+    pendingPayments: (store.pendingPayments || []).filter(p => p.id !== id),
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function getPendingSummary(store: StoreData) {
+  const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
+  const totalOwed = list.reduce((s, p) => s + p.balance, 0);
+  const customerCount = new Set(list.map(p => p.customerName.toLowerCase())).size;
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  let collectedThisMonth = 0;
+  let collectedAllTime = 0;
+  let originatedAllTime = 0;
+  (store.pendingPayments || []).forEach(p => {
+    originatedAllTime += p.total;
+    (p.events || []).forEach(e => {
+      collectedAllTime += e.amount;
+      if (new Date(e.date) >= monthStart) collectedThisMonth += e.amount;
+    });
+  });
+  const recoveryRate = originatedAllTime > 0 ? Math.round((collectedAllTime / originatedAllTime) * 100) : 0;
+  const overdue = list.filter(p => p.dueDate && new Date(p.dueDate) < new Date());
+  return { totalOwed, customerCount, collectedThisMonth, recoveryRate, overdue, list };
+}
