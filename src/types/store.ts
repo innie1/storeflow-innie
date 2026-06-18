@@ -267,11 +267,12 @@ export interface StoreData {
   customerRequests?: CustomerRequest[];
   savingsGoal?: SavingsGoal;
   managerSettings?: ManagerSettings;
+  pendingPayments?: PendingPayment[];
   createdAt: string;
   profile?: StoreProfile;
 }
 
 
 export type TabId =
-  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager'
+  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings';
