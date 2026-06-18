@@ -29,6 +29,7 @@ const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
 
 const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'expenses', label: 'Expenses', icon: '🧾' },
+  { id: 'pending', label: 'Pending Payments', icon: '💳' },
   { id: 'history', label: 'History', icon: '📋' },
   { id: 'roi', label: 'ROI Tracker', icon: '📈' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
