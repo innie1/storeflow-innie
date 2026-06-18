@@ -7,7 +7,7 @@ import Mascot, { MascotBadge } from '@/components/Mascot';
 
 interface DashboardProps {
   store: StoreData;
-  onNavigate: (tab: 'inventory' | 'manager' | 'settings', lowStock?: boolean) => void;
+  onNavigate: (tab: 'inventory' | 'manager' | 'settings' | 'pending', lowStock?: boolean) => void;
 }
 
 
