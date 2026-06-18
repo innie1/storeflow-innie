@@ -364,6 +364,8 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
         <div className="space-y-4 animate-fade-in">
           <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} />
 
+          <MoneyOwedCard store={store} />
+
           <MostActivePeriodsCard store={store} />
 
           {settings.revenueForecasts && (
