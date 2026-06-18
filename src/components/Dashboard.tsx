@@ -391,6 +391,21 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         </button>
       )}
 
+      {/* Pending Payments card */}
+      {pendingSummary.totalOwed > 0 && (
+        <button onClick={() => onNavigate('pending')}
+          className="w-full p-4 rounded-2xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/15 transition-colors">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-display">💳 Pending Payments</p>
+              <p className="font-display font-bold text-2xl text-warning mt-1">₦{pendingSummary.totalOwed.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{pendingSummary.customerCount} customer{pendingSummary.customerCount === 1 ? '' : 's'}</p>
+            </div>
+            <span className="text-warning">›</span>
+          </div>
+        </button>
+      )}
+
       {/* Breakdown Panel */}
       {activeBreakdown === 'revenue' && (
         <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
