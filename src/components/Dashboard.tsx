@@ -7,7 +7,7 @@ import Mascot, { MascotBadge } from '@/components/Mascot';
 
 interface DashboardProps {
   store: StoreData;
-  onNavigate: (tab: 'inventory' | 'manager' | 'settings', lowStock?: boolean) => void;
+  onNavigate: (tab: 'inventory' | 'manager' | 'settings' | 'pending', lowStock?: boolean) => void;
 }
 
 
@@ -17,6 +17,13 @@ type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const stats = getDashboardStats(store);
   const topSellers = getTopSellers(store, 5);
+  const pendingSummary = useMemo(() => {
+    const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
+    return {
+      totalOwed: list.reduce((s, p) => s + p.balance, 0),
+      customerCount: new Set(list.map(p => p.customerName.toLowerCase())).size,
+    };
+  }, [store.pendingPayments]);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownType>(null);
   const [salesRange, setSalesRange] = useState<DateRange>('all');
   const [customStart, setCustomStart] = useState('');
@@ -381,6 +388,21 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
         >
           <span className="text-sm font-display font-semibold text-warning">⚠ {stats.lowStockProducts.length} low-stock product{stats.lowStockProducts.length === 1 ? '' : 's'}</span>
           <span className="text-warning text-xs">View →</span>
+        </button>
+      )}
+
+      {/* Pending Payments card */}
+      {pendingSummary.totalOwed > 0 && (
+        <button onClick={() => onNavigate('pending')}
+          className="w-full p-4 rounded-2xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/15 transition-colors">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-display">💳 Pending Payments</p>
+              <p className="font-display font-bold text-2xl text-warning mt-1">₦{pendingSummary.totalOwed.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{pendingSummary.customerCount} customer{pendingSummary.customerCount === 1 ? '' : 's'}</p>
+            </div>
+            <span className="text-warning">›</span>
+          </div>
         </button>
       )}
 

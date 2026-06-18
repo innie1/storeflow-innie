@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
-import { saveStore } from '@/lib/store-data';
+import { saveStore, getPendingSummary } from '@/lib/store-data';
 import {
   healthScore, forecast, generateRecommendations, generateInsights,
   topCustomerRequests, mostActivePeriods, ActivityRange, ActivityBucket,
@@ -254,6 +254,62 @@ function HealthBreakdownModal({ store, onClose }: { store: StoreData; onClose: (
   );
 }
 
+function MoneyOwedCard({ store }: { store: StoreData }) {
+  const s = getPendingSummary(store);
+  if (s.list.length === 0) return null;
+  const halfCollect = Math.round(s.totalOwed * 0.5);
+  const advices: string[] = [];
+  if (s.totalOwed > 0) advices.push(`Collecting 50% of outstanding balances would add ₦${halfCollect.toLocaleString()} to profit this month.`);
+  if (s.overdue.length > 0) advices.push(`${s.overdue.length} customer${s.overdue.length === 1 ? ' is' : 's are'} overdue.`);
+  // Repeat-delay pattern
+  const nameCount = new Map<string, number>();
+  (store.pendingPayments || []).forEach(p => nameCount.set(p.customerName, (nameCount.get(p.customerName) || 0) + 1));
+  const repeat = [...nameCount.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (repeat && repeat[1] >= 2) advices.push(`${repeat[0]} has delayed payment ${repeat[1]} times.`);
+  // Weekend pattern
+  const weekendCount = (store.pendingPayments || []).filter(p => { const d = new Date(p.createdAt).getDay(); return d === 0 || d === 6; }).length;
+  if ((store.pendingPayments || []).length >= 4 && weekendCount / (store.pendingPayments || []).length > 0.5) {
+    advices.push('Most debts are created on weekends.');
+  }
+
+  return (
+    <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="font-display font-bold text-sm">💳 Money Owed To You</h3>
+          <p className="text-[11px] text-muted-foreground">Outstanding customer balances</p>
+        </div>
+        <span className={`text-[10px] px-2 py-0.5 rounded-full font-display font-bold ${s.recoveryRate >= 70 ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'}`}>
+          {s.recoveryRate}% recovered
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="p-2.5 rounded-lg bg-warning/10 border border-warning/20">
+          <p className="text-[10px] text-muted-foreground uppercase">Outstanding</p>
+          <p className="font-display font-bold text-warning text-sm">₦{s.totalOwed.toLocaleString()}</p>
+        </div>
+        <div className="p-2.5 rounded-lg bg-surface-2">
+          <p className="text-[10px] text-muted-foreground uppercase">Customers</p>
+          <p className="font-display font-bold text-sm">{s.customerCount}</p>
+        </div>
+        <div className="p-2.5 rounded-lg bg-surface-2">
+          <p className="text-[10px] text-muted-foreground uppercase">Overdue</p>
+          <p className="font-display font-bold text-sm text-destructive">{s.overdue.length}</p>
+        </div>
+      </div>
+      {advices.length > 0 && (
+        <div className="space-y-1.5">
+          {advices.map((a, i) => (
+            <p key={i} className="text-[11px] text-foreground/90 leading-snug flex gap-1.5">
+              <span>💡</span><span className="flex-1">{a}</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const [tab, setTab] = useState<ManagerTab>('overview');
   const [requestText, setRequestText] = useState('');
@@ -363,6 +419,8 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
       {tab === 'overview' && (
         <div className="space-y-4 animate-fade-in">
           <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} />
+
+          <MoneyOwedCard store={store} />
 
           <MostActivePeriodsCard store={store} />
 

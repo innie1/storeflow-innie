@@ -22,6 +22,8 @@ export interface Restock {
   funding?: 'balance' | 'new_money';
 }
 
+export type PaymentMethod = 'cash' | 'transfer' | 'pos' | 'mixed';
+
 export interface Sale {
   id: string;
   productId: string;
@@ -31,6 +33,38 @@ export interface Sale {
   total: number;
   profit: number;
   date: string;
+  pendingPaymentId?: string;
+  paymentMethod?: PaymentMethod;
+}
+
+export interface PendingPaymentItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface PendingPaymentEvent {
+  date: string;
+  amount: number;
+  method?: PaymentMethod;
+  note?: string;
+}
+
+export interface PendingPayment {
+  id: string;
+  customerName: string;
+  customerPhone?: string;
+  customerNote?: string;
+  items: PendingPaymentItem[];
+  total: number;
+  paid: number;
+  balance: number;
+  dueDate?: string;
+  createdAt: string;
+  status: 'pending' | 'paid';
+  events: PendingPaymentEvent[];
+  saleIds: string[];
 }
 
 export type ExpenseCategory = 'Restock' | 'Rent' | 'Utilities' | 'Salaries' | 'Transport' | 'Other';
@@ -233,11 +267,12 @@ export interface StoreData {
   customerRequests?: CustomerRequest[];
   savingsGoal?: SavingsGoal;
   managerSettings?: ManagerSettings;
+  pendingPayments?: PendingPayment[];
   createdAt: string;
   profile?: StoreProfile;
 }
 
 
 export type TabId =
-  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager'
+  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings';
