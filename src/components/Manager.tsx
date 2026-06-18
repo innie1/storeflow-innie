@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
-import { saveStore } from '@/lib/store-data';
+import { saveStore, getPendingSummary } from '@/lib/store-data';
 import {
   healthScore, forecast, generateRecommendations, generateInsights,
   topCustomerRequests, mostActivePeriods, ActivityRange, ActivityBucket,
