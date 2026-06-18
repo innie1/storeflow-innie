@@ -12,6 +12,7 @@ import Settings, { saveSession, clearSession, getActiveSession } from '@/compone
 import Expenses from '@/components/Expenses';
 import ROITracker from '@/components/ROITracker';
 import Manager from '@/components/Manager';
+import PendingPayments from '@/components/PendingPayments';
 import GamesDashboard from '@/components/games/GamesDashboard';
 import GamesSettings from '@/components/games/GamesSettings';
 import GamesHistory from '@/components/games/GamesHistory';
