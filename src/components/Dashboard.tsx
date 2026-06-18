@@ -17,6 +17,13 @@ type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const stats = getDashboardStats(store);
   const topSellers = getTopSellers(store, 5);
+  const pendingSummary = useMemo(() => {
+    const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
+    return {
+      totalOwed: list.reduce((s, p) => s + p.balance, 0),
+      customerCount: new Set(list.map(p => p.customerName.toLowerCase())).size,
+    };
+  }, [store.pendingPayments]);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownType>(null);
   const [salesRange, setSalesRange] = useState<DateRange>('all');
   const [customStart, setCustomStart] = useState('');
