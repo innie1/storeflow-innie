@@ -231,6 +231,7 @@ export default function Index() {
         {tab === 'sales' && <Sales store={store} onUpdate={setStore} />}
         {tab === 'expenses' && <Expenses store={store} onUpdate={setStore} />}
         {tab === 'manager' && <Manager store={store} onUpdate={setStore} />}
+        {tab === 'pending' && <PendingPayments store={store} onUpdate={setStore} />}
         {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
         {tab === 'roi' && <ROITracker store={store} onUpdate={setStore} />}
         {tab === 'settings' && <Settings store={store} onUpdate={setStore} onLock={handleLock} />}
