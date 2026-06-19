@@ -290,9 +290,14 @@ export interface StoreData {
   memoryArchive?: MemoryEntry[];
   createdAt: string;
   profile?: StoreProfile;
+  coins?: number;
+  lastDailyClaim?: string;
+  marketplaceListings?: any[];
+  registeredSuppliers?: any[];
 }
 
 
 export type TabId =
-  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending'
+  | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending' | 'marketplace'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings';
+

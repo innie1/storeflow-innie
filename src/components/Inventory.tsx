@@ -31,6 +31,30 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [importText, setImportText] = useState('');
   const [importPreview, setImportPreview] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] | null>(null);
   const [newProduct, setNewProduct] = useState({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: '' });
+  const [customCategoryActive, setCustomCategoryActive] = useState(false);
+  const [customCategoryVal, setCustomCategoryVal] = useState('');
+  const [editCustomCategoryActive, setEditCustomCategoryActive] = useState(false);
+  const [editCustomCategoryVal, setEditCustomCategoryVal] = useState('');
+
+  const existingCategories = useMemo(() => {
+    const cats = new Set(['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others']);
+    store.products.forEach(p => {
+      if (p.category && p.category.trim()) {
+        cats.add(p.category.trim());
+      }
+    });
+    return Array.from(cats);
+  }, [store.products]);
+
+  const autoCategory = (name: string): string => {
+    const n = name.toLowerCase();
+    if (n.includes('soap') || n.includes('detto') || n.includes('lux') || n.includes('premier') || n.includes('handwash')) return 'Soap';
+    if (n.includes('detergent') || n.includes('omo') || n.includes('ariel') || n.includes('soclin') || n.includes('wash') || n.includes('bleach') || n.includes('hypo')) return 'Detergents';
+    if (n.includes('milk') || n.includes('drink') || n.includes('water') || n.includes('beverage') || n.includes('soda') || n.includes('milo') || n.includes('coke') || n.includes('mineral') || n.includes('juice') || n.includes('fanta') || n.includes('sprite') || n.includes('pepsi') || n.includes('tea') || n.includes('coffee')) return 'Beverages';
+    if (n.includes('rice') || n.includes('beans') || n.includes('garri') || n.includes('yam') || n.includes('food') || n.includes('grocery') || n.includes('spaghetti') || n.includes('indomie') || n.includes('bread') || n.includes('semovita') || n.includes('oil') || n.includes('sugar') || n.includes('salt') || n.includes('flour') || n.includes('semolina')) return 'Groceries';
+    return 'Others';
+  };
+
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [receiveMode, setReceiveMode] = useState(false);
@@ -292,7 +316,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           placeholder="Search products..."
           className="flex-1 min-w-[200px] p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
         />
-        <button onClick={() => setShowAddModal(true)} className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-display font-semibold hover:opacity-90">
+        <button onClick={() => { setShowAddModal(true); setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries' }); setCustomCategoryActive(false); setCustomCategoryVal(''); }} className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-display font-semibold hover:opacity-90">
           + Add
         </button>
         <button onClick={() => setShowImportModal(true)} className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border">
@@ -327,7 +351,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {products.map(p => {
           const inList = shoppingList.find(i => i.productId === p.id);
           return (
@@ -385,7 +409,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center">↑</button>
-                  <button onClick={() => { setEditProduct({ ...p }); setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center">✎</button>
+                  <button onClick={() => { setEditProduct({ ...p }); setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category)); setEditCustomCategoryVal(p.category); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center">✎</button>
                   <button onClick={() => handleDelete(p)} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive flex items-center justify-center">✕</button>
                 </div>
               </div>
@@ -407,7 +431,22 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         return (
         <Modal title="Add Product" onClose={() => setShowAddModal(false)}>
           <div className="space-y-3">
-            <input value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Product name" className={inputClass} />
+            <input
+              value={newProduct.name}
+              onChange={e => {
+                const name = e.target.value;
+                const guessed = autoCategory(name);
+                setNewProduct({ ...newProduct, name, category: guessed });
+                if (guessed === 'Others') {
+                  setCustomCategoryActive(true);
+                  setCustomCategoryVal('');
+                } else {
+                  setCustomCategoryActive(false);
+                }
+              }}
+              placeholder="Product name"
+              className={inputClass}
+            />
             <div className="grid grid-cols-2 gap-3">
               <input value={newProduct.costPrice} onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value })} placeholder="Cost price (₦)" type="number" className={inputClass} />
               <input value={newProduct.sellingPrice} onChange={e => setNewProduct({ ...newProduct, sellingPrice: e.target.value })} placeholder="Selling price (₦)" type="number" className={inputClass} />
@@ -446,7 +485,39 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             )}
             <div className="grid grid-cols-2 gap-3">
               <input value={newProduct.quantity} onChange={e => setNewProduct({ ...newProduct, quantity: e.target.value })} placeholder="Quantity" type="number" className={inputClass} />
-              <input value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })} placeholder="Category" className={inputClass} />
+              <div className="space-y-2 text-left">
+                <select
+                  value={['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(newProduct.category) ? newProduct.category : 'Others'}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === 'Others') {
+                      setCustomCategoryActive(true);
+                      setNewProduct({ ...newProduct, category: customCategoryVal || 'Others' });
+                    } else {
+                      setCustomCategoryActive(false);
+                      setNewProduct({ ...newProduct, category: val });
+                    }
+                  }}
+                  className={inputClass}
+                >
+                  <option value="Groceries">Groceries</option>
+                  <option value="Beverages">Beverages</option>
+                  <option value="Detergents">Detergents</option>
+                  <option value="Soap">Soap</option>
+                  <option value="Others">Others / Custom</option>
+                </select>
+                {customCategoryActive && (
+                  <input
+                    value={customCategoryVal}
+                    onChange={e => {
+                      setCustomCategoryVal(e.target.value);
+                      setNewProduct({ ...newProduct, category: e.target.value });
+                    }}
+                    placeholder="Enter custom category..."
+                    className={inputClass}
+                  />
+                )}
+              </div>
             </div>
             <button onClick={handleAdd} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Item</button>
           </div>
@@ -490,7 +561,39 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             )}
             <div className="grid grid-cols-2 gap-3">
               <input value={editDraft.quantity} onChange={e => setEditDraft({ ...editDraft, quantity: e.target.value })} type="number" placeholder="Quantity" className={inputClass} />
-              <input value={editDraft.category} onChange={e => setEditDraft({ ...editDraft, category: e.target.value })} placeholder="Category" className={inputClass} />
+              <div className="space-y-2 text-left">
+                <select
+                  value={['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(editDraft.category) ? editDraft.category : 'Others'}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === 'Others') {
+                      setEditCustomCategoryActive(true);
+                      setEditDraft({ ...editDraft, category: editCustomCategoryVal || 'Others' });
+                    } else {
+                      setEditCustomCategoryActive(false);
+                      setEditDraft({ ...editDraft, category: val });
+                    }
+                  }}
+                  className={inputClass}
+                >
+                  <option value="Groceries">Groceries</option>
+                  <option value="Beverages">Beverages</option>
+                  <option value="Detergents">Detergents</option>
+                  <option value="Soap">Soap</option>
+                  <option value="Others">Others / Custom</option>
+                </select>
+                {editCustomCategoryActive && (
+                  <input
+                    value={editCustomCategoryVal}
+                    onChange={e => {
+                      setEditCustomCategoryVal(e.target.value);
+                      setEditDraft({ ...editDraft, category: e.target.value });
+                    }}
+                    placeholder="Enter custom category..."
+                    className={inputClass}
+                  />
+                )}
+              </div>
             </div>
             <button onClick={handleEdit} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Changes</button>
           </div>

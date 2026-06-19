@@ -252,7 +252,33 @@ function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | 
 }
 
 export function addProduct(store: StoreData, product: Omit<Product, 'id'>): StoreData {
-  const updated = { ...store, products: [...store.products, { ...product, id: generateId(), initialQuantity: product.quantity, addedAt: new Date().toISOString() }] };
+  const now = new Date().toISOString();
+  const costTotal = Math.round(product.costPrice * product.quantity * 100) / 100;
+  const newInvestments = [...(store.investments || [])];
+  const newExpenses = [...(store.expenses || [])];
+  if (costTotal > 0) {
+    newInvestments.push({
+      id: generateId(),
+      amount: costTotal,
+      note: `Added Inventory: ${product.name}`,
+      date: now,
+      type: 'additional',
+    });
+    newExpenses.push({
+      id: generateId(),
+      amount: costTotal,
+      category: 'Restock',
+      date: now,
+      note: `Added Inventory: ${product.name} (${product.quantity} units)`,
+      source: 'restock',
+    });
+  }
+  const updated = {
+    ...store,
+    products: [...store.products, { ...product, id: generateId(), initialQuantity: product.quantity, addedAt: now }],
+    investments: newInvestments,
+    expenses: newExpenses,
+  };
   saveStore(updated);
   return updated;
 }
@@ -345,7 +371,40 @@ export function clearSales(store: StoreData): StoreData {
 export function importProducts(store: StoreData, products: Omit<Product, 'id'>[]): StoreData {
   const now = new Date().toISOString();
   const newProducts = products.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }));
-  const updated = { ...store, products: [...store.products, ...newProducts] };
+  
+  let importTotal = 0;
+  products.forEach(p => {
+    importTotal += p.costPrice * p.quantity;
+  });
+  importTotal = Math.round(importTotal * 100) / 100;
+
+  const newInvestments = [...(store.investments || [])];
+  const newExpenses = [...(store.expenses || [])];
+
+  if (importTotal > 0) {
+    newInvestments.push({
+      id: generateId(),
+      amount: importTotal,
+      note: `Bulk Imported Inventory (${products.length} products)`,
+      date: now,
+      type: 'additional',
+    });
+    newExpenses.push({
+      id: generateId(),
+      amount: importTotal,
+      category: 'Restock',
+      date: now,
+      note: `Bulk Imported Inventory (${products.length} products)`,
+      source: 'restock',
+    });
+  }
+
+  const updated = {
+    ...store,
+    products: [...store.products, ...newProducts],
+    investments: newInvestments,
+    expenses: newExpenses,
+  };
   saveStore(updated);
   return updated;
 }

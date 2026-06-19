@@ -22,6 +22,8 @@ interface SalesProps {
 
 export default function Sales({ store, onUpdate, managerSettings }: SalesProps) {
   const [search, setSearch] = useState('');
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
   const [category, setCategory] = useState<string>('All');
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -224,8 +226,48 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
         </div>
       </div>
 
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search products..."
-        className="w-full p-3 rounded-xl bg-card border border-border text-sm focus:outline-none focus:border-primary" />
+      {/* Voice Sell — inline ambient bar */}
+      {(managerSettings?.voiceFeatures !== false) && (
+        <VoiceSell
+          products={store.products}
+          autoStart={managerSettings?.autoVoiceListen === true}
+          ambientActive={voiceActive}
+          setAmbientActive={setVoiceActive}
+          onListeningChange={setVoiceListening}
+          onAddItems={items => {
+            items.forEach(item => addToCart(item.productId, item.quantity));
+          }}
+          onCheckout={() => openCheckout()}
+        />
+      )}
+
+      <div className="relative">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="🔍 Search products..."
+          className={`w-full p-3 pr-10 rounded-xl bg-card border text-sm focus:outline-none transition-all duration-300 ${
+            voiceActive && voiceListening
+              ? 'border-[#E8C34E] shadow-[0_0_12px_rgba(232,195,78,0.25)] animate-[border-pulse_2s_infinite_ease-in-out]'
+              : voiceActive
+              ? 'border-[#E8C34E]/60 shadow-[0_0_8px_rgba(232,195,78,0.1)]'
+              : 'border-border focus:border-primary'
+          }`}
+        />
+        <button
+          onClick={() => setVoiceActive(!voiceActive)}
+          className={`absolute right-3 top-3 text-lg transition-all active:scale-90 ${
+            voiceActive
+              ? 'text-[#E8C34E]'
+              : 'text-muted-foreground hover:text-[#E8C34E]'
+          }`}
+          style={voiceActive && voiceListening ? { animation: 'mic-pop 1.5s ease-in-out infinite' } : {}}
+          title={voiceActive ? 'Stop voice listening' : 'Start voice listening'}
+          aria-label={voiceActive ? 'Stop voice listening' : 'Start voice listening'}
+        >
+          🎙
+        </button>
+      </div>
 
       {categories.length > 1 && (
         <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 no-scrollbar">
@@ -380,7 +422,7 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
               <div className="space-y-2">
                 <p className="text-xs font-display font-bold text-muted-foreground uppercase">Payment Method</p>
                 <div className="grid grid-cols-4 gap-1.5">
-                  {([['cash', '💵', 'Cash'], ['transfer', '🏦', 'Transfer'], ['pos', '💳', 'POS'], ['mixed', '👥', 'Mixed']] as const).map(([m, icon, label]) => (
+                  {([['transfer', '🏦', 'Transfer'], ['pos', '💳', 'Card'], ['cash', '💵', 'Cash'], ['mixed', '👥', 'Mixed']] as const).map(([m, icon, label]) => (
                     <button key={m} onClick={() => setMethod(m)}
                       className={`p-2 rounded-lg border text-center ${
                         method === m ? 'border-success bg-success/10' : 'border-border bg-surface-2'
@@ -455,17 +497,6 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
           onClose={() => setScanning(false)} onDetected={handleBarcodeDetected} />
       )}
 
-      {/* Voice Sell — only when voiceFeatures is enabled (or not set) */}
-      {(managerSettings?.voiceFeatures !== false) && (
-        <VoiceSell
-          products={store.products.filter(p => p.quantity > 0)}
-          autoStart={managerSettings?.autoVoiceListen === true}
-          onAddItems={items => {
-            items.forEach(item => addToCart(item.productId, item.quantity));
-          }}
-          onCheckout={() => openCheckout()}
-        />
-      )}
 
       {lastSale && <SaleReceipt store={store} sale={lastSale} onClose={() => setLastSale(null)} />}
     </div>

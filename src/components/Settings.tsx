@@ -881,7 +881,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       <div className={`${card} divide-y divide-border`}>
         <SupportRow icon="📖" label="Help Center" onClick={() => { setHelpOpen(null); setView('help'); }} />
         <SupportRow icon="❓" label="FAQ" onClick={() => { setHelpOpen(null); setView('faq'); }} />
-        <SupportRow icon="💬" label="Contact Support" onClick={() => setShowContactPopup(true)} />
+        <SupportRow icon="💬" label="Contact Support" onClick={() => setView('contact')} />
         <SupportRow icon="ℹ️" label="About StoreFlow" onClick={() => setView('about')} />
       </div>
     </SubPage>
@@ -889,106 +889,113 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
 
   // ============ HOME ============
   return (
-    <div className="animate-fade-in max-w-md mx-auto space-y-4">
-      {/* Store Profile */}
-      <button onClick={() => setView('profile')} className={`${card} w-full p-4 text-left hover:ring-1 hover:ring-primary/30 transition-all`}>
-        <div className="flex items-start gap-3">
-          <div className="relative">
-            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-primary/15 border border-primary/30 flex items-center justify-center text-3xl">
-              {store.profile?.photo ? <img src={store.profile.photo} alt="" className="w-full h-full object-cover" /> : '🏪'}
-            </div>
-            <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">📷</span>
-          </div>
-          <div className="flex-1 min-w-0 space-y-1">
-            <h3 className="font-display font-bold text-lg leading-tight truncate">{store.storeName}</h3>
-            {profile.location && <p className="text-xs text-muted-foreground flex items-start gap-1"><span>📍</span><span className="line-clamp-2">{profile.location}</span></p>}
-            {profile.phone && <p className="text-xs text-muted-foreground flex items-center gap-1">📞 {profile.phone}</p>}
-            {profile.email && <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">✉️ {profile.email}</p>}
-          </div>
-          <div className="flex flex-col items-center gap-1 shrink-0">
-            <div className="w-12 h-12 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-primary">✏️</div>
-            <span className="text-[10px] text-muted-foreground font-display font-semibold">Edit</span>
-          </div>
-        </div>
-      </button>
-
-      {/* Flow Card */}
-      <button onClick={() => setView('flow')} className={`${card} w-full p-4 text-left hover:ring-1 hover:ring-primary/30 transition-all border ${mgr.enabled ? 'border-success/30 bg-gradient-to-br from-success/10 to-transparent' : 'border-border'}`}>
-        <div className="flex items-start gap-3">
-          <div className="shrink-0">
-            <Mascot size={64} mood={mgr.enabled ? 'happy' : 'sleeping'} />
-          </div>
-          <div className="flex-1 min-w-0 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <h3 className="font-display font-bold text-xl">Flow</h3>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-display font-bold ${mgr.enabled ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${mgr.enabled ? 'bg-success' : 'bg-muted-foreground'}`} />
-                {mgr.enabled ? 'Active' : 'Disabled'}
-              </span>
-            </div>
-            {mgr.enabled ? (
-              <>
-                <p className="text-xs text-muted-foreground leading-snug">Your business companion for forecasts, advice and insights.</p>
-                <div className="flex items-center gap-2 pt-1">
-                  <ProgressRing pct={profileCompletion} size={40} />
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Business Profile</p>
-                    <p className="text-xs font-display font-semibold">{profileCompletion}% Complete</p>
-                  </div>
+    <div className="animate-fade-in space-y-4 md:space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
+        {/* Left column — profile + Flow */}
+        <div className="md:col-span-5 space-y-4">
+          {/* Store Profile */}
+          <button onClick={() => setView('profile')} className={`${card} w-full p-4 text-left hover:ring-1 hover:ring-primary/30 transition-all`}>
+            <div className="flex items-start gap-3">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-primary/15 border border-primary/30 flex items-center justify-center text-3xl">
+                  {store.profile?.photo ? <img src={store.profile.photo} alt="" className="w-full h-full object-cover" /> : '🏪'}
                 </div>
-                {latestInsight && (
-                  <p className="text-[11px] text-success mt-1 line-clamp-2">{latestInsight.icon} {latestInsight.text}</p>
+                <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">📷</span>
+              </div>
+              <div className="flex-1 min-w-0 space-y-1">
+                <h3 className="font-display font-bold text-lg leading-tight truncate">{store.storeName}</h3>
+                {profile.location && <p className="text-xs text-muted-foreground flex items-start gap-1"><span>📍</span><span className="line-clamp-2">{profile.location}</span></p>}
+                {profile.phone && <p className="text-xs text-muted-foreground flex items-center gap-1">📞 {profile.phone}</p>}
+                {profile.email && <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">✉️ {profile.email}</p>}
+              </div>
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <div className="w-12 h-12 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-primary">✏️</div>
+                <span className="text-[10px] text-muted-foreground font-display font-semibold">Edit</span>
+              </div>
+            </div>
+          </button>
+
+          {/* Flow Card */}
+          <button onClick={() => setView('flow')} className={`${card} w-full p-4 text-left hover:ring-1 hover:ring-primary/30 transition-all border ${mgr.enabled ? 'border-success/30 bg-gradient-to-br from-success/10 to-transparent' : 'border-border'}`}>
+            <div className="flex items-start gap-3">
+              <div className="shrink-0">
+                <Mascot size={64} mood={mgr.enabled ? 'happy' : 'sleeping'} />
+              </div>
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display font-bold text-xl">Flow</h3>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-display font-bold ${mgr.enabled ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${mgr.enabled ? 'bg-success' : 'bg-muted-foreground'}`} />
+                    {mgr.enabled ? 'Active' : 'Disabled'}
+                  </span>
+                </div>
+                {mgr.enabled ? (
+                  <>
+                    <p className="text-xs text-muted-foreground leading-snug">Your business companion for forecasts, advice and insights.</p>
+                    <div className="flex items-center gap-2 pt-1">
+                      <ProgressRing pct={profileCompletion} size={40} />
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Business Profile</p>
+                        <p className="text-xs font-display font-semibold">{profileCompletion}% Complete</p>
+                      </div>
+                    </div>
+                    {latestInsight && (
+                      <p className="text-[11px] text-success mt-1 line-clamp-2">{latestInsight.icon} {latestInsight.text}</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Turn on Flow to unlock forecasts, recommendations and business insights.</p>
                 )}
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">Turn on Flow to unlock forecasts, recommendations and business insights.</p>
-            )}
-          </div>
-          <div className="shrink-0 self-center w-12 h-12 rounded-xl bg-surface-2 border border-border flex flex-col items-center justify-center text-primary text-xs">
-            <span>›</span>
-          </div>
+              </div>
+              <div className="shrink-0 self-center w-12 h-12 rounded-xl bg-surface-2 border border-border flex flex-col items-center justify-center text-primary text-xs">
+                <span>›</span>
+              </div>
+            </div>
+          </button>
         </div>
-      </button>
 
-      {/* Setting Tiles */}
-      <SettingTile icon="🏷️" color="#F2C94C" title="Pricing" desc="Manage profit margin and pricing." right={<><p className="text-[10px] text-muted-foreground">Default Margin</p><p className="text-base font-display font-bold text-primary">{mgr.defaultMargin}%</p></>} onClick={() => setView('pricing')} />
-      <SettingTile icon="📦" color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />
-      <SettingTile icon="🐖" color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}
-        right={<div className="text-right space-y-1">
-          <p className="text-[10px] text-muted-foreground">Goal</p>
-          <p className="text-sm font-display font-bold" style={{ color: '#9B6BFB' }}>₦{savings.amount.toLocaleString()}</p>
-          <div className="w-20 h-1.5 rounded-full bg-surface-2 overflow-hidden ml-auto">
-            <div className="h-full rounded-full" style={{ width: `${savingsPct}%`, background: '#9B6BFB' }} />
-          </div>
-          <p className="text-[10px] text-muted-foreground">{Math.round(savingsPct)}%</p>
-        </div>} />
+        {/* Right column — settings tiles */}
+        <div className="md:col-span-7 space-y-3">
+          <SettingTile icon="🏷️" color="#F2C94C" title="Pricing" desc="Manage profit margin and pricing." right={<><p className="text-[10px] text-muted-foreground">Default Margin</p><p className="text-base font-display font-bold text-primary">{mgr.defaultMargin}%</p></>} onClick={() => setView('pricing')} />
+          <SettingTile icon="📦" color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />
+          <SettingTile icon="🐖" color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}
+            right={<div className="text-right space-y-1">
+              <p className="text-[10px] text-muted-foreground">Goal</p>
+              <p className="text-sm font-display font-bold" style={{ color: '#9B6BFB' }}>₦{savings.amount.toLocaleString()}</p>
+              <div className="w-20 h-1.5 rounded-full bg-surface-2 overflow-hidden ml-auto">
+                <div className="h-full rounded-full" style={{ width: `${savingsPct}%`, background: '#9B6BFB' }} />
+              </div>
+              <p className="text-[10px] text-muted-foreground">{Math.round(savingsPct)}%</p>
+            </div>} />
 
-      <SettingTile icon="🎨" color="#5B8FF9" title="Appearance" desc="Customize theme and experience." onClick={() => setView('appearance')}
-        right={<div className="flex gap-1.5">
-          {THEMES.map(t => (
-            <div key={t.id} className={`w-10 h-10 rounded-xl flex items-center justify-center text-base border ${theme===t.id ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`} style={{ background: t.swatch + '22' }}>
-              {t.emoji}
-            </div>
-          ))}
-        </div>} />
+          <SettingTile icon="🎨" color="#5B8FF9" title="Appearance" desc="Customize theme and experience." onClick={() => setView('appearance')}
+            right={<div className="flex gap-1.5">
+              {THEMES.map(t => (
+                <div key={t.id} className={`w-10 h-10 rounded-xl flex items-center justify-center text-base border ${theme===t.id ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`} style={{ background: t.swatch + '22' }}>
+                  {t.emoji}
+                </div>
+              ))}
+            </div>} />
 
-      <SettingTile icon="🔔" color="#FF8A3D" title="Notifications" desc="Manage alerts and reminders." onClick={() => setView('notifications')}
-        right={<><p className="text-[10px] font-display font-semibold text-warning">{activeNotifTypes} Types Active</p>
-          <div className="flex gap-1 mt-1">{['📊','⭐','⚠️','📘','💰'].map((e,i)=><span key={i} className="w-6 h-6 rounded bg-surface-2 border border-border flex items-center justify-center text-[10px]">{e}</span>)}</div></>} />
+          <SettingTile icon="🔔" color="#FF8A3D" title="Notifications" desc="Manage alerts and reminders." onClick={() => setView('notifications')}
+            right={<><p className="text-[10px] font-display font-semibold text-warning">{activeNotifTypes} Types Active</p>
+              <div className="flex gap-1 mt-1">{['📊','⭐','⚠️','📘','💰'].map((e,i)=><span key={i} className="w-6 h-6 rounded bg-surface-2 border border-border flex items-center justify-center text-[10px]">{e}</span>)}</div></> } />
 
-      <SettingTile icon="🛡️" color="#2EBFB1" title="Security" desc="App lock and security settings." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
+          <SettingTile icon="🛡️" color="#2EBFB1" title="Security" desc="App lock and security settings." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
 
-      <SettingTile icon="🗄️" color="#3B82F6" title="Data & Storage" desc="Import, export and backup your data." onClick={() => setView('data')}
-        right={<div className="flex gap-1">
-          {[{e:'⬆️',l:'Export'},{e:'⬇️',l:'Import'},{e:'☁️',l:'Backup'},{e:'⋯',l:'More'}].map(o=>(
-            <div key={o.l} className="w-10 h-10 rounded-lg bg-surface-2 border border-border flex flex-col items-center justify-center">
-              <span className="text-xs">{o.e}</span>
-              <span className="text-[8px] text-muted-foreground">{o.l}</span>
-            </div>
-          ))}
-        </div>} />
+          <SettingTile icon="🗄️" color="#3B82F6" title="Data & Storage" desc="Import, export and backup your data." onClick={() => setView('data')}
+            right={<div className="flex gap-1">
+              {[{e:'⬆️',l:'Export'},{e:'⬇️',l:'Import'},{e:'☁️',l:'Backup'},{e:'⋯',l:'More'}].map(o=>(
+                <div key={o.l} className="w-10 h-10 rounded-lg bg-surface-2 border border-border flex flex-col items-center justify-center">
+                  <span className="text-xs">{o.e}</span>
+                  <span className="text-[8px] text-muted-foreground">{o.l}</span>
+                </div>
+              ))}
+            </div>} />
 
-      <SettingTile icon="🎧" color="#F2C94C" title="Support" desc="Help, FAQs and contact." onClick={() => setView('support')} />
+          <SettingTile icon="🎧" color="#F2C94C" title="Support" desc="Help, FAQs and contact." onClick={() => setView('support')} />
+        </div>
+      </div>
 
       {showTrash && <RecentlyDeleted store={store} onUpdate={onUpdate} onClose={() => setShowTrash(false)} />}
       {showSwitcher && <StoreSwitcher currentCode={store.accessCode} onSwitch={onUpdate} onClose={() => setShowSwitcher(false)} />}
@@ -1001,6 +1008,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
     </div>
   );
 }
+
 
 // ============ small components ============
 function Field({ label, value, onChange, placeholder, type='text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {

@@ -155,11 +155,11 @@ export default function PendingPayments({ store, onUpdate }: Props) {
               onChange={e => setPartialAmt(e.target.value)}
               className="w-full p-3 rounded-lg bg-surface-2 border border-border text-center text-lg font-display" />
             <div className="grid grid-cols-3 gap-1.5">
-              {(['cash', 'transfer', 'pos'] as PaymentMethod[]).map(m => (
+              {(['transfer', 'pos', 'cash'] as PaymentMethod[]).map(m => (
                 <button key={m} onClick={() => setPartialMethod(m)}
                   className={`p-2 rounded-lg text-xs font-display font-semibold border ${
                     partialMethod === m ? 'bg-primary/15 text-primary border-primary/50' : 'bg-surface-2 text-muted-foreground border-border'
-                  }`}>{m.toUpperCase()}</button>
+                  }`}>{m === 'pos' ? 'CARD' : m.toUpperCase()}</button>
               ))}
             </div>
             <div className="flex gap-2">

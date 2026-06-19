@@ -19,6 +19,8 @@ import GamesHistory from '@/components/games/GamesHistory';
 import GamesAnalytics from '@/components/games/GamesAnalytics';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
+import Marketplace from '@/components/Marketplace';
+
 
 const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
@@ -29,6 +31,7 @@ const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
 
 
 const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'marketplace', label: 'Marketplace', icon: '🛒' },
   { id: 'expenses', label: 'Expenses', icon: '🧾' },
   { id: 'pending', label: 'Pending Payments', icon: '💳' },
   { id: 'history', label: 'History', icon: '📋' },
@@ -336,6 +339,9 @@ export default function Index() {
           </div>
           <div className={tab === 'settings' ? 'block' : 'hidden'}>
             <Settings store={store} onUpdate={setStore} onLock={handleLock} />
+          </div>
+          <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
+            <Marketplace store={store} onUpdate={setStore} />
           </div>
           {isGames && (
             <>
