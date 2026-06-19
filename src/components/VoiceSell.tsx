@@ -148,6 +148,7 @@ export default function VoiceSell({
   const ambientWantActive = useRef(false);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [supported] = useState(() => !!SR);
+  const processedIndicesRef = useRef<Set<number>>(new Set());
 
   // Notify parent on actual listening status changes
   useEffect(() => {
@@ -160,6 +161,7 @@ export default function VoiceSell({
     try { ambientRecogRef.current?.abort(); } catch { /* ok */ }
     ambientRecogRef.current = null;
     setAmbientListening(false);
+    processedIndicesRef.current.clear();
   }, []);
 
   const startAmbientSession = useCallback(() => {
@@ -167,25 +169,29 @@ export default function VoiceSell({
 
     try { ambientRecogRef.current?.abort(); } catch { /* ok */ }
 
+    processedIndicesRef.current.clear();
+
     const r = new SR() as SpeechRecognition;
     r.continuous = true;
     r.interimResults = true;
     r.lang = 'en-US';
     r.maxAlternatives = 2;
 
-    let accumulated = '';
-
     r.onstart = () => {
       setAmbientListening(true);
     };
 
     r.onresult = (e: SpeechRecognitionEvent) => {
-      let finalText = '';
+      let newFinalText = '';
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          finalText += ' ' + t;
+        const result = e.results[i];
+        const t = result[0].transcript;
+        if (result.isFinal) {
+          if (!processedIndicesRef.current.has(i)) {
+            processedIndicesRef.current.add(i);
+            newFinalText += ' ' + t;
+          }
         } else {
           interim = t;
         }
@@ -193,9 +199,8 @@ export default function VoiceSell({
 
       if (interim) setLastHeard(interim);
 
-      if (finalText.trim()) {
-        accumulated += ' ' + finalText;
-        const text = accumulated.trim();
+      if (newFinalText.trim()) {
+        const text = newFinalText.trim();
         setLastHeard(text.split(' ').slice(-6).join(' '));
 
         const items = parseTranscript(text, products);
@@ -204,7 +209,6 @@ export default function VoiceSell({
           setAddedCount(prev => prev + items.reduce((s, it) => s + it.quantity, 0));
           const names = items.map(it => `${it.productName} ×${it.quantity}`).join(', ');
           showToast(`🎙 Added: ${names}`);
-          accumulated = '';
         }
       }
     };
@@ -236,6 +240,7 @@ export default function VoiceSell({
     ambientWantActive.current = true;
     setAddedCount(0);
     setLastHeard('');
+    processedIndicesRef.current.clear();
     startAmbientSession();
   }, [startAmbientSession]);
 

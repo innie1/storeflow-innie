@@ -446,7 +446,7 @@ export function Typewriter({ text, speed = 50 }: { text: string; speed?: number 
 export function useCountUp(target: number, durationMs = 1500) {
   const [count, setCount] = useState(0);
 
-  useEffectReact(() => {
+  useEffect(() => {
     let start = 0;
     const end = target;
     if (start === end) {

@@ -301,7 +301,7 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
                   </span>
                   <button
                     onClick={() => changeCartQty(i, -item.quantity)}
-                    className="w-5 h-5 rounded-md hover:bg-destructive/10 text-destructive/80 hover:text-destructive flex items-center justify-center text-sm font-bold active:scale-90 transition-transform"
+                    className="w-6 h-6 rounded-md bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center justify-center text-sm font-bold active:scale-90 transition-transform ml-1"
                     title="Remove item"
                   >
                     ×
@@ -419,6 +419,7 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
                       <button onClick={() => changeCartQty(i, -1)} className="w-6 h-6 rounded bg-card border border-border">−</button>
                       <span className="w-6 text-center text-xs font-bold">{item.quantity}</span>
                       <button onClick={() => changeCartQty(i, 1)} className="w-6 h-6 rounded bg-card border border-border">+</button>
+                      <button onClick={() => changeCartQty(i, -item.quantity)} className="w-6 h-6 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center justify-center font-bold text-sm ml-1 active:scale-90 transition-transform" title="Remove item">×</button>
                     </div>
                     <span className="w-20 text-right text-primary font-display font-bold text-sm">₦{(item.unitPrice * item.quantity).toLocaleString()}</span>
                   </div>
