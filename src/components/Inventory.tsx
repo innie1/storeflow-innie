@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
@@ -59,6 +59,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [receiveMode, setReceiveMode] = useState(false);
   const [receiveData, setReceiveData] = useState<Record<string, { qty: string; cost: string }>>({});
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [receiveMode]);
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [scanForProduct, setScanForProduct] = useState<Product | null>(null);
 

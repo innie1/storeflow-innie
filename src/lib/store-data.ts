@@ -1,5 +1,6 @@
 import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, Investment, StoreCategory, GameService, GameSession } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
+import { createAutoBackupSnapshot } from '@/lib/backup-system';
 
 const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -239,6 +240,9 @@ export function saveStore(store: StoreData): void {
   const trash = (store.trash || []).filter(t => new Date(t.deletedAt).getTime() > cutoff);
   const cleaned = { ...store, trash };
   localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(cleaned));
+  if (cleaned.managerSettings?.autoBackupsEnabled !== false) {
+    createAutoBackupSnapshot().catch(() => {});
+  }
 }
 
 function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | Expense): TrashItem[] {

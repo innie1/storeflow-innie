@@ -10,6 +10,8 @@ import RecentlyDeleted from '@/components/RecentlyDeleted';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import ToggleRow from '@/components/Toggle';
 import Mascot from '@/components/Mascot';
+import { compileBackupPayload, triggerBackupExport, restoreBackupPayload, BackupPayload } from '@/lib/backup-system';
+import { LocalBackup, getLocalBackups, saveLocalBackup, deleteLocalBackup } from '@/lib/backup-db';
 import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
 import { generateInsights } from '@/lib/manager-intel';
 
@@ -43,7 +45,7 @@ export function getActiveSession(): string | null {
 type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
   | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
-  | 'help' | 'faq' | 'about' | 'contact';
+  | 'help' | 'faq' | 'about' | 'contact' | 'backups';
 
 interface SettingsProps {
   store: StoreData;
@@ -107,6 +109,120 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [showSavingsModal, setShowSavingsModal] = useState(false);
   const [lowStock, setLowStock] = useState<string>(String(getLowStockThreshold()));
   const [helpOpen, setHelpOpen] = useState<string | null>(null);
+
+  // Backup system state
+  const [localBackups, setLocalBackups] = useState<LocalBackup[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [restoreConfirm, setRestoreConfirm] = useState<LocalBackup | null>(null);
+
+  const loadBackups = async () => {
+    setLoadingBackups(true);
+    try {
+      const list = await getLocalBackups();
+      setLocalBackups(list);
+    } catch (err) {
+      showToast('Failed to load local backups', 'error');
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view === 'backups') {
+      loadBackups();
+    }
+  }, [view]);
+
+  const handleCreateManualBackup = async () => {
+    try {
+      const payload = compileBackupPayload();
+      const dbData: Record<string, string> = {
+        index: payload.index,
+        deviceMemory: JSON.stringify(payload.deviceMemory),
+        lowStock: payload.lowStock || '',
+        lockTimer: payload.lockTimer || '',
+        theme: payload.theme || '',
+      };
+      for (const [k, v] of Object.entries(payload.stores)) {
+        dbData[k] = v;
+      }
+      await saveLocalBackup('manual', dbData);
+      showToast('✓ Local backup snapshot created');
+      loadBackups();
+    } catch (err) {
+      showToast('Failed to save backup snapshot', 'error');
+    }
+  };
+
+  const handleDeleteBackup = async (id: string) => {
+    try {
+      await deleteLocalBackup(id);
+      showToast('Snapshot deleted');
+      loadBackups();
+    } catch (err) {
+      showToast('Failed to delete snapshot', 'error');
+    }
+  };
+
+  const handleRestoreBackup = async () => {
+    if (!restoreConfirm) return;
+    try {
+      const dbData = restoreConfirm.data;
+      const stores: Record<string, string> = {};
+      for (const [k, v] of Object.entries(dbData)) {
+        if (k.startsWith('storeflow_') && k !== 'storeflow_index' && k !== 'storeflow_flow_memory') {
+          stores[k] = v;
+        }
+      }
+      
+      const payload: BackupPayload = {
+        version: '1.0',
+        timestamp: restoreConfirm.timestamp,
+        deviceMemory: dbData.deviceMemory ? JSON.parse(dbData.deviceMemory) : null,
+        index: dbData.index || '[]',
+        stores,
+        lowStock: dbData.lowStock || undefined,
+        lockTimer: dbData.lockTimer || undefined,
+        theme: dbData.theme || undefined,
+      };
+
+      const result = restoreBackupPayload(payload);
+      showToast(`✓ Restored: ${result.storesRestoredCount} stores merged successfully`);
+      setRestoreConfirm(null);
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err) {
+      showToast('Failed to restore snapshot', 'error');
+    }
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const payload = JSON.parse(event.target?.result as string) as BackupPayload;
+        if (!payload.version || !payload.index) {
+          showToast('Invalid StoreFlow backup file schema', 'error');
+          return;
+        }
+        
+        const result = restoreBackupPayload(payload);
+        showToast(`✓ Imported: ${result.storesRestoredCount} stores successfully merged`);
+        
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } catch (err) {
+        showToast('Failed to parse backup JSON file', 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
   const [showExport, setShowExport] = useState(false);
   const [showContactPopup, setShowContactPopup] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -205,6 +321,10 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   };
 
   useEffect(() => { saveLockTimer(timer); saveSession(store.accessCode); }, [timer, store.accessCode]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
 
   const handleLock = () => { clearSession(); onLock(); showToast('Store locked'); };
   const toggleSavings = (next: boolean) => {
@@ -344,6 +464,25 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
             <ToggleRow label="Voice Notes" checked={mgr.voiceFeatures} onChange={v => updateMgr({ voiceFeatures: v })} />
             <ToggleRow label="Auto-Listen on Sales" description="Mic starts automatically when you open the Sales page." checked={mgr.autoVoiceListen} onChange={v => updateMgr({ autoVoiceListen: v })} />
             <ToggleRow label="Business Questions" checked={mgr.businessQuestions} onChange={v => updateMgr({ businessQuestions: v })} />
+          </div>
+
+          {/* Graph Settings */}
+          <div className="px-1 mt-4">
+            <SectionLabel>Active Periods Graph</SectionLabel>
+          </div>
+          <div className={`${card} p-4 space-y-3`}>
+            <div>
+              <p className="text-sm font-display font-semibold">Graph Interval</p>
+              <p className="text-[11px] text-muted-foreground">Select the bucket time interval for the active periods chart.</p>
+            </div>
+            <div className="flex gap-2">
+              {([10, 30, 60] as const).map(interval => (
+                <button key={interval} onClick={() => updateMgr({ graphInterval: interval })}
+                  className={`flex-1 py-2 rounded-lg text-xs font-display font-bold border transition-colors ${mgr.graphInterval === interval ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}>
+                  {interval === 60 ? '1 Hour' : `${interval} Mins`}
+                </button>
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -495,10 +634,8 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       <div className="grid grid-cols-2 gap-2">
         <DataTile icon="🔄" label="Switch Store" onClick={() => setShowSwitcher(true)} />
         <DataTile icon="🗑" label={`Recently Deleted${trashCount ? ` (${trashCount})` : ''}`} onClick={() => setShowTrash(true)} />
-        <DataTile icon="⬆️" label="Export Data" onClick={() => setShowExport(true)} />
-        <DataTile icon="⬇️" label="Import Data" onClick={() => showToast('Import coming soon')} />
-        <DataTile icon="☁️" label="Backup" onClick={() => showToast('Backup queued')} />
-        <DataTile icon="♻️" label="Restore" onClick={() => showToast('Restore coming soon')} />
+        <DataTile icon="💾" label="Backups & Restore" onClick={() => setView('backups')} />
+        <DataTile icon="⬆️" label="Raw Export" onClick={() => setShowExport(true)} />
       </div>
       {showTrash && (
         <RecentlyDeleted
@@ -626,6 +763,130 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       )}
     </SubPage>
   );
+
+  if (view === 'backups') {
+    return (
+      <SubPage title="Backups & Restore" onBack={() => setView('data')}>
+        {/* Toggle for Auto-backups */}
+        <div className={`${card} px-4 divide-y divide-border`}>
+          <ToggleRow
+            label="Automatic Backups"
+            description="Create a local recovery snapshot in IndexedDB automatically after every sale checkout and expense entry."
+            checked={mgr.autoBackupsEnabled ?? false}
+            onChange={(v) => updateMgr({ autoBackupsEnabled: v })}
+          />
+        </div>
+
+        {/* Global Import/Export actions */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => {
+              triggerBackupExport();
+              showToast('Backup file exported');
+            }}
+            className="p-4 rounded-2xl bg-card shadow-card flex flex-col items-center justify-center gap-2 hover:ring-1 hover:ring-primary/30 transition-all text-center"
+          >
+            <span className="text-2xl">📤</span>
+            <span className="font-display font-semibold text-xs text-foreground">Export Backup</span>
+            <span className="text-[9px] text-muted-foreground">Download database JSON</span>
+          </button>
+          
+          <label className="p-4 rounded-2xl bg-card shadow-card flex flex-col items-center justify-center gap-2 hover:ring-1 hover:ring-primary/30 transition-all text-center cursor-pointer">
+            <span className="text-2xl">📥</span>
+            <span className="font-display font-semibold text-xs text-foreground">Import Backup</span>
+            <span className="text-[9px] text-muted-foreground">Upload and restore JSON</span>
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+          </label>
+        </div>
+
+        {/* Manual backup action */}
+        <button
+          onClick={handleCreateManualBackup}
+          className="w-full p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm hover:opacity-95 transition-opacity"
+        >
+          💾 Create Manual Backup Snapshot
+        </button>
+
+        {/* Local restore points list */}
+        <div className={`${card} p-4 space-y-3`}>
+          <h3 className="font-display font-bold text-sm">Local Snapshots</h3>
+          <p className="text-[11px] text-muted-foreground -mt-1">
+            Restore points saved locally in IndexedDB database.
+          </p>
+
+          {loadingBackups ? (
+            <div className="text-center py-4 text-xs text-muted-foreground">Loading snapshots...</div>
+          ) : localBackups.length === 0 ? (
+            <div className="text-center py-6 text-xs text-muted-foreground">No local snapshots created yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {localBackups.map((b) => (
+                <div key={b.id} className="p-3 rounded-xl bg-surface-2 border border-border flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-display font-bold text-xs text-foreground">
+                      {b.type === 'auto_save' ? '🔄 Auto-Save' : '👤 Manual Backup'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                      {new Date(b.timestamp).toLocaleString()} · {(b.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setRestoreConfirm(b)}
+                      className="px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-display font-bold transition-colors"
+                    >
+                      Restore
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBackup(b.id)}
+                      className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors text-[10px]"
+                      title="Delete snapshot"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Restore Confirmation Modal */}
+        {restoreConfirm && (
+          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-4">
+              <div className="text-center space-y-2">
+                <div className="text-3xl">⚠️</div>
+                <h3 className="font-display font-bold text-lg">Restore this snapshot?</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  This will restore the database to the state recorded on <strong className="text-foreground">{new Date(restoreConfirm.timestamp).toLocaleString()}</strong>.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setRestoreConfirm(null)}
+                  className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRestoreBackup}
+                  className="flex-1 p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs"
+                >
+                  Confirm Restore
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </SubPage>
+    );
+  }
 
   // ===== ABOUT =====
   if (view === 'about') return (

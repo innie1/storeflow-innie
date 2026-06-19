@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Radial Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#2d2615"/>
+      <stop offset="70%" stop-color="#141108"/>
+      <stop offset="100%" stop-color="#0a0804"/>
+    </radialGradient>
+
+    <!-- Golden Ring Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f3e5ab"/>
+      <stop offset="25%" stop-color="#d4af37"/>
+      <stop offset="50%" stop-color="#aa7c11"/>
+      <stop offset="75%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#f3e5ab"/>
+    </linearGradient>
+
+    <!-- Inner Glow Gradient -->
+    <linearGradient id="innerGlow" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#aa7c11" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#d4af37" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#f3e5ab" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <!-- Drop Shadow for Gold Text/Elements -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Ring (Double Gold Border) -->
+  <circle cx="256" cy="256" r="236" fill="url(#bgGrad)" stroke="url(#goldGrad)" stroke-width="12"/>
+  <circle cx="256" cy="256" r="216" fill="none" stroke="url(#innerGlow)" stroke-width="3"/>
+
+  <!-- Inner Gold Circle Rim -->
+  <circle cx="256" cy="256" r="196" fill="none" stroke="url(#goldGrad)" stroke-width="4" stroke-dasharray="10 6" opacity="0.6"/>
+
+  <!-- Content Group with Drop Shadow -->
+  <g filter="url(#shadow)">
+    <!-- Number 1 -->
+    <text x="256" y="240" font-family="'Outfit', 'Inter', 'system-ui', sans-serif" font-size="150" font-weight="900" text-anchor="middle" fill="url(#goldGrad)">1</text>
+
+    <!-- FLOW Text -->
+    <text x="256" y="315" font-family="'Outfit', 'Inter', 'system-ui', sans-serif" font-size="54" font-weight="900" letter-spacing="4" text-anchor="middle" fill="url(#goldGrad)">FLOW</text>
+
+    <!-- Three Gold Stars -->
+    <!-- Center Star -->
+    <polygon points="256,350 260,362 272,362 262,370 266,382 256,374 246,382 250,370 240,362 252,362" fill="url(#goldGrad)"/>
+    <!-- Left Star -->
+    <polygon points="216,356 220,366 230,366 222,373 225,383 216,376 207,383 210,373 202,366 212,366" fill="url(#goldGrad)" opacity="0.85"/>
+    <!-- Right Star -->
+    <polygon points="296,356 300,366 310,366 302,373 305,383 296,376 287,383 290,373 282,366 292,366" fill="url(#goldGrad)" opacity="0.85"/>
+  </g>
+</svg>

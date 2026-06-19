@@ -647,7 +647,7 @@ function fmtMin(min: number): string {
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 }
 
-export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d'): MostActivePeriods {
+export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d', interval: number = 30): MostActivePeriods {
   let cutoff = 0;
   const now = Date.now();
   if (range === 'today') { const d = new Date(); d.setHours(0, 0, 0, 0); cutoff = d.getTime(); }
@@ -656,10 +656,14 @@ export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d')
   else if (range === '1y') cutoff = now - 365 * 86400000;
   else cutoff = 0;
 
+  const N = Math.floor(1440 / interval);
+  const labelInterval = interval === 10 ? 120 : interval === 30 ? 180 : 120;
+
   const buckets: ActivityBucket[] = [];
-  for (let i = 0; i < 48; i++) {
-    const minute = i * 30; const h = Math.floor(minute / 60);
-    buckets.push({ minute, label: fmtMin(minute), shortLabel: minute % 180 === 0 ? `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}` : '', sales: 0, revenue: 0, profit: 0 });
+  for (let i = 0; i < N; i++) {
+    const minute = i * interval; const h = Math.floor(minute / 60);
+    const showLabel = minute % labelInterval === 0;
+    buckets.push({ minute, label: fmtMin(minute), shortLabel: showLabel ? `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}` : '', sales: 0, revenue: 0, profit: 0 });
   }
   let totalSales = 0;
   store.sales.forEach(s => {
@@ -667,20 +671,83 @@ export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d')
     if (t < cutoff) return;
     const d = new Date(t);
     const min = d.getHours() * 60 + d.getMinutes();
-    const idx = Math.floor(min / 30);
+    const idx = Math.floor(min / interval);
     const b = buckets[idx]; if (!b) return;
     b.sales += 1; b.revenue += s.total; b.profit += s.profit; totalSales += 1;
   });
   let peakWindow: MostActivePeriods['peakWindow'];
   if (totalSales > 0) {
-    const sorted = [...buckets].map(b => b.sales).sort((a, b) => b - a);
+    const sorted = [...buckets].map(b => b.revenue).sort((a, b) => b - a);
     const cut = sorted[Math.min(8, sorted.length - 1)] || 1;
     let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
     buckets.forEach((b, i) => {
-      if (b.sales >= cut && b.sales > 0) { if (curStart < 0) curStart = i; curLen++; if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; } }
+      if (b.revenue >= cut && b.revenue > 0) { if (curStart < 0) curStart = i; curLen++; if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; } }
       else { curStart = -1; curLen = 0; }
     });
-    if (bestStart >= 0) peakWindow = { startLabel: buckets[bestStart].label, endLabel: fmtMin(Math.min(1440, (bestStart + bestLen) * 30)) };
+    if (bestStart >= 0) peakWindow = { startLabel: buckets[bestStart].label, endLabel: fmtMin(Math.min(1440, (bestStart + bestLen) * interval)) };
   }
   return { buckets, peakWindow, totalSales };
+}
+
+export function generateFlowReport(store: StoreData): string {
+  const h = healthScore(store);
+  const stock = inventoryIntelligence(store);
+  const pending = getPendingSummary(store);
+  const sales = store.sales;
+  
+  const lowStock = stock.filter(f => f.urgency === 'critical' || f.urgency === 'soon');
+  const criticalStock = stock.filter(f => f.urgency === 'critical');
+  const debtTotal = pending.totalOwed;
+  const overdueCount = pending.overdue.length;
+  
+  const ea = expenseAnalysis(store);
+  const totalExpenses = ea.totalLast30;
+  
+  let text = `Hello! Here is my analysis for ${store.storeName}. `;
+  
+  if (h.overall >= 80) {
+    text += `Your store is in excellent shape, with a health score of ${h.overall}/100! 🌟 `;
+  } else if (h.overall >= 55) {
+    text += `Your store is doing decently, scoring ${h.overall}/100. There are a few things we can tune. 📈 `;
+  } else {
+    text += `Your store needs attention right now (health score: ${h.overall}/100). Let's fix the gaps. ⚠️ `;
+  }
+
+  if (criticalStock.length > 0) {
+    const names = criticalStock.slice(0, 3).map(f => f.product.name).join(', ');
+    text += `Critically, you are running low on ${criticalStock.length} key product${criticalStock.length === 1 ? '' : 's'}: ${names}. I recommend restocking these immediately to avoid losing customers. `;
+  } else if (lowStock.length > 0) {
+    const names = lowStock.slice(0, 3).map(f => f.product.name).join(', ');
+    text += `You have ${lowStock.length} product${lowStock.length === 1 ? '' : 's'} running low soon, including: ${names}. Plan a restock run this week. `;
+  } else {
+    text += `Your inventory levels look stable for now! All tracked items have adequate stock. 👍 `;
+  }
+
+  if (debtTotal > 0) {
+    text += `You have ₦${debtTotal.toLocaleString()} in customer debts across ${pending.pendingCount} pending payments. `;
+    if (overdueCount > 0) {
+      text += `${overdueCount} of these are overdue. You should reach out to these customers to collect balances and boost cash flow. 💳 `;
+    } else {
+      text += `Keep an eye on these payment due dates to prevent overdue bills. `;
+    }
+  } else {
+    text += `Great job keeping pending payments clean — you have zero outstanding customer debt! 💸 `;
+  }
+
+  if (totalExpenses > 0) {
+    text += `Your expenses over the last 30 days total ₦${totalExpenses.toLocaleString()}. `;
+    if (ea.trendPct > 15) {
+      text += `This is a ${ea.trendPct.toFixed(0)}% spike compared to last month, driven mostly by ${ea.largestCategory} costs. Try to audit this area. 🧾 `;
+    }
+  } else {
+    text += `No major business expenses recorded in the last 30 days. `;
+  }
+
+  if (criticalStock.length > 0 || overdueCount > 0) {
+    text += `Priority actions: Restock your critical items and call your debtors. You've got this! 💪`;
+  } else {
+    text += `Overall, operations are smooth. Focus on introducing fast-moving products to accelerate sales! 🚀`;
+  }
+
+  return text;
 }

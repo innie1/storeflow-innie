@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { addProduct, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
+import { FlowIcon } from './FlowIcon';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface MarketplaceProps {
@@ -184,6 +185,10 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
   // Supplier catalog details modal
   const [activeSupplierCatalog, setActiveSupplierCatalog] = useState<Supplier | null>(null);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab, isUnlocked]);
+
   // Price comparison selector
   const [comparisonProduct, setComparisonProduct] = useState('Rice (50kg)');
 
@@ -268,12 +273,12 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
     };
     onUpdate(updated);
     saveStore(updated);
-    showToast('🪙 Claimed Daily login reward! +50 StoreFlow Coins.', 'success');
+    showToast('Claimed Daily login reward! +50 FLOW.', 'success');
   };
 
   const handleRedeem = (item: typeof REDEEMABLES[0]) => {
     if (coinsBalance < item.cost) {
-      showToast('Insufficient coins balance!', 'error');
+      showToast('Insufficient FLOW balance!', 'error');
       return;
     }
     const updated = {
@@ -326,7 +331,7 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
     const updated = {
       ...store,
       marketplaceListings: [...(store.marketplaceListings || []), newListing],
-      coins: coinsBalance + 25, // Earn 25 coins for keeping inventory/listings updated
+      coins: coinsBalance + 25, // Earn 25 FLOW for keeping inventory/listings updated
     };
     onUpdate(updated);
     saveStore(updated);
@@ -334,7 +339,7 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
     setExcessProduct('');
     setExcessQty('');
     setExcessPrice('');
-    showToast('🚀 Listing posted! You earned 🪙 25 coins for liquidating excess stock.');
+    showToast('🚀 Listing posted! You earned 25 FLOW for liquidating excess stock.');
   };
 
   const handleRegisterSupplier = (e: React.FormEvent) => {
@@ -358,13 +363,13 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
     const updated = {
       ...store,
       registeredSuppliers: [...(store.registeredSuppliers || []), newSupplier],
-      coins: coinsBalance + 100, // Earn 100 coins for adding a supplier
+      coins: coinsBalance + 100, // Earn 100 FLOW for adding a supplier
     };
     onUpdate(updated);
     saveStore(updated);
 
     setSupSubmitted(true);
-    showToast('📋 Supplier registration submitted! Earned 🪙 100 coins.');
+    showToast('📋 Supplier registration submitted! Earned 100 FLOW.');
   };
 
   const handleAskFlow = (query: string) => {
@@ -468,8 +473,8 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
   return (
     <div className="text-white space-y-6 pb-20 animate-fade-in bg-[#0B0B12] rounded-3xl p-4 md:p-6 border border-[#E8C34E]/10">
       
-      {/* ─── HEADER & COIN SYSTEM ────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-[#E8C34E]/10 to-transparent p-5 rounded-2xl border border-[#E8C34E]/20">
+      {/* ─── HEADER & FLOW SYSTEM ────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-gold/10 to-transparent p-5 rounded-2xl border border-gold/20">
         <div>
           <h2 className="font-display text-2xl font-black tracking-tight text-white flex items-center gap-2">
             🛒 StoreFlow <span className="text-[#E8C34E] text-glow">Marketplace</span>
@@ -484,7 +489,8 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
             onClick={() => setShowRewardsModal(true)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-yellow-500/20 to-[#E8C34E]/20 border border-[#E8C34E] text-sm font-display font-black text-[#E8C34E] hover:scale-105 transition-transform shadow-[0_0_10px_rgba(232,195,78,0.15)]"
           >
-            🪙 <span className="animate-pulse">{coinsBalance}</span> Coins
+            <FlowIcon className="w-4 h-4 inline-block align-text-bottom mr-1" />
+            <span className="animate-pulse">{coinsBalance}</span> FLOW
           </button>
           
           <button
@@ -639,7 +645,7 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
                 const el = document.getElementById('trending-section');
                 el?.scrollIntoView({ behavior: 'smooth' });
               }},
-              { label: 'Rewards', sub: 'Redeem coin prizes', icon: '🎁', onClick: () => setShowRewardsModal(true) },
+              { label: 'Rewards', sub: 'Redeem FLOW rewards', icon: '🎁', onClick: () => setShowRewardsModal(true) },
             ].map(qa => (
               <button
                 key={qa.label}
@@ -967,9 +973,9 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
 
                 <button
                   onClick={handlePostExcessListing}
-                  className="w-full py-2.5 rounded-xl bg-[#E8C34E] text-[#0B0B12] font-display font-black text-xs shadow-md active:scale-95 transition-transform"
+                  className="w-full py-2.5 rounded-xl bg-[#E8C34E] text-[#0B0B12] font-display font-black text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center gap-1"
                 >
-                  Post Listing (+🪙25)
+                  Post Listing (+25 FLOW)
                 </button>
               </div>
 
@@ -1159,9 +1165,9 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
 
                     <button
                       type="submit"
-                      className="w-full py-2.5 rounded-xl bg-[#E8C34E] text-[#0B0B12] font-display font-black text-xs shadow-md"
+                      className="w-full py-2.5 rounded-xl bg-[#E8C34E] text-[#0B0B12] font-display font-black text-xs shadow-md flex items-center justify-center gap-1"
                     >
-                      Submit Supplier Details (+🪙100)
+                      Submit Supplier Details (+100 FLOW)
                     </button>
                   </>
                 )}
@@ -1193,22 +1199,28 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
       )}
 
       {/* ═══════════════════════════════════════════════════════════
-           MODAL: REWARDS COINS REDEMPTION
+           MODAL: REWARDS FLOW REDEMPTION
          ═══════════════════════════════════════════════════════════ */}
       {showRewardsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowRewardsModal(false)}>
-          <div className="w-full max-w-md bg-[#16181D] border border-[#E8C34E]/30 rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md bg-[#16181D] border border-gold/30 rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center">
-              <div>
-                <h3 className="font-display font-black text-lg text-white">🪙 StoreFlow Rewards</h3>
-                <p className="text-xs text-muted-foreground">Exchange your coins for business boosters</p>
+              <div className="flex items-center gap-2">
+                <FlowIcon className="w-6 h-6" />
+                <div>
+                  <h3 className="font-display font-black text-lg text-white">StoreFlow Rewards</h3>
+                  <p className="text-xs text-muted-foreground">Exchange your FLOW for business boosters</p>
+                </div>
               </div>
               <button onClick={() => setShowRewardsModal(false)} className="text-muted-foreground hover:text-white text-2xl">×</button>
             </div>
 
-            <div className="p-3 bg-[#E8C34E]/10 border border-[#E8C34E]/20 rounded-xl text-center">
+            <div className="p-3 bg-gold/10 border border-gold/20 rounded-xl text-center">
               <p className="text-[10px] text-muted-foreground uppercase">Your Balance</p>
-              <p className="font-display text-2xl font-black text-[#E8C34E]">🪙 {coinsBalance} Coins</p>
+              <div className="flex items-center justify-center gap-2 font-display text-2xl font-black text-gold">
+                <FlowIcon className="w-6 h-6" />
+                <span>{coinsBalance} FLOW</span>
+              </div>
             </div>
 
             <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
@@ -1223,13 +1235,14 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
                     <button
                       onClick={() => handleRedeem(item)}
                       disabled={!canAfford}
-                      className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-display font-bold transition-all ${
+                      className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-display font-bold transition-all flex items-center gap-1 ${
                         canAfford
-                          ? 'bg-[#E8C34E] text-[#0B0B12] hover:scale-105'
+                          ? 'bg-gold text-[#0B0B12] hover:scale-105'
                           : 'bg-surface-3 text-muted-foreground border border-border cursor-not-allowed opacity-50'
                       }`}
                     >
-                      🪙 {item.cost}
+                      <FlowIcon className="w-3.5 h-3.5" />
+                      <span>{item.cost}</span>
                     </button>
                   </div>
                 );

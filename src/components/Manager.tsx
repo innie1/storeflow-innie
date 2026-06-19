@@ -5,11 +5,12 @@ import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
-  generateNotifications, ActivityRange, ActivityBucket,
+  generateNotifications, ActivityRange, ActivityBucket, generateFlowReport,
 } from '@/lib/manager-intel';
-import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier } from '@/lib/flow-memory';
+import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward } from '@/lib/flow-memory';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotBadge } from '@/components/Mascot';
+import { FlowIcon } from '@/components/FlowIcon';
 
 interface ManagerProps {
   store: StoreData;
@@ -34,17 +35,27 @@ function Ring({ value, size = 100, stroke = 9, tone = 'primary' }: { value: numb
 }
 
 // ─── Activity graph helpers ───────────────────────────────────────────────────
-function activityColor(sales: number, max: number): string {
-  if (max <= 0 || sales <= 0) return 'hsl(142 60% 25%)';
-  const r = sales / max;
-  if (r >= 0.85) return 'hsl(18 95% 55%)';
-  if (r >= 0.65) return 'hsl(38 95% 55%)';
-  if (r >= 0.4) return 'hsl(50 95% 55%)';
-  if (r >= 0.2) return 'hsl(115 70% 50%)';
-  return 'hsl(140 65% 38%)';
+function activityColor(revenue: number, maxRevenue: number): string {
+  if (revenue <= 0) return 'hsl(142 60% 25%)'; // Neutral/empty bar
+
+  let greenThreshold = 10000;
+  let yellowThreshold = 30000;
+
+  if (maxRevenue > 30000) {
+    greenThreshold = maxRevenue * 0.33;
+    yellowThreshold = maxRevenue * 0.7;
+  }
+
+  if (revenue <= greenThreshold) {
+    return 'hsl(140 65% 38%)'; // Green bar
+  } else if (revenue <= yellowThreshold) {
+    return 'hsl(50 95% 55%)'; // Yellowish bar
+  } else {
+    return 'hsl(18 95% 55%)'; // Gold bar
+  }
 }
-function fmtPlus30(min: number): string {
-  const end = Math.min(1440, min + 30); const h = Math.floor(end / 60); const m = end % 60;
+function fmtPlusInterval(min: number, interval = 30): string {
+  const end = Math.min(1440, min + interval); const h = Math.floor(end / 60); const m = end % 60;
   return `${h % 12 === 0 ? 12 : h % 12}:${m.toString().padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
@@ -174,18 +185,35 @@ function MoneyOwedCard({ store }: { store: StoreData }) {
 function MostActivePeriodsCard({ store }: { store: StoreData }) {
   const [range, setRange] = useState<ActivityRange>('today');
   const [selected, setSelected] = useState<ActivityBucket | null>(null);
-  const data = useMemo(() => mostActivePeriods(store, range), [store, range]);
-  const max = Math.max(1, ...data.buckets.map(b => b.sales));
+  
+  const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
+  const interval = settings.graphInterval || 30;
+
+  const data = useMemo(() => mostActivePeriods(store, range, interval), [store, range, interval]);
+  const maxRevenue = Math.max(1, ...data.buckets.map(b => b.revenue));
+
+  const formatYAxisValue = (pct: number) => {
+    const val = (maxRevenue * pct) / 100;
+    if (val === 0) return '₦0';
+    if (val >= 1000000) return `₦${(val / 1000000).toFixed(1)}M`;
+    if (val >= 1000) return `₦${(val / 1000).toFixed(0)}k`;
+    return `₦${val}`;
+  };
+
   const rangeLabels: { id: ActivityRange; label: string }[] = [
     { id: 'today', label: 'Today' }, { id: '7d', label: '7D' },
     { id: '30d', label: '30D' }, { id: '1y', label: '1Y' }, { id: 'lifetime', label: 'All' },
   ];
+
+  const barGap = interval === 10 ? 'gap-[1px]' : 'gap-[2px]';
+  const barMinWidth = interval === 10 ? '1px' : '3px';
+
   return (
     <div className="p-4 rounded-2xl bg-card shadow-card">
       <div className="flex items-start justify-between gap-3 mb-1">
         <div>
           <h3 className="font-display font-bold text-sm">Most Active Periods</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Sales by 30-min slots</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Revenue by {interval}-min slots</p>
         </div>
         <div className="flex gap-1 flex-shrink-0">
           {rangeLabels.map(r => (
@@ -200,41 +228,47 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
         <>
           <div className="mt-3 relative">
             <div className="flex">
-              <div className="w-7 flex flex-col justify-between text-[9px] text-muted-foreground pr-1 h-32 py-0.5">
-                {[100, 75, 50, 25, 0].map(v => <span key={v} className="text-right">{v}</span>)}
+              <div className="w-10 flex flex-col justify-between text-[8px] text-muted-foreground pr-1 h-32 py-0.5">
+                {[100, 75, 50, 25, 0].map(v => <span key={v} className="text-right truncate">{formatYAxisValue(v)}</span>)}
               </div>
               <div className="flex-1 relative">
                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
                   {[0, 1, 2, 3, 4].map(i => <div key={i} className="border-t border-border/40" />)}
                 </div>
-                <div className="flex items-end gap-[2px] h-32 relative">
+                <div className={`flex items-end ${barGap} h-32 relative`}>
                   {data.buckets.map((b, i) => {
-                    const h = Math.max(2, (b.sales / max) * 100);
-                    const isPeak = b.sales === max && max > 0;
+                    const h = Math.max(2, (b.revenue / maxRevenue) * 100);
+                    const isPeak = b.revenue === maxRevenue && maxRevenue > 0;
                     return (
                       <button key={b.minute} onClick={() => setSelected(b)}
                         className={`flex-1 rounded-t-sm transition-all hover:opacity-80 bar-grow-wave-item ${isPeak ? 'bar-breathe-anim' : ''}`}
                         style={{ 
                           height: `${h}%`, 
-                          background: activityColor(b.sales, max), 
-                          minWidth: '4px',
+                          background: activityColor(b.revenue, maxRevenue), 
+                          minWidth: barMinWidth,
                           animationDelay: `${i * 12}ms`,
                           transform: 'scaleY(0)'
                         }}
-                        aria-label={`${b.label}: ${b.sales} sales`} />
+                        aria-label={`${b.label}: ₦${b.revenue.toLocaleString()} revenue (${b.sales} sales)`} />
                     );
                   })}
                 </div>
               </div>
             </div>
-            <div className="flex pl-7 mt-1 text-[9px] text-muted-foreground">
-              {data.buckets.map((b, i) => <span key={i} className="flex-1 text-left">{b.shortLabel}</span>)}
+            <div className="relative h-4 mt-1 text-[9px] text-muted-foreground">
+              <div className="absolute left-10 right-0 top-0 bottom-0">
+                {data.buckets.map((b, i) => b.shortLabel ? (
+                  <span key={i} className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${(i / data.buckets.length) * 100}%` }}>
+                    {b.shortLabel}
+                  </span>
+                ) : null)}
+              </div>
             </div>
           </div>
           <div className="flex justify-center gap-4 mt-3 text-[10px]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'hsl(140 65% 38%)' }} />Low</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'hsl(50 95% 55%)' }} />Medium</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'hsl(18 95% 55%)' }} />High</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'hsl(140 65% 38%)' }} />Low (Green)</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'hsl(50 95% 55%)' }} />Mid (Yellow)</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: 'hsl(18 95% 55%)' }} />High (Gold)</span>
           </div>
           {data.peakWindow && (
             <div className="mt-3 p-3 rounded-xl bg-primary/5 border border-primary/30 flex items-center gap-2">
@@ -250,7 +284,7 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
       {selected && (
         <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setSelected(null)}>
           <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-4 animate-slide-up space-y-2" onClick={e => e.stopPropagation()}>
-            <h4 className="font-display font-bold text-base">{selected.label} – {fmtPlus30(selected.minute)}</h4>
+            <h4 className="font-display font-bold text-base">{selected.label} – {fmtPlusInterval(selected.minute, interval)}</h4>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Sales</p><p className="font-display font-bold">{selected.sales}</p></div>
               <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Revenue</p><p className="font-display font-bold text-primary text-xs">₦{Math.round(selected.revenue).toLocaleString()}</p></div>
@@ -329,31 +363,178 @@ function SupplierPanel() {
 }
 
 // ─── Coins Card ───────────────────────────────────────────────────────────────
-function CoinsCard({ store }: { store: StoreData }) {
-  const mem = getFlowMemory();
+// ─── Flow Wallet Card ─────────────────────────────────────────────────────────
+function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: StoreData) => void }) {
+  const [mem, setMem] = useState(() => getFlowMemory());
+  const [refCode, setRefCode] = useState('');
+  const [claiming, setClaiming] = useState(false);
+  const [showTx, setShowTx] = useState(false);
+
   const todaySales = store.sales.filter(s => s.date.startsWith(new Date().toISOString().split('T')[0])).length;
-  const { streak } = mem;
+  const { streak, flowBalance, lifetimeFlowEarned, flowEarnedToday, flowTransactions = [], claimedReferralCode } = mem;
+
+  const handleClaimReferral = () => {
+    const code = refCode.trim();
+    if (!code) return;
+    setClaiming(true);
+    setTimeout(() => {
+      const res = claimReferral(code);
+      if (res.success) {
+        showToast(res.message, 'success');
+        const updatedMem = getFlowMemory();
+        setMem(updatedMem);
+        // Force update store coins for compatibility
+        const updatedStore = {
+          ...store,
+          coins: updatedMem.coins,
+        };
+        saveStore(updatedStore);
+        onUpdate(updatedStore);
+        setRefCode('');
+      } else {
+        showToast(res.message, 'error');
+      }
+      setClaiming(false);
+    }, 800);
+  };
+
+  const getTxColor = (type: string) => {
+    switch (type) {
+      case 'referral': return 'text-purple-400';
+      case 'streak': return 'text-amber-400';
+      case 'daily': return 'text-emerald-400';
+      case 'game': return 'text-sky-400';
+      default: return 'text-gold';
+    }
+  };
+
   return (
-    <div className="p-4 rounded-2xl bg-gradient-to-br from-gold/20 via-gold-dim/10 to-transparent border border-gold/30 shadow-card">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-display font-bold text-sm">🪙 Flow Coins</h3>
-        <span className="text-[10px] text-muted-foreground">Earned by growing your store</span>
+    <div className="p-5 rounded-2xl bg-gradient-to-br from-gold/15 via-gold-dim/5 to-surface-1 border border-gold/25 shadow-card space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FlowIcon className="w-6 h-6 animate-pulse" />
+          <h3 className="font-display font-bold text-base text-white tracking-wide">FLOW Wallet</h3>
+        </div>
+        <span className="text-[10px] bg-gold/10 border border-gold/30 text-gold px-2 py-0.5 rounded-full font-display font-semibold uppercase tracking-wider">
+          1 FLOW = ₦20
+        </span>
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <div className="p-2.5 rounded-lg bg-gold/10 border border-gold/20 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase">Total Coins</p>
-          <p className="font-display font-bold text-gold text-lg">{mem.coins}</p>
+
+      {/* Main Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Balance Card */}
+        <div className="p-3.5 rounded-xl bg-gold/5 border border-gold/15 relative overflow-hidden flex flex-col justify-between min-h-[90px]">
+          <div className="absolute -right-3 -top-3 opacity-10">
+            <FlowIcon className="w-16 h-16" />
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Available FLOW</p>
+            <p className="font-display font-extrabold text-2xl text-gold mt-1">
+              {flowBalance.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            </p>
+          </div>
+          <p className="font-display font-bold text-xs text-emerald-400 mt-1">
+            ≈ ₦{(flowBalance * 20).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
         </div>
-        <div className="p-2.5 rounded-lg bg-surface-2 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase">🔥 Streak</p>
-          <p className="font-display font-bold text-sm">{streak} day{streak !== 1 ? 's' : ''}</p>
-        </div>
-        <div className="p-2.5 rounded-lg bg-surface-2 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase">Today</p>
-          <p className="font-display font-bold text-sm">{todaySales} sale{todaySales !== 1 ? 's' : ''}</p>
+
+        {/* Earnings Card */}
+        <div className="p-3.5 rounded-xl bg-surface-2 border border-border flex flex-col justify-between min-h-[90px]">
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Today's Earned</p>
+            <p className="font-display font-bold text-base text-white mt-1">
+              +{flowEarnedToday.toLocaleString(undefined, { minimumFractionDigits: 1 })} FLOW
+            </p>
+          </div>
+          <div className="text-[10px] text-muted-foreground pt-1 border-t border-border mt-2 flex justify-between">
+            <span>Lifetime:</span>
+            <span className="font-bold text-white">{lifetimeFlowEarned.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+          </div>
         </div>
       </div>
-      <p className="text-[10px] text-muted-foreground mt-2">Earn coins by recording sales, expenses, maintaining streak &amp; achieving goals.</p>
+
+      {/* Streak & Activity Progress */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="p-2.5 rounded-xl bg-surface-2 border border-border/60 text-center flex items-center justify-between px-3">
+          <div className="text-left">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-medium">🔥 Streak</p>
+            <p className="font-display font-bold text-xs text-white mt-0.5">{streak} day{streak !== 1 ? 's' : ''}</p>
+          </div>
+          <div className="text-lg">🔥</div>
+        </div>
+        <div className="p-2.5 rounded-xl bg-surface-2 border border-border/60 text-center flex items-center justify-between px-3">
+          <div className="text-left">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-medium">Today's Sales</p>
+            <p className="font-display font-bold text-xs text-white mt-0.5">{todaySales} sale{todaySales !== 1 ? 's' : ''}</p>
+          </div>
+          <div className="text-lg">📈</div>
+        </div>
+      </div>
+
+      {/* Referral Welcomer Code Section */}
+      <div className="p-3.5 rounded-xl bg-surface-2/40 border border-border/60 space-y-2">
+        <h4 className="font-display font-bold text-xs text-white flex items-center gap-1.5">
+          🎁 Welcome Bonus
+        </h4>
+        {claimedReferralCode ? (
+          <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400">
+            <span>Claimed: <strong>{claimedReferralCode}</strong></span>
+            <span className="font-bold">+5 FLOW Bonus</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-[10px] text-muted-foreground">Enter a referral code to instantly claim 5 FLOW welcome bonus (₦100).</p>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                placeholder="e.g. FLOW-WELCOME" 
+                value={refCode}
+                onChange={e => setRefCode(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded-lg bg-surface-3 border border-border text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-gold"
+              />
+              <button 
+                onClick={handleClaimReferral}
+                disabled={claiming || !refCode.trim()}
+                className="px-3 py-1.5 bg-gold text-surface-1 font-display font-bold text-xs rounded-lg hover:brightness-110 active:scale-95 transition disabled:opacity-50"
+              >
+                {claiming ? 'Claiming...' : 'Claim'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Collapsible Recent Transactions */}
+      {flowTransactions.length > 0 && (
+        <div className="space-y-1.5">
+          <button 
+            onClick={() => setShowTx(!showTx)} 
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-surface-2 border border-border text-xs text-muted-foreground font-display font-semibold hover:text-white transition"
+          >
+            <span>📜 Recent Transactions ({flowTransactions.length})</span>
+            <span>{showTx ? '▲' : '▼'}</span>
+          </button>
+          
+          {showTx && (
+            <div className="p-2 rounded-xl bg-surface-2 border border-border/50 max-h-[150px] overflow-y-auto space-y-1.5 scrollbar-thin">
+              {flowTransactions.map((tx: any) => (
+                <div key={tx.id} className="flex justify-between items-start p-2 rounded-lg bg-surface-3 text-[11px] border border-border/30">
+                  <div className="space-y-0.5 max-w-[70%]">
+                    <p className="text-white font-medium truncate">{tx.description}</p>
+                    <p className="text-[9px] text-muted-foreground">
+                      {new Date(tx.date).toLocaleDateString()} · <span className={`capitalize font-semibold ${getTxColor(tx.type)}`}>{tx.type}</span>
+                    </p>
+                  </div>
+                  <span className="font-display font-bold text-gold flex-shrink-0">
+                    +{tx.amount.toLocaleString(undefined, { minimumFractionDigits: 1 })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -506,16 +687,24 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
     }
   }, [tab, store]);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [tab]);
+
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
 
-  // Record streak + coins on mount
+  // Record streak + FLOW on mount
   useEffect(() => {
     if (!settings.enabled) return;
     const { isNew } = recordStreak();
     if (isNew) {
-      addCoins(10); // streak bonus
-      if (store.sales.some(s => s.date.startsWith(new Date().toISOString().split('T')[0]))) {
-        addCoins(5); // sold today bonus
+      try {
+        addFlowReward(1.0, 'streak', 'Daily streak bonus'); 
+        if (store.sales.some(s => s.date.startsWith(new Date().toISOString().split('T')[0]))) {
+          addFlowReward(0.5, 'daily', 'First sale of the day bonus');
+        }
+      } catch (e) {
+        // Cooldown or anti-cheat triggered
       }
     }
     // Auto-generate and save notifications
@@ -547,7 +736,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
           <h2 className="font-display font-bold text-xl text-foreground">Flow is sleeping</h2>
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">Wake Flow up to unlock insights, forecasts, recommendations and savings plans tailored to your store.</p>
           <ul className="text-left text-sm text-muted-foreground max-w-xs mx-auto space-y-1.5">
-            {['Business Insights', 'Revenue Forecasts', 'Expense Analysis', 'Product Suggestions', 'Savings Plans', 'Coin Rewards'].map(x => (
+            {['Business Insights', 'Revenue Forecasts', 'Expense Analysis', 'Product Suggestions', 'Savings Plans', 'FLOW Rewards'].map(x => (
               <li key={x} className="flex items-center gap-2"><span className="text-success">✓</span>{x}</li>
             ))}
           </ul>
@@ -588,13 +777,26 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
     saveStore(updated); onUpdate(updated);
     setRequestText('');
     showToast('Request recorded');
-    addCoins(2);
+    try {
+      addFlowReward(0.2, 'event', 'Recorded customer request');
+    } catch {}
   };
+
+  const [adviceReport, setAdviceReport] = useState('');
+  const [adviceReportVisible, setAdviceReportVisible] = useState(false);
 
   const handleGetAdvice = () => {
     setAdviceLoading(true);
-    addCoins(1);
-    setTimeout(() => setAdviceLoading(false), 600);
+    setAdviceReport('');
+    setAdviceReportVisible(false);
+    try {
+      addFlowReward(0.5, 'event', 'Requested business advice report');
+    } catch {}
+    setTimeout(() => {
+      setAdviceLoading(false);
+      setAdviceReport(generateFlowReport(store));
+      setAdviceReportVisible(true);
+    }, 1500);
   };
 
   const tabs: { id: ManagerTab; label: string; badge?: number }[] = [
@@ -785,7 +987,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
             </div>
           )}
 
-          <CoinsCard store={store} />
+          <FlowWalletCard store={store} onUpdate={onUpdate} />
         </div>
       )}
 
@@ -987,6 +1189,18 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
               {adviceLoading ? '⏳ Analysing...' : '✨ Get Fresh Advice'}
             </button>
           </div>
+
+          {/* Advice Report Card (Typewriter Analysis) */}
+          {adviceReportVisible && adviceReport && (
+            <div className="p-4 rounded-2xl bg-card border border-primary/25 shadow-card space-y-2 animate-fade-in relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-[#9b5de5] to-success" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs">🤖</span>
+                <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">Flow's Analysis Breakdown</h4>
+              </div>
+              <Typewriter text={adviceReport} speed={12} />
+            </div>
+          )}
 
           {/* Advice cards */}
           {advice.length > 0 ? (

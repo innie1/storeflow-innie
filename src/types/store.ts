@@ -231,6 +231,9 @@ export interface ManagerSettings {
   // Security
   biometricLock: boolean;
   pinLock: boolean;
+  // Graph settings
+  graphInterval?: 10 | 30 | 60;
+  autoBackupsEnabled?: boolean;
 }
 
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
@@ -270,6 +273,8 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   compactMode: false,
   biometricLock: false,
   pinLock: false,
+  graphInterval: 30,
+  autoBackupsEnabled: true,
 };
 
 export interface StoreData {

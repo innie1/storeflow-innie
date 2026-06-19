@@ -85,6 +85,10 @@ export default function Index() {
     }
   }, []);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [tab]);
+
   const handleStoreLoaded = useCallback((s: StoreData) => {
     setStore(s);
     saveSession(s.accessCode);
