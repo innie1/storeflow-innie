@@ -488,6 +488,23 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const [flowXP, setFlowXP] = useState(() => Number(localStorage.getItem('storeflow_flow_xp') || '0'));
   const [xpAnimation, setXpAnimation] = useState(false);
   const [greeting] = useState(() => beeGreeting(store));
+  const [seenAdviceIds, setSeenAdviceIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('storeflow_seen_advice_ids');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    if (tab === 'advice') {
+      const currentIds = generateAdvice(store).map(a => a.id);
+      const updatedSet = new Set(currentIds);
+      setSeenAdviceIds(updatedSet);
+      localStorage.setItem('storeflow_seen_advice_ids', JSON.stringify(Array.from(updatedSet)));
+    }
+  }, [tab, store]);
 
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
 
@@ -584,7 +601,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
     { id: 'overview', label: 'Overview' },
     { id: 'predictions', label: 'Forecasts' },
     { id: 'analysis', label: 'Analysis' },
-    { id: 'advice', label: 'Advice', badge: generateAdvice(store).filter(a => a.priority === 'critical' || a.priority === 'high').length || undefined },
+    { id: 'advice', label: 'Advice', badge: generateAdvice(store).filter(a => (a.priority === 'critical' || a.priority === 'high') && !seenAdviceIds.has(a.id)).length || undefined },
   ];
 
   const advice = generateAdvice(store);
