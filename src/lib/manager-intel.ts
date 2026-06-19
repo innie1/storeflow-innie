@@ -1,32 +1,26 @@
-import { StoreData, Product } from '@/types/store';
+import { StoreData, Product, FlowNotification } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
+import { getPendingSummary } from '@/lib/store-data';
 
-function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
-function daysAgo(n: number) { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - n); return d; }
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function daysAgo(n: number) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - n); return d; }
 function daysBetween(a: Date, b: Date) {
   return Math.max(1, Math.round((startOfDay(a).getTime() - startOfDay(b).getTime()) / 86400000) + 1);
 }
 
+// ─── Daily series ─────────────────────────────────────────────────────────────
 export interface DailyPoint {
-  ts: number;
-  label: string;
-  revenue: number;
-  profit: number;
-  expenses: number;
-  salesCount: number;
+  ts: number; label: string;
+  revenue: number; profit: number; expenses: number; salesCount: number;
 }
 
 export function dailySeries(store: StoreData, days: number): DailyPoint[] {
   const today = startOfDay(new Date());
   const buckets: DailyPoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    buckets.push({
-      ts: d.getTime(),
-      label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-      revenue: 0, profit: 0, expenses: 0, salesCount: 0,
-    });
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    buckets.push({ ts: d.getTime(), label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), revenue: 0, profit: 0, expenses: 0, salesCount: 0 });
   }
   const minTs = buckets[0].ts;
   store.sales.forEach(s => {
@@ -50,90 +44,128 @@ export function lifetimeSeries(store: StoreData): DailyPoint[] {
   return dailySeries(store, Math.min(days, 365));
 }
 
-export interface Forecast {
-  expectedRevenue: number;
-  expectedProfit: number;
-  expectedExpenses: number;
-  confidence: 'High' | 'Medium' | 'Low';
-}
-
+// ─── Linear Regression ────────────────────────────────────────────────────────
 function linReg(values: number[]) {
   const n = values.length;
   if (n < 2) return { slope: 0, intercept: values[0] || 0, r2: 0 };
   const xs = values.map((_, i) => i);
-  const meanX = xs.reduce((a,b)=>a+b,0)/n;
-  const meanY = values.reduce((a,b)=>a+b,0)/n;
-  let num=0, den=0, totSS=0;
-  xs.forEach((x,i) => { num += (x-meanX)*(values[i]-meanY); den += (x-meanX)**2; });
-  const slope = den ? num/den : 0;
-  const intercept = meanY - slope*meanX;
-  values.forEach(y => { totSS += (y-meanY)**2; });
+  const meanX = xs.reduce((a, b) => a + b, 0) / n;
+  const meanY = values.reduce((a, b) => a + b, 0) / n;
+  let num = 0, den = 0, totSS = 0;
+  xs.forEach((x, i) => { num += (x - meanX) * (values[i] - meanY); den += (x - meanX) ** 2; });
+  const slope = den ? num / den : 0;
+  const intercept = meanY - slope * meanX;
+  values.forEach(y => { totSS += (y - meanY) ** 2; });
   let resSS = 0;
-  values.forEach((y,i) => { const yh = slope*i + intercept; resSS += (y-yh)**2; });
-  const r2 = totSS ? Math.max(0, 1 - resSS/totSS) : 0;
+  values.forEach((y, i) => { const yh = slope * i + intercept; resSS += (y - yh) ** 2; });
+  const r2 = totSS ? Math.max(0, 1 - resSS / totSS) : 0;
   return { slope, intercept, r2 };
 }
 
-export function forecast(store: StoreData, horizonDays: number): Forecast {
+// ─── Forecast ─────────────────────────────────────────────────────────────────
+export interface Forecast {
+  horizonDays: number;
+  label: string;
+  expectedRevenue: number;
+  expectedProfit: number;
+  expectedExpenses: number;
+  confidencePct: number;
+  confidence: 'High' | 'Medium' | 'Low';
+}
+
+export function forecastHorizon(store: StoreData, horizonDays: number): Forecast {
   const series = dailySeries(store, 30);
   const rev = linReg(series.map(s => s.revenue));
   const prof = linReg(series.map(s => s.profit));
   const exp = linReg(series.map(s => s.expenses));
   let expectedRevenue = 0, expectedProfit = 0, expectedExpenses = 0;
   for (let i = 30; i < 30 + horizonDays; i++) {
-    expectedRevenue += Math.max(0, rev.slope*i + rev.intercept);
-    expectedProfit += Math.max(0, prof.slope*i + prof.intercept);
-    expectedExpenses += Math.max(0, exp.slope*i + exp.intercept);
+    expectedRevenue += Math.max(0, rev.slope * i + rev.intercept);
+    expectedProfit += Math.max(0, prof.slope * i + prof.intercept);
+    expectedExpenses += Math.max(0, exp.slope * i + exp.intercept);
   }
   const avgR2 = (rev.r2 + prof.r2 + exp.r2) / 3;
   const totalSales = store.sales.length;
   let confidence: Forecast['confidence'] = 'Low';
-  if (totalSales >= 30 && avgR2 > 0.5) confidence = 'High';
-  else if (totalSales >= 10 && avgR2 > 0.25) confidence = 'Medium';
-  return { expectedRevenue, expectedProfit, expectedExpenses, confidence };
+  let confidencePct = 55;
+  if (totalSales >= 30 && avgR2 > 0.5) { confidence = 'High'; confidencePct = 80 + Math.round(avgR2 * 15); }
+  else if (totalSales >= 10 && avgR2 > 0.25) { confidence = 'Medium'; confidencePct = 65 + Math.round(avgR2 * 20); }
+  const horizonLabel: Record<number, string> = { 1: 'Tomorrow', 7: '7 Days', 14: '14 Days', 30: '1 Month', 90: '3 Months', 180: '6 Months', 365: '1 Year' };
+  return { horizonDays, label: horizonLabel[horizonDays] ?? `${horizonDays}d`, expectedRevenue, expectedProfit, expectedExpenses, confidencePct: Math.min(95, confidencePct), confidence };
 }
 
+/** Legacy compat */
+export function forecast(store: StoreData, horizonDays: number) { return forecastHorizon(store, horizonDays); }
+
+// ─── Store Health (6-factor per spec) ─────────────────────────────────────────
 export interface HealthScore {
   overall: number;
+  revenue: number;     // 25%
+  profit: number;      // 25%
+  inventory: number;   // 15%
+  expense: number;     // 15%
+  savings: number;     // 10%
+  debt: number;        // 10%
+  // legacy compat
   sales: number;
-  inventory: number;
-  expense: number;
-  profit: number;
   label: string;
+  details: Record<string, string>;
 }
 
 export function healthScore(store: StoreData): HealthScore {
   const last7 = dailySeries(store, 7);
   const prev7 = dailySeries(store, 14).slice(0, 7);
-  const rev7 = last7.reduce((s,d)=>s+d.revenue,0);
-  const revPrev = prev7.reduce((s,d)=>s+d.revenue,0);
-  const profit7 = last7.reduce((s,d)=>s+d.profit,0);
-  const exp7 = last7.reduce((s,d)=>s+d.expenses,0);
+  const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
+  const revPrev = prev7.reduce((s, d) => s + d.revenue, 0);
+  const profit7 = last7.reduce((s, d) => s + d.profit, 0);
+  const exp7 = last7.reduce((s, d) => s + d.expenses, 0);
 
-  let salesScore = 50;
+  // 25%: Revenue Performance
+  let revenueScore = 50;
   if (revPrev > 0) {
     const growth = (rev7 - revPrev) / revPrev;
-    salesScore = Math.max(0, Math.min(100, 60 + growth * 100));
-  } else if (rev7 > 0) salesScore = 70;
+    revenueScore = Math.max(0, Math.min(100, 60 + growth * 150));
+  } else if (rev7 > 0) revenueScore = 65;
+  const revDetail = revPrev > 0
+    ? `Revenue ${rev7 >= revPrev ? '↑' : '↓'} ${Math.abs(((rev7 - revPrev) / revPrev) * 100).toFixed(1)}% vs last week`
+    : rev7 > 0 ? `₦${rev7.toLocaleString()} this week` : 'No sales this week';
 
+  // 25%: Profit Performance
+  let profitScore = 50;
+  if (rev7 > 0) { const margin = profit7 / rev7; profitScore = Math.max(0, Math.min(100, margin * 200)); }
+  const profDetail = rev7 > 0 ? `${((profit7 / rev7) * 100).toFixed(1)}% margin` : 'No sales data';
+
+  // 15%: Inventory Health
   const threshold = getLowStockThreshold();
   const total = store.products.length || 1;
   const healthy = store.products.filter(p => p.quantity > threshold).length;
   const inventoryScore = Math.round((healthy / total) * 100);
+  const invDetail = `${healthy}/${total} products well-stocked`;
 
+  // 15%: Expense Control
   let expenseScore = 80;
-  if (rev7 > 0) {
-    const ratio = exp7 / rev7;
-    expenseScore = Math.max(0, Math.min(100, 100 - ratio * 60));
-  }
+  if (rev7 > 0) { const ratio = exp7 / rev7; expenseScore = Math.max(0, Math.min(100, 100 - ratio * 60)); }
+  const expDetail = rev7 > 0 ? `Expenses = ${((exp7 / rev7) * 100).toFixed(0)}% of revenue` : exp7 > 0 ? `₦${exp7.toLocaleString()} expenses this week` : 'No expenses recorded';
 
-  let profitScore = 50;
-  if (rev7 > 0) {
-    const margin = profit7 / rev7;
-    profitScore = Math.max(0, Math.min(100, margin * 200));
-  }
+  // 10%: Savings Progress
+  let savingsScore = 50;
+  const sg = store.savingsGoal;
+  if (sg && sg.amount > 0) { savingsScore = Math.min(100, Math.round((sg.saved / sg.amount) * 100)); }
+  const savDetail = sg ? `₦${sg.saved.toLocaleString()} / ₦${sg.amount.toLocaleString()} saved` : 'No savings goal set';
 
-  const overall = Math.round(salesScore*0.3 + inventoryScore*0.25 + expenseScore*0.2 + profitScore*0.25);
+  // 10%: Customer Debt Management
+  let debtScore = 80;
+  const pendSum = getPendingSummary(store);
+  if (pendSum.totalOwed > 0 && rev7 > 0) {
+    const debtRatio = pendSum.totalOwed / (rev7 * 4);
+    debtScore = Math.max(0, Math.min(100, 100 - debtRatio * 80));
+  } else if (pendSum.totalOwed === 0) debtScore = 100;
+  const debtDetail = pendSum.totalOwed > 0 ? `₦${pendSum.totalOwed.toLocaleString()} outstanding · ${pendSum.overdue.length} overdue` : 'No outstanding debts';
+
+  const overall = Math.round(
+    revenueScore * 0.25 + profitScore * 0.25 + inventoryScore * 0.15 +
+    expenseScore * 0.15 + savingsScore * 0.10 + debtScore * 0.10
+  );
   let label = 'Needs Attention';
   if (overall >= 80) label = 'Great Performance';
   else if (overall >= 60) label = 'Healthy';
@@ -141,14 +173,361 @@ export function healthScore(store: StoreData): HealthScore {
 
   return {
     overall,
-    sales: Math.round(salesScore),
+    revenue: Math.round(revenueScore),
+    profit: Math.round(profitScore),
     inventory: inventoryScore,
     expense: Math.round(expenseScore),
-    profit: Math.round(profitScore),
+    savings: savingsScore,
+    debt: debtScore,
+    sales: Math.round(revenueScore), // legacy compat
     label,
+    details: { revenue: revDetail, profit: profDetail, inventory: invDetail, expense: expDetail, savings: savDetail, debt: debtDetail },
   };
 }
 
+// ─── Sales Analysis ───────────────────────────────────────────────────────────
+export interface SalesAnalysis {
+  fastMovers: { name: string; qty: number; revenue: number }[];
+  slowMovers: { name: string; qty: number; daysInStock: number }[];
+  neverSold: { name: string; daysInStock: number }[];
+  coPurchases: { a: string; b: string; count: number }[];
+  topDay: string;
+  topDayRevenue: number;
+}
+
+export function analyzeSales(store: StoreData): SalesAnalysis {
+  const last30 = store.sales.filter(s => new Date(s.date) >= daysAgo(30));
+
+  // Fast movers
+  const tally = new Map<string, { name: string; qty: number; revenue: number }>();
+  last30.forEach(s => {
+    const e = tally.get(s.productId) || { name: s.productName, qty: 0, revenue: 0 };
+    e.qty += s.quantity; e.revenue += s.total;
+    tally.set(s.productId, e);
+  });
+  const fastMovers = [...tally.values()].sort((a, b) => b.qty - a.qty).slice(0, 5);
+
+  // Slow movers / never sold
+  const soldIds = new Set(last30.map(s => s.productId));
+  const slowMovers: SalesAnalysis['slowMovers'] = [];
+  const neverSold: SalesAnalysis['neverSold'] = [];
+  store.products.forEach(p => {
+    const daysInStock = p.addedAt ? Math.floor((Date.now() - new Date(p.addedAt).getTime()) / 86400000) : 0;
+    if (!soldIds.has(p.id)) {
+      if (daysInStock > 7) neverSold.push({ name: p.name, daysInStock });
+    } else {
+      const qty = tally.get(p.id)?.qty || 0;
+      if (qty < 3) slowMovers.push({ name: p.name, qty, daysInStock });
+    }
+  });
+
+  // Co-purchases: find product pairs in same-day sales
+  const byDay = new Map<string, string[]>();
+  last30.forEach(s => {
+    const day = s.date.split('T')[0];
+    const arr = byDay.get(day) || [];
+    arr.push(s.productName);
+    byDay.set(day, arr);
+  });
+  const pairCount = new Map<string, number>();
+  byDay.forEach(names => {
+    for (let i = 0; i < names.length; i++)
+      for (let j = i + 1; j < names.length; j++) {
+        const key = [names[i], names[j]].sort().join('|||');
+        pairCount.set(key, (pairCount.get(key) || 0) + 1);
+      }
+  });
+  const coPurchases = [...pairCount.entries()]
+    .filter(([, c]) => c >= 2)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([key, count]) => { const [a, b] = key.split('|||'); return { a, b, count }; });
+
+  // Top day (by revenue in last 30d)
+  const dayTotals = new Map<string, number>();
+  last30.forEach(s => {
+    const day = s.date.split('T')[0];
+    dayTotals.set(day, (dayTotals.get(day) || 0) + s.total);
+  });
+  let topDay = '', topDayRevenue = 0;
+  dayTotals.forEach((rev, day) => { if (rev > topDayRevenue) { topDayRevenue = rev; topDay = day; } });
+
+  return { fastMovers, slowMovers: slowMovers.slice(0, 5), neverSold: neverSold.slice(0, 5), coPurchases, topDay, topDayRevenue };
+}
+
+// ─── Inventory Intelligence ───────────────────────────────────────────────────
+export interface StockForecast {
+  product: Product;
+  perDay: number;
+  daysLeft: number;
+  restockQty: number;
+  urgency: 'critical' | 'soon' | 'ok';
+}
+
+export function inventoryIntelligence(store: StoreData): StockForecast[] {
+  return store.products
+    .filter(p => p.quantity > 0)
+    .map(p => {
+      const sold14 = store.sales
+        .filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(13))
+        .reduce((sum, s) => sum + s.quantity, 0);
+      const perDay = sold14 / 14;
+      const daysLeft = perDay > 0 ? Math.floor(p.quantity / perDay) : Infinity;
+      // Recommend 14-day supply + 20% buffer
+      const restockQty = perDay > 0 ? Math.ceil(perDay * 14 * 1.2) : 0;
+      const urgency: StockForecast['urgency'] = daysLeft <= 3 ? 'critical' : daysLeft <= 7 ? 'soon' : 'ok';
+      return { product: p, perDay, daysLeft, restockQty, urgency };
+    })
+    .filter(f => Number.isFinite(f.daysLeft) && f.daysLeft <= 14)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+// ─── Expense Analysis ─────────────────────────────────────────────────────────
+export interface ExpenseAnalysis {
+  byCat: { category: string; total: number; count: number; pct: number; trend: 'up' | 'down' | 'flat' }[];
+  totalLast30: number;
+  totalPrev30: number;
+  trendPct: number;
+  largestCategory: string;
+}
+
+export function expenseAnalysis(store: StoreData): ExpenseAnalysis {
+  const now = Date.now();
+  const last30 = (store.expenses || []).filter(e => now - new Date(e.date).getTime() < 30 * 86400000);
+  const prev30 = (store.expenses || []).filter(e => {
+    const t = now - new Date(e.date).getTime();
+    return t >= 30 * 86400000 && t < 60 * 86400000;
+  });
+  const totalLast30 = last30.reduce((s, e) => s + e.amount, 0);
+  const totalPrev30 = prev30.reduce((s, e) => s + e.amount, 0);
+  const trendPct = totalPrev30 > 0 ? ((totalLast30 - totalPrev30) / totalPrev30) * 100 : 0;
+
+  const catMap = new Map<string, { total: number; count: number }>();
+  const prevCatMap = new Map<string, number>();
+  last30.forEach(e => {
+    const c = catMap.get(e.category) || { total: 0, count: 0 };
+    c.total += e.amount; c.count++;
+    catMap.set(e.category, c);
+  });
+  prev30.forEach(e => prevCatMap.set(e.category, (prevCatMap.get(e.category) || 0) + e.amount));
+
+  const byCat = [...catMap.entries()].map(([category, { total, count }]) => {
+    const prev = prevCatMap.get(category) || 0;
+    const trend: 'up' | 'down' | 'flat' = prev > 0 ? (total > prev * 1.1 ? 'up' : total < prev * 0.9 ? 'down' : 'flat') : 'flat';
+    return { category, total, count, pct: totalLast30 > 0 ? Math.round((total / totalLast30) * 100) : 0, trend };
+  }).sort((a, b) => b.total - a.total);
+
+  return { byCat, totalLast30, totalPrev30, trendPct, largestCategory: byCat[0]?.category || '' };
+}
+
+// ─── Rent Intelligence ────────────────────────────────────────────────────────
+export interface RentAnalysis {
+  monthly: number;
+  weeklyTarget: number;
+  emergencyBuffer: number;
+  increaseBuffer: number; // 10% reserve
+  affordabilityPct: number; // rent as % of avg monthly revenue
+}
+
+export function rentAnalysis(store: StoreData): RentAnalysis | null {
+  const rent = store.profile?.rent;
+  if (!rent?.isRented || !rent.amount) return null;
+  const monthly = rent.frequency === 'yearly' ? rent.amount / 12 : rent.frequency === 'quarterly' ? rent.amount / 3 : rent.amount;
+  const weeklyTarget = Math.ceil(monthly / 4.33);
+  const emergencyBuffer = Math.ceil(weeklyTarget * 0.1);
+  const increaseBuffer = Math.ceil(monthly * 0.1);
+  // Avg monthly revenue
+  const series = dailySeries(store, 30);
+  const monthlyRev = series.reduce((s, d) => s + d.revenue, 0);
+  const affordabilityPct = monthlyRev > 0 ? Math.round((monthly / monthlyRev) * 100) : 100;
+  return { monthly, weeklyTarget, emergencyBuffer, increaseBuffer, affordabilityPct };
+}
+
+// ─── Smart Pricing ────────────────────────────────────────────────────────────
+export interface PricingAlert {
+  product: Product;
+  type: 'underpriced' | 'overpriced' | 'zero_margin';
+  currentMargin: number;
+  suggestedPrice: number;
+  expectedLift: number;
+}
+
+export function pricingAlerts(store: StoreData, targetMargin = 0.25): PricingAlert[] {
+  return store.products
+    .filter(p => p.costPrice > 0)
+    .map(p => {
+      const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
+      const suggested = Math.round((p.costPrice * (1 + targetMargin)) / 10) * 10;
+      const lift = suggested - p.sellingPrice;
+      if (margin <= 0) return { product: p, type: 'zero_margin' as const, currentMargin: margin, suggestedPrice: suggested, expectedLift: lift };
+      if (margin < targetMargin - 0.05) return { product: p, type: 'underpriced' as const, currentMargin: margin, suggestedPrice: suggested, expectedLift: lift };
+      if (margin > 0.8) return { product: p, type: 'overpriced' as const, currentMargin: margin, suggestedPrice: Math.round(p.costPrice * 1.4 / 10) * 10, expectedLift: 0 };
+      return null;
+    })
+    .filter(Boolean) as PricingAlert[];
+}
+
+// ─── Customer Requests ────────────────────────────────────────────────────────
+export function topCustomerRequests(store: StoreData, limit = 5) {
+  const reqs = store.customerRequests || [];
+  const tally = new Map<string, { text: string; count: number; lastDate: string }>();
+  reqs.forEach(r => {
+    const key = r.text.trim().toLowerCase();
+    const e = tally.get(key) || { text: r.text.trim(), count: 0, lastDate: r.date };
+    e.count++;
+    if (r.date > e.lastDate) { e.text = r.text.trim(); e.lastDate = r.date; }
+    tally.set(key, e);
+  });
+  return [...tally.values()].sort((a, b) => b.count - a.count).slice(0, limit);
+}
+
+// ─── Business Advice ──────────────────────────────────────────────────────────
+export interface AdviceCard {
+  id: string;
+  icon: string;
+  title: string;
+  detail: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  action?: string;
+}
+
+export function generateAdvice(store: StoreData): AdviceCard[] {
+  const advice: AdviceCard[] = [];
+  const h = healthScore(store);
+  const stock = inventoryIntelligence(store);
+  const ea = expenseAnalysis(store);
+  const analysis = analyzeSales(store);
+  const pending = getPendingSummary(store);
+  const series7 = dailySeries(store, 7);
+  const rev7 = series7.reduce((s, d) => s + d.revenue, 0);
+
+  // Critical: running out of fast sellers
+  stock.filter(f => f.urgency === 'critical').slice(0, 2).forEach(f => {
+    advice.push({ id: `cr-${f.product.id}`, icon: '🚨', title: `Restock ${f.product.name} NOW`, detail: `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`, priority: 'critical' });
+  });
+
+  // Critical: no sales this week
+  if (rev7 === 0 && store.products.length > 0) {
+    advice.push({ id: 'no-sales', icon: '⚠️', title: 'No sales recorded this week', detail: 'Record sales to unlock predictions and keep your store health score accurate.', priority: 'critical' });
+  }
+
+  // High: large outstanding debts
+  if (pending.totalOwed > rev7 * 0.3) {
+    advice.push({ id: 'debt', icon: '💳', title: 'Chase outstanding payments', detail: `₦${pending.totalOwed.toLocaleString()} owed. ${pending.overdue.length} customers are overdue. Collect this to improve cash flow.`, priority: 'high' });
+  }
+
+  // High: soaring expenses
+  if (ea.trendPct > 20 && ea.totalLast30 > 0) {
+    advice.push({ id: 'exp-rise', icon: '🧾', title: `${ea.largestCategory} spending up ${ea.trendPct.toFixed(0)}%`, detail: `Your ${ea.largestCategory.toLowerCase()} expenses grew significantly this month. Review and cut where possible.`, priority: 'high' });
+  }
+
+  // High: underpriced products
+  const alerts = pricingAlerts(store);
+  const underpriced = alerts.filter(a => a.type === 'underpriced').slice(0, 1);
+  underpriced.forEach(a => {
+    advice.push({ id: `price-${a.product.id}`, icon: '📈', title: `Raise price on ${a.product.name}`, detail: `Current margin: ${(a.currentMargin * 100).toFixed(0)}%. Suggest ₦${a.suggestedPrice.toLocaleString()} — adds ₦${a.expectedLift.toLocaleString()} per unit.`, priority: 'high' });
+  });
+
+  // Medium: restock soon
+  stock.filter(f => f.urgency === 'soon').slice(0, 2).forEach(f => {
+    advice.push({ id: `soon-${f.product.id}`, icon: '📦', title: `Order ${f.product.name} this week`, detail: `About ${f.daysLeft} days of stock left. Restock ${f.restockQty} units to avoid a gap.`, priority: 'medium' });
+  });
+
+  // Medium: co-purchase opportunity
+  if (analysis.coPurchases.length > 0) {
+    const cp = analysis.coPurchases[0];
+    advice.push({ id: 'copurchase', icon: '🛒', title: 'Bundle opportunity', detail: `Customers often buy ${cp.a} and ${cp.b} together (${cp.count}x). Stock them near each other and consider a combo deal.`, priority: 'medium' });
+  }
+
+  // Medium: never-sold products tying up capital
+  if (analysis.neverSold.length >= 3) {
+    advice.push({ id: 'dead-stock', icon: '😴', title: `${analysis.neverSold.length} products never sold`, detail: `${analysis.neverSold.slice(0, 2).map(p => p.name).join(', ')} and others have never sold. Consider discounting or replacing with faster movers.`, priority: 'medium' });
+  }
+
+  // Low: health is great
+  if (h.overall >= 80) {
+    advice.push({ id: 'great', icon: '🌟', title: 'Your store is thriving', detail: `Health score: ${h.overall}/100. Keep maintaining stock levels and expense control.`, priority: 'low' });
+  }
+
+  // Low: set a savings goal
+  if (!store.savingsGoal) {
+    advice.push({ id: 'save', icon: '💰', title: 'Set a savings goal', detail: 'Saving even 5% of revenue weekly builds a safety net for rent, restocking, and emergencies.', priority: 'low' });
+  }
+
+  return advice.sort((a, b) => {
+    const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    return rank[a.priority] - rank[b.priority];
+  });
+}
+
+// ─── Bee Personality — Greeting ───────────────────────────────────────────────
+export function beeGreeting(store: StoreData): string {
+  const hour = new Date().getHours();
+  const name = store.storeName;
+  const series7 = dailySeries(store, 7);
+  const rev7 = series7.reduce((s, d) => s + d.revenue, 0);
+  const todaySales = store.sales.filter(s => s.date.startsWith(new Date().toISOString().split('T')[0])).length;
+
+  const greetings: Record<string, string[]> = {
+    morning: [
+      `Good morning! Let's make today great for ${name}.`,
+      `Morning! Your store is ready — let's sell.`,
+      `Rise and shine! It's a new day to grow ${name}.`,
+    ],
+    afternoon: [
+      `Good afternoon. How's ${name} doing today?`,
+      `Afternoon check-in — keep the momentum going!`,
+      todaySales > 0 ? `Nice work — ${todaySales} sale${todaySales > 1 ? 's' : ''} so far today. Keep it up!` : `Afternoon! No sales logged yet — let's change that.`,
+    ],
+    evening: [
+      rev7 > 0 ? `Evening! Your store made ₦${rev7.toLocaleString()} this week.` : `Evening! Record your sales so I can help you track progress.`,
+      `Good evening. Let's review how the day went.`,
+    ],
+    night: [
+      `Night shift? I'm here. ${name} is in good hands.`,
+      `Late night. Make sure everything is tallied for today.`,
+    ],
+  };
+
+  const period = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
+  const pool = greetings[period];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// ─── Notifications Generator ───────────────────────────────────────────────────
+export function generateNotifications(store: StoreData): FlowNotification[] {
+  const notes: FlowNotification[] = [];
+  const now = new Date().toISOString();
+  const stock = inventoryIntelligence(store);
+  const analysis = analyzeSales(store);
+  const ea = expenseAnalysis(store);
+  const h = healthScore(store);
+  const pending = getPendingSummary(store);
+
+  stock.filter(f => f.urgency === 'critical').forEach(f => {
+    notes.push({ id: `low-${f.product.id}`, icon: '🚨', text: `${f.product.name} runs out in ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'}.`, tone: 'danger', date: now, read: false });
+  });
+  stock.filter(f => f.urgency === 'soon').slice(0, 3).forEach(f => {
+    notes.push({ id: `soon-${f.product.id}`, icon: '📦', text: `${f.product.name} will need restocking in ${f.daysLeft} days.`, tone: 'warning', date: now, read: false });
+  });
+  if (ea.trendPct > 25) {
+    notes.push({ id: 'exp-spike', icon: '🧾', text: `Expenses up ${ea.trendPct.toFixed(0)}% this month. Review your ${ea.largestCategory.toLowerCase()} spending.`, tone: 'warning', date: now, read: false });
+  }
+  if (h.overall >= 80) {
+    notes.push({ id: 'health-great', icon: '🌟', text: `Store health is ${h.overall}/100 — great job keeping things on track!`, tone: 'success', date: now, read: false });
+  } else if (h.overall < 40) {
+    notes.push({ id: 'health-low', icon: '⚠️', text: `Store health dropped to ${h.overall}/100. Check the advice tab.`, tone: 'danger', date: now, read: false });
+  }
+  if (pending.overdue.length > 0) {
+    notes.push({ id: 'overdue', icon: '💳', text: `${pending.overdue.length} customer${pending.overdue.length > 1 ? 's are' : ' is'} overdue on payments.`, tone: 'warning', date: now, read: false });
+  }
+  if (analysis.neverSold.length >= 5) {
+    notes.push({ id: 'dead-stock', icon: '😴', text: `${analysis.neverSold.length} products have never been sold. Consider moving them out.`, tone: 'info', date: now, read: false });
+  }
+  return notes;
+}
+
+// ─── Insights (enhanced) ──────────────────────────────────────────────────────
 export interface Insight {
   id: string;
   icon: string;
@@ -161,61 +540,45 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
   const days = range === '7d' ? 7 : range === '1m' ? 30 : 365;
   const cur = dailySeries(store, days);
   const prev = dailySeries(store, days * 2).slice(0, days);
-  const curRev = cur.reduce((s,d)=>s+d.revenue,0);
-  const prevRev = prev.reduce((s,d)=>s+d.revenue,0);
+  const curRev = cur.reduce((s, d) => s + d.revenue, 0);
+  const prevRev = prev.reduce((s, d) => s + d.revenue, 0);
   if (prevRev > 0) {
     const pct = ((curRev - prevRev) / prevRev) * 100;
     if (Math.abs(pct) >= 1) {
-      out.push({
-        id: 'rev',
-        icon: pct >= 0 ? '📈' : '📉',
-        text: `Revenue ${pct >= 0 ? 'increased' : 'decreased'} ${Math.abs(pct).toFixed(1)}% this ${range === '7d' ? 'week' : range === '1m' ? 'month' : 'period'}`,
-        tone: pct >= 0 ? 'success' : 'warning',
-      });
+      out.push({ id: 'rev', icon: pct >= 0 ? '📈' : '📉', text: `Revenue ${pct >= 0 ? 'increased' : 'decreased'} ${Math.abs(pct).toFixed(1)}% vs previous ${range === '7d' ? 'week' : range === '1m' ? 'month' : 'period'}`, tone: pct >= 0 ? 'success' : 'warning' });
     }
   } else if (curRev > 0) {
-    out.push({ id: 'rev', icon: '📈', text: `Revenue is up — keep going!`, tone: 'success' });
+    out.push({ id: 'rev', icon: '📈', text: `Revenue is growing — keep going!`, tone: 'success' });
   }
-
   const threshold = getLowStockThreshold();
   const low = store.products.filter(p => p.quantity > 0 && p.quantity <= threshold);
   if (low.length > 0) {
-    out.push({
-      id: 'low',
-      icon: '⚠',
-      text: `${low.length} product${low.length === 1 ? '' : 's'} need restocking`,
-      tone: 'warning',
-    });
+    out.push({ id: 'low', icon: '⚠', text: `${low.length} product${low.length === 1 ? '' : 's'} need restocking`, tone: 'warning' });
   }
-
   const tally = new Map<string, number>();
   store.sales.forEach(s => tally.set(s.productName, (tally.get(s.productName) || 0) + s.quantity));
-  const best = [...tally.entries()].sort((a,b) => b[1]-a[1])[0];
+  const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
   if (best) out.push({ id: 'best', icon: '⭐', text: `${best[0]} is your best seller`, tone: 'info' });
-
   if (curRev > 0) {
     const savable = Math.round(curRev * 0.05 / 100) * 100;
-    if (savable >= 500) {
-      out.push({
-        id: 'save',
-        icon: '💰',
-        text: `Save ₦${savable.toLocaleString()} this ${range === '7d' ? 'week' : 'period'}`,
-        tone: 'info',
-      });
-    }
+    if (savable >= 500) out.push({ id: 'save', icon: '💰', text: `Save ₦${savable.toLocaleString()} this ${range === '7d' ? 'week' : 'period'}`, tone: 'info' });
   }
-
-  return out.slice(0, 4);
+  const ea = expenseAnalysis(store);
+  if (ea.trendPct > 20) {
+    out.push({ id: 'exp', icon: '🧾', text: `Expenses rose ${ea.trendPct.toFixed(0)}% this month. Largest: ${ea.largestCategory}`, tone: 'warning' });
+  }
+  const rent = rentAnalysis(store);
+  if (rent && rent.affordabilityPct > 30) {
+    out.push({ id: 'rent', icon: '🏠', text: `Rent is ${rent.affordabilityPct}% of monthly revenue — high. Consider growing sales.`, tone: rent.affordabilityPct > 50 ? 'danger' : 'warning' });
+  }
+  return out.slice(0, 6);
 }
 
+// ─── Recommendations (original, enhanced) ─────────────────────────────────────
 export interface Recommendation {
-  id: string;
-  icon: string;
-  title: string;
-  detail: string;
+  id: string; icon: string; title: string; detail: string;
   tone: 'warning' | 'danger' | 'info' | 'success';
-  action?: 'restock' | 'price' | 'expense';
-  productId?: string;
+  action?: 'restock' | 'price' | 'expense'; productId?: string;
 }
 
 export function forecastDaysRemaining(store: StoreData, p: Product): number {
@@ -233,91 +596,42 @@ export function generateRecommendations(store: StoreData): Recommendation[] {
     const days = forecastDaysRemaining(store, p);
     if (Number.isFinite(days) && days <= 5 && p.quantity > 0) {
       const lostRev = Math.round(p.sellingPrice * (p.quantity / Math.max(1, days)) * 7);
-      recs.push({
-        id: `r-${p.id}`,
-        icon: '📦',
-        title: `Restock ${p.name}`,
-        detail: `Stock will finish in ${days} day${days === 1 ? '' : 's'}. Potential lost revenue: ₦${lostRev.toLocaleString()}`,
-        tone: days <= 2 ? 'danger' : 'warning',
-        action: 'restock',
-        productId: p.id,
-      });
+      recs.push({ id: `r-${p.id}`, icon: '📦', title: `Restock ${p.name}`, detail: `Stock will finish in ${days} day${days === 1 ? '' : 's'}. Potential lost revenue: ₦${lostRev.toLocaleString()}`, tone: days <= 2 ? 'danger' : 'warning', action: 'restock', productId: p.id });
     }
   });
-
   const exp = store.expenses || [];
   if (exp.length >= 4) {
     const byCat = new Map<string, number[]>();
-    exp.forEach(e => {
-      const arr = byCat.get(e.category) || [];
-      arr.push(e.amount);
-      byCat.set(e.category, arr);
-    });
+    exp.forEach(e => { const arr = byCat.get(e.category) || []; arr.push(e.amount); byCat.set(e.category, arr); });
     byCat.forEach((amts, cat) => {
       if (amts.length < 3) return;
       const recent = amts[0];
-      const avgPrev = amts.slice(1).reduce((s,a)=>s+a,0) / (amts.length-1);
+      const avgPrev = amts.slice(1).reduce((s, a) => s + a, 0) / (amts.length - 1);
       if (avgPrev > 0 && recent > avgPrev * 1.2) {
         const pct = Math.round(((recent - avgPrev) / avgPrev) * 100);
-        recs.push({
-          id: `e-${cat}`,
-          icon: '🧾',
-          title: `${cat} Expense Alert`,
-          detail: `Your ${cat.toLowerCase()} cost is ${pct}% higher than usual. Consider alternative options.`,
-          tone: 'warning',
-          action: 'expense',
-        });
+        recs.push({ id: `e-${cat}`, icon: '🧾', title: `${cat} Expense Alert`, detail: `Your ${cat.toLowerCase()} cost is ${pct}% higher than usual.`, tone: 'warning', action: 'expense' });
       }
     });
   }
-
   store.products.forEach(p => {
     if (!p.costPrice) return;
     const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
-    const sold = store.sales.filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(6))
-      .reduce((sum, s) => sum + s.quantity, 0);
+    const sold = store.sales.filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(6)).reduce((sum, s) => sum + s.quantity, 0);
     if (margin > 0 && margin < 0.2 && sold >= 5) {
       const suggested = Math.round((p.costPrice * 1.3) / 10) * 10;
       const lift = suggested - p.sellingPrice;
-      if (lift >= 10) {
-        recs.push({
-          id: `p-${p.id}`,
-          icon: '📈',
-          title: 'Price Opportunity',
-          detail: `You can increase price on ${p.name} by ₦${lift.toLocaleString()}`,
-          tone: 'info',
-          action: 'price',
-          productId: p.id,
-        });
-      }
+      if (lift >= 10) recs.push({ id: `p-${p.id}`, icon: '📈', title: 'Price Opportunity', detail: `Increase ${p.name} by ₦${lift.toLocaleString()} for a better margin`, tone: 'info', action: 'price', productId: p.id });
     }
   });
   return recs.slice(0, 6);
 }
 
-export function topCustomerRequests(store: StoreData, limit = 5) {
-  const reqs = store.customerRequests || [];
-  const tally = new Map<string, number>();
-  reqs.forEach(r => {
-    const key = r.text.trim().toLowerCase();
-    tally.set(key, (tally.get(key) || 0) + 1);
-  });
-  return [...tally.entries()]
-    .map(([text, count]) => ({ text, count }))
-    .sort((a,b) => b.count - a.count)
-    .slice(0, limit);
-}
-
+// ─── Activity Graph ────────────────────────────────────────────────────────────
 export type ActivityRange = 'today' | '7d' | '30d' | '1y' | 'lifetime';
 
 export interface ActivityBucket {
-  /** minute-of-day at bucket start, 0..1410 step 30 */
-  minute: number;
-  label: string;       // "12:00 AM"
-  shortLabel: string;  // "12 AM" / blank for in-between
-  sales: number;
-  revenue: number;
-  profit: number;
+  minute: number; label: string; shortLabel: string;
+  sales: number; revenue: number; profit: number;
 }
 
 export interface MostActivePeriods {
@@ -327,8 +641,7 @@ export interface MostActivePeriods {
 }
 
 function fmtMin(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
+  const h = Math.floor(min / 60); const m = min % 60;
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
@@ -337,25 +650,17 @@ function fmtMin(min: number): string {
 export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d'): MostActivePeriods {
   let cutoff = 0;
   const now = Date.now();
-  if (range === 'today') {
-    const d = new Date(); d.setHours(0,0,0,0); cutoff = d.getTime();
-  } else if (range === '7d') cutoff = now - 7 * 86400000;
+  if (range === 'today') { const d = new Date(); d.setHours(0, 0, 0, 0); cutoff = d.getTime(); }
+  else if (range === '7d') cutoff = now - 7 * 86400000;
   else if (range === '30d') cutoff = now - 30 * 86400000;
   else if (range === '1y') cutoff = now - 365 * 86400000;
   else cutoff = 0;
 
   const buckets: ActivityBucket[] = [];
   for (let i = 0; i < 48; i++) {
-    const minute = i * 30;
-    const h = Math.floor(minute / 60);
-    buckets.push({
-      minute,
-      label: fmtMin(minute),
-      shortLabel: minute % 180 === 0 ? `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}` : '',
-      sales: 0, revenue: 0, profit: 0,
-    });
+    const minute = i * 30; const h = Math.floor(minute / 60);
+    buckets.push({ minute, label: fmtMin(minute), shortLabel: minute % 180 === 0 ? `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}` : '', sales: 0, revenue: 0, profit: 0 });
   }
-
   let totalSales = 0;
   store.sales.forEach(s => {
     const t = new Date(s.date).getTime();
@@ -363,33 +668,19 @@ export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d')
     const d = new Date(t);
     const min = d.getHours() * 60 + d.getMinutes();
     const idx = Math.floor(min / 30);
-    const b = buckets[idx];
-    if (!b) return;
-    b.sales += 1; b.revenue += s.total; b.profit += s.profit;
-    totalSales += 1;
+    const b = buckets[idx]; if (!b) return;
+    b.sales += 1; b.revenue += s.total; b.profit += s.profit; totalSales += 1;
   });
-
-  // peak window: contiguous run of top-quartile buckets
   let peakWindow: MostActivePeriods['peakWindow'];
   if (totalSales > 0) {
-    const sorted = [...buckets].map(b => b.sales).sort((a,b)=>b-a);
+    const sorted = [...buckets].map(b => b.sales).sort((a, b) => b - a);
     const cut = sorted[Math.min(8, sorted.length - 1)] || 1;
     let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
     buckets.forEach((b, i) => {
-      if (b.sales >= cut && b.sales > 0) {
-        if (curStart < 0) curStart = i;
-        curLen++;
-        if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
-      } else { curStart = -1; curLen = 0; }
+      if (b.sales >= cut && b.sales > 0) { if (curStart < 0) curStart = i; curLen++; if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; } }
+      else { curStart = -1; curLen = 0; }
     });
-    if (bestStart >= 0) {
-      peakWindow = {
-        startLabel: buckets[bestStart].label,
-        endLabel: fmtMin(Math.min(1440, (bestStart + bestLen) * 30)),
-      };
-    }
+    if (bestStart >= 0) peakWindow = { startLabel: buckets[bestStart].label, endLabel: fmtMin(Math.min(1440, (bestStart + bestLen) * 30)) };
   }
-
   return { buckets, peakWindow, totalSales };
 }
-

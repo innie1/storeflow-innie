@@ -162,6 +162,22 @@ export interface CustomerRequest {
   fulfilled?: boolean;
 }
 
+export interface FlowNotification {
+  id: string;
+  text: string;
+  icon: string;
+  tone: 'success' | 'warning' | 'info' | 'danger';
+  date: string;
+  read: boolean;
+}
+
+export interface MemoryEntry {
+  type: 'product' | 'expense' | 'sale';
+  data: Product | Expense | Sale;
+  deletedAt: string;
+  summary?: string; // e.g. "Coca-Cola: ₦52,000 revenue over 6 months"
+}
+
 export type SavingsFrequency = 'daily' | 'weekly' | 'monthly';
 
 export interface SavingsGoal {
@@ -184,6 +200,7 @@ export interface ManagerSettings {
   productSuggestions: boolean;
   savingsPlanner: boolean;
   voiceFeatures: boolean;
+  autoVoiceListen: boolean;
   weeklyRecap: boolean;
   customerRequests: boolean;
   businessAdvice: boolean;
@@ -225,6 +242,7 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   productSuggestions: true,
   savingsPlanner: true,
   voiceFeatures: true,
+  autoVoiceListen: false,
   weeklyRecap: true,
   customerRequests: true,
   businessAdvice: true,
@@ -268,6 +286,8 @@ export interface StoreData {
   savingsGoal?: SavingsGoal;
   managerSettings?: ManagerSettings;
   pendingPayments?: PendingPayment[];
+  flowNotifications?: FlowNotification[];
+  memoryArchive?: MemoryEntry[];
   createdAt: string;
   profile?: StoreProfile;
 }

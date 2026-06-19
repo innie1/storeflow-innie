@@ -90,6 +90,15 @@ export default {
           "0%, 100%": { boxShadow: "0 0 0 0 hsl(45 90% 61% / 0.4)" },
           "50%": { boxShadow: "0 0 0 8px hsl(45 90% 61% / 0)" },
         },
+        "voice-ring": {
+          "0%": { transform: "scale(1)", opacity: "1" },
+          "80%": { transform: "scale(2.2)", opacity: "0" },
+          "100%": { transform: "scale(2.2)", opacity: "0" },
+        },
+        "mic-pop": {
+          "0%, 100%": { transform: "scale(1)" },
+          "50%": { transform: "scale(1.12)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -97,6 +106,8 @@ export default {
         "fade-in": "fade-in 0.3s ease-out",
         "slide-up": "slide-up 0.4s ease-out",
         "pulse-gold": "pulse-gold 2s infinite",
+        "voice-ring": "voice-ring 1.4s ease-out infinite",
+        "mic-pop": "mic-pop 0.6s ease-in-out infinite",
       },
     },
   },

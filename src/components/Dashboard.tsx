@@ -26,6 +26,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
   }, [store.pendingPayments]);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownType>(null);
   const [salesRange, setSalesRange] = useState<DateRange>('all');
+  const [trendRange, setTrendRange] = useState<'today' | '1w' | '14d' | '30d' | 'all'>('14d');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
@@ -218,9 +219,127 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
     return Array.from(map.values()).sort((a, b) => b.ts - a.ts);
   };
 
-  // Trend chart: last 14 days — revenue + profit
+  // Trend chart: dynamic range — revenue + profit
   const trendData = useMemo(() => {
-    const days = 14;
+    if (trendRange === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const buckets: { label: string; total: number; profit: number; hour: number }[] = [];
+      for (let h = 0; h < 24; h++) {
+        const d = new Date(today);
+        d.setHours(h);
+        buckets.push({
+          label: d.toLocaleTimeString(undefined, { hour: 'numeric', hour12: true }),
+          total: 0,
+          profit: 0,
+          hour: h,
+        });
+      }
+      const todayStart = today.getTime();
+      const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+      store.sales.forEach(s => {
+        const sd = new Date(s.date);
+        const sTime = sd.getTime();
+        if (sTime >= todayStart && sTime < todayEnd) {
+          const h = sd.getHours();
+          const bucket = buckets.find(b => b.hour === h);
+          if (bucket) {
+            bucket.total += s.total;
+            bucket.profit += s.profit;
+          }
+        }
+      });
+      return buckets;
+    }
+
+    if (trendRange === 'all') {
+      if (store.sales.length === 0) return [];
+      const saleDates = store.sales.map(s => new Date(s.date).getTime());
+      const minDate = new Date(Math.min(...saleDates));
+      const maxDate = new Date(Math.max(...saleDates));
+      minDate.setHours(0, 0, 0, 0);
+      maxDate.setHours(23, 59, 59, 999);
+
+      const timeDiff = maxDate.getTime() - minDate.getTime();
+      const diffDays = Math.ceil(timeDiff / (24 * 60 * 60 * 1000));
+
+      if (diffDays <= 31) {
+        const buckets: { label: string; total: number; profit: number; ts: number }[] = [];
+        const current = new Date(minDate);
+        while (current <= maxDate) {
+          buckets.push({
+            label: current.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+            total: 0,
+            profit: 0,
+            ts: current.getTime(),
+          });
+          current.setDate(current.getDate() + 1);
+        }
+        store.sales.forEach(s => {
+          const sd = new Date(s.date);
+          sd.setHours(0, 0, 0, 0);
+          const b = buckets.find(x => x.ts === sd.getTime());
+          if (b) {
+            b.total += s.total;
+            b.profit += s.profit;
+          }
+        });
+        return buckets;
+      } else if (diffDays <= 180) {
+        const buckets: { label: string; total: number; profit: number; startTs: number; endTs: number }[] = [];
+        const current = new Date(minDate);
+        current.setDate(current.getDate() - current.getDay()); // align to start of week
+        while (current <= maxDate) {
+          const weekStart = new Date(current);
+          const weekEnd = new Date(current);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          buckets.push({
+            label: `${weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
+            total: 0,
+            profit: 0,
+            startTs: weekStart.getTime(),
+            endTs: weekEnd.getTime() + 24 * 60 * 60 * 1000 - 1,
+          });
+          current.setDate(current.getDate() + 7);
+        }
+        store.sales.forEach(s => {
+          const sd = new Date(s.date).getTime();
+          const b = buckets.find(x => sd >= x.startTs && sd <= x.endTs);
+          if (b) {
+            b.total += s.total;
+            b.profit += s.profit;
+          }
+        });
+        return buckets;
+      } else {
+        const buckets: { label: string; total: number; profit: number; startTs: number; endTs: number }[] = [];
+        const current = new Date(minDate);
+        current.setDate(1); // start of month
+        while (current <= maxDate) {
+          const monthStart = new Date(current);
+          const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+          buckets.push({
+            label: current.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }),
+            total: 0,
+            profit: 0,
+            startTs: monthStart.getTime(),
+            endTs: monthEnd.getTime() + 24 * 60 * 60 * 1000 - 1,
+          });
+          current.setMonth(current.getMonth() + 1);
+        }
+        store.sales.forEach(s => {
+          const sd = new Date(s.date).getTime();
+          const b = buckets.find(x => sd >= x.startTs && sd <= x.endTs);
+          if (b) {
+            b.total += s.total;
+            b.profit += s.profit;
+          }
+        });
+        return buckets;
+      }
+    }
+
+    const days = trendRange === '1w' ? 7 : trendRange === '30d' ? 30 : 14;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const buckets: { label: string; total: number; profit: number; ts: number }[] = [];
@@ -244,7 +363,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
       }
     });
     return buckets;
-  }, [store.sales]);
+  }, [store.sales, trendRange]);
 
   const profitTone = stats.totalProfit >= 0 ? 'text-success' : 'text-destructive';
   const profitSign = stats.totalProfit >= 0 ? '+' : '−';
@@ -263,441 +382,471 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const healthDash = (Math.min(100, health.overall) / 100) * healthC;
 
   return (
-    <div className="animate-fade-in space-y-3">
-      {/* Store Health + Store Manager */}
-      <div className="grid grid-cols-2 gap-3">
-        {managerEnabled ? (
-          <div className="p-4 rounded-2xl bg-card shadow-card">
-            <p className="text-xs text-muted-foreground font-display">Store Health</p>
-            <p className="font-display font-bold text-3xl text-foreground mt-1">{health.overall}<span className="text-sm text-muted-foreground">/100</span></p>
-            <p className="text-[10px] text-muted-foreground mt-1">{health.label}</p>
-            <div className="flex justify-center mt-2">
-              <svg width={healthSize} height={healthSize} viewBox={`0 0 ${healthSize} ${healthSize}`} className="-rotate-90">
-                <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke="hsl(var(--surface-2))" strokeWidth={8} fill="none" />
-                <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke={healthTone} strokeWidth={8} fill="none"
-                  strokeDasharray={`${healthDash} ${healthC}`} strokeLinecap="round" style={{ transition: 'stroke-dasharray 800ms ease-out' }} />
-              </svg>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => onNavigate('manager')} className="p-4 rounded-2xl bg-card shadow-card text-left">
-            <div className="flex justify-center mb-1"><Mascot size={56} mood="sleeping" /></div>
-            <p className="text-xs text-muted-foreground text-center">Store Manager is off</p>
-            <p className="text-[10px] text-primary text-center mt-1 font-display font-semibold">Tap to enable →</p>
-          </button>
-        )}
-        <div className="p-4 rounded-2xl bg-card shadow-card flex flex-col">
-          <div className="flex items-center gap-2 mb-2">
-            <Mascot size={36} mood={managerEnabled ? 'thinking' : 'sleeping'} />
-            <div className="flex-1 min-w-0">
-              <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
-              <MascotBadge on={managerEnabled} />
-            </div>
-          </div>
-          <div className="space-y-1 flex-1">
-            {!managerEnabled && (
-              <p className="text-[11px] text-muted-foreground">Turn on Store Manager to receive insights, forecasts, recommendations and alerts.</p>
+    <div className="animate-fade-in space-y-4 md:space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
+        {/* Left Column - Stats & Summary (5/12 width) */}
+        <div className="md:col-span-5 space-y-4">
+          {/* Store Health + Store Manager */}
+          <div className="grid grid-cols-2 gap-3">
+            {managerEnabled ? (
+              <div className="p-4 rounded-2xl bg-card shadow-card">
+                <p className="text-xs text-muted-foreground font-display">Store Health</p>
+                <p className="font-display font-bold text-3xl text-foreground mt-1">{health.overall}<span className="text-sm text-muted-foreground">/100</span></p>
+                <p className="text-[10px] text-muted-foreground mt-1">{health.label}</p>
+                <div className="flex justify-center mt-2">
+                  <svg width={healthSize} height={healthSize} viewBox={`0 0 ${healthSize} ${healthSize}`} className="-rotate-90">
+                    <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke="hsl(var(--surface-2))" strokeWidth={8} fill="none" />
+                    <circle cx={healthSize/2} cy={healthSize/2} r={healthR} stroke={healthTone} strokeWidth={8} fill="none"
+                      strokeDasharray={`${healthDash} ${healthC}`} strokeLinecap="round" style={{ transition: 'stroke-dasharray 800ms ease-out' }} />
+                  </svg>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => onNavigate('manager')} className="p-4 rounded-2xl bg-card shadow-card text-left">
+                <div className="flex justify-center mb-1"><Mascot size={56} mood="sleeping" /></div>
+                <p className="text-xs text-muted-foreground text-center">Store Manager is off</p>
+                <p className="text-[10px] text-primary text-center mt-1 font-display font-semibold">Tap to enable →</p>
+              </button>
             )}
-            {managerEnabled && insights.length === 0 && <p className="text-[11px] text-muted-foreground">Insights appear as you record sales.</p>}
-            {managerEnabled && insights.slice(0, 4).map(i => (
-              <p key={i.id} className="text-[11px] text-foreground/90 leading-snug flex gap-1.5">
-                <span>{i.icon}</span><span className="flex-1">{i.text}</span>
-              </p>
-            ))}
+            <div className="p-4 rounded-2xl bg-card shadow-card flex flex-col">
+              <div className="flex items-center gap-2 mb-2">
+                <Mascot size={36} mood={managerEnabled ? 'thinking' : 'sleeping'} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
+                  <MascotBadge on={managerEnabled} />
+                </div>
+              </div>
+              <div className="space-y-1 flex-1">
+                {!managerEnabled && (
+                  <p className="text-[11px] text-muted-foreground">Turn on Store Manager to receive insights, forecasts, recommendations and alerts.</p>
+                )}
+                {managerEnabled && insights.length === 0 && <p className="text-[11px] text-muted-foreground">Insights appear as you record sales.</p>}
+                {managerEnabled && insights.slice(0, 4).map(i => (
+                  <p key={i.id} className="text-[11px] text-foreground/90 leading-snug flex gap-1.5">
+                    <span>{i.icon}</span><span className="flex-1">{i.text}</span>
+                  </p>
+                ))}
+              </div>
+              {managerEnabled && insightCount > 0 && (
+                <button onClick={() => onNavigate('manager')} className="mt-2 text-[10px] text-primary font-display font-semibold text-left">
+                  View all insights ({insightCount}) →
+                </button>
+              )}
+            </div>
           </div>
-          {managerEnabled && insightCount > 0 && (
-            <button onClick={() => onNavigate('manager')} className="mt-2 text-[10px] text-primary font-display font-semibold text-left">
-              View all insights ({insightCount}) →
+
+          {/* Revenue Card */}
+          <button
+            onClick={() => toggleBreakdown('revenue')}
+            className={`w-full p-5 rounded-2xl bg-card shadow-card text-left transition-all ${
+              activeBreakdown === 'revenue' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
+            }`}
+          >
+            <p className="text-sm text-muted-foreground font-display">Revenue</p>
+            <p className="font-display font-bold text-[2.4rem] leading-tight text-primary tracking-tight">
+              ₦{stats.totalRevenue.toLocaleString()}
+            </p>
+            <p className={`text-sm font-display font-semibold mt-1 ${profitTone}`}>
+              {profitSign}₦{profitAbs.toLocaleString()} profit
+            </p>
+            <div className="mt-2 pt-2 border-t border-border flex items-end justify-between">
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Net Income</p>
+                <p className={`font-display font-bold text-lg ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
+                  {stats.netIncome >= 0 ? '' : '−'}₦{Math.abs(stats.netIncome).toLocaleString()}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expenses</p>
+                <p className="font-display font-semibold text-sm text-destructive">₦{stats.totalExpenses.toLocaleString()}</p>
+              </div>
+            </div>
+          </button>
+
+          {/* Sales / Products Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => toggleBreakdown('sales')}
+              className={`p-4 rounded-2xl bg-card shadow-card text-left transition-all ${
+                activeBreakdown === 'sales' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
+              }`}
+            >
+              <p className="text-xs text-muted-foreground font-display">Sales</p>
+              <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalSales}</p>
+            </button>
+            <div className="p-4 rounded-2xl bg-card shadow-card">
+              <p className="text-xs text-muted-foreground font-display">Products</p>
+              <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
+            </div>
+          </div>
+
+          {/* Inventory Card */}
+          <button
+            onClick={() => toggleBreakdown('inventory')}
+            className={`w-full p-4 rounded-2xl bg-card shadow-card text-left transition-all ${
+              activeBreakdown === 'inventory' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground font-display">Inventory</p>
+                <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-display font-bold text-xl text-success">₦{stats.inventoryValue.toLocaleString()}</p>
+                <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-display font-bold uppercase tracking-wide">
+                  Now
+                </span>
+              </div>
+            </div>
+          </button>
+
+          {/* Low Stock Warning */}
+          {stats.lowStockProducts.length > 0 && (
+            <button
+              onClick={() => onNavigate('inventory', true)}
+              className="w-full p-3 rounded-xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/20 transition-colors flex items-center justify-between"
+            >
+              <span className="text-sm font-display font-semibold text-warning">⚠ {stats.lowStockProducts.length} low-stock product{stats.lowStockProducts.length === 1 ? '' : 's'}</span>
+              <span className="text-warning text-xs">View →</span>
             </button>
           )}
-        </div>
-      </div>
 
-
-
-      <button
-        onClick={() => toggleBreakdown('revenue')}
-        className={`w-full p-5 rounded-2xl bg-card shadow-card text-left transition-all ${
-          activeBreakdown === 'revenue' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
-        }`}
-      >
-        <p className="text-sm text-muted-foreground font-display">Revenue</p>
-        <p className="font-display font-bold text-[2.4rem] leading-tight text-primary tracking-tight">
-          ₦{stats.totalRevenue.toLocaleString()}
-        </p>
-        <p className={`text-sm font-display font-semibold mt-1 ${profitTone}`}>
-          {profitSign}₦{profitAbs.toLocaleString()} profit
-        </p>
-        <div className="mt-2 pt-2 border-t border-border flex items-end justify-between">
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Net Income</p>
-            <p className={`font-display font-bold text-lg ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
-              {stats.netIncome >= 0 ? '' : '−'}₦{Math.abs(stats.netIncome).toLocaleString()}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expenses</p>
-            <p className="font-display font-semibold text-sm text-destructive">₦{stats.totalExpenses.toLocaleString()}</p>
-          </div>
-        </div>
-      </button>
-
-      {/* Sales / Products grid */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => toggleBreakdown('sales')}
-          className={`p-4 rounded-2xl bg-card shadow-card text-left transition-all ${
-            activeBreakdown === 'sales' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
-          }`}
-        >
-          <p className="text-xs text-muted-foreground font-display">Sales</p>
-          <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalSales}</p>
-        </button>
-        <div className="p-4 rounded-2xl bg-card shadow-card">
-          <p className="text-xs text-muted-foreground font-display">Products</p>
-          <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
-        </div>
-      </div>
-
-      {/* Inventory card with Now badge */}
-      <button
-        onClick={() => toggleBreakdown('inventory')}
-        className={`w-full p-4 rounded-2xl bg-card shadow-card text-left transition-all ${
-          activeBreakdown === 'inventory' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
-        }`}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs text-muted-foreground font-display">Inventory</p>
-            <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
-          </div>
-          <div className="text-right">
-            <p className="font-display font-bold text-xl text-success">₦{stats.inventoryValue.toLocaleString()}</p>
-            <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-display font-bold uppercase tracking-wide">
-              Now
-            </span>
-          </div>
-        </div>
-      </button>
-
-      {/* Low stock chip (only if any) */}
-      {stats.lowStockProducts.length > 0 && (
-        <button
-          onClick={() => onNavigate('inventory', true)}
-          className="w-full p-3 rounded-xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/20 transition-colors flex items-center justify-between"
-        >
-          <span className="text-sm font-display font-semibold text-warning">⚠ {stats.lowStockProducts.length} low-stock product{stats.lowStockProducts.length === 1 ? '' : 's'}</span>
-          <span className="text-warning text-xs">View →</span>
-        </button>
-      )}
-
-      {/* Pending Payments card */}
-      {pendingSummary.totalOwed > 0 && (
-        <button onClick={() => onNavigate('pending')}
-          className="w-full p-4 rounded-2xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/15 transition-colors">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground font-display">💳 Pending Payments</p>
-              <p className="font-display font-bold text-2xl text-warning mt-1">₦{pendingSummary.totalOwed.toLocaleString()}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{pendingSummary.customerCount} customer{pendingSummary.customerCount === 1 ? '' : 's'}</p>
-            </div>
-            <span className="text-warning">›</span>
-          </div>
-        </button>
-      )}
-
-      {/* Breakdown Panel */}
-      {activeBreakdown === 'revenue' && (
-        <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
-          <h3 className="font-display font-bold text-sm text-primary">Revenue Breakdown</h3>
-          {getRevenueBreakdown().length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sales yet</p>
-          ) : (
-            <div className="space-y-1.5 max-h-64 overflow-y-auto">
-              {getRevenueBreakdown().map((item, i) => (
-                <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
-                  <div>
-                    <span className="text-foreground font-medium">{item.name}</span>
-                    <span className="text-muted-foreground ml-2 text-xs">{item.qty} sold</span>
-                  </div>
-                  <span className="text-primary font-bold">₦{item.revenue.toLocaleString()}</span>
+          {/* Pending Payments Card */}
+          {pendingSummary.totalOwed > 0 && (
+            <button onClick={() => onNavigate('pending')}
+              className="w-full p-4 rounded-2xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/15 transition-colors">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-display">💳 Pending Payments</p>
+                  <p className="font-display font-bold text-2xl text-warning mt-1">₦{pendingSummary.totalOwed.toLocaleString()}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{pendingSummary.customerCount} customer{pendingSummary.customerCount === 1 ? '' : 's'}</p>
                 </div>
-              ))}
+                <span className="text-warning">›</span>
+              </div>
+            </button>
+          )}
+
+          {/* Share Report (Compact Footer) */}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleShareReport}
+              className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors text-xs font-display font-semibold"
+            >
+              📤 Share Performance Report
+            </button>
+            <button
+              onClick={handleWhatsAppReport}
+              className="p-2.5 rounded-xl bg-success/10 border border-success/20 text-success hover:bg-success/20 transition-colors text-sm"
+              title="Share on WhatsApp"
+            >
+              💬
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column - Breakdowns & Graphs (7/12 width) */}
+        <div className="md:col-span-7 space-y-4">
+          {/* Breakdown Panels */}
+          {activeBreakdown === 'revenue' && (
+            <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
+              <h3 className="font-display font-bold text-sm text-primary">Revenue Breakdown</h3>
+              {getRevenueBreakdown().length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sales yet</p>
+              ) : (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {getRevenueBreakdown().map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
+                      <div>
+                        <span className="text-foreground font-medium">{item.name}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">{item.qty} sold</span>
+                      </div>
+                      <span className="text-primary font-bold">₦{item.revenue.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      {activeBreakdown === 'profit' && (
-        <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
-          <h3 className="font-display font-bold text-sm text-success">Profit Breakdown</h3>
-          {getProfitBreakdown().length === 0 ? (
-            <p className="text-sm text-muted-foreground">No sales yet</p>
-          ) : (
-            <div className="space-y-1.5 max-h-64 overflow-y-auto">
-              {getProfitBreakdown().map((item, i) => (
-                <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
-                  <div>
-                    <span className="text-foreground font-medium">{item.name}</span>
-                    <span className="text-muted-foreground ml-2 text-xs">{item.margin}% margin</span>
-                  </div>
-                  <span className="text-success font-bold">₦{item.profit.toLocaleString()}</span>
+          {activeBreakdown === 'profit' && (
+            <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
+              <h3 className="font-display font-bold text-sm text-success">Profit Breakdown</h3>
+              {getProfitBreakdown().length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sales yet</p>
+              ) : (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {getProfitBreakdown().map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
+                      <div>
+                        <span className="text-foreground font-medium">{item.name}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">{item.margin}% margin</span>
+                      </div>
+                      <span className="text-success font-bold">₦{item.profit.toLocaleString()}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      {activeBreakdown === 'inventory' && (() => {
-        const items = getInventoryBreakdown();
-        const totalInitial = items.reduce((s, i) => s + i.initial, 0);
-        const totalCurrent = items.reduce((s, i) => s + i.current, 0);
-        const totalPurchased = items.reduce((s, i) => s + i.purchased, 0);
-        const totalValue = items.reduce((s, i) => s + i.value, 0);
-        return (
-          <div className="p-4 rounded-xl bg-card shadow-card space-y-3 animate-fade-in">
-            <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="p-2 rounded-lg bg-surface-2 text-center">
-                <p className="text-[10px] text-muted-foreground uppercase">Initial</p>
-                <p className="font-display font-bold text-base text-foreground">{totalInitial.toLocaleString()}</p>
-              </div>
-              <div className="p-2 rounded-lg bg-success/10 text-center">
-                <p className="text-[10px] text-success uppercase">Bought</p>
-                <p className="font-display font-bold text-base text-success">+{totalPurchased.toLocaleString()}</p>
-              </div>
-              <div className="p-2 rounded-lg bg-primary/10 text-center">
-                <p className="text-[10px] text-primary uppercase">Current</p>
-                <p className="font-display font-bold text-base text-primary">{totalCurrent.toLocaleString()}</p>
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground text-right">Total value: ₦{totalValue.toLocaleString()}</p>
-            <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground px-2 pb-1 border-b border-border uppercase tracking-wide">
-              <span className="col-span-1">Product</span>
-              <span className="text-center">Initial</span>
-              <span className="text-center text-success">+ Bought</span>
-              <span className="text-center text-primary">Current</span>
-            </div>
-            <div className="space-y-1.5 max-h-72 overflow-y-auto">
-              {items.map((item, i) => (
-                <div key={i} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-surface-2 text-sm">
-                  <div className="col-span-1 min-w-0">
-                    <p className="text-foreground font-medium truncate">{item.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{item.category} • ₦{item.value.toLocaleString()}</p>
+          {activeBreakdown === 'inventory' && (() => {
+            const items = getInventoryBreakdown();
+            const totalInitial = items.reduce((s, i) => s + i.initial, 0);
+            const totalCurrent = items.reduce((s, i) => s + i.current, 0);
+            const totalPurchased = items.reduce((s, i) => s + i.purchased, 0);
+            const totalValue = items.reduce((s, i) => s + i.value, 0);
+            return (
+              <div className="p-4 rounded-xl bg-card shadow-card space-y-3 animate-fade-in">
+                <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 rounded-lg bg-surface-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase">Initial</p>
+                    <p className="font-display font-bold text-base text-foreground">{totalInitial.toLocaleString()}</p>
                   </div>
-                  <span className="text-center text-muted-foreground">{item.initial}</span>
-                  <span className="text-center text-success">{item.purchased > 0 ? `+${item.purchased}` : '—'}</span>
-                  <span className={`text-center font-bold ${item.current <= 5 ? 'text-destructive' : 'text-primary'}`}>{item.current}</span>
+                  <div className="p-2 rounded-lg bg-success/10 text-center">
+                    <p className="text-[10px] text-success uppercase">Bought</p>
+                    <p className="font-display font-bold text-base text-success">+{totalPurchased.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-primary/10 text-center">
+                    <p className="text-[10px] text-primary uppercase">Current</p>
+                    <p className="font-display font-bold text-base text-primary">{totalCurrent.toLocaleString()}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
-      {activeBreakdown === 'sales' && (() => {
-        const breakdown = getSalesBreakdown();
-        const maxTotal = Math.max(...breakdown.map(d => d.total), 0);
-        const minTotal = breakdown.length > 1 ? Math.min(...breakdown.map(d => d.total)) : -1;
-        const rangeTotal = breakdown.reduce((s, d) => s + d.total, 0);
-        const rangeCount = breakdown.reduce((s, d) => s + d.count, 0);
-        const ranges: { key: DateRange; label: string }[] = [
-          { key: 'today', label: 'Today' },
-          { key: 'week', label: '7 Days' },
-          { key: 'month', label: '30 Days' },
-          { key: 'all', label: 'All' },
-          { key: 'custom', label: 'Custom' },
-        ];
-        return (
-          <div className="p-4 rounded-xl bg-card shadow-card space-y-3 animate-fade-in">
-            <h3 className="font-display font-bold text-sm">Sales by Day</h3>
-
-            <div className="flex flex-wrap gap-1.5">
-              {ranges.map(r => (
-                <button
-                  key={r.key}
-                  onClick={() => setSalesRange(r.key)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-display font-semibold border transition-colors ${
-                    salesRange === r.key
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-
-            {salesRange === 'custom' && (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase">From</label>
-                  <input
-                    type="date"
-                    value={customStart}
-                    onChange={e => setCustomStart(e.target.value)}
-                    className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground"
-                  />
+                <p className="text-[10px] text-muted-foreground text-right">Total value: ₦{totalValue.toLocaleString()}</p>
+                <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground px-2 pb-1 border-b border-border uppercase tracking-wide">
+                  <span className="col-span-1">Product</span>
+                  <span className="text-center">Initial</span>
+                  <span className="text-center text-success">+ Bought</span>
+                  <span className="text-center text-primary">Current</span>
                 </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase">To</label>
-                  <input
-                    type="date"
-                    value={customEnd}
-                    onChange={e => setCustomEnd(e.target.value)}
-                    className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground"
-                  />
+                <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                  {items.map((item, i) => (
+                    <div key={i} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-surface-2 text-sm">
+                      <div className="col-span-1 min-w-0">
+                        <p className="text-foreground font-medium truncate">{item.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{item.category} • ₦{item.value.toLocaleString()}</p>
+                      </div>
+                      <span className="text-center text-muted-foreground">{item.initial}</span>
+                      <span className="text-center text-success">{item.purchased > 0 ? `+${item.purchased}` : '—'}</span>
+                      <span className={`text-center font-bold ${item.current <= 5 ? 'text-destructive' : 'text-primary'}`}>{item.current}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}
+            );
+          })()}
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="p-2 rounded-lg bg-primary/10 text-center">
-                <p className="text-[10px] text-primary uppercase">Range Revenue</p>
-                <p className="font-display font-bold text-sm text-primary">₦{rangeTotal.toLocaleString()}</p>
-              </div>
-              <div className="p-2 rounded-lg bg-surface-2 text-center">
-                <p className="text-[10px] text-muted-foreground uppercase">Transactions</p>
-                <p className="font-display font-bold text-sm text-foreground">{rangeCount}</p>
-              </div>
-            </div>
+          {activeBreakdown === 'sales' && (() => {
+            const breakdown = getSalesBreakdown();
+            const maxTotal = Math.max(...breakdown.map(d => d.total), 0);
+            const minTotal = breakdown.length > 1 ? Math.min(...breakdown.map(d => d.total)) : -1;
+            const rangeTotal = breakdown.reduce((s, d) => s + d.total, 0);
+            const rangeCount = breakdown.reduce((s, d) => s + d.count, 0);
+            const ranges: { key: DateRange; label: string }[] = [
+              { key: 'today', label: 'Today' },
+              { key: 'week', label: '7 Days' },
+              { key: 'month', label: '30 Days' },
+              { key: 'all', label: 'All' },
+              { key: 'custom', label: 'Custom' },
+            ];
+            return (
+              <div className="p-4 rounded-xl bg-card shadow-card space-y-3 animate-fade-in">
+                <h3 className="font-display font-bold text-sm">Sales by Day</h3>
 
-            {breakdown.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No sales in this range</p>
-            ) : (
-              <>
-                {breakdown.length > 1 && (
-                  <div className="flex gap-2 text-[10px] text-muted-foreground">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success" /> Best day</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" /> Lowest day</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {ranges.map(r => (
+                    <button
+                      key={r.key}
+                      onClick={() => setSalesRange(r.key)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-display font-semibold border transition-colors ${
+                        salesRange === r.key
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+
+                {salesRange === 'custom' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase">From</label>
+                      <input
+                        type="date"
+                        value={customStart}
+                        onChange={e => setCustomStart(e.target.value)}
+                        className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase">To</label>
+                      <input
+                        type="date"
+                        value={customEnd}
+                        onChange={e => setCustomEnd(e.target.value)}
+                        className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground"
+                      />
+                    </div>
                   </div>
                 )}
-                <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                  {breakdown.map((day, i) => {
-                    const isBest = day.total === maxTotal && maxTotal > 0;
-                    const isWorst = day.total === minTotal && minTotal >= 0 && !isBest;
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded-lg bg-primary/10 text-center">
+                    <p className="text-[10px] text-primary uppercase">Range Revenue</p>
+                    <p className="font-display font-bold text-sm text-primary">₦{rangeTotal.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-surface-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase">Transactions</p>
+                    <p className="font-display font-bold text-sm text-foreground">{rangeCount}</p>
+                  </div>
+                </div>
+
+                {breakdown.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No sales in this range</p>
+                ) : (
+                  <>
+                    {breakdown.length > 1 && (
+                      <div className="flex gap-2 text-[10px] text-muted-foreground">
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success" /> Best day</span>
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" /> Lowest day</span>
+                      </div>
+                    )}
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                      {breakdown.map((day, i) => {
+                        const isBest = day.total === maxTotal && maxTotal > 0;
+                        const isWorst = day.total === minTotal && minTotal >= 0 && !isBest;
+                        return (
+                          <div
+                            key={i}
+                            className={`flex justify-between items-center p-2 rounded-lg text-sm border ${
+                              isBest ? 'bg-success/10 border-success/40' :
+                              isWorst ? 'bg-destructive/10 border-destructive/40' :
+                              'bg-surface-2 border-transparent'
+                            }`}
+                          >
+                            <div>
+                              <span className="text-foreground font-medium">
+                                {day.date} {isBest && '🏆'} {isWorst && '📉'}
+                              </span>
+                              <span className="text-muted-foreground ml-2 text-xs">{day.count} transactions</span>
+                            </div>
+                            <span className={`font-bold ${isBest ? 'text-success' : isWorst ? 'text-destructive' : 'text-primary'}`}>
+                              ₦{day.total.toLocaleString()}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Sales Trend Chart */}
+          {store.sales.length > 0 && (
+            <div className="p-4 rounded-xl bg-card shadow-card">
+              <div className="flex flex-col gap-2 mb-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-display font-bold">Sales Trend</h3>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {[
+                    { key: 'today', label: 'Today' },
+                    { key: '1w', label: '1 Week' },
+                    { key: '14d', label: '14 Days' },
+                    { key: '30d', label: '30 Days' },
+                    { key: 'all', label: 'All' },
+                  ].map(r => (
+                    <button
+                      key={r.key}
+                      onClick={() => setTrendRange(r.key as any)}
+                      className={`px-2.5 py-0.5 rounded-md text-[10px] font-display font-semibold border transition-colors ${
+                        trendRange === r.key
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3 mb-2 text-[11px]">
+                <span className="flex items-center gap-1.5 text-primary">
+                  <span className="w-3 h-0.5 bg-primary rounded" /> Revenue
+                </span>
+                <span className="flex items-center gap-1.5 text-success">
+                  <span className="w-3 h-0.5 bg-success rounded" /> Profit
+                </span>
+              </div>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData} margin={{ left: -10, right: 10, top: 5, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: 'hsl(var(--chart-axis))', fontSize: 10 }} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: 'hsl(var(--chart-axis))', fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                    <Tooltip
+                      contentStyle={{ background: 'hsl(var(--chart-tooltip-bg))', border: '1px solid hsl(var(--chart-tooltip-border))', borderRadius: 8, fontSize: 12 }}
+                      labelStyle={{ color: 'hsl(var(--primary))' }}
+                      formatter={(value: number, name: string) => [`₦${value.toLocaleString()}`, name]}
+                    />
+
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      name="Revenue"
+                      stroke="hsl(var(--chart-revenue))"
+                      strokeWidth={2}
+                      dot={{ fill: 'hsl(var(--chart-revenue))', r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="profit"
+                      name="Profit"
+                      stroke="hsl(var(--chart-profit))"
+                      strokeWidth={2}
+                      strokeDasharray="4 3"
+                      dot={{ fill: 'hsl(var(--chart-profit))', r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Top Sellers */}
+          {topSellers.length > 0 && (() => {
+            const maxSold = Math.max(...topSellers.map(t => t.totalSold), 1);
+            return (
+              <div className="p-4 rounded-2xl bg-card shadow-card">
+                <h3 className="font-display font-bold mb-3">Top Sellers</h3>
+                <div className="space-y-3">
+                  {topSellers.map(t => {
+                    const pct = Math.max(6, Math.round((t.totalSold / maxSold) * 100));
                     return (
-                      <div
-                        key={i}
-                        className={`flex justify-between items-center p-2 rounded-lg text-sm border ${
-                          isBest ? 'bg-success/10 border-success/40' :
-                          isWorst ? 'bg-destructive/10 border-destructive/40' :
-                          'bg-surface-2 border-transparent'
-                        }`}
-                      >
-                        <div>
-                          <span className="text-foreground font-medium">
-                            {day.date} {isBest && '🏆'} {isWorst && '📉'}
-                          </span>
-                          <span className="text-muted-foreground ml-2 text-xs">{day.count} transactions</span>
+                      <div key={t.name} className="flex items-center gap-3">
+                        <span className="text-sm text-foreground font-display font-semibold w-24 truncate shrink-0">{t.name}</span>
+                        <div className="flex-1 h-3 rounded-full bg-surface-2 overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
                         </div>
-                        <span className={`font-bold ${isBest ? 'text-success' : isWorst ? 'text-destructive' : 'text-primary'}`}>
-                          ₦{day.total.toLocaleString()}
-                        </span>
+                        <span className="text-[11px] text-muted-foreground tabular-nums w-10 text-right shrink-0">{t.totalSold}</span>
                       </div>
                     );
                   })}
                 </div>
-              </>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Sales Trend Chart (last 14 days) */}
-      {store.sales.length > 0 && (
-        <div className="p-4 rounded-xl bg-card shadow-card">
-          <div className="flex justify-between items-baseline mb-2">
-            <h3 className="font-display font-bold">Sales Trend</h3>
-            <span className="text-[10px] text-muted-foreground">Last 14 days</span>
-          </div>
-          <div className="flex gap-3 mb-2 text-[11px]">
-            <span className="flex items-center gap-1.5 text-primary">
-              <span className="w-3 h-0.5 bg-primary rounded" /> Revenue
-            </span>
-            <span className="flex items-center gap-1.5 text-success">
-              <span className="w-3 h-0.5 bg-success rounded" /> Profit
-            </span>
-          </div>
-          <div className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData} margin={{ left: -10, right: 10, top: 5, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: 'hsl(var(--chart-axis))', fontSize: 10 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: 'hsl(var(--chart-axis))', fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
-                <Tooltip
-                  contentStyle={{ background: 'hsl(var(--chart-tooltip-bg))', border: '1px solid hsl(var(--chart-tooltip-border))', borderRadius: 8, fontSize: 12 }}
-                  labelStyle={{ color: 'hsl(var(--primary))' }}
-                  formatter={(value: number, name: string) => [`₦${value.toLocaleString()}`, name]}
-                />
-
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  name="Revenue"
-                  stroke="hsl(var(--chart-revenue))"
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--chart-revenue))', r: 3 }}
-                  activeDot={{ r: 5 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="profit"
-                  name="Profit"
-                  stroke="hsl(var(--chart-profit))"
-                  strokeWidth={2}
-                  strokeDasharray="4 3"
-                  dot={{ fill: 'hsl(var(--chart-profit))', r: 3 }}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+              </div>
+            );
+          })()}
         </div>
-      )}
-
-      {topSellers.length > 0 && (() => {
-        const maxSold = Math.max(...topSellers.map(t => t.totalSold), 1);
-        return (
-          <div className="p-4 rounded-2xl bg-card shadow-card">
-            <h3 className="font-display font-bold mb-3">Top Sellers</h3>
-            <div className="space-y-3">
-              {topSellers.map(t => {
-                const pct = Math.max(6, Math.round((t.totalSold / maxSold) * 100));
-                return (
-                  <div key={t.name} className="flex items-center gap-3">
-                    <span className="text-sm text-foreground font-display font-semibold w-24 truncate shrink-0">{t.name}</span>
-                    <div className="flex-1 h-3 rounded-full bg-surface-2 overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="text-[11px] text-muted-foreground tabular-nums w-10 text-right shrink-0">{t.totalSold}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Share report (compact footer) */}
-      <div className="flex gap-2 pt-1">
-        <button
-          onClick={handleShareReport}
-          className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors text-xs font-display font-semibold"
-        >
-          📤 Share Performance Report
-        </button>
-        <button
-          onClick={handleWhatsAppReport}
-          className="p-2.5 rounded-xl bg-success/10 border border-success/20 text-success hover:bg-success/20 transition-colors text-sm"
-          title="Share on WhatsApp"
-        >
-          💬
-        </button>
       </div>
     </div>
   );

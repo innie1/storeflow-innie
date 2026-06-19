@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { StoreData, Sale, PaymentMethod } from '@/types/store';
+import { StoreData, Sale, PaymentMethod, ManagerSettings } from '@/types/store';
 import { recordCheckout, getTopSellers, findProductByBarcode } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
+import VoiceSell from '@/components/VoiceSell';
 
 interface CartItem {
   productId: string;
@@ -16,9 +17,10 @@ interface CartItem {
 interface SalesProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
+  managerSettings?: ManagerSettings;
 }
 
-export default function Sales({ store, onUpdate }: SalesProps) {
+export default function Sales({ store, onUpdate, managerSettings }: SalesProps) {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('All');
   const [lastSale, setLastSale] = useState<Sale | null>(null);
@@ -241,7 +243,7 @@ export default function Sales({ store, onUpdate }: SalesProps) {
           {store.products.length === 0 ? 'Add products in the Inventory tab to start selling.' : 'No products match.'}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
           {visibleProducts.map(p => {
             const avail = getAvailableQty(p.id);
             const isTop = topSellerIds.has(p.id);
@@ -451,6 +453,18 @@ export default function Sales({ store, onUpdate }: SalesProps) {
       {scanning && (
         <BarcodeScanner title="Scan to Sell" subtitle="Aim at the product's barcode"
           onClose={() => setScanning(false)} onDetected={handleBarcodeDetected} />
+      )}
+
+      {/* Voice Sell — only when voiceFeatures is enabled (or not set) */}
+      {(managerSettings?.voiceFeatures !== false) && (
+        <VoiceSell
+          products={store.products.filter(p => p.quantity > 0)}
+          autoStart={managerSettings?.autoVoiceListen === true}
+          onAddItems={items => {
+            items.forEach(item => addToCart(item.productId, item.quantity));
+          }}
+          onCheckout={() => openCheckout()}
+        />
       )}
 
       {lastSale && <SaleReceipt store={store} sale={lastSale} onClose={() => setLastSale(null)} />}

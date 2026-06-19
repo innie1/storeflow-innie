@@ -18,40 +18,135 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-const DEFAULT_PRODUCTS: Omit<Product, 'id'>[] = [
-  { name: "Dettol Soap", costPrice: 250, sellingPrice: 350, quantity: 48, category: "Toiletries" },
-  { name: "Peak Milk (Tin)", costPrice: 500, sellingPrice: 650, quantity: 36, category: "Groceries" },
-  { name: "Indomie (Carton)", costPrice: 4500, sellingPrice: 5200, quantity: 12, category: "Groceries" },
-  { name: "Golden Penny Spaghetti", costPrice: 400, sellingPrice: 550, quantity: 30, category: "Groceries" },
-  { name: "Bournvita 400g", costPrice: 1200, sellingPrice: 1500, quantity: 15, category: "Beverages" },
-  { name: "Milo 400g", costPrice: 1400, sellingPrice: 1750, quantity: 18, category: "Beverages" },
-  { name: "Dangote Sugar 500g", costPrice: 350, sellingPrice: 500, quantity: 40, category: "Groceries" },
-  { name: "Kings Oil 75cl", costPrice: 800, sellingPrice: 1050, quantity: 24, category: "Groceries" },
-  { name: "Maggi Star (Pack)", costPrice: 100, sellingPrice: 150, quantity: 100, category: "Groceries" },
-  { name: "Omo Detergent 500g", costPrice: 300, sellingPrice: 450, quantity: 35, category: "Toiletries" },
-  { name: "Close Up Toothpaste", costPrice: 200, sellingPrice: 300, quantity: 25, category: "Toiletries" },
-  { name: "Harpic Toilet Cleaner", costPrice: 500, sellingPrice: 700, quantity: 10, category: "Toiletries" },
-  { name: "Coca-Cola (Bottle)", costPrice: 150, sellingPrice: 200, quantity: 60, category: "Beverages" },
-  { name: "Fanta (Bottle)", costPrice: 150, sellingPrice: 200, quantity: 48, category: "Beverages" },
-  { name: "Maltina (Can)", costPrice: 200, sellingPrice: 300, quantity: 36, category: "Beverages" },
-  { name: "Eva Water 75cl", costPrice: 100, sellingPrice: 150, quantity: 72, category: "Beverages" },
-  { name: "Cabin Biscuit", costPrice: 50, sellingPrice: 100, quantity: 80, category: "Snacks" },
-  { name: "Digestive Biscuit", costPrice: 150, sellingPrice: 250, quantity: 30, category: "Snacks" },
-  { name: "Gala Sausage Roll", costPrice: 100, sellingPrice: 150, quantity: 50, category: "Snacks" },
-  { name: "Butter Bread (Loaf)", costPrice: 500, sellingPrice: 700, quantity: 8, category: "Bakery" },
-  { name: "Golden Penny Flour 1kg", costPrice: 600, sellingPrice: 800, quantity: 20, category: "Groceries" },
-  { name: "Nescafe Sachet", costPrice: 50, sellingPrice: 100, quantity: 100, category: "Beverages" },
-  { name: "Lipton Tea (Pack)", costPrice: 200, sellingPrice: 300, quantity: 40, category: "Beverages" },
-  { name: "Vaseline Jelly 100ml", costPrice: 300, sellingPrice: 450, quantity: 20, category: "Toiletries" },
-  { name: "Nivea Roll-On", costPrice: 400, sellingPrice: 600, quantity: 15, category: "Toiletries" },
-  { name: "Dano Milk Sachet", costPrice: 100, sellingPrice: 150, quantity: 60, category: "Groceries" },
-  { name: "Sardine (Titus)", costPrice: 500, sellingPrice: 700, quantity: 25, category: "Groceries" },
-  { name: "Tomato Paste (Tin)", costPrice: 200, sellingPrice: 300, quantity: 40, category: "Groceries" },
-  { name: "Groundnut Oil 75cl", costPrice: 900, sellingPrice: 1200, quantity: 18, category: "Groceries" },
-  { name: "Pampers Diapers (Small)", costPrice: 1500, sellingPrice: 2000, quantity: 10, category: "Baby" },
-  { name: "Cway Water (Big)", costPrice: 200, sellingPrice: 300, quantity: 30, category: "Beverages" },
-  { name: "Tissue Paper (Roll)", costPrice: 150, sellingPrice: 250, quantity: 50, category: "Toiletries" },
+const RAW_DEFAULT_PRODUCTS = [
+  { name: "Peak Milk Liquid (New)", costPrice: 700, quantity: 1, category: "Beverage" },
+  { name: "Peak Milk Liquid (Old)", costPrice: 1100, quantity: 1, category: "Beverage" },
+  { name: "Raid", costPrice: 2200, quantity: 1, category: "Insecticide" },
+  { name: "Viva Refill (Big)", costPrice: 2100, quantity: 1, category: "Detergent" },
+  { name: "Cabin Biscuit", costPrice: 850, quantity: 1, category: "Biscuit" },
+  { name: "Golden Penny Butter", costPrice: 900, quantity: 1, category: "Butter" },
+  { name: "Small Corned Beef", costPrice: 2500, quantity: 1, category: "Canned Food" },
+  { name: "Titus", costPrice: 1500, quantity: 1, category: "Canned Food" },
+  { name: "Oral-B / Close-up (Big)", costPrice: 1500, quantity: 1, category: "Toothpaste" },
+  { name: "Ashante Butter", costPrice: 500, quantity: 1, category: "Butter" },
+  { name: "Tin Tomatoes (Medium)", costPrice: 700, quantity: 1, category: "Canned Food" },
+  { name: "Butter Roll", costPrice: 700, quantity: 10, category: "Butter" },
+  { name: "Sachet Onion & Pepper Paste Roll", costPrice: 800, quantity: 8, category: "Condiment" },
+  { name: "Super Pack Carton", costPrice: 15000, quantity: 44, category: "Packaged Food" },
+  { name: "Sugar Packet", costPrice: 1200, quantity: 1, category: "Sugar" },
+  { name: "Sachet Peak Milk & Milo Roll", costPrice: 1750, quantity: 10, category: "Beverage" },
+  { name: "Pampers (Big Size)", costPrice: 5700, quantity: 1, category: "Diaper" },
+  { name: "Mama Lemon (Big)", costPrice: 2500, quantity: 1, category: "Detergent" },
+  { name: "Mama Lemon (Medium)", costPrice: 1500, quantity: 1, category: "Detergent" },
+  { name: "Action Bitter Can (20cl)", costPrice: 700, quantity: 1, category: "Beverage" },
+  { name: "Balamo Can", costPrice: 400, quantity: 1, category: "Beverage" },
+  { name: "David P Water Pack", costPrice: 2400, quantity: 1, category: "Water" },
+  { name: "Aquafina Water Pack", costPrice: 2400, quantity: 1, category: "Water" },
+  { name: "Baby & Me Soap", costPrice: 600, quantity: 1, category: "Soap" },
+  { name: "Viva Tablet Soap", costPrice: 700, quantity: 1, category: "Soap" },
+  { name: "Colgate", costPrice: 1500, quantity: 1, category: "Toothpaste" },
+  { name: "Super Glue Carton", costPrice: 1800, quantity: 12, category: "Adhesive" },
+  { name: "Capt. Jack", costPrice: 500, quantity: 1, category: "Beverage" },
+  { name: "Engine Oil (Small Jerrycan)", costPrice: 3500, quantity: 1, category: "Automotive" },
+  { name: "Big Tissue Paper", costPrice: 6000, quantity: 1, category: "Toiletries" },
+  { name: "Softcare Pampers (Small Pack)", costPrice: 1100, quantity: 1, category: "Diaper" },
+  { name: "Powdered Refill Peak Milk", costPrice: 4000, quantity: 1, category: "Beverage" },
+  { name: "Refill Milo", costPrice: 3500, quantity: 1, category: "Beverage" },
+  { name: "Cake Roll", costPrice: 1600, quantity: 10, category: "Bakery" },
+  { name: "Dano Milk", costPrice: 1500, quantity: 10, category: "Beverage" },
+  { name: "Golden Penny Spaghetti", costPrice: 900, quantity: 1, category: "Pasta" },
+  { name: "Custard Cup (Smallest)", costPrice: 1500, quantity: 1, category: "Food" },
+  { name: "Custard Cup (with Milk & Sugar)", costPrice: 2000, quantity: 1, category: "Food" },
+  { name: "Garri Mix (Big Roll)", costPrice: 3000, quantity: 10, category: "Food" },
+  { name: "Garri Mix (Small Roll)", costPrice: 1800, quantity: 10, category: "Food" },
+  { name: "Coca Oat Roll", costPrice: 3000, quantity: 10, category: "Food" },
+  { name: "Choco Roll", costPrice: 3300, quantity: 10, category: "Food" },
+  { name: "3-in-1 Nescafé", costPrice: 1800, quantity: 10, category: "Beverage" },
+  { name: "Power Oil Groundnut Oil Roll", costPrice: 3400, quantity: 8, category: "Oil" },
+  { name: "Lipton", costPrice: 800, quantity: 10, category: "Beverage" },
+  { name: "Bama Roll", costPrice: 800, quantity: 10, category: "Condiment" },
+  { name: "Mineral", costPrice: 4700, quantity: 10, category: "Beverage" },
+  { name: "Eagle Gin", costPrice: 2300, quantity: 6, category: "Alcohol" },
+  { name: "Malta Guinness", costPrice: 13500, quantity: 3, category: "Beverage" },
+  { name: "Chelsea", costPrice: 3200, quantity: 3, category: "Biscuit" },
+  { name: "Predator", costPrice: 5500, quantity: 2, category: "Beverage" },
+  { name: "Fearless", costPrice: 5000, quantity: 2, category: "Beverage" },
+  { name: "Nutrimilk", costPrice: 6000, quantity: 2, category: "Beverage" },
+  { name: "Bigi", costPrice: 2700, quantity: 2, category: "Beverage" },
+  { name: "Hollandia", costPrice: 17000, quantity: 2, category: "Beverage" },
+  { name: "Nutrichoco", costPrice: 9500, quantity: 1, category: "Beverage" },
+  { name: "Fayrouz", costPrice: 14000, quantity: 1, category: "Beverage" },
+  { name: "Pepsi", costPrice: 5000, quantity: 1, category: "Beverage" },
+  { name: "Teem Lemon", costPrice: 5000, quantity: 1, category: "Beverage" },
+  { name: "Lacasera S/M", costPrice: 3000, quantity: 1, category: "Beverage" },
+  { name: "Big Lacasera", costPrice: 4200, quantity: 1, category: "Beverage" },
+  { name: "GINO Tomatoes Sachet", costPrice: 8000, quantity: 1, category: "Condiment" },
+  { name: "Indomitable", costPrice: 10000, quantity: 1, category: "Packaged Food" },
+  { name: "Dudu Mixed Fruit", costPrice: 8700, quantity: 1, category: "Beverage" },
+  { name: "Can Coke", costPrice: 12000, quantity: 1, category: "Beverage" },
+  { name: "Can Fanta", costPrice: 12000, quantity: 1, category: "Beverage" },
+  { name: "Viju Baked", costPrice: 10500, quantity: 1, category: "Beverage" },
+  { name: "Ceeder", costPrice: 11000, quantity: 1, category: "Beverage" },
+  { name: "Exotic", costPrice: 15000, quantity: 1, category: "Beverage" },
+  { name: "5Alive Pulpy", costPrice: 8000, quantity: 1, category: "Beverage" },
+  { name: "Black Bullet", costPrice: 28600, quantity: 1, category: "Beverage" },
+  { name: "Action Schnapps", costPrice: 19500, quantity: 1, category: "Alcohol" },
+  { name: "Guinness Stout", costPrice: 25000, quantity: 1, category: "Beverage" },
+  { name: "Spaghetti", costPrice: 19500, quantity: 1, category: "Pasta" },
+  { name: "Macaroni", costPrice: 19600, quantity: 1, category: "Pasta" },
+  { name: "Rice Mango", costPrice: 80000, quantity: 1, category: "Rice" },
+  { name: "Blue Bullet", costPrice: 21000, quantity: 1, category: "Beverage" },
+  { name: "Garri (White Bucket)", costPrice: 2500, quantity: 1, category: "Grocery" },
+  { name: "Garri (Yellow Bucket)", costPrice: 2500, quantity: 1, category: "Grocery" },
+  { name: "Rice (Foreign Bucket)", costPrice: 8000, quantity: 1, category: "Rice" },
+  { name: "Rice (Foreign Bag 50kg)", costPrice: 96000, quantity: 1, category: "Rice" },
+  { name: "White Beans Bucket", costPrice: 7000, quantity: 1, category: "Grocery" },
+  { name: "Honey Beans Bucket", costPrice: 7500, quantity: 1, category: "Grocery" },
+  { name: "Semovita (1kg)", costPrice: 2500, quantity: 1, category: "Food" },
+  { name: "Semolina (1kg)", costPrice: 2600, quantity: 1, category: "Food" },
+  { name: "Poundo Yam (1kg)", costPrice: 4500, quantity: 1, category: "Food" },
+  { name: "Wheat Meal (1kg)", costPrice: 3000, quantity: 1, category: "Food" },
+  { name: "Golden Morn (1kg)", costPrice: 3500, quantity: 1, category: "Cereal" },
+  { name: "Corn Flakes (500g)", costPrice: 3500, quantity: 1, category: "Cereal" },
+  { name: "Peak Milk Sachet Roll", costPrice: 3000, quantity: 10, category: "Beverage" },
+  { name: "Milo Sachet Roll", costPrice: 3500, quantity: 10, category: "Beverage" },
+  { name: "Bread (Small Loaf)", costPrice: 1500, quantity: 1, category: "Bakery" },
+  { name: "Bread (Large Loaf)", costPrice: 2500, quantity: 1, category: "Bakery" },
+  { name: "Egg Crate", costPrice: 7000, quantity: 1, category: "Food" },
+  { name: "Palm Oil (1 Litre)", costPrice: 2500, quantity: 1, category: "Oil" },
+  { name: "Groundnut Oil (1 Litre)", costPrice: 3500, quantity: 1, category: "Oil" },
+  { name: "Salt (Small Pack)", costPrice: 1200, quantity: 1, category: "Condiment" },
+  { name: "Salt (Large Pack)", costPrice: 2500, quantity: 1, category: "Condiment" },
+  { name: "Maggi Star Cubes (Pack)", costPrice: 1800, quantity: 1, category: "Seasoning" },
+  { name: "Knorr Cubes (Pack)", costPrice: 1800, quantity: 1, category: "Seasoning" },
+  { name: "Dettol Soap", costPrice: 1500, quantity: 1, category: "Soap" },
+  { name: "Premier Soap", costPrice: 1200, quantity: 1, category: "Soap" },
+  { name: "Joy Soap", costPrice: 1200, quantity: 1, category: "Soap" },
+  { name: "Morning Fresh", costPrice: 1800, quantity: 1, category: "Detergent" },
+  { name: "Omo Detergent (Small)", costPrice: 2000, quantity: 1, category: "Detergent" },
+  { name: "Ariel Detergent (Small)", costPrice: 2500, quantity: 1, category: "Detergent" },
+  { name: "Onion Basket", costPrice: 18000, quantity: 1, category: "Vegetables" },
+  { name: "Tomatoes Basket", costPrice: 35000, quantity: 1, category: "Vegetables" },
+  { name: "Pepper Basket", costPrice: 25000, quantity: 1, category: "Vegetables" },
+  { name: "Sachet Water Bag", costPrice: 600, quantity: 1, category: "Water" },
+  { name: "Basket (Small)", costPrice: 2500, quantity: 1, category: "Household" },
+  { name: "Basket (Medium)", costPrice: 4500, quantity: 1, category: "Household" },
+  { name: "Basket (Large)", costPrice: 7000, quantity: 1, category: "Household" },
+  { name: "Sack (Rice Sack)", costPrice: 1200, quantity: 1, category: "Packaging" },
+  { name: "Sack (Garri Sack)", costPrice: 1000, quantity: 1, category: "Packaging" }
 ];
+
+const DEFAULT_PRODUCTS: Omit<Product, 'id'>[] = RAW_DEFAULT_PRODUCTS.map(p => {
+  const cost = p.costPrice;
+  const selling = Math.round((cost * 1.30) / 50) * 50 || cost + 50;
+  return {
+    name: p.name,
+    costPrice: cost,
+    sellingPrice: selling,
+    quantity: p.quantity,
+    category: p.category
+  };
+});
 
 const STORE_INDEX_KEY = 'storeflow_index';
 
@@ -96,7 +191,10 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
   const now = new Date().toISOString();
   const isRetail = category === 'retail';
   const products = isRetail
-    ? DEFAULT_PRODUCTS.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }))
+    ? DEFAULT_PRODUCTS.map(p => {
+        const qty = Math.max(6, p.quantity);
+        return { ...p, quantity: qty, id: generateId(), initialQuantity: qty, addedAt: now };
+      })
     : [];
   const inventoryValue = products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
   const investments: Investment[] = inventoryValue > 0 ? [{
@@ -175,6 +273,23 @@ export function deleteProduct(store: StoreData, id: string): StoreData {
     ...store,
     products: store.products.filter(p => p.id !== id),
     trash: pushTrash(store, 'product', product),
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function clearInventory(store: StoreData): StoreData {
+  const now = new Date().toISOString();
+  const trashItems = store.products.map(p => ({
+    id: generateId(),
+    kind: 'product' as TrashKind,
+    deletedAt: now,
+    payload: p,
+  }));
+  const updated = {
+    ...store,
+    products: [],
+    trash: [...trashItems, ...(store.trash || [])],
   };
   saveStore(updated);
   return updated;

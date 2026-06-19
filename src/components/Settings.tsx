@@ -3,7 +3,7 @@ import {
   StoreData, StoreProfile, ManagerSettings, DEFAULT_MANAGER_SETTINGS,
   SavingsGoal, PaymentInfo, SavingsFrequency, RentInfo, RentFrequency,
 } from '@/types/store';
-import { saveStore, getTrash } from '@/lib/store-data';
+import { saveStore, getTrash, getDashboardStats, getTopSellers } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
@@ -42,7 +42,8 @@ export function getActiveSession(): string | null {
 
 type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
-  | 'appearance' | 'notifications' | 'security' | 'data' | 'support';
+  | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
+  | 'help' | 'faq' | 'about' | 'contact';
 
 interface SettingsProps {
   store: StoreData;
@@ -105,6 +106,9 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showSavingsModal, setShowSavingsModal] = useState(false);
   const [lowStock, setLowStock] = useState<string>(String(getLowStockThreshold()));
+  const [helpOpen, setHelpOpen] = useState<string | null>(null);
+  const [showExport, setShowExport] = useState(false);
+  const [showContactPopup, setShowContactPopup] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<StoreProfile>(
@@ -295,29 +299,49 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
 
   if (view === 'flow') return (
     <SubPage title="Flow Settings" onBack={() => setView('home')}>
-      <div className={`${card} p-4 space-y-1`}>
+      {/* Master toggle */}
+      <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Enable Flow" description="Master switch — turn on for insights, forecasts and advice." checked={mgr.enabled} onChange={v => updateMgr({ enabled: v })} />
-        {mgr.enabled && (
-          <>
+      </div>
+
+      {mgr.enabled && (
+        <>
+          {/* Forecasts */}
+          <div className="px-1">
             <SectionLabel>Forecasts</SectionLabel>
+          </div>
+          <div className={`${card} px-4 divide-y divide-border`}>
             <ToggleRow label="Revenue Forecasts" checked={mgr.revenueForecasts} onChange={v => updateMgr({ revenueForecasts: v })} />
             <ToggleRow label="Profit Forecasts" checked={mgr.profitForecasts} onChange={v => updateMgr({ profitForecasts: v })} />
             <ToggleRow label="Inventory Forecasts" checked={mgr.inventoryForecasts} onChange={v => updateMgr({ inventoryForecasts: v })} />
             <ToggleRow label="Expense Analysis" checked={mgr.expenseAnalysis} onChange={v => updateMgr({ expenseAnalysis: v })} />
+          </div>
+
+          {/* Recommendations */}
+          <div className="px-1">
             <SectionLabel>Recommendations</SectionLabel>
+          </div>
+          <div className={`${card} px-4 divide-y divide-border`}>
             <ToggleRow label="Smart Pricing" checked={mgr.smartPricing} onChange={v => updateMgr({ smartPricing: v })} />
             <ToggleRow label="Product Suggestions" checked={mgr.productSuggestions} onChange={v => updateMgr({ productSuggestions: v })} />
             <ToggleRow label="Business Advice" checked={mgr.businessAdvice} onChange={v => updateMgr({ businessAdvice: v })} />
             <ToggleRow label="Business Expansion" checked={mgr.businessExpansion} onChange={v => updateMgr({ businessExpansion: v })} />
+          </div>
+
+          {/* Tools */}
+          <div className="px-1">
             <SectionLabel>Tools</SectionLabel>
+          </div>
+          <div className={`${card} px-4 divide-y divide-border`}>
             <ToggleRow label="Weekly Recaps" checked={mgr.weeklyRecap} onChange={v => updateMgr({ weeklyRecap: v })} />
             <ToggleRow label="Customer Request Tracking" checked={mgr.customerRequests} onChange={v => updateMgr({ customerRequests: v })} />
             <ToggleRow label="Savings Planner" checked={mgr.savingsPlanner} onChange={toggleSavings} />
             <ToggleRow label="Voice Notes" checked={mgr.voiceFeatures} onChange={v => updateMgr({ voiceFeatures: v })} />
+            <ToggleRow label="Auto-Listen on Sales" description="Mic starts automatically when you open the Sales page." checked={mgr.autoVoiceListen} onChange={v => updateMgr({ autoVoiceListen: v })} />
             <ToggleRow label="Business Questions" checked={mgr.businessQuestions} onChange={v => updateMgr({ businessQuestions: v })} />
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </SubPage>
   );
 
@@ -345,7 +369,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
           ))}
         </div>
       </div>
-      <div className={`${card} p-4`}>
+      <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Auto-Suggest Selling Prices" checked={mgr.autoSuggestPrices} onChange={v => updateMgr({ autoSuggestPrices: v })} />
         <ToggleRow label="Auto-Apply Suggested Prices" checked={mgr.autoApplyPrices} onChange={v => updateMgr({ autoApplyPrices: v })} />
         <ToggleRow label="Show Product Profit" checked={mgr.showProductProfit} onChange={v => updateMgr({ showProductProfit: v })} />
@@ -363,7 +387,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
           onChange={v => updateMgr({ criticalStockThreshold: Math.max(0, Number(v) || 0) })}
           onSave={() => showToast('Saved')} />
       </div>
-      <div className={`${card} p-4`}>
+      <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Restock Suggestions" checked={mgr.restockSuggestions} onChange={v => updateMgr({ restockSuggestions: v })} />
         <ToggleRow label="Inventory Alerts" checked={mgr.inventoryAlerts} onChange={v => updateMgr({ inventoryAlerts: v })} />
         <ToggleRow label="Low Stock Notifications" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />
@@ -411,7 +435,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
           ))}
         </div>
       </div>
-      <div className={`${card} p-4`}>
+      <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Mascot Animations" description="Animate Flow across the app." checked={mgr.mascotAnimations} onChange={v => updateMgr({ mascotAnimations: v })} />
         <ToggleRow label="Reduce Motion" checked={mgr.reduceMotion} onChange={v => updateMgr({ reduceMotion: v })} />
         <ToggleRow label="Compact Mode" description="Tighter spacing across cards." checked={mgr.compactMode} onChange={v => updateMgr({ compactMode: v })} />
@@ -421,7 +445,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
 
   if (view === 'notifications') return (
     <SubPage title="Notifications" onBack={() => setView('home')}>
-      <div className={`${card} p-4`}>
+      <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Insights" checked={mgr.notifyInsights} onChange={v => updateMgr({ notifyInsights: v })} />
         <ToggleRow label="Recommendations" checked={mgr.notifyRecommendations} onChange={v => updateMgr({ notifyRecommendations: v })} />
         <ToggleRow label="Alerts" checked={mgr.notifyAlerts} onChange={v => updateMgr({ notifyAlerts: v })} />
@@ -436,7 +460,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
 
   if (view === 'security') return (
     <SubPage title="Security" onBack={() => setView('home')}>
-      <div className={`${card} p-4`}>
+      <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Biometric Lock" description="Use fingerprint / Face ID where supported." checked={mgr.biometricLock} onChange={v => updateMgr({ biometricLock: v })} />
         <ToggleRow label="PIN Lock" checked={mgr.pinLock} onChange={v => updateMgr({ pinLock: v })} />
       </div>
@@ -465,20 +489,400 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       <div className="grid grid-cols-2 gap-2">
         <DataTile icon="🔄" label="Switch Store" onClick={() => setShowSwitcher(true)} />
         <DataTile icon="🗑" label={`Recently Deleted${trashCount ? ` (${trashCount})` : ''}`} onClick={() => setShowTrash(true)} />
-        <DataTile icon="⬆️" label="Export Data" onClick={() => showToast('Use the export menu in Dashboard')} />
+        <DataTile icon="⬆️" label="Export Data" onClick={() => setShowExport(true)} />
         <DataTile icon="⬇️" label="Import Data" onClick={() => showToast('Import coming soon')} />
         <DataTile icon="☁️" label="Backup" onClick={() => showToast('Backup queued')} />
         <DataTile icon="♻️" label="Restore" onClick={() => showToast('Restore coming soon')} />
       </div>
+      {showTrash && (
+        <RecentlyDeleted
+          store={store}
+          onUpdate={onUpdate}
+          onClose={() => setShowTrash(false)}
+        />
+      )}
+      {showSwitcher && (
+        <StoreSwitcher
+          currentCode={store.accessCode}
+          onSwitch={onUpdate}
+          onClose={() => setShowSwitcher(false)}
+        />
+      )}
+      {showExport && (
+        <ExportSheet store={store} onClose={() => setShowExport(false)} />
+      )}
     </SubPage>
   );
 
+  // ===== ABOUT =====
+  if (view === 'about') return (
+    <SubPage title="About StoreFlow" onBack={() => setView('support')}>
+      <div className={`${card} p-6 flex flex-col items-center text-center gap-4`}>
+        <div className="w-20 h-20 rounded-3xl bg-primary/10 border border-primary/25 flex items-center justify-center text-4xl">
+          🏪
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-2xl">StoreFlow</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Version 1.0 · Innie Group</p>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          A modern business management platform for small businesses, supermarkets, kiosks, pharmacies, boutiques, restaurants, and growing stores.
+        </p>
+      </div>
+
+      <div className={`${card} p-4 space-y-3`}>
+        <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">Our Mission</p>
+        <ul className="space-y-2">
+          {([
+            ['📈', 'Help you make better business decisions'],
+            ['💸', 'Reduce losses and increase profits'],
+            ['📊', 'Track business growth over time'],
+            ['🔮', 'Predict future performance'],
+            ['🐖', 'Save for business goals'],
+            ['🤝', 'Understand what customers want'],
+            ['🏪', 'Make store management easier'],
+          ] as [string, string][]).map(([icon, text]) => (
+            <li key={text} className="flex items-start gap-2.5 text-sm text-foreground/85">
+              <span className="shrink-0 leading-5">{icon}</span>
+              <span>{text}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className={`${card} px-4 divide-y divide-border`}>
+        <div className="py-3.5 flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Developer</span>
+          <span className="text-sm font-display font-semibold">Innie Group</span>
+        </div>
+        <div className="py-3.5 flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Version</span>
+          <span className="text-sm font-display font-semibold">1.0</span>
+        </div>
+        <div className="py-3.5 flex items-center justify-between gap-3">
+          <span className="text-sm text-muted-foreground shrink-0">Email</span>
+          <a href="mailto:inniegroup@gmail.com" className="text-sm font-semibold text-primary truncate">
+            inniegroup@gmail.com
+          </a>
+        </div>
+        <div className="py-3.5 flex items-center justify-between gap-3">
+          <span className="text-sm text-muted-foreground shrink-0">WhatsApp</span>
+          <a href="https://wa.me/2347025517388" target="_blank" rel="noopener noreferrer"
+            className="text-sm font-semibold text-success">
+            07025517388
+          </a>
+        </div>
+      </div>
+
+      <div className="p-5 rounded-2xl bg-primary/5 border border-primary/20 text-center space-y-1">
+        <p className="text-sm text-muted-foreground">Thank you for choosing StoreFlow.</p>
+        <p className="font-display font-bold text-primary">Your growth is our mission. 🌱</p>
+      </div>
+    </SubPage>
+  );
+
+  // ===== CONTACT =====
+  if (view === 'contact') return (
+    <SubPage title="Contact Support" onBack={() => setView('support')}>
+      <div className={`${card} p-5 space-y-4`}>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-success/10 flex items-center justify-center text-2xl shrink-0">💬</div>
+          <div>
+            <p className="font-display font-bold text-sm">WhatsApp Support</p>
+            <p className="text-xs text-muted-foreground">Chat directly with the StoreFlow team</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              window.open('https://wa.me/2347025517388?text=Hello%20StoreFlow%20Team,%20I%20need%20assistance%20with%20StoreFlow.', '_blank');
+            }}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-success text-white font-display font-bold text-sm"
+          >
+            💬 Open WhatsApp
+          </button>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText('07025517388');
+              showToast('WhatsApp phone number copied');
+            }}
+            className="px-4 rounded-xl bg-surface-2 border border-border text-sm font-semibold hover:bg-surface-3 transition-colors"
+          >
+            Copy
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground text-center">Phone: 07025517388</p>
+      </div>
+
+      <div className={`${card} p-5 space-y-4`}>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl shrink-0">📧</div>
+          <div>
+            <p className="font-display font-bold text-sm">Email Support</p>
+            <p className="text-xs text-muted-foreground">Send a detailed issue or request</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              window.open('mailto:inniegroup@gmail.com?subject=StoreFlow%20Support%20Request&body=Hello%20StoreFlow%20Team,%0A%0AI%20need%20help%20with:%0A%0A_________________________%0A%0AThank%20you.', '_blank');
+            }}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm"
+          >
+            ✉️ Email Support
+          </button>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText('inniegroup@gmail.com');
+              showToast('Support email copied');
+            }}
+            className="px-4 rounded-xl bg-surface-2 border border-border text-sm font-semibold hover:bg-surface-3 transition-colors"
+          >
+            Copy
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground text-center">Email: inniegroup@gmail.com</p>
+      </div>
+
+      <button
+        onClick={() => setShowContactPopup(true)}
+        className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-success text-primary-foreground font-display font-bold text-sm shadow-md hover:opacity-95 transition-all"
+      >
+        ✨ Show More Support Options
+      </button>
+
+      <div className={`${card} p-4 text-center space-y-1`}>
+        <p className="text-xs font-semibold text-foreground">Support Hours</p>
+        <p className="text-xs text-muted-foreground">Monday - Sunday</p>
+        <p className="text-[10px] text-muted-foreground">StoreFlow Support Team · Innie Group</p>
+      </div>
+    </SubPage>
+  );
+
+  // ===== FAQ =====
+  if (view === 'faq') return (
+    <SubPage title="Frequently Asked Questions" onBack={() => setView('support')}>
+      <div className={`${card} px-4 divide-y divide-border`}>
+        {([
+          ['Does StoreFlow work offline?', 'Yes. Most features work offline and data syncs when available.'],
+          ['Can I manage multiple stores?', 'Yes. Use the Switch Store feature in Settings → Data & Storage.'],
+          ['Can I restore deleted items?', 'Yes. Visit Settings → Data & Storage → Recently Deleted. Nothing is permanently deleted immediately.'],
+          ['Can Flow predict future sales?', 'Yes. Predictions become more accurate as more sales and expense data is recorded.'],
+          ['Does Flow learn from my business?', 'Yes. Flow learns from your sales history, inventory, expenses, customer requests, and business information.'],
+          ['Can I disable Flow?', 'Yes. Flow can be turned off at any time in Settings → Flow Settings.'],
+          ['Can I track partial payments and debts?', 'Yes. StoreFlow automatically creates and tracks outstanding balances for partial payments.'],
+          ['Can I upload a store logo?', 'Yes. Your logo appears throughout the app. Add it in Settings → Edit Profile.'],
+          ['Can StoreFlow help me save money?', 'Yes. The Savings Plan feature and Flow recommendations help you build financial discipline over time.'],
+          ['Is my data safe?', 'Yes. StoreFlow stores and protects your business information securely on your device.'],
+        ] as [string, string][]).map(([q, a]) => (
+          <div key={q}>
+            <button
+              className="w-full text-left flex items-start justify-between gap-3 py-4"
+              onClick={() => setHelpOpen(helpOpen === q ? null : q)}
+            >
+              <p className="text-sm font-display font-semibold text-foreground leading-snug">{q}</p>
+              <span className="shrink-0 text-muted-foreground text-xs mt-0.5">
+                {helpOpen === q ? '▴' : '▾'}
+              </span>
+            </button>
+            {helpOpen === q && (
+              <p className="pb-4 text-sm text-muted-foreground leading-relaxed animate-fade-in">{a}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </SubPage>
+  );
+
+  // ===== HELP CENTER =====
+  if (view === 'help') {
+    const topics = [
+      {
+        id: 'start', icon: '🚀', title: 'Getting Started',
+        body: (
+          <div className="space-y-2">
+            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+              {['Create your store profile', 'Add your products', 'Record sales daily', 'Record expenses', 'Set profit margins', 'Configure savings goals', 'Turn on Flow for insights and recommendations', 'Review your dashboard regularly'].map((s, i) => <li key={i}>{s}</li>)}
+            </ol>
+            <p className="text-[11px] text-muted-foreground italic mt-1">The more data you record, the smarter StoreFlow becomes.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'sales', icon: '🛒', title: 'Making a Sale',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <ol className="list-decimal list-inside space-y-1">
+              {['Open the Sales page', 'Search or select products', 'Add products to cart', 'Click Complete Sale', 'Select payment type', 'Save sale'].map((s, i) => <li key={i}>{s}</li>)}
+            </ol>
+            <p className="text-[11px] italic">Inventory automatically updates after each sale.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'partial', icon: '💳', title: 'Partial Payments',
+        body: (
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>When a customer pays part of their total, StoreFlow automatically creates a Pending Balance. The sale is still recorded fully.</p>
+            <div className="bg-surface-2 border border-border rounded-lg p-3 text-xs space-y-1">
+              <div className="flex justify-between"><span>Customer buys</span><strong className="text-foreground">₦2,500</strong></div>
+              <div className="flex justify-between"><span>Customer pays</span><strong className="text-foreground">₦2,000</strong></div>
+              <div className="flex justify-between border-t border-border pt-1 mt-1"><span>Pending balance</span><strong className="text-warning">₦500</strong></div>
+            </div>
+            <div>
+              <p className="font-semibold text-foreground/80 mb-1">When customer pays later:</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                {['Open Pending Balance', 'Tap Record Payment', 'Enter amount paid', 'Balance updates automatically'].map((s, i) => <li key={i}>{s}</li>)}
+              </ol>
+            </div>
+            <p className="text-[11px] italic">Find all balances at: Sales → Pending Balances</p>
+          </div>
+        ),
+      },
+      {
+        id: 'inventory', icon: '📦', title: 'Adding Products',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>Go to <strong className="text-foreground">Inventory → Add Product</strong> and enter:</p>
+            <ul className="space-y-1 text-xs">
+              {['Product Name', 'Category', 'Cost Price', 'Selling Price', 'Quantity', 'Barcode (optional)'].map(f => (
+                <li key={f} className="flex items-center gap-1.5"><span className="text-primary text-xs">●</span>{f}</li>
+              ))}
+            </ul>
+          </div>
+        ),
+      },
+      {
+        id: 'pricing', icon: '🏷️', title: 'Auto Pricing',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>When Auto Pricing is on, StoreFlow suggests a selling price based on cost + desired margin.</p>
+            <div className="bg-surface-2 border border-border rounded-lg p-3 text-xs space-y-1">
+              <div className="flex justify-between"><span>Cost Price</span><strong className="text-foreground">₦1,000</strong></div>
+              <div className="flex justify-between"><span>Margin</span><strong className="text-foreground">20%</strong></div>
+              <div className="flex justify-between border-t border-border pt-1 mt-1"><span>Suggested Price</span><strong className="text-success">₦1,200</strong></div>
+            </div>
+            <p className="text-[11px] italic">Enable in Settings → Pricing.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'batch', icon: '📥', title: 'Batch Import',
+        body: (
+          <p className="text-sm text-muted-foreground">Import multiple products at once. Before saving, StoreFlow shows a preview screen where you can edit products, correct prices or names, and remove mistakes — then approve and save all at once.</p>
+        ),
+      },
+      {
+        id: 'flow', icon: '🤖', title: 'Flow Assistant',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>Flow analyzes your sales, expenses, inventory, debts, and trends to give tailored recommendations.</p>
+            <ul className="space-y-1 text-xs">
+              {['Predict revenue and profits', 'Detect slow and fast-moving products', 'Suggest savings targets', 'Analyze rent and expense impact', 'Forecast busy periods and daily sales', 'Answer business questions (Ask Advice)', 'Suggest products worth stocking'].map(f => (
+                <li key={f} className="flex items-center gap-1.5"><span className="text-success text-xs">●</span>{f}</li>
+              ))}
+            </ul>
+            <p className="text-[11px] italic">Flow helps you make smarter decisions — it does not replace them.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'health', icon: '💚', title: 'Store Health Score',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>Your Store Health Score reflects overall business performance based on revenue, profit, expenses, inventory levels, savings progress, and outstanding balances. A higher score means a healthier, more profitable business.</p>
+            <p className="text-[11px] italic">Tap the score on your dashboard for a full breakdown.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'requests', icon: '💬', title: 'Customer Requests',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>When a customer asks for a product you don't have, record their request. StoreFlow tracks the product name, frequency, number of requests, and last request date.</p>
+            <p>Flow uses this data to recommend which products to stock next.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'rent', icon: '🏠', title: 'Rent Analysis',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p><strong className="text-foreground">Rented store:</strong> Flow calculates weekly and monthly savings targets to cover rent, including a 10% buffer for increases. It also shows how rent affects your profitability.</p>
+            <p><strong className="text-foreground">Owned store:</strong> Flow estimates annual savings, emergency reserves, and property maintenance suggestions.</p>
+            <p className="text-[11px] italic">Configure in Settings → Edit Profile.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'savings', icon: '🐖', title: 'Savings Plan',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>Choose between percentage saving (e.g. 10% of profit) or a fixed amount (e.g. ₦5,000 weekly or ₦20,000 monthly). Plans can be enabled or paused at any time.</p>
+            <p className="text-[11px] italic">Set up in Settings → Savings Plan.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'graphs', icon: '📊', title: 'Graphs & Activity',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>The Sales Activity graph shows 30-minute intervals by default (Today view). Switch timeframes:</p>
+            <ul className="space-y-1 text-xs">
+              {['Today (hourly)', '7 Days', '14 Days', '30 Days', '1 Year', 'Lifetime'].map(f => (
+                <li key={f} className="flex items-center gap-1.5"><span className="text-primary text-xs">●</span>{f}</li>
+              ))}
+            </ul>
+            <p>The Dashboard Sales Trend chart can also be filtered by Today, 1 Week, 14 Days, 30 Days, or All Time.</p>
+          </div>
+        ),
+      },
+      {
+        id: 'trash', icon: '🗑️', title: 'Data Recovery',
+        body: (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>Nothing is permanently deleted immediately. Deleted products, sales, expenses, and categories all go to Trash and can be restored at any time.</p>
+            <p className="text-[11px] italic">Access via: Settings → Data & Storage → Recently Deleted</p>
+          </div>
+        ),
+      },
+    ];
+
+    return (
+      <SubPage title="Help Center" onBack={() => setView('support')}>
+        <div className={`${card} px-4 divide-y divide-border`}>
+          {topics.map(topic => (
+            <div key={topic.id}>
+              <button
+                className="w-full flex items-center gap-3 py-3.5 text-left"
+                onClick={() => setHelpOpen(helpOpen === topic.id ? null : topic.id)}
+              >
+                <span className="text-xl shrink-0 w-7 text-center">{topic.icon}</span>
+                <span className="flex-1 text-sm font-display font-semibold text-foreground">{topic.title}</span>
+                <span className="shrink-0 text-muted-foreground text-xs">
+                  {helpOpen === topic.id ? '▴' : '▾'}
+                </span>
+              </button>
+              {helpOpen === topic.id && (
+                <div className="pb-4 pl-10 pr-1 animate-fade-in">
+                  {topic.body}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </SubPage>
+    );
+  }
+
+  // ===== SUPPORT HOME =====
   if (view === 'support') return (
     <SubPage title="Support" onBack={() => setView('home')}>
       <div className={`${card} divide-y divide-border`}>
-        <SupportRow icon="?" label="Help Center" onClick={() => showToast('Help center coming soon')} />
-        <SupportRow icon="💬" label="Contact Support" onClick={() => showToast('Reach us at help@storeflow.app')} />
-        <SupportRow icon="ℹ️" label="About StoreFlow" onClick={() => showToast('StoreFlow · v2.4')} />
+        <SupportRow icon="📖" label="Help Center" onClick={() => { setHelpOpen(null); setView('help'); }} />
+        <SupportRow icon="❓" label="FAQ" onClick={() => { setHelpOpen(null); setView('faq'); }} />
+        <SupportRow icon="💬" label="Contact Support" onClick={() => setShowContactPopup(true)} />
+        <SupportRow icon="ℹ️" label="About StoreFlow" onClick={() => setView('about')} />
       </div>
     </SubPage>
   );
@@ -591,6 +995,9 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       {showSavingsModal && (
         <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} />
       )}
+      {showContactPopup && (
+        <ContactOptionsSheet storeName={store.storeName} onClose={() => setShowContactPopup(false)} />
+      )}
     </div>
   );
 }
@@ -606,7 +1013,11 @@ function Field({ label, value, onChange, placeholder, type='text' }: { label: st
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] uppercase tracking-wide text-muted-foreground pt-3 pb-1">{children}</p>;
+  return (
+    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold pt-2 pb-1 px-1">
+      {children}
+    </p>
+  );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -719,6 +1130,556 @@ function SavingsModal({ initial, onClose, onSave }: { initial: SavingsGoal; onCl
         </div>
 
         <button onClick={() => onSave(g)} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90">Save Plan</button>
+      </div>
+    </div>
+  );
+}
+
+// ============ EXPORT SHEET ============
+function ExportSheet({ store, onClose }: { store: StoreData; onClose: () => void }) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const stats = getDashboardStats(store);
+  const topSellers = getTopSellers(store, 5);
+
+  const buildReport = () => {
+    const p = store.profile;
+    let r = `\ud83d\udcca PERFORMANCE REPORT\n`;
+    r += `==============================\n`;
+    r += `${store.storeName}\n`;
+    if (p?.location) r += `\ud83d\udccd ${p.location}\n`;
+    r += `\ud83d\udcc5 ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
+    r += `==============================\n\n`;
+    r += `\ud83d\udcb0 OVERVIEW\n`;
+    r += `Gross Revenue: \u20a6${stats.totalRevenue.toLocaleString()}\n`;
+    r += `Total Expenses: \u20a6${stats.totalExpenses.toLocaleString()}\n`;
+    r += `Net Income: \u20a6${stats.netIncome.toLocaleString()}\n`;
+    r += `Profit: \u20a6${stats.totalProfit.toLocaleString()}\n`;
+    r += `Inventory Value: \u20a6${stats.inventoryValue.toLocaleString()}\n`;
+    r += `Total Sales: ${stats.totalSales}\n`;
+    r += `Products: ${stats.totalProducts}\n`;
+    r += `Low Stock Items: ${stats.lowStockProducts.length}\n\n`;
+    const soldMap = new Map<string, { name: string; qty: number; revenue: number; profit: number }>();
+    store.sales.forEach(s => {
+      const e = soldMap.get(s.productId) || { name: s.productName, qty: 0, revenue: 0, profit: 0 };
+      e.qty += s.quantity; e.revenue += s.total; e.profit += s.profit;
+      soldMap.set(s.productId, e);
+    });
+    if (soldMap.size > 0) {
+      r += `\ud83d\udce6 SOLD ITEMS\n------------------------------\n`;
+      Array.from(soldMap.values()).sort((a, b) => b.revenue - a.revenue).forEach(i => {
+        r += `${i.name}: ${i.qty} sold \u2014 \u20a6${i.revenue.toLocaleString()} (profit: \u20a6${i.profit.toLocaleString()})\n`;
+      });
+      r += '\n';
+    }
+    r += `\ud83c\udfea INVENTORY\n------------------------------\n`;
+    store.products.filter(p => p.quantity > 0).sort((a, b) => b.quantity - a.quantity).forEach(p => {
+      r += `${p.name}: ${p.quantity} left (\u20a6${p.sellingPrice.toLocaleString()} each)\n`;
+    });
+    if (stats.lowStockProducts.length > 0) {
+      r += `\n\u26a0\ufe0f LOW STOCK\n------------------------------\n`;
+      stats.lowStockProducts.forEach(p => { r += `${p.name}: only ${p.quantity} left!\n`; });
+    }
+    if (topSellers.length > 0) {
+      r += `\n\ud83c\udfc6 TOP SELLERS\n------------------------------\n`;
+      topSellers.forEach((t, i) => { r += `${i + 1}. ${t.name} \u2014 ${t.totalSold} units (\u20a6${t.revenue.toLocaleString()})\n`; });
+    }
+    r += `\n==============================\nGenerated by StoreFlow\n`;
+    return r;
+  };
+
+  const buildCSV = () => {
+    let csv = 'Type,Name,Category,Cost Price,Selling Price,Quantity,Value\n';
+    store.products.forEach(p => {
+      csv += `Product,"${p.name}","${p.category}",${p.costPrice},${p.sellingPrice},${p.quantity},${p.costPrice * p.quantity}\n`;
+    });
+    csv += '\nDate,Product,Quantity,Unit Price,Total,Profit\n';
+    store.sales.forEach(s => {
+      csv += `${new Date(s.date).toLocaleDateString()},"${s.productName}",${s.quantity},${s.unitPrice},${s.total},${s.profit}\n`;
+    });
+    return csv;
+  };
+
+  const download = (content: string, name: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
+
+  const slug = store.storeName.replace(/\s+/g, '_');
+
+  const handlePDF = async () => {
+    setLoading('pdf');
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+      const W = doc.internal.pageSize.getWidth();
+      let y = 15;
+      const row = (left: string, right: string, bold = false) => {
+        if (y > 272) { doc.addPage(); y = 15; }
+        doc.setFont('helvetica', bold ? 'bold' : 'normal');
+        doc.setFontSize(10); doc.setTextColor(20, 20, 20);
+        doc.text(left, 15, y);
+        doc.setFont('helvetica', 'bold');
+        doc.text(right, W - 15, y, { align: 'right' });
+        y += 7;
+      };
+      const heading = (text: string, r = 99, g = 102, b = 241) => {
+        if (y > 272) { doc.addPage(); y = 15; }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+        doc.setTextColor(r, g, b); doc.text(text, 15, y); y += 7;
+        doc.setTextColor(20, 20, 20);
+      };
+      // Header banner
+      doc.setFillColor(99, 102, 241);
+      doc.rect(0, 0, W, 28, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+      doc.text('StoreFlow', 15, 12);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      doc.text('Performance Report', 15, 20);
+      doc.text(new Date().toLocaleDateString(), W - 15, 20, { align: 'right' });
+      y = 38;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(20, 20, 20);
+      doc.text(store.storeName, 15, y); y += 7;
+      if (store.profile?.location) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+        doc.text(store.profile.location, 15, y); y += 7;
+      }
+      y += 3;
+      heading('OVERVIEW');
+      row('Gross Revenue', `\u20a6${stats.totalRevenue.toLocaleString()}`);
+      row('Total Expenses', `\u20a6${stats.totalExpenses.toLocaleString()}`);
+      row('Net Income', `\u20a6${stats.netIncome.toLocaleString()}`, true);
+      row('Profit', `\u20a6${stats.totalProfit.toLocaleString()}`, true);
+      row('Inventory Value', `\u20a6${stats.inventoryValue.toLocaleString()}`);
+      row('Total Sales', `${stats.totalSales}`);
+      row('Products', `${stats.totalProducts}`);
+      row('Low Stock Items', `${stats.lowStockProducts.length}`);
+      y += 3;
+      if (topSellers.length > 0) {
+        heading('TOP SELLERS');
+        topSellers.forEach((t, i) => {
+          if (y > 272) { doc.addPage(); y = 15; }
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(20, 20, 20);
+          doc.text(`${i + 1}. ${t.name} \u2014 ${t.totalSold} units  \u20a6${t.revenue.toLocaleString()}`, 15, y);
+          y += 7;
+        });
+        y += 3;
+      }
+      if (stats.lowStockProducts.length > 0) {
+        heading('LOW STOCK ALERTS', 220, 38, 38);
+        stats.lowStockProducts.forEach(p => {
+          if (y > 272) { doc.addPage(); y = 15; }
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(180, 30, 30);
+          doc.text(`\u2022 ${p.name}: only ${p.quantity} left`, 15, y); y += 7;
+        });
+      }
+      // Footer
+      const pages = doc.getNumberOfPages();
+      for (let i = 1; i <= pages; i++) {
+        doc.setPage(i);
+        doc.setFillColor(245, 245, 250);
+        doc.rect(0, 285, W, 12, 'F');
+        doc.setFontSize(8); doc.setTextColor(150, 150, 150); doc.setFont('helvetica', 'normal');
+        doc.text('Generated by StoreFlow \u00b7 Innie Group', W / 2, 292, { align: 'center' });
+        doc.text(`Page ${i} of ${pages}`, W - 15, 292, { align: 'right' });
+      }
+      doc.save(`StoreFlow_Report_${slug}.pdf`);
+      showToast('PDF exported!');
+    } catch {
+      showToast('PDF export failed', 'error');
+    }
+    setLoading(null); onClose();
+  };
+
+  const handleText = () => {
+    setLoading('text');
+    download(buildReport(), `StoreFlow_${slug}.txt`, 'text/plain');
+    showToast('Text report downloaded');
+    setLoading(null); onClose();
+  };
+
+  const handleCSV = () => {
+    setLoading('csv');
+    download(buildCSV(), `StoreFlow_${slug}.csv`, 'text/csv');
+    showToast('CSV downloaded');
+    setLoading(null); onClose();
+  };
+
+  const handleWhatsApp = () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildReport())}`, '_blank');
+    onClose();
+  };
+
+  const handleShare = async () => {
+    const text = buildReport();
+    if (navigator.share) {
+      try { await navigator.share({ title: `StoreFlow Report \u2014 ${store.storeName}`, text }); }
+      catch { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(text);
+      showToast('Report copied to clipboard');
+    }
+    onClose();
+  };
+
+  const options = [
+    { id: 'pdf',  icon: '\ud83d\udcc4', label: 'Export as PDF',      sub: 'Formatted report saved to your device', color: 'text-destructive', action: handlePDF },
+    { id: 'text', icon: '\ud83d\udcdd', label: 'Export as Text',     sub: 'Plain text .txt file',                 color: 'text-foreground',  action: handleText },
+    { id: 'csv',  icon: '\ud83d\udcca', label: 'Export as CSV',      sub: 'Spreadsheet-ready data file',          color: 'text-success',     action: handleCSV },
+    { id: 'wa',   icon: '\ud83d\udcac', label: 'Share to WhatsApp',  sub: 'Send report via WhatsApp',             color: 'text-success',     action: handleWhatsApp },
+    { id: 'share',icon: '\ud83d\udce4', label: 'Share\u2026',        sub: 'Send with any app on your device',     color: 'text-primary',     action: handleShare },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full bg-card rounded-t-3xl shadow-2xl animate-slide-up"
+        style={{ maxWidth: '448px', margin: '0 auto' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1.5 rounded-full bg-border" />
+        </div>
+        <div className="px-5 pb-3">
+          <h3 className="font-display font-bold text-lg">Export Data</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Choose export format or sharing method</p>
+        </div>
+        <div className="px-4 space-y-1">
+          {options.map(opt => (
+            <button
+              key={opt.id}
+              onClick={opt.action}
+              disabled={loading !== null}
+              className="w-full flex items-center gap-4 p-3 rounded-2xl text-left transition-colors hover:bg-surface-2 active:bg-surface-2 disabled:opacity-60"
+            >
+              <div className="w-11 h-11 rounded-2xl bg-surface-2 border border-border flex items-center justify-center text-xl shrink-0">
+                {loading === opt.id ? '\u23f3' : opt.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-display font-semibold ${opt.color}`}>{opt.label}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{opt.sub}</p>
+              </div>
+              <span className="shrink-0 text-muted-foreground text-lg">›</span>
+            </button>
+          ))}
+        </div>
+        <div className="px-4 py-4">
+          <button
+            onClick={onClose}
+            className="w-full py-3.5 rounded-2xl border border-border text-muted-foreground font-display font-semibold text-sm transition-colors hover:bg-surface-2"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ContactOptionsSheetProps {
+  storeName: string;
+  onClose: () => void;
+}
+
+function ContactOptionsSheet({ storeName, onClose }: ContactOptionsSheetProps) {
+  const [activeTab, setActiveTab] = useState<'menu' | 'bug' | 'feature'>('menu');
+  const [bugSubject, setBugSubject] = useState('');
+  const [bugDesc, setBugDesc] = useState('');
+  const [featureName, setFeatureName] = useState('');
+  const [featureDesc, setFeatureDesc] = useState('');
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    showToast(`${label} copied`);
+  };
+
+  const options = [
+    {
+      id: 'wa',
+      icon: '💬',
+      label: 'WhatsApp Support',
+      desc: 'Chat directly with the StoreFlow team.',
+      action: () => {
+        window.open('https://wa.me/2347025517388?text=Hello%20StoreFlow%20Team,%20I%20need%20assistance%20with%20StoreFlow.', '_blank');
+      }
+    },
+    {
+      id: 'email',
+      icon: '✉️',
+      label: 'Email Support',
+      desc: 'Send a detailed issue or request.',
+      action: () => {
+        window.open('mailto:inniegroup@gmail.com?subject=StoreFlow%20Support%20Request&body=Hello%20StoreFlow%20Team,%0A%0AI%20need%20help%20with:%0A%0A_________________________%0A%0AThank%20you.', '_blank');
+      }
+    },
+    {
+      id: 'bug',
+      icon: '🪲',
+      label: 'Report a Bug',
+      desc: 'Tell us about an issue in the app.',
+      action: () => setActiveTab('bug')
+    },
+    {
+      id: 'feature',
+      icon: '💡',
+      label: 'Suggest a Feature',
+      desc: 'Help improve StoreFlow by sharing your ideas.',
+      action: () => setActiveTab('feature')
+    },
+    {
+      id: 'partner',
+      icon: '🤝',
+      label: 'Business Partnership',
+      desc: 'Discuss supplier partnerships, promotions, and opportunities.',
+      action: () => {
+        window.open('mailto:inniegroup@gmail.com?subject=StoreFlow%20Business%20Partnership%20Proposal&body=Hello%20StoreFlow%20Team,%0A%0AI%20would%20like%20to%20discuss%20a%20business%20partnership/promotion%20opportunity%20with%20StoreFlow.%0A%0AStore%20Name:%20' + encodeURIComponent(storeName) + '%0A%0ADetails:%0A%0A_________________________%0A%0AThank%20you.', '_blank');
+      }
+    }
+  ];
+
+  const handleSendBug = () => {
+    if (!bugSubject.trim() || !bugDesc.trim()) {
+      showToast('Please fill in all fields', 'error');
+      return;
+    }
+    const subject = `StoreFlow Bug Report: ${bugSubject}`;
+    const body = `Hello StoreFlow Team,
+
+I found a bug in the app.
+
+Issue Summary:
+${bugSubject}
+
+Description & Steps to Reproduce:
+${bugDesc}
+
+Store Name: ${storeName}
+OS/Browser: ${navigator.userAgent}
+Screen Size: ${window.innerWidth}x${window.innerHeight}
+
+Thank you.`;
+
+    window.open(`mailto:inniegroup@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    showToast('Mail client opened');
+    setActiveTab('menu');
+  };
+
+  const handleSendFeature = () => {
+    if (!featureName.trim() || !featureDesc.trim()) {
+      showToast('Please fill in all fields', 'error');
+      return;
+    }
+    const subject = `StoreFlow Feature Suggestion: ${featureName}`;
+    const body = `Hello StoreFlow Team,
+
+I would like to suggest a new feature for StoreFlow.
+
+Feature Suggestion:
+${featureName}
+
+Description:
+${featureDesc}
+
+Store Name: ${storeName}
+
+Thank you.`;
+
+    window.open(`mailto:inniegroup@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    showToast('Mail client opened');
+    setActiveTab('menu');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full bg-card rounded-t-3xl shadow-2xl animate-slide-up flex flex-col"
+        style={{ maxWidth: '448px', margin: '0 auto', maxHeight: '90vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1.5 rounded-full bg-border" />
+        </div>
+
+        {activeTab === 'menu' && (
+          <>
+            <div className="px-5 pb-2 shrink-0">
+              <h3 className="font-display font-bold text-xl text-primary">Contact Us</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Support Hours: Monday - Sunday</p>
+              <p className="text-[10px] text-muted-foreground">StoreFlow Support Team · Innie Group</p>
+            </div>
+
+            <div className="px-4 space-y-1 overflow-y-auto max-h-[50vh] no-scrollbar">
+              {options.map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={opt.action}
+                  className="w-full flex items-center gap-3.5 p-3 rounded-2xl text-left transition-colors hover:bg-surface-2 active:bg-surface-2"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-surface-2 border border-border flex items-center justify-center text-lg shrink-0">
+                    {opt.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-display font-bold text-foreground">{opt.label}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{opt.desc}</p>
+                  </div>
+                  <span className="shrink-0 text-muted-foreground text-base">›</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Quick Copy Section */}
+            <div className="px-5 py-3 border-t border-border mt-3 space-y-2 bg-surface-2/40 shrink-0">
+              <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">StoreFlow Contact Details</p>
+              
+              <div className="flex items-center justify-between text-xs p-2 rounded-xl bg-card border border-border">
+                <span className="text-muted-foreground">WhatsApp: <strong className="text-foreground">07025517388</strong></span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => handleCopy('07025517388', 'WhatsApp phone number')}
+                    className="px-2.5 py-1 rounded bg-success/10 text-success text-[10px] font-semibold"
+                  >
+                    Copy
+                  </button>
+                  <a
+                    href="https://wa.me/2347025517388?text=Hello%20StoreFlow%20Team,%20I%20need%20assistance%20with%20StoreFlow."
+                    target="_blank" rel="noopener noreferrer"
+                    className="w-5 h-5 flex items-center justify-center text-xs"
+                    title="Open chat"
+                  >
+                    💬
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs p-2 rounded-xl bg-card border border-border">
+                <span className="text-muted-foreground truncate mr-2">Email: <strong className="text-foreground">inniegroup@gmail.com</strong></span>
+                <button
+                  onClick={() => handleCopy('inniegroup@gmail.com', 'Support email address')}
+                  className="px-2.5 py-1 rounded bg-primary/10 text-primary text-[10px] font-semibold shrink-0"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'bug' && (
+          <div className="px-5 pb-2 flex-1 flex flex-col min-h-0">
+            <div className="py-2 flex items-center justify-between shrink-0">
+              <h3 className="font-display font-bold text-lg text-destructive">Report a Bug 🪲</h3>
+              <button onClick={() => setActiveTab('menu')} className="text-xs text-muted-foreground hover:underline">Back</button>
+            </div>
+            
+            <div className="space-y-3 flex-1 overflow-y-auto pb-4 no-scrollbar">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Subject / Short Summary</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sales checkout is slow"
+                  value={bugSubject}
+                  onChange={e => setBugSubject(e.target.value)}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-destructive"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Details & Steps to Reproduce</label>
+                <textarea
+                  placeholder="Tell us what you did, what you expected, and what actually happened..."
+                  value={bugDesc}
+                  onChange={e => setBugDesc(e.target.value)}
+                  rows={4}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-destructive resize-none"
+                />
+              </div>
+
+              <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/10 text-[10px] text-muted-foreground/80 space-y-1">
+                <p className="font-semibold text-destructive/80">Included System Details (automatic):</p>
+                <p className="truncate">Device: {navigator.userAgent}</p>
+                <p>Store: {storeName}</p>
+              </div>
+            </div>
+
+            <div className="py-3 border-t border-border flex gap-2 shrink-0">
+              <button
+                onClick={() => setActiveTab('menu')}
+                className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendBug}
+                className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-xs font-display font-bold"
+              >
+                Open Mail to Send
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'feature' && (
+          <div className="px-5 pb-2 flex-1 flex flex-col min-h-0">
+            <div className="py-2 flex items-center justify-between shrink-0">
+              <h3 className="font-display font-bold text-lg text-primary">Suggest a Feature 💡</h3>
+              <button onClick={() => setActiveTab('menu')} className="text-xs text-muted-foreground hover:underline">Back</button>
+            </div>
+            
+            <div className="space-y-3 flex-1 overflow-y-auto pb-4 no-scrollbar">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Feature Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Dark mode automatic toggle"
+                  value={featureName}
+                  onChange={e => setFeatureName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Description & Why it's useful</label>
+                <textarea
+                  placeholder="Describe your idea and how it would help you run your store..."
+                  value={featureDesc}
+                  onChange={e => setFeatureDesc(e.target.value)}
+                  rows={5}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="py-3 border-t border-border flex gap-2 shrink-0">
+              <button
+                onClick={() => setActiveTab('menu')}
+                className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendFeature}
+                className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-display font-bold"
+              >
+                Open Mail to Send
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="px-4 pb-4 pt-1 shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full py-3.5 rounded-2xl border border-border text-muted-foreground font-display font-semibold text-sm transition-colors hover:bg-surface-2"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );

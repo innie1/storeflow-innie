@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
-import { loadStore, findProductByBarcode, addProduct, recordSale } from '@/lib/store-data';
+import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore } from '@/lib/store-data';
 import StoreAccess from '@/components/StoreAccess';
 import Dashboard from '@/components/Dashboard';
 import Inventory from '@/components/Inventory';
@@ -59,6 +59,19 @@ export default function Index() {
   const [newProductPrompt, setNewProductPrompt] = useState<{ barcode: string; name: string; costPrice: string; sellingPrice: string; quantity: string } | null>(null);
 
   const isGames = store?.category === 'games';
+
+  const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;
+
+  useEffect(() => {
+    if (tab === 'manager' && store && store.flowNotifications?.some(n => !n.read)) {
+      const updated = {
+        ...store,
+        flowNotifications: store.flowNotifications.map(n => ({ ...n, read: true }))
+      };
+      setStore(updated);
+      saveStore(updated);
+    }
+  }, [tab, store]);
   const mainTabs = isGames ? GAMES_MAIN_TABS : RETAIL_MAIN_TABS;
   const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;
 
@@ -170,127 +183,232 @@ export default function Index() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="font-display font-bold text-lg"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
-          <p className="text-xs text-muted-foreground">{tab === 'settings' ? 'Settings' : store.storeName}</p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowLockConfirm(true)}
-            className="px-3 py-1.5 rounded-full bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors flex items-center gap-1.5"
-          >
-            <span>🔒</span> Lock Store
-          </button>
-          <button
-            onClick={() => { setTab('settings'); setShowMoreMenu(false); }}
-            className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center transition-all border-2 ${
-              tab === 'settings' ? 'border-primary' : 'border-border hover:border-primary/40'
-            }`}
-            aria-label="Profile"
-          >
-            {store.profile?.photo ? (
-              <img src={store.profile.photo} alt={store.storeName} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-surface-2 flex items-center justify-center">
-                <span className="text-sm">👤</span>
-              </div>
-            )}
-          </button>
-        </div>
-      </header>
-
-      {showLockConfirm && (
-        <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowLockConfirm(false)}>
-          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="text-center space-y-2">
-              <div className="text-3xl">🔒</div>
-              <h3 className="font-display font-bold text-lg">Lock your store?</h3>
-              <p className="text-sm text-muted-foreground">You'll need to re-enter your access code to get back in.</p>
+    <div className="min-h-screen flex flex-col md:flex-row bg-background">
+      {/* Left Sidebar for Tablet and Desktop (>=768px) */}
+      <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-border bg-card">
+        {/* Sidebar Header */}
+        <div className="p-5 border-b border-border flex flex-col gap-2">
+          <h1 className="font-display font-bold text-2xl">
+            <span className="text-foreground">Store</span>
+            <span className="text-primary">Flow</span>
+          </h1>
+          <div className="flex items-center gap-2 mt-1.5 p-2 rounded-xl bg-surface-2 border border-border">
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary/15 flex items-center justify-center text-lg shrink-0">
+              {store.profile?.photo ? <img src={store.profile.photo} alt="" className="w-full h-full object-cover" /> : '🏪'}
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setShowLockConfirm(false)} className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm">Cancel</button>
-              <button onClick={() => { setShowLockConfirm(false); handleLock(); }} className="flex-1 p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm">Lock Store</button>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-bold text-xs truncate leading-tight">{store.storeName}</p>
+              <p className="text-[10px] text-muted-foreground capitalize truncate">{store.category || 'Retail'}</p>
             </div>
           </div>
         </div>
-      )}
 
-      <main className="flex-1 p-4 pb-20 container max-w-3xl">
-        {tab === 'dashboard' && <Dashboard store={store} onNavigate={handleNavigate} />}
-        {tab === 'inventory' && (
-          <Inventory
-            store={store}
-            onUpdate={setStore}
-            filterLowStock={filterLowStock}
-            onClearFilter={() => setFilterLowStock(false)}
-          />
-        )}
-        {tab === 'sales' && <Sales store={store} onUpdate={setStore} />}
-        {tab === 'expenses' && <Expenses store={store} onUpdate={setStore} />}
-        {tab === 'manager' && <Manager store={store} onUpdate={setStore} />}
-        {tab === 'pending' && <PendingPayments store={store} onUpdate={setStore} />}
-        {tab === 'history' && <SalesHistory store={store} onUpdate={setStore} />}
-        {tab === 'roi' && <ROITracker store={store} onUpdate={setStore} />}
-        {tab === 'settings' && <Settings store={store} onUpdate={setStore} onLock={handleLock} />}
-        {tab === 'games-dashboard' && (
-          <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} />
-        )}
-        {tab === 'games-history' && <GamesHistory store={store} onUpdate={setStore} />}
-        {tab === 'games-analytics' && <GamesAnalytics store={store} />}
-        {tab === 'games-settings' && <GamesSettings store={store} onUpdate={setStore} />}
-      </main>
-
-      {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
-        <div className="flex justify-around max-w-3xl mx-auto">
+        {/* Sidebar Nav Links */}
+        <div className="flex-1 py-4 overflow-y-auto px-3 space-y-1 no-scrollbar">
+          <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">Main Menu</p>
           {mainTabs.map(t => (
             <button
               key={t.id}
-              onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
-              className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
-                tab === t.id ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors relative ${
+                tab === t.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
               }`}
             >
-              <span className="text-lg mb-0.5">{t.icon}</span>
-              <span className="font-display font-semibold">{t.label}</span>
+              <span className="text-lg relative">
+                {t.icon}
+                {t.id === 'manager' && unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-destructive" />
+                )}
+              </span>
+              <span>{t.label}</span>
             </button>
           ))}
-          {/* More button */}
-          <div className="relative">
-            <button
-              onClick={() => setShowMoreMenu(!showMoreMenu)}
-              className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
-                moreItems.some(m => m.id === tab) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <span className="text-lg mb-0.5">•••</span>
-              <span className="font-display font-semibold">More</span>
-            </button>
-            {showMoreMenu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
-                <div className="absolute bottom-full right-0 mb-2 w-44 bg-card shadow-card border border-border rounded-xl overflow-hidden z-50 animate-fade-in">
-                  {moreItems.map(m => (
-                    <button
-                      key={m.id}
-                      onClick={() => { setTab(m.id); setShowMoreMenu(false); }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-display font-semibold transition-colors ${
-                        tab === m.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
-                      }`}
-                    >
-                      <span>{m.icon}</span>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+
+          <div className="pt-4 mt-4 border-t border-border">
+            <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">Tools & Settings</p>
+            {moreItems.map(m => (
+              <button
+                key={m.id}
+                onClick={() => setTab(m.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors ${
+                  tab === m.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
+                }`}
+              >
+                <span className="text-lg">{m.icon}</span>
+                <span>{m.label}</span>
+              </button>
+            ))}
           </div>
         </div>
-      </nav>
+
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-border space-y-2">
+          <button
+            onClick={() => setShowLockConfirm(true)}
+            className="w-full py-2.5 px-3 rounded-xl bg-destructive/10 text-destructive border border-destructive/20 text-xs font-display font-semibold hover:bg-destructive/20 transition-colors flex items-center justify-center gap-2"
+          >
+            <span>🔒</span> Lock Store
+          </button>
+          <div className="text-[10px] text-center text-muted-foreground">
+            Version 1.0 · Innie Group
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Layout Area */}
+      <div className="flex-1 flex flex-col md:pl-64">
+        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
+          <div>
+            <h1 className="font-display font-bold text-lg"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
+            <p className="text-xs text-muted-foreground">{tab === 'settings' ? 'Settings' : store.storeName}</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLockConfirm(true)}
+              className="md:hidden px-3 py-1.5 rounded-full bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors flex items-center gap-1.5"
+            >
+              <span>🔒</span> Lock Store
+            </button>
+            <button
+              onClick={() => { setTab('settings'); setShowMoreMenu(false); }}
+              className={`md:hidden w-9 h-9 rounded-full overflow-hidden flex items-center justify-center transition-all border-2 ${
+                tab === 'settings' ? 'border-primary' : 'border-border hover:border-primary/40'
+              }`}
+              aria-label="Profile"
+            >
+              {store.profile?.photo ? (
+                <img src={store.profile.photo} alt={store.storeName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-surface-2 flex items-center justify-center">
+                  <span className="text-sm">👤</span>
+                </div>
+              )}
+            </button>
+          </div>
+        </header>
+
+        {showLockConfirm && (
+          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowLockConfirm(false)}>
+            <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
+              <div className="text-center space-y-2">
+                <div className="text-3xl">🔒</div>
+                <h3 className="font-display font-bold text-lg">Lock your store?</h3>
+                <p className="text-sm text-muted-foreground">You'll need to re-enter your access code to get back in.</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowLockConfirm(false)} className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm">Cancel</button>
+                <button onClick={() => { setShowLockConfirm(false); handleLock(); }} className="flex-1 p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm">Lock Store</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 container max-w-5xl lg:max-w-6xl mx-auto space-y-6">
+          <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
+            <Dashboard store={store} onNavigate={handleNavigate} />
+          </div>
+          <div className={tab === 'inventory' ? 'block' : 'hidden'}>
+            <Inventory
+              store={store}
+              onUpdate={setStore}
+              filterLowStock={filterLowStock}
+              onClearFilter={() => setFilterLowStock(false)}
+            />
+          </div>
+          <div className={tab === 'sales' ? 'block' : 'hidden'}>
+            <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} />
+          </div>
+          <div className={tab === 'expenses' ? 'block' : 'hidden'}>
+            <Expenses store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'manager' ? 'block' : 'hidden'}>
+            <Manager store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'pending' ? 'block' : 'hidden'}>
+            <PendingPayments store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'history' ? 'block' : 'hidden'}>
+            <SalesHistory store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'roi' ? 'block' : 'hidden'}>
+            <ROITracker store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'settings' ? 'block' : 'hidden'}>
+            <Settings store={store} onUpdate={setStore} onLock={handleLock} />
+          </div>
+          {isGames && (
+            <>
+              <div className={tab === 'games-dashboard' ? 'block' : 'hidden'}>
+                <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} />
+              </div>
+              <div className={tab === 'games-history' ? 'block' : 'hidden'}>
+                <GamesHistory store={store} onUpdate={setStore} />
+              </div>
+              <div className={tab === 'games-analytics' ? 'block' : 'hidden'}>
+                <GamesAnalytics store={store} />
+              </div>
+              <div className={tab === 'games-settings' ? 'block' : 'hidden'}>
+                <GamesSettings store={store} onUpdate={setStore} />
+              </div>
+            </>
+          )}
+        </main>
+
+        {/* Bottom Nav */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
+          <div className="flex justify-around max-w-3xl mx-auto">
+            {mainTabs.map(t => (
+              <button
+                key={t.id}
+                onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
+                className={`flex flex-col items-center py-2 px-3 text-xs transition-colors relative ${
+                  tab === t.id ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span className="text-lg mb-0.5 relative">
+                  {t.icon}
+                  {t.id === 'manager' && unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-destructive" />
+                  )}
+                </span>
+                <span className="font-display font-semibold">{t.label}</span>
+              </button>
+            ))}
+            {/* More button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMoreMenu(!showMoreMenu)}
+                className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
+                  moreItems.some(m => m.id === tab) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span className="text-lg mb-0.5">•••</span>
+                <span className="font-display font-semibold">More</span>
+              </button>
+              {showMoreMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
+                  <div className="absolute bottom-full right-0 mb-2 w-44 bg-card shadow-card border border-border rounded-xl overflow-hidden z-50 animate-fade-in">
+                    {moreItems.map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => { setTab(m.id); setShowMoreMenu(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-display font-semibold transition-colors ${
+                          tab === m.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
+                        }`}
+                      >
+                        <span>{m.icon}</span>
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </nav>
+      </div>
 
       {showScanner && (
         <ReceiptScanner
