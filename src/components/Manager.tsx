@@ -410,19 +410,19 @@ function NotificationDrawer({ store, onClose, onUpdate }: { store: StoreData; on
   );
 }
 
-import { useEffect as useEffectReact } from 'react';
+
 
 // Typewriter component for Flow greetings and text outputs
 export function Typewriter({ text, speed = 50 }: { text: string; speed?: number }) {
   const [displayedText, setDisplayedText] = useState('');
   const [index, setIndex] = useState(0);
 
-  useEffectReact(() => {
+  useEffect(() => {
     setDisplayedText('');
     setIndex(0);
   }, [text]);
 
-  useEffectReact(() => {
+  useEffect(() => {
     if (index < text.length) {
       const timeout = setTimeout(() => {
         setDisplayedText(prev => prev + text.charAt(index));
