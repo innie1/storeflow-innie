@@ -460,8 +460,8 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
   });
 }
 
-// ─── Bee Personality — Greeting ───────────────────────────────────────────────
-export function beeGreeting(store: StoreData): string {
+// ─── Flow Personality — Greeting ───────────────────────────────────────────────
+export function flowGreeting(store: StoreData): string {
   const hour = new Date().getHours();
   const name = store.storeName;
   const series7 = dailySeries(store, 7);

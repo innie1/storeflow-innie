@@ -4,7 +4,7 @@ import { saveStore, getPendingSummary } from '@/lib/store-data';
 import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
-  expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, beeGreeting,
+  expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
   generateNotifications, ActivityRange, ActivityBucket,
 } from '@/lib/manager-intel';
 import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier } from '@/lib/flow-memory';
@@ -134,7 +134,7 @@ function StoreHealthCard({ store, onOpenBreakdown, animate = true }: { store: St
         </div>
         <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
           <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Revenue</p><p className="font-display font-bold text-sm truncate">₦{displayRevenue.toLocaleString()}</p></div>
-          <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Profit</p><p className={`font-display font-bold text-sm truncate transition-all duration-300 ${animate && isProfitDone && profit > 0 ? 'text-success font-black drop-shadow-[0_0_4px_rgba(34,197,94,0.3)] animate-pulse' : 'text-success'}`}>₦{displayProfit.toLocaleString()}</p></div>
+          <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Profit</p><p className={`font-display font-bold text-sm truncate transition-all duration-300 ${animate && isProfitDone && profit > 0 ? 'text-success font-black drop-shadow-[0_0_4px_rgba(34,197,94,0.3)] pulse-twice-anim' : 'text-success'}`}>₦{displayProfit.toLocaleString()}</p></div>
           <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Expenses</p><p className={`font-display font-bold text-sm truncate transition-all duration-300 ${animate && isExpenseDone && expenses > 0 ? 'text-destructive font-black drop-shadow-[0_0_4px_rgba(239,68,68,0.3)]' : 'text-destructive'}`}>₦{displayExpenses.toLocaleString()}</p></div>
           <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Score</p><p className={`font-display font-bold text-sm ${tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : 'text-primary'}`}>{health.label}</p></div>
         </div>
@@ -487,7 +487,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const [showPatHearts, setShowPatHearts] = useState(false);
   const [flowXP, setFlowXP] = useState(() => Number(localStorage.getItem('storeflow_flow_xp') || '0'));
   const [xpAnimation, setXpAnimation] = useState(false);
-  const [greeting] = useState(() => beeGreeting(store));
+  const [greeting] = useState(() => flowGreeting(store));
   const [seenAdviceIds, setSeenAdviceIds] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('storeflow_seen_advice_ids');
@@ -631,6 +631,14 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.08); }
         }
+        @keyframes bar-glow-twice {
+          0%, 100% { filter: drop-shadow(0 0 0px transparent); }
+          50% { filter: drop-shadow(0 0 8px rgba(232, 195, 78, 0.6)); }
+        }
+        @keyframes pulse-opacity-twice {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
         .flow-card-enter-anim {
           animation: flow-card-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
@@ -640,8 +648,11 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
         }
         .bar-breathe-anim {
           transform-origin: bottom;
-          animation: bar-breathe 3s ease-in-out infinite;
-          border: 1px solid #E8C34E !important;
+          animation: bar-grow-wave 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards, bar-glow-twice 2s ease-in-out 2 forwards;
+          border: 1px solid rgba(232, 195, 78, 0.4);
+        }
+        .pulse-twice-anim {
+          animation: pulse-opacity-twice 1s ease-in-out 2;
         }
         .pulse-once-anim {
           animation: pulse-once 0.35s ease-out;
@@ -658,9 +669,9 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">Today, {today}</p>
-            {/* Bee greeting */}
+            {/* Flow greeting */}
             <div className="mt-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/15 flex items-start gap-2">
-              <span className="text-base animate-[mascot-float_2s_infinite]">🐝</span>
+              <span className="text-base animate-[mascot-float_2s_infinite]">💡</span>
               <p className="text-xs text-foreground/90 leading-relaxed flex-1">
                 <Typewriter text={greeting} />
               </p>
@@ -965,7 +976,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
           {/* Get fresh advice button */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border border-primary/20">
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-3xl">🐝</span>
+              <span className="text-3xl">✨</span>
               <div>
                 <h3 className="font-display font-bold text-base">Flow Advice Engine</h3>
                 <p className="text-xs text-muted-foreground">Analysing your sales, inventory, expenses &amp; debts</p>
