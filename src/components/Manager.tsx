@@ -95,13 +95,29 @@ function HealthBreakdownModal({ store, onClose }: { store: StoreData; onClose: (
 }
 
 // ─── Store Health Card ────────────────────────────────────────────────────────
-function StoreHealthCard({ store, onOpenBreakdown }: { store: StoreData; onOpenBreakdown: () => void }) {
+function StoreHealthCard({ store, onOpenBreakdown, animate = true }: { store: StoreData; onOpenBreakdown: () => void; animate?: boolean }) {
   const health = healthScore(store);
   const tone: 'success' | 'primary' | 'warning' | 'danger' = health.overall >= 80 ? 'success' : health.overall >= 60 ? 'primary' : health.overall >= 40 ? 'warning' : 'danger';
   const last7Sales = store.sales.filter(s => new Date(s.date).getTime() >= Date.now() - 7 * 86400000);
   const revenue = last7Sales.reduce((s, x) => s + x.total, 0);
   const profit = last7Sales.reduce((s, x) => s + x.profit, 0);
   const expenses = (store.expenses || []).filter(e => new Date(e.date).getTime() >= Date.now() - 7 * 86400000).reduce((s, e) => s + e.amount, 0);
+
+  const animatedHealth = useCountUp(animate ? health.overall : 0, 1500);
+  const displayHealth = animate ? animatedHealth : health.overall;
+  const isHealthDone = animate ? animatedHealth === health.overall : true;
+
+  const animatedRevenue = useCountUp(animate ? revenue : 0, 2000);
+  const displayRevenue = animate ? animatedRevenue : revenue;
+
+  const animatedProfit = useCountUp(animate ? profit : 0, 2000);
+  const displayProfit = animate ? animatedProfit : profit;
+  const isProfitDone = animate ? animatedProfit === profit : true;
+
+  const animatedExpenses = useCountUp(animate ? expenses : 0, 2000);
+  const displayExpenses = animate ? animatedExpenses : expenses;
+  const isExpenseDone = animate ? animatedExpenses === expenses : true;
+
   return (
     <button onClick={onOpenBreakdown} className="w-full text-left p-4 rounded-2xl bg-card shadow-card hover:border-primary/30 border border-transparent transition-colors">
       <div className="flex items-center justify-between mb-3">
@@ -109,17 +125,17 @@ function StoreHealthCard({ store, onOpenBreakdown }: { store: StoreData; onOpenB
         <span className="text-muted-foreground">›</span>
       </div>
       <div className="flex items-center gap-4">
-        <div className="relative flex-shrink-0">
-          <Ring value={health.overall} size={104} tone={tone} />
+        <div className={`relative flex-shrink-0 ${animate && isHealthDone ? 'pulse-once-anim' : ''}`}>
+          <Ring value={displayHealth} size={104} tone={tone} />
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-display font-bold text-3xl text-foreground leading-none">{health.overall}</span>
+            <span className="font-display font-bold text-3xl text-foreground leading-none">{displayHealth}</span>
             <span className="text-[10px] text-muted-foreground">/100</span>
           </div>
         </div>
         <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
-          <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Revenue</p><p className="font-display font-bold text-sm truncate">₦{revenue.toLocaleString()}</p></div>
-          <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Profit</p><p className="font-display font-bold text-sm text-success truncate">₦{profit.toLocaleString()}</p></div>
-          <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Expenses</p><p className="font-display font-bold text-sm text-destructive truncate">₦{expenses.toLocaleString()}</p></div>
+          <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Revenue</p><p className="font-display font-bold text-sm truncate">₦{displayRevenue.toLocaleString()}</p></div>
+          <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Profit</p><p className={`font-display font-bold text-sm truncate transition-all duration-300 ${animate && isProfitDone && profit > 0 ? 'text-success font-black drop-shadow-[0_0_4px_rgba(34,197,94,0.3)] animate-pulse' : 'text-success'}`}>₦{displayProfit.toLocaleString()}</p></div>
+          <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Expenses</p><p className={`font-display font-bold text-sm truncate transition-all duration-300 ${animate && isExpenseDone && expenses > 0 ? 'text-destructive font-black drop-shadow-[0_0_4px_rgba(239,68,68,0.3)]' : 'text-destructive'}`}>₦{displayExpenses.toLocaleString()}</p></div>
           <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Score</p><p className={`font-display font-bold text-sm ${tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : 'text-primary'}`}>{health.label}</p></div>
         </div>
       </div>
@@ -192,12 +208,19 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
                   {[0, 1, 2, 3, 4].map(i => <div key={i} className="border-t border-border/40" />)}
                 </div>
                 <div className="flex items-end gap-[2px] h-32 relative">
-                  {data.buckets.map(b => {
+                  {data.buckets.map((b, i) => {
                     const h = Math.max(2, (b.sales / max) * 100);
+                    const isPeak = b.sales === max && max > 0;
                     return (
                       <button key={b.minute} onClick={() => setSelected(b)}
-                        className="flex-1 rounded-t-sm transition-all hover:opacity-80"
-                        style={{ height: `${h}%`, background: activityColor(b.sales, max), minWidth: '4px' }}
+                        className={`flex-1 rounded-t-sm transition-all hover:opacity-80 bar-grow-wave-item ${isPeak ? 'bar-breathe-anim' : ''}`}
+                        style={{ 
+                          height: `${h}%`, 
+                          background: activityColor(b.sales, max), 
+                          minWidth: '4px',
+                          animationDelay: `${i * 12}ms`,
+                          transform: 'scaleY(0)'
+                        }}
                         aria-label={`${b.label}: ${b.sales} sales`} />
                     );
                   })}
@@ -342,6 +365,13 @@ function NotificationDrawer({ store, onClose, onUpdate }: { store: StoreData; on
     const updated = { ...store, flowNotifications: notes.map(n => ({ ...n, read: true })) };
     saveStore(updated); onUpdate(updated);
   };
+
+  useEffect(() => {
+    if (notes.some(n => !n.read)) {
+      const updated = { ...store, flowNotifications: notes.map(n => ({ ...n, read: true })) };
+      saveStore(updated); onUpdate(updated);
+    }
+  }, [notes, store, onUpdate]);
   const toneStyle: Record<string, string> = {
     success: 'bg-success/10 border-success/30 text-success',
     warning: 'bg-warning/10 border-warning/30 text-warning',
@@ -380,6 +410,72 @@ function NotificationDrawer({ store, onClose, onUpdate }: { store: StoreData; on
   );
 }
 
+import { useEffect as useEffectReact } from 'react';
+
+// Typewriter component for Flow greetings and text outputs
+export function Typewriter({ text, speed = 50 }: { text: string; speed?: number }) {
+  const [displayedText, setDisplayedText] = useState('');
+  const [index, setIndex] = useState(0);
+
+  useEffectReact(() => {
+    setDisplayedText('');
+    setIndex(0);
+  }, [text]);
+
+  useEffectReact(() => {
+    if (index < text.length) {
+      const timeout = setTimeout(() => {
+        setDisplayedText(prev => prev + text.charAt(index));
+        setIndex(prev => prev + 1);
+      }, speed);
+      return () => clearTimeout(timeout);
+    }
+  }, [index, text, speed]);
+
+  const isDone = index >= text.length;
+
+  return (
+    <span>
+      {displayedText}
+      <span className={`inline-block w-[1.5px] h-3.5 ml-0.5 bg-primary/80 ${isDone ? 'animate-[cursor-blink_1s_step-end_infinite]' : 'bg-primary'}`} />
+    </span>
+  );
+}
+
+// useCountUp React hook for animating numerical values
+export function useCountUp(target: number, durationMs = 1500) {
+  const [count, setCount] = useState(0);
+
+  useEffectReact(() => {
+    let start = 0;
+    const end = target;
+    if (start === end) {
+      setCount(end);
+      return;
+    }
+    const totalSteps = 45;
+    const stepTime = durationMs / totalSteps;
+    const increment = (end - start) / totalSteps;
+    
+    let currentStep = 0;
+    const timer = setInterval(() => {
+      currentStep++;
+      setCount(prev => {
+        const next = start + increment * currentStep;
+        if (currentStep >= totalSteps) {
+          clearInterval(timer);
+          return end;
+        }
+        return Math.round(next);
+      });
+    }, stepTime);
+    
+    return () => clearInterval(timer);
+  }, [target, durationMs]);
+
+  return count;
+}
+
 // ─── Main Manager ─────────────────────────────────────────────────────────────
 export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const [tab, setTab] = useState<ManagerTab>('overview');
@@ -387,6 +483,10 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [adviceLoading, setAdviceLoading] = useState(false);
+  const [hasPatted, setHasPatted] = useState(() => localStorage.getItem('storeflow_flow_patted') === new Date().toISOString().split('T')[0]);
+  const [showPatHearts, setShowPatHearts] = useState(false);
+  const [flowXP, setFlowXP] = useState(() => Number(localStorage.getItem('storeflow_flow_xp') || '0'));
+  const [xpAnimation, setXpAnimation] = useState(false);
   const [greeting] = useState(() => beeGreeting(store));
 
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
@@ -445,6 +545,19 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const requests = topCustomerRequests(store, 6);
   const savings = store.savingsGoal;
   const unreadCount = (store.flowNotifications || []).filter(n => !n.read).length;
+  const flowMood = useMemo(() => {
+    const health = healthScore(store);
+    const hasLowStock = store.products.some(p => p.quantity <= 3);
+    const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
+    const isGoalAchieved = savings && savings.saved >= savings.amount && savings.amount > 0;
+    
+    if (isGoalAchieved) return 'celebrating';
+    if (health.overall >= 80) return 'confident';
+    if (health.overall >= 65) return 'happy';
+    if (hasLowStock) return 'concerned';
+    if (hasDebt || health.overall < 50) return 'worried';
+    return 'neutral';
+  }, [store, savings]);
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 
   // Forecasts for Predictions tab
@@ -479,7 +592,44 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const adviceIconBg: Record<string, string> = { critical: 'bg-destructive/10', high: 'bg-warning/10', medium: 'bg-primary/10', low: 'bg-surface-3' };
 
   return (
-    <div className="animate-fade-in space-y-4">
+    <div className="animate-fade-in flow-card-enter-anim space-y-4">
+      <style>{`
+        @keyframes flow-card-enter {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bar-grow-wave {
+          from { transform: scaleY(0); }
+          to { transform: scaleY(1); }
+        }
+        @keyframes bar-breathe {
+          0%, 100% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(232, 195, 78, 0.2)); }
+          50% { transform: scale(1.04); filter: drop-shadow(0 0 8px rgba(232, 195, 78, 0.5)); }
+        }
+        @keyframes cursor-blink {
+          0%, 100% { opacity: 0; }
+          50% { opacity: 1; }
+        }
+        @keyframes pulse-once {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.08); }
+        }
+        .flow-card-enter-anim {
+          animation: flow-card-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .bar-grow-wave-item {
+          transform-origin: bottom;
+          animation: bar-grow-wave 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .bar-breathe-anim {
+          transform-origin: bottom;
+          animation: bar-breathe 3s ease-in-out infinite;
+          border: 1px solid #E8C34E !important;
+        }
+        .pulse-once-anim {
+          animation: pulse-once 0.35s ease-out;
+        }
+      `}</style>
       {/* Hero */}
       <div className="relative pt-1">
         <div className="flex items-start justify-between gap-3">
@@ -493,12 +643,14 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
             <p className="text-xs text-muted-foreground mt-0.5">Today, {today}</p>
             {/* Bee greeting */}
             <div className="mt-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/15 flex items-start gap-2">
-              <span className="text-base">🐝</span>
-              <p className="text-xs text-foreground/90 leading-relaxed flex-1">{greeting}</p>
+              <span className="text-base animate-[mascot-float_2s_infinite]">🐝</span>
+              <p className="text-xs text-foreground/90 leading-relaxed flex-1">
+                <Typewriter text={greeting} />
+              </p>
             </div>
           </div>
           <div className="flex-shrink-0 flex flex-col items-center gap-1">
-            <Mascot size={72} mood="happy" />
+            <Mascot size={72} mood={flowMood} animate={settings.mascotAnimations !== false} />
             {/* Notification bell */}
             <button onClick={() => setShowNotifications(true)} className="relative w-8 h-8 rounded-full bg-surface-2 border border-border flex items-center justify-center text-sm">
               🔔
@@ -522,7 +674,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
       {/* ─── OVERVIEW ─────────────────────────────────────────────────────── */}
       {tab === 'overview' && (
         <div className="space-y-4 animate-fade-in">
-          <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} />
+          <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} animate={settings.numericAnimations !== false} />
 
           {/* Next Best Action */}
           {advice.length > 0 && (

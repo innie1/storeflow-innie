@@ -3,7 +3,7 @@ import {
   StoreData, StoreProfile, ManagerSettings, DEFAULT_MANAGER_SETTINGS,
   SavingsGoal, PaymentInfo, SavingsFrequency, RentInfo, RentFrequency,
 } from '@/types/store';
-import { saveStore, getTrash, getDashboardStats, getTopSellers } from '@/lib/store-data';
+import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
@@ -110,6 +110,11 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [showExport, setShowExport] = useState(false);
   const [showContactPopup, setShowContactPopup] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [delStoreNameInput, setDelStoreNameInput] = useState('');
+  const [delCodeInput, setDelCodeInput] = useState('');
+  const [delConfirmTextInput, setDelConfirmTextInput] = useState('');
+  const [delError, setDelError] = useState('');
 
   const [profile, setProfile] = useState<StoreProfile>(
     store.profile || { storeType: '', location: '', phone: '', email: '' }
@@ -415,7 +420,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         <button onClick={() => setShowSavingsModal(true)} className="w-full p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold">Edit Savings Plan</button>
       </div>
       {showSavingsModal && (
-        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} />
+        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} animate={mgr.mascotAnimations} />
       )}
     </SubPage>
   );
@@ -437,6 +442,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       </div>
       <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Mascot Animations" description="Animate Flow across the app." checked={mgr.mascotAnimations} onChange={v => updateMgr({ mascotAnimations: v })} />
+        <ToggleRow label="Number Animations" description="Count up and pulse numeric statistics." checked={mgr.numericAnimations ?? true} onChange={v => updateMgr({ numericAnimations: v })} />
         <ToggleRow label="Reduce Motion" checked={mgr.reduceMotion} onChange={v => updateMgr({ reduceMotion: v })} />
         <ToggleRow label="Compact Mode" description="Tighter spacing across cards." checked={mgr.compactMode} onChange={v => updateMgr({ compactMode: v })} />
       </div>
@@ -510,6 +516,113 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       )}
       {showExport && (
         <ExportSheet store={store} onClose={() => setShowExport(false)} />
+      )}
+
+      <div className="pt-6 border-t border-border mt-4">
+        <button
+          onClick={() => setShowDeleteModal(true)}
+          className="w-full p-3.5 rounded-xl bg-destructive/10 hover:bg-destructive/20 border border-destructive/25 text-destructive font-display font-bold text-sm transition-colors flex items-center justify-center gap-2"
+        >
+          🗑️ Delete Store Permanent Action
+        </button>
+      </div>
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-[80] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => {
+          setShowDeleteModal(false);
+          setDelStoreNameInput('');
+          setDelCodeInput('');
+          setDelConfirmTextInput('');
+          setDelError('');
+        }}>
+          <div className="w-full max-w-sm bg-card border border-destructive/30 rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="text-center space-y-1.5">
+              <div className="text-3xl">⚠️</div>
+              <h3 className="font-display font-bold text-lg text-destructive">Delete Store?</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                This action is permanent and cannot be undone. Answer the following security questions to proceed.
+              </p>
+            </div>
+
+            <div className="space-y-3.5 pt-1">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">1. What is this store's name?</label>
+                <input
+                  value={delStoreNameInput}
+                  onChange={e => setDelStoreNameInput(e.target.value)}
+                  placeholder="Type store name..."
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">2. What is this store's access code?</label>
+                <input
+                  value={delCodeInput}
+                  onChange={e => setDelCodeInput(e.target.value)}
+                  placeholder="Type 6-character code..."
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-mono focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">3. Confirm by typing "DELETE STORE"</label>
+                <input
+                  value={delConfirmTextInput}
+                  onChange={e => setDelConfirmTextInput(e.target.value)}
+                  placeholder="Type DELETE STORE..."
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {delError && (
+              <p className="text-xs text-destructive text-center font-semibold bg-destructive/10 p-2 rounded-lg border border-destructive/20">{delError}</p>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDelStoreNameInput('');
+                  setDelCodeInput('');
+                  setDelConfirmTextInput('');
+                  setDelError('');
+                }}
+                className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const matchesName = delStoreNameInput.trim().toLowerCase() === store.storeName.toLowerCase();
+                  const matchesCode = delCodeInput.trim().toUpperCase() === store.accessCode.toUpperCase();
+                  const matchesConfirm = delConfirmTextInput.trim() === 'DELETE STORE';
+
+                  if (!matchesName) {
+                    setDelError('Incorrect store name');
+                    return;
+                  }
+                  if (!matchesCode) {
+                    setDelError('Incorrect access code');
+                    return;
+                  }
+                  if (!matchesConfirm) {
+                    setDelError('Type DELETE STORE exactly');
+                    return;
+                  }
+
+                  removeStoreFromIndex(store.accessCode);
+                  onLock();
+                  showToast('Store successfully deleted');
+                }}
+                className="flex-1 p-3 rounded-xl bg-destructive text-white font-display font-bold text-xs active:scale-[0.98] transition-transform"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </SubPage>
   );
@@ -919,7 +1032,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
           <button onClick={() => setView('flow')} className={`${card} w-full p-4 text-left hover:ring-1 hover:ring-primary/30 transition-all border ${mgr.enabled ? 'border-success/30 bg-gradient-to-br from-success/10 to-transparent' : 'border-border'}`}>
             <div className="flex items-start gap-3">
               <div className="shrink-0">
-                <Mascot size={64} mood={mgr.enabled ? 'happy' : 'sleeping'} />
+                <Mascot size={64} mood={mgr.enabled ? 'happy' : 'sleeping'} animate={mgr.mascotAnimations} />
               </div>
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-center gap-2">
@@ -1000,7 +1113,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       {showTrash && <RecentlyDeleted store={store} onUpdate={onUpdate} onClose={() => setShowTrash(false)} />}
       {showSwitcher && <StoreSwitcher currentCode={store.accessCode} onSwitch={onUpdate} onClose={() => setShowSwitcher(false)} />}
       {showSavingsModal && (
-        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} />
+        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} animate={mgr.mascotAnimations} />
       )}
       {showContactPopup && (
         <ContactOptionsSheet storeName={store.storeName} onClose={() => setShowContactPopup(false)} />
@@ -1083,7 +1196,7 @@ function SupportRow({ icon, label, onClick }: { icon: string; label: string; onC
 }
 
 // --- Savings setup modal ---
-function SavingsModal({ initial, onClose, onSave }: { initial: SavingsGoal; onClose: () => void; onSave: (g: SavingsGoal) => void }) {
+function SavingsModal({ initial, onClose, onSave, animate = true }: { initial: SavingsGoal; onClose: () => void; onSave: (g: SavingsGoal) => void; animate?: boolean }) {
   const [g, setG] = useState<SavingsGoal>(initial);
   const inp = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary";
   const freqs: SavingsFrequency[] = ['daily', 'weekly', 'monthly'];
@@ -1092,7 +1205,7 @@ function SavingsModal({ initial, onClose, onSave }: { initial: SavingsGoal; onCl
       <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-3 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
-            <Mascot size={36} mood="happy" />
+            <Mascot size={36} mood="happy" animate={animate} />
             <h3 className="font-display font-bold text-lg">Set Up Savings Plan</h3>
           </div>
           <button onClick={onClose} className="text-xl text-muted-foreground hover:text-foreground">×</button>

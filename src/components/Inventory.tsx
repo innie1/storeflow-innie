@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';

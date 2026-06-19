@@ -225,6 +225,7 @@ export interface ManagerSettings {
   notifyLowStock: boolean;
   // Appearance
   mascotAnimations: boolean;
+  numericAnimations: boolean;
   reduceMotion: boolean;
   compactMode: boolean;
   // Security
@@ -264,6 +265,7 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   notifyCustomerRequests: true,
   notifyLowStock: true,
   mascotAnimations: true,
+  numericAnimations: true,
   reduceMotion: false,
   compactMode: false,
   biometricLock: false,

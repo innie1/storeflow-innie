@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { StoreData, PendingPayment, PaymentMethod } from '@/types/store';
 import { addPaymentToPending, markPendingPaid, deletePendingPayment, getPendingSummary } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
@@ -16,7 +16,13 @@ export default function PendingPayments({ store, onUpdate }: Props) {
   const [filter, setFilter] = useState<'all' | 'overdue' | 'paid'>('all');
   const [partialFor, setPartialFor] = useState<PendingPayment | null>(null);
   const [partialAmt, setPartialAmt] = useState('');
-  const [partialMethod, setPartialMethod] = useState<PaymentMethod>('cash');
+  const [partialMethod, setPartialMethod] = useState<PaymentMethod>(() => {
+    return (localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('storeflow_last_payment_method', partialMethod);
+  }, [partialMethod]);
 
   const all = store.pendingPayments || [];
   const list = useMemo(() => {
@@ -131,7 +137,7 @@ export default function PendingPayments({ store, onUpdate }: Props) {
                   <div className="grid grid-cols-5 gap-1.5 pt-1">
                     <button onClick={() => call(p.customerPhone)} className="p-2 rounded-lg bg-surface-2 text-[10px] font-display font-semibold">📞 Call</button>
                     <button onClick={() => wa(p)} className="p-2 rounded-lg bg-success/15 text-success text-[10px] font-display font-semibold">💬 WhatsApp</button>
-                    <button onClick={() => { setPartialFor(p); setPartialAmt(''); }} className="p-2 rounded-lg bg-primary/15 text-primary text-[10px] font-display font-semibold">+ Partial</button>
+                    <button onClick={() => { setPartialFor(p); setPartialAmt(''); setPartialMethod((localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer'); }} className="p-2 rounded-lg bg-primary/15 text-primary text-[10px] font-display font-semibold">+ Partial</button>
                     <button onClick={() => handleMarkPaid(p)} className="p-2 rounded-lg bg-success text-white text-[10px] font-display font-semibold">✓ Paid</button>
                     <button onClick={() => handleDelete(p)} className="p-2 rounded-lg bg-destructive/15 text-destructive text-[10px] font-display font-semibold">🗑</button>
                   </div>

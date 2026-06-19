@@ -374,6 +374,20 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const health = healthScore(store);
   const insights = managerEnabled ? generateInsights(store, '7d') : [];
   const recs = managerEnabled ? generateRecommendations(store) : [];
+  const flowMood = useMemo(() => {
+    if (!managerEnabled) return 'sleeping';
+    const hasLowStock = store.products.some(p => p.quantity <= 3);
+    const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
+    const isGoalAchieved = store.savingsGoal && store.savingsGoal.saved >= store.savingsGoal.amount && store.savingsGoal.amount > 0;
+    
+    if (isGoalAchieved) return 'celebrating';
+    if (health.overall >= 80) return 'confident';
+    if (health.overall >= 65) return 'happy';
+    if (hasLowStock) return 'concerned';
+    if (hasDebt || health.overall < 50) return 'worried';
+    return 'neutral';
+  }, [store, managerEnabled, health.overall]);
+
   const insightCount = insights.length + recs.length;
   const healthTone = health.overall >= 80 ? 'hsl(var(--success))' : health.overall >= 60 ? 'hsl(var(--primary))' : health.overall >= 40 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))';
   const healthSize = 70;
@@ -410,7 +424,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
             )}
             <div className="p-4 rounded-2xl bg-card shadow-card flex flex-col">
               <div className="flex items-center gap-2 mb-2">
-                <Mascot size={36} mood={managerEnabled ? 'thinking' : 'sleeping'} />
+                <Mascot size={36} mood={flowMood} />
                 <div className="flex-1 min-w-0">
                   <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
                   <MascotBadge on={managerEnabled} />

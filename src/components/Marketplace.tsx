@@ -162,6 +162,12 @@ const COMPARISON_PRODUCTS = ['Rice (50kg)', 'Beans (50kg)', 'Garri White (50kg)'
 
 export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
   // ─── State ──────────────────────────────────────────────────────────────────
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    return localStorage.getItem('storeflow_marketplace_unlocked') === 'true';
+  });
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'suppliers' | 'trending' | 'deals'>('all');
   const [selectedProductToAdd, setSelectedProductToAdd] = useState<{
@@ -406,6 +412,58 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
 
     return { prices, cheapest, savings };
   }, [comparisonProduct]);
+
+  if (!isUnlocked) {
+    return (
+      <div className="text-white space-y-6 pb-20 animate-fade-in bg-[#0B0B12] rounded-3xl p-6 border border-[#E8C34E]/10 max-w-md mx-auto flex flex-col justify-center min-h-[400px]">
+        <div className="text-center space-y-3">
+          <div className="w-16 h-16 rounded-3xl bg-[#E8C34E]/10 border border-[#E8C34E]/25 flex items-center justify-center text-4xl mx-auto shadow-[0_0_15px_rgba(232,195,78,0.1)]">
+            🔒
+          </div>
+          <h2 className="font-display font-black text-xl text-white">
+            Marketplace <span className="text-[#E8C34E]">Private Preview</span>
+          </h2>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            The StoreFlow B2B Marketplace is currently locked in private beta mode. Please enter the bypass password to access it.
+          </p>
+        </div>
+
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            if (passwordInput.toLowerCase() === 'fantazia') {
+              setIsUnlocked(true);
+              localStorage.setItem('storeflow_marketplace_unlocked', 'true');
+              showToast('Marketplace Unlocked!', 'success');
+            } else {
+              setPasswordError('Incorrect bypass password');
+            }
+          }}
+          className="space-y-3 pt-2"
+        >
+          <input
+            type="password"
+            placeholder="Enter beta password..."
+            value={passwordInput}
+            onChange={e => {
+              setPasswordInput(e.target.value);
+              setPasswordError('');
+            }}
+            className="w-full p-3 rounded-xl bg-[#16181D] border border-border text-center text-sm focus:outline-none focus:border-[#E8C34E] text-white"
+          />
+          {passwordError && (
+            <p className="text-xs text-destructive text-center font-semibold">{passwordError}</p>
+          )}
+          <button
+            type="submit"
+            className="w-full p-3.5 rounded-xl bg-[#E8C34E] text-[#0B0B12] font-display font-black text-sm active:scale-[0.98] transition-transform hover:bg-[#E8C34E]/90"
+          >
+            Unlock Access
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="text-white space-y-6 pb-20 animate-fade-in bg-[#0B0B12] rounded-3xl p-4 md:p-6 border border-[#E8C34E]/10">

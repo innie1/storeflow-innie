@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { StoreData, Sale, PaymentMethod, ManagerSettings } from '@/types/store';
 import { recordCheckout, getTopSellers, findProductByBarcode } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
@@ -35,8 +35,14 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
   // checkout form
   const [discount, setDiscount] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('cash');
+  const [method, setMethod] = useState<PaymentMethod>(() => {
+    return (localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer';
+  });
   const [saveAs, setSaveAs] = useState<'paid' | 'pending'>('paid');
+
+  useEffect(() => {
+    localStorage.setItem('storeflow_last_payment_method', method);
+  }, [method]);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -159,7 +165,9 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
 
   const openCheckout = (preset?: number) => {
     if (cart.length === 0 && !preset) return showToast('Cart is empty', 'error');
-    setDiscount(''); setMethod('cash'); setSaveAs('paid');
+    setDiscount('');
+    setMethod((localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer');
+    setSaveAs('paid');
     setCustomerName(''); setCustomerPhone(''); setDueDate(''); setCustomerNote('');
     const sub = preset ?? cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
     setPaidAmount(String(sub));
@@ -208,7 +216,7 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
   const balanceTone = balance === 0 ? 'text-success' : balance < total ? 'text-warning' : 'text-destructive';
 
   return (
-    <div className="animate-fade-in max-w-md mx-auto space-y-4 pb-28">
+    <div className="animate-fade-in w-full max-w-2xl mx-auto space-y-4 pb-28">
       {/* Today hero */}
       <div className="rounded-2xl p-4 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border border-primary/20">
         <div className="flex items-center justify-between mb-3">
@@ -269,6 +277,42 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
         </button>
       </div>
 
+      {voiceActive && cart.length > 0 && (
+        <div className="rounded-xl border border-[#E8C34E]/20 bg-[#E8C34E]/5 p-3 space-y-2">
+          <div className="flex items-center justify-between border-b border-border/40 pb-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-display font-bold text-primary uppercase tracking-wider">🎙️ Voice Added Items</span>
+              <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-bold">{cartCount} items</span>
+            </div>
+            <button onClick={() => setCart([])} className="text-[10px] text-destructive/80 hover:text-destructive font-display font-semibold">
+              Clear list
+            </button>
+          </div>
+          <div className="space-y-1.5 max-h-36 overflow-y-auto no-scrollbar">
+            {cart.map((item, i) => (
+              <div key={item.productId} className="flex items-center justify-between text-xs py-1 px-1.5 rounded-lg bg-card border border-border/30">
+                <div className="flex-1 min-w-0 pr-2">
+                  <p className="font-display font-semibold truncate">{item.productName}</p>
+                  <p className="text-[10px] text-muted-foreground">₦{item.unitPrice.toLocaleString()} × {item.quantity}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-display font-semibold text-primary">
+                    ₦{(item.unitPrice * item.quantity).toLocaleString()}
+                  </span>
+                  <button
+                    onClick={() => changeCartQty(i, -item.quantity)}
+                    className="w-5 h-5 rounded-md hover:bg-destructive/10 text-destructive/80 hover:text-destructive flex items-center justify-center text-sm font-bold active:scale-90 transition-transform"
+                    title="Remove item"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {categories.length > 1 && (
         <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 no-scrollbar">
           {categories.map(c => (
@@ -285,7 +329,7 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
           {store.products.length === 0 ? 'Add products in the Inventory tab to start selling.' : 'No products match.'}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 w-full">
           {visibleProducts.map(p => {
             const avail = getAvailableQty(p.id);
             const isTop = topSellerIds.has(p.id);
