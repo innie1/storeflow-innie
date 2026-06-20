@@ -98,6 +98,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
   // Session-load welcome greeting (only once per session)
   useEffect(() => {
+    if (!isManagerEnabled || isClosingTime) return;
     if (typeof window !== 'undefined' && !sessionStorage.getItem('storeflow_session_greeted')) {
       sessionStorage.setItem('storeflow_session_greeted', 'true');
       const timer = setTimeout(() => {
@@ -105,7 +106,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       }, 1200);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [isManagerEnabled, isClosingTime]);
 
   // Sleep inactivity timer (3 minutes of no user mascot interaction)
   const resetInactivity = () => {
@@ -145,7 +146,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
               setIsManagerEnabled(activeStore.managerSettings?.enabled !== false);
               
               // Local storage fallback for detecting sales if store prop is not provided
-              if (!store && activeStore.sales) {
+              if (activeStore.managerSettings?.enabled !== false && !store && activeStore.sales) {
                 const newSalesCount = activeStore.sales.length;
                 if (lastSalesCountRef.current !== null && newSalesCount > lastSalesCountRef.current) {
                   const saleDiff = newSalesCount - lastSalesCountRef.current;
@@ -182,7 +183,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
   // Real-time sale awareness when store is passed as prop
   useEffect(() => {
-    if (store && store.sales) {
+    if (isManagerEnabled && store && store.sales) {
       const newSalesCount = store.sales.length;
       if (lastSalesCountRef.current !== null && newSalesCount > lastSalesCountRef.current) {
         const saleDiff = newSalesCount - lastSalesCountRef.current;
@@ -305,7 +306,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     isClosingTime = currentHours >= 21 || currentHours < 6;
   }
 
-  const isSleepingState = (isSleeping || isClosingTime) && !isTalking && !wakeOverride;
+  const isSleepingState = !isManagerEnabled || ((isSleeping || isClosingTime) && !wakeOverride);
   const isMorningBathing = !isClosingTime && currentMinutesTotal >= 360 && currentMinutesTotal <= 510 && (mood === 'idle' || mood === 'neutral');
 
   const currentMood: MascotMood = isSleepingState
@@ -481,20 +482,9 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const handleTap = () => {
     resetInactivity();
 
-    // 1. Manager disabled prompt
-    if (!isManagerEnabled) {
-      triggerSpeech("Hey! Can you turn me on so we can work together? 🥺", 'sleeping', 4000);
-      return;
-    }
-
-    // Waking up from sleep check
-    if (currentMood === 'sleeping') {
-      setWakeOverride(true);
-      if (wakeOverrideTimeout.current) clearTimeout(wakeOverrideTimeout.current);
-      wakeOverrideTimeout.current = setTimeout(() => {
-        setWakeOverride(false);
-      }, 40000); // 40 seconds awake period
-      triggerSpeech("Yawn... Okay, okay, I'm awake! Let's do some work. 🥱☕", 'happy', 4000);
+    // If disabled or sleeping, just tell them to wake us up so we can work
+    if (!isManagerEnabled || currentMood === 'sleeping') {
+      triggerSpeech("Please wake me up so we can work together! 🥺", 'sleeping', 4000);
       return;
     }
 
@@ -1168,7 +1158,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       )}
 
       {/* Floating ZZZs */}
-      {currentMood === 'sleeping' && (
+      {currentMood === 'sleeping' && !isTalking && (
         <div className="absolute -top-3 left-[30%] pointer-events-none font-display font-black text-indigo-400 select-none">
           <span className="absolute text-[12px] animate-zzz-1">Z</span>
           <span className="absolute text-[9px] animate-zzz-2" style={{ left: '6px', top: '-4px' }}>Z</span>

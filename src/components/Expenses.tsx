@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { StoreData, ExpenseCategory, Expense } from '@/types/store';
+import { StoreData, ExpenseCategory, Expense, Restock } from '@/types/store';
 import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
@@ -30,6 +30,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
   const [restockQtys, setRestockQtys] = useState<Record<string, string>>({});
   const [restockFunding, setRestockFunding] = useState<RestockFunding>('balance');
   const [restockSearch, setRestockSearch] = useState('');
+  const [selectedRestockBatch, setSelectedRestockBatch] = useState<{ expense: Expense; items: Restock[] } | null>(null);
 
   const expenses = store.expenses || [];
 
@@ -180,32 +181,46 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
             {expenses.length === 0 ? 'No expenses yet. Tap "New Expense" to add one.' : 'No expenses in this category.'}
           </p>
         ) : (
-          filtered.map(e => (
-            <div key={e.id} className="p-3 rounded-lg bg-card border border-border flex items-center gap-3">
-              <div className="text-2xl">{CATEGORY_ICON[e.category]}</div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-display font-semibold text-sm">{e.category}</span>
-                  {e.source === 'restock' && (
-                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20">Auto</span>
-                  )}
+          filtered.map(e => {
+            const isRestock = e.category === 'Restock' || e.source === 'restock';
+            return (
+              <div
+                key={e.id}
+                onClick={() => {
+                  if (isRestock) {
+                    const items = (store.restocks || []).filter(r => r.batchId === e.restockBatchId);
+                    setSelectedRestockBatch({ expense: e, items });
+                  }
+                }}
+                className={`p-3 rounded-lg bg-card border border-border flex items-center gap-3 transition-colors ${
+                  isRestock ? 'cursor-pointer hover:bg-surface-2/30 hover:border-success/30' : ''
+                }`}
+              >
+                <div className="text-2xl">{CATEGORY_ICON[e.category]}</div>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-display font-semibold text-sm">{e.category}</span>
+                    {e.source === 'restock' && (
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20">Auto</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {new Date(e.date).toLocaleDateString()} {new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {e.note && <p className="text-xs text-muted-foreground truncate mt-0.5">{e.note}</p>}
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {new Date(e.date).toLocaleDateString()} {new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-                {e.note && <p className="text-xs text-muted-foreground truncate mt-0.5">{e.note}</p>}
+                <div className="text-right">
+                  <p className="font-display font-bold text-destructive">₦{e.amount.toLocaleString()}</p>
+                  <button
+                    onClick={(evt) => { evt.stopPropagation(); handleDelete(e); }}
+                    className="text-[10px] text-muted-foreground hover:text-destructive mt-0.5"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="font-display font-bold text-destructive">₦{e.amount.toLocaleString()}</p>
-                <button
-                  onClick={() => handleDelete(e)}
-                  className="text-[10px] text-muted-foreground hover:text-destructive mt-0.5"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -386,6 +401,77 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                 className="w-full p-2.5 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90 disabled:opacity-40"
               >
                 ✓ Save Restock
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedRestockBatch && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setSelectedRestockBatch(null)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl p-5 animate-slide-up max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-display font-bold text-base flex items-center gap-2 text-success">
+                <span>📦 Restock Batch Details</span>
+              </h3>
+              <button onClick={() => setSelectedRestockBatch(null)} className="text-muted-foreground hover:text-foreground text-xl">×</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-left">
+              {/* Summary Metadata */}
+              <div className="p-3 bg-surface-2 rounded-lg border border-border text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date & Time:</span>
+                  <span className="font-semibold text-foreground">
+                    {new Date(selectedRestockBatch.expense.date).toLocaleDateString()} {new Date(selectedRestockBatch.expense.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Funding Source:</span>
+                  <span className="font-semibold text-primary">
+                    {selectedRestockBatch.items[0]?.funding === 'new_money' ? '💵 New Money Capital' : '💰 Store Cash Balance'}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-1.5 border-t border-border/60">
+                  <span className="text-muted-foreground font-semibold">Total Amount:</span>
+                  <span className="font-bold text-success">₦{selectedRestockBatch.expense.amount.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Products List */}
+              <div>
+                <h4 className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1.5">Restocked Products</h4>
+                <div className="space-y-1.5">
+                  {selectedRestockBatch.items.length > 0 ? (
+                    selectedRestockBatch.items.map((item, idx) => (
+                      <div key={item.id || idx} className="p-2 rounded-lg bg-surface-2/60 border border-border/50 flex justify-between items-center text-xs">
+                        <div className="min-w-0 flex-1 pr-2">
+                          <p className="font-semibold text-foreground truncate">{item.productName}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Qty: <span className="text-foreground font-medium">{item.quantity}</span> · Cost: ₦{item.costPrice.toLocaleString()} each
+                          </p>
+                        </div>
+                        <span className="font-display font-bold text-primary text-right shrink-0">
+                          ₦{item.total.toLocaleString()}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 bg-surface-2 rounded-lg border border-border/40 text-center text-xs text-muted-foreground">
+                      No specific product logs found for this batch. The restock note states:
+                      <p className="italic mt-1 text-foreground">"{selectedRestockBatch.expense.note}"</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 mt-3 border-t border-border">
+              <button
+                onClick={() => setSelectedRestockBatch(null)}
+                className="w-full p-2 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border text-xs font-display font-semibold transition-colors"
+              >
+                Close Details
               </button>
             </div>
           </div>

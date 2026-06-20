@@ -96,6 +96,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
   const [showAuditHistory, setShowAuditHistory] = useState(false);
   const [selectedBarcodeProduct, setSelectedBarcodeProduct] = useState<Product | null>(null);
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [selectedTransferProduct, setSelectedTransferProduct] = useState<Product | null>(null);
   const [transferQty, setTransferQty] = useState('');
   const [transferDestCode, setTransferDestCode] = useState('');
@@ -510,7 +511,11 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         {products.map(p => {
           const inList = shoppingList.find(i => i.productId === p.id);
           return (
-            <div key={p.id} className={`p-3 rounded-lg bg-card border flex items-center gap-3 transition-colors ${p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'}`}>
+            <div
+              key={p.id}
+              onClick={() => { if (!countMode) setSelectedDetailProduct(p); }}
+              className={`p-3 rounded-lg bg-card border flex items-center gap-3 transition-colors cursor-pointer hover:bg-surface-2/30 ${p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'}`}
+            >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <p className="font-display font-semibold text-sm truncate">{p.name}</p>
@@ -584,7 +589,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     <p className="text-lg font-bold leading-none">{p.quantity}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">stock</p>
                   </div>
-                  <div className="flex flex-col gap-1 shrink-0">
+                  <div className="flex flex-col gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                     <div className="flex gap-1">
                       <button
                         onClick={() => setScanForProduct(p)}
@@ -1319,6 +1324,157 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             >
               🚚 Complete Transfer
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {selectedDetailProduct && (
+        <Modal title={`Product Details: ${selectedDetailProduct.name}`} onClose={() => setSelectedDetailProduct(null)}>
+          <div className="space-y-4 text-left">
+            {/* Details Grid */}
+            <div className="grid grid-cols-2 gap-3 bg-surface-2 p-3 rounded-xl border border-border text-xs">
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Category</p>
+                <p className="font-bold text-foreground mt-0.5">{selectedDetailProduct.category}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Barcode / SKU</p>
+                <p className="font-mono font-bold text-success mt-0.5">{selectedDetailProduct.barcode || 'Not Linked'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Current Stock</p>
+                <p className={`font-black mt-0.5 ${selectedDetailProduct.quantity <= lowThreshold ? 'text-destructive' : selectedDetailProduct.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
+                  {selectedDetailProduct.quantity} units
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Profit Margin</p>
+                {(() => {
+                  const margin = selectedDetailProduct.sellingPrice - selectedDetailProduct.costPrice;
+                  const pct = selectedDetailProduct.costPrice > 0 ? (margin / selectedDetailProduct.costPrice) * 100 : 0;
+                  const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
+                  return <p className={`font-bold mt-0.5 ${cls}`}>₦{margin.toLocaleString()} (+{pct.toFixed(0)}%)</p>;
+                })()}
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Cost Price</p>
+                <p className="font-bold text-muted-foreground mt-0.5">₦{selectedDetailProduct.costPrice.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Selling Price</p>
+                <p className="font-bold text-primary mt-0.5">₦{selectedDetailProduct.sellingPrice.toLocaleString()}</p>
+              </div>
+            </div>
+
+            {/* Price History Section */}
+            {(() => {
+              const priceHistory = selectedDetailProduct.priceHistory || [];
+              return (
+                <div className="space-y-2 mt-3 pt-3 border-t border-border">
+                  <h4 className="text-xs font-display font-bold text-primary flex items-center gap-1.5">
+                    📈 Cost Price History Chart
+                  </h4>
+                  {priceHistory.length >= 2 ? (
+                    <div className="h-32 w-full bg-surface-2 p-1 rounded-lg border border-border">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={priceHistory}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
+                          <XAxis
+                            dataKey="date"
+                            tickFormatter={(str) => {
+                              try {
+                                return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                              } catch {
+                                return '';
+                              }
+                            }}
+                            tick={{ fill: '#94a3b8', fontSize: 8 }}
+                          />
+                          <YAxis
+                            tick={{ fill: '#94a3b8', fontSize: 8 }}
+                            domain={['auto', 'auto']}
+                          />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#1e293b', borderColor: '#d97706', borderRadius: '6px', padding: '6px' }}
+                            labelStyle={{ color: '#f59e0b', fontSize: 9, fontWeight: 'bold' }}
+                            itemStyle={{ color: '#f8fafc', fontSize: 9 }}
+                            labelFormatter={(lbl) => {
+                              try {
+                                return new Date(lbl).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+                              } catch {
+                                return String(lbl);
+                              }
+                            }}
+                          />
+                          <Line type="monotone" dataKey="costPrice" stroke="#d97706" strokeWidth={1.5} dot={{ fill: '#d97706', r: 2 }} name="Cost" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground italic text-center py-1">
+                      At least two cost changes are required to render the history trend line.
+                    </p>
+                  )}
+
+                  <p className="text-[10px] text-muted-foreground uppercase font-semibold">Change Log Timeline</p>
+                  {priceHistory.length > 0 ? (
+                    <div className="max-h-24 overflow-y-auto space-y-1 text-[9px] no-scrollbar">
+                      {priceHistory.slice().reverse().map((h, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-surface-2 p-1 rounded border border-border">
+                          <span className="text-muted-foreground">
+                            {new Date(h.date).toLocaleDateString('en-GB')} {new Date(h.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="font-bold text-foreground">₦{h.costPrice.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-2 rounded bg-surface-2 border border-border text-center text-[10px] text-muted-foreground">
+                      Initial Cost Price: ₦{selectedDetailProduct.costPrice.toLocaleString()} (added at creation)
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Actions buttons inside popup */}
+            <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border">
+              <button
+                onClick={() => {
+                  setRestockProduct(selectedDetailProduct);
+                  setRestockQty('');
+                  setSingleRestockFunding('balance');
+                  setSelectedDetailProduct(null);
+                }}
+                className="p-2 rounded-lg bg-success text-white font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90"
+              >
+                ↑ Restock
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedTransferProduct(selectedDetailProduct);
+                  setTransferQty('');
+                  setTransferDestCode('');
+                  setSelectedDetailProduct(null);
+                }}
+                className="p-2 rounded-lg bg-warning text-slate-950 font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90"
+              >
+                🚚 Transfer
+              </button>
+              <button
+                onClick={() => {
+                  const p = selectedDetailProduct;
+                  setEditProduct({ ...p });
+                  setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category });
+                  setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category));
+                  setEditCustomCategoryVal(p.category);
+                  setSelectedDetailProduct(null);
+                }}
+                className="p-2 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90"
+              >
+                ✎ Edit
+              </button>
+            </div>
           </div>
         </Modal>
       )}
