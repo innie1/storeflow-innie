@@ -234,6 +234,12 @@ export interface ManagerSettings {
   // Graph settings
   graphInterval?: 10 | 30 | 60;
   autoBackupsEnabled?: boolean;
+  // Discounts
+  autoDiscountEnabled?: boolean;
+  autoDiscountType?: 'percentage' | 'flat';
+  autoDiscountValue?: number;
+  autoDiscountMinSubtotal?: number;
+  autoDiscountMaxSubtotal?: number;
 }
 
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
@@ -275,6 +281,11 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   pinLock: false,
   graphInterval: 30,
   autoBackupsEnabled: true,
+  autoDiscountEnabled: false,
+  autoDiscountType: 'flat',
+  autoDiscountValue: 0,
+  autoDiscountMinSubtotal: 0,
+  autoDiscountMaxSubtotal: 0,
 };
 
 export interface StoreData {

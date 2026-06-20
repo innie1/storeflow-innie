@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Radial Glow -->
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#08080f" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Blue Gradient -->
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="50%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+
+    <!-- Gold Accent Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+
+  <!-- Glow Background -->
+  <circle cx="256" cy="256" r="250" fill="url(#glow)" />
+
+  <!-- 3D Isometric Box Logo -->
+  <g transform="translate(0, -10)">
+    <!-- Right Face -->
+    <path d="M256 160 L380 220 L380 370 L256 310 Z" fill="url(#blueGrad)" opacity="0.9" />
+    <!-- Left Face -->
+    <path d="M256 160 L132 220 L132 370 L256 310 Z" fill="#1e3a8a" />
+    <!-- Top Face -->
+    <path d="M256 160 L380 220 L256 280 L132 220 Z" fill="#3b82f6" />
+
+    <!-- Gold Center Stripe on Top & Front -->
+    <path d="M256 160 L290 176 L256 192 L222 176 Z" fill="url(#goldGrad)" />
+    <path d="M222 176 L256 192 L256 310 L222 294 Z" fill="url(#goldGrad)" opacity="0.8" />
+    <path d="M290 176 L256 192 L256 310 L290 294 Z" fill="url(#goldGrad)" />
+
+    <!-- White Letter 'F' stylized on front right -->
+    <path d="M256 192 H335 V225 H290 V245 H325 V275 H290 V325 H256 Z" fill="#ffffff" />
+  </g>
+</svg>

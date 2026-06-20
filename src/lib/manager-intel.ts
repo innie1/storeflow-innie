@@ -265,20 +265,29 @@ export interface StockForecast {
 }
 
 export function inventoryIntelligence(store: StoreData): StockForecast[] {
+  const threshold = getLowStockThreshold();
   return store.products
-    .filter(p => p.quantity > 0)
     .map(p => {
       const sold14 = store.sales
         .filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(13))
         .reduce((sum, s) => sum + s.quantity, 0);
       const perDay = sold14 / 14;
-      const daysLeft = perDay > 0 ? Math.floor(p.quantity / perDay) : Infinity;
-      // Recommend 14-day supply + 20% buffer
-      const restockQty = perDay > 0 ? Math.ceil(perDay * 14 * 1.2) : 0;
-      const urgency: StockForecast['urgency'] = daysLeft <= 3 ? 'critical' : daysLeft <= 7 ? 'soon' : 'ok';
+      const daysLeft = p.quantity === 0 ? 0 : (perDay > 0 ? Math.floor(p.quantity / perDay) : Infinity);
+      // Recommend 14-day supply + 20% buffer, default to 10 if no sales history
+      const restockQty = perDay > 0 ? Math.ceil(perDay * 14 * 1.2) : 10;
+      
+      let urgency: StockForecast['urgency'] = 'ok';
+      if (p.quantity === 0) {
+        urgency = 'critical';
+      } else if (daysLeft <= 3 || p.quantity <= Math.max(1, Math.floor(threshold / 2))) {
+        urgency = 'critical';
+      } else if (daysLeft <= 7 || p.quantity <= threshold) {
+        urgency = 'soon';
+      }
+      
       return { product: p, perDay, daysLeft, restockQty, urgency };
     })
-    .filter(f => Number.isFinite(f.daysLeft) && f.daysLeft <= 14)
+    .filter(f => f.urgency !== 'ok')
     .sort((a, b) => a.daysLeft - b.daysLeft);
 }
 
@@ -401,9 +410,18 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
   const series7 = dailySeries(store, 7);
   const rev7 = series7.reduce((s, d) => s + d.revenue, 0);
 
-  // Critical: running out of fast sellers
-  stock.filter(f => f.urgency === 'critical').slice(0, 2).forEach(f => {
-    advice.push({ id: `cr-${f.product.id}`, icon: '🚨', title: `Restock ${f.product.name} NOW`, detail: `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`, priority: 'critical' });
+  // Critical: running out of fast sellers or completely out of stock
+  stock.filter(f => f.urgency === 'critical').slice(0, 3).forEach(f => {
+    const isOut = f.product.quantity === 0;
+    advice.push({ 
+      id: `cr-${f.product.id}`, 
+      icon: '🚨', 
+      title: isOut ? `Restock ${f.product.name} (Sold Out)` : `Restock ${f.product.name} NOW`, 
+      detail: isOut
+        ? `Out of Stock: ${f.product.name} is completely sold out. Restock at least ${f.restockQty} units immediately to recover lost revenue.`
+        : `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`, 
+      priority: 'critical' 
+    });
   });
 
   // Critical: no sales this week
@@ -693,60 +711,133 @@ export function generateFlowReport(store: StoreData): string {
   const h = healthScore(store);
   const stock = inventoryIntelligence(store);
   const pending = getPendingSummary(store);
-  const sales = store.sales;
   
-  const lowStock = stock.filter(f => f.urgency === 'critical' || f.urgency === 'soon');
-  const criticalStock = stock.filter(f => f.urgency === 'critical');
-  const debtTotal = pending.totalOwed;
-  const overdueCount = pending.overdue.length;
+  const last7 = dailySeries(store, 7);
+  const prev7 = dailySeries(store, 14).slice(0, 7);
+  const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
+  const revPrev = prev7.reduce((s, d) => s + d.revenue, 0);
+  const profit7 = last7.reduce((s, d) => s + d.profit, 0);
+  const exp7 = last7.reduce((s, d) => s + d.expenses, 0);
+  
+  const outOfStock = store.products.filter(p => p.quantity === 0);
+  const threshold = getLowStockThreshold();
+  const lowStock = store.products.filter(p => p.quantity > 0 && p.quantity <= threshold);
   
   const ea = expenseAnalysis(store);
-  const totalExpenses = ea.totalLast30;
   
-  let text = `Hello! Here is my analysis for ${store.storeName}. `;
-  
+  let text = `Hi, I'm Flow, your business assistant. Here is a tailored analysis for ${store.storeName}. \n\n`;
+
+  // 1. Overall Health & Performance Assessment
+  text += `### 📊 Store Performance Summary\n`;
   if (h.overall >= 80) {
-    text += `Your store is in excellent shape, with a health score of ${h.overall}/100! 🌟 `;
-  } else if (h.overall >= 55) {
-    text += `Your store is doing decently, scoring ${h.overall}/100. There are a few things we can tune. 📈 `;
+    text += `Your store is performing exceptionally well with a health score of **${h.overall}/100** (Great). `;
+  } else if (h.overall >= 60) {
+    text += `Your store is in healthy standing with a score of **${h.overall}/100**. Operations are stable, but we can optimize. `;
+  } else if (h.overall >= 40) {
+    text += `Your store performance is average (**${h.overall}/100**). Some financial and inventory metrics are falling behind. `;
   } else {
-    text += `Your store needs attention right now (health score: ${h.overall}/100). Let's fix the gaps. ⚠️ `;
+    text += `⚠️ **Critical Warning:** Your store is underperforming with a health score of **${h.overall}/100** (Needs Immediate Attention). `;
   }
 
-  if (criticalStock.length > 0) {
-    const names = criticalStock.slice(0, 3).map(f => f.product.name).join(', ');
-    text += `Critically, you are running low on ${criticalStock.length} key product${criticalStock.length === 1 ? '' : 's'}: ${names}. I recommend restocking these immediately to avoid losing customers. `;
-  } else if (lowStock.length > 0) {
-    const names = lowStock.slice(0, 3).map(f => f.product.name).join(', ');
-    text += `You have ${lowStock.length} product${lowStock.length === 1 ? '' : 's'} running low soon, including: ${names}. Plan a restock run this week. `;
+  // Revenue & Profit Trend Analysis
+  if (rev7 === 0) {
+    text += `You have logged **zero sales** this week. If you've been opening the shop, make sure to record every sale on StoreFlow so I can track your revenue. If foot traffic is low, consider running a weekend promotion. \n\n`;
   } else {
-    text += `Your inventory levels look stable for now! All tracked items have adequate stock. 👍 `;
-  }
-
-  if (debtTotal > 0) {
-    text += `You have ₦${debtTotal.toLocaleString()} in customer debts across ${pending.pendingCount} pending payments. `;
-    if (overdueCount > 0) {
-      text += `${overdueCount} of these are overdue. You should reach out to these customers to collect balances and boost cash flow. 💳 `;
+    const margin = rev7 > 0 ? (profit7 / rev7) * 100 : 0;
+    text += `This week, you generated **₦${rev7.toLocaleString()}** in revenue. `;
+    if (revPrev > 0) {
+      const growth = ((rev7 - revPrev) / revPrev) * 100;
+      if (growth < -10) {
+        text += `This is a significant **decline of ${Math.abs(growth).toFixed(1)}%** compared to last week (₦${revPrev.toLocaleString()}). `;
+      } else if (growth > 10) {
+        text += `This is a strong **growth of ${growth.toFixed(1)}%** compared to last week! `;
+      } else {
+        text += `This is stable compared to last week. `;
+      }
+    }
+    
+    if (margin < 15 && margin > 0) {
+      text += `However, your net profit margin is thin at **${margin.toFixed(1)}%**. You might be pricing your items too close to their cost price, or facing high wholesale prices. Check the 'Analysis' tab to see which products have low margins. \n\n`;
+    } else if (margin <= 0 && rev7 > 0) {
+      text += `Critically, you are operating at a **negative profit margin** on sales this week. Review product costs immediately! \n\n`;
     } else {
-      text += `Keep an eye on these payment due dates to prevent overdue bills. `;
+      text += `Your profit margin is healthy at **${margin.toFixed(1)}%** (₦${profit7.toLocaleString()} profit). \n\n`;
     }
-  } else {
-    text += `Great job keeping pending payments clean — you have zero outstanding customer debt! 💸 `;
   }
 
-  if (totalExpenses > 0) {
-    text += `Your expenses over the last 30 days total ₦${totalExpenses.toLocaleString()}. `;
-    if (ea.trendPct > 15) {
-      text += `This is a ${ea.trendPct.toFixed(0)}% spike compared to last month, driven mostly by ${ea.largestCategory} costs. Try to audit this area. 🧾 `;
+  // 2. Inventory Health (Zero stock / Low stock)
+  text += `### 📦 Inventory Diagnostics\n`;
+  if (store.products.length === 0) {
+    text += `You currently have **0 products** registered in your inventory. To get started, go to the Inventory page and add your products so I can track stock levels. \n\n`;
+  } else if (outOfStock.length > 0 || lowStock.length > 0) {
+    if (outOfStock.length > 0) {
+      const oosNames = outOfStock.slice(0, 3).map(p => p.name).join(', ');
+      text += `🚨 **Out of Stock:** You have **${outOfStock.length} product(s) completely sold out** (${oosNames}${outOfStock.length > 3 ? '...' : ''}). When products are at zero, you are actively losing sales. Restock these immediately. \n`;
     }
+    if (lowStock.length > 0) {
+      const lowNames = lowStock.slice(0, 3).map(p => p.name).join(', ');
+      text += `⚠️ **Low Stock:** There are **${lowStock.length} product(s) running low** (below ${threshold} units), including: ${lowNames}. \n`;
+    }
+    text += `Go to the Marketplace tab to find local suppliers or place quick orders. \n\n`;
   } else {
-    text += `No major business expenses recorded in the last 30 days. `;
+    text += `Your inventory is fully stocked! All registered products are above the low stock threshold of ${threshold} units. Keep it up! 👍 \n\n`;
   }
 
-  if (criticalStock.length > 0 || overdueCount > 0) {
-    text += `Priority actions: Restock your critical items and call your debtors. You've got this! 💪`;
+  // 3. Expense Control
+  text += `### 🧾 Expense Audit\n`;
+  if (exp7 > 0) {
+    text += `Your recorded expenses total **₦${exp7.toLocaleString()}** this week. `;
+    if (rev7 > 0) {
+      const expRatio = (exp7 / rev7) * 100;
+      if (expRatio > 40) {
+        text += `This represents **${expRatio.toFixed(0)}% of your weekly revenue**, which is dangerously high. `;
+        if (ea.trendPct > 10) {
+          text += `Your monthly spending spike is driven by the **${ea.largestCategory}** category. Audit this category immediately to plug financial leaks. `;
+        }
+      } else {
+        text += `Expenses are well-controlled, taking up only ${expRatio.toFixed(0)}% of your revenue. `;
+      }
+    }
+    text += `\n\n`;
   } else {
-    text += `Overall, operations are smooth. Focus on introducing fast-moving products to accelerate sales! 🚀`;
+    text += `You have **no expenses recorded** this week. Keeping accurate expense logs is crucial for knowing your true net profit. \n\n`;
+  }
+
+  // 4. Debt & Cash Flow
+  text += `### 💳 Outstanding Debts & Cash Flow\n`;
+  if (pending.totalOwed > 0) {
+    text += `Customers owe your store **₦${pending.totalOwed.toLocaleString()}** across ${pending.pendingCount} pending payment(s). `;
+    if (pending.overdue.length > 0) {
+      text += `Of these, **${pending.overdue.length} payment(s) are overdue**. This is tying up your working capital, making it harder to restock. I suggest sending a WhatsApp reminder directly from the 'Pending' tab to collect these funds. \n\n`;
+    } else {
+      text += `These balances are not yet overdue. Make sure to collect them on the due dates to maintain healthy cash flow. \n\n`;
+    }
+  } else {
+    text += `Your outstanding customer debt is zero! This is excellent for your cash flow. \n\n`;
+  }
+
+  // 5. Tailored Priority Recommendations
+  text += `### ⚡ Priority Recommendations\n`;
+  let recsAdded = 0;
+
+  if (outOfStock.length > 0) {
+    text += `${recsAdded + 1}. **Restock Out-of-Stock Items:** Focus on replenishing ${outOfStock.slice(0, 2).map(p => p.name).join(' and ')} immediately.\n`;
+    recsAdded++;
+  }
+  if (rev7 === 0) {
+    text += `${recsAdded + 1}. **Record Sales Activity:** Open your shop and start logging sales daily to generate actionable forecasts.\n`;
+    recsAdded++;
+  }
+  if (pending.overdue.length > 0) {
+    text += `${recsAdded + 1}. **Collect Overdue Debts:** Call or message the overdue customer(s) to recover ₦${pending.totalOwed.toLocaleString()}.\n`;
+    recsAdded++;
+  }
+  if (exp7 > rev7 && rev7 > 0) {
+    text += `${recsAdded + 1}. **Reduce Overhead:** Your expenses are outstripping your sales. Freeze non-essential purchases.\n`;
+    recsAdded++;
+  }
+  if (recsAdded === 0) {
+    text += `1. **Maintain Steady Operations:** Keep doing what you're doing! Consider setting a higher savings goal or expanding your product listings in the Marketplace.\n`;
   }
 
   return text;

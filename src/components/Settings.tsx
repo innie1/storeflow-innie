@@ -45,7 +45,7 @@ export function getActiveSession(): string | null {
 type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
   | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
-  | 'help' | 'faq' | 'about' | 'contact' | 'backups';
+  | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount';
 
 interface SettingsProps {
   store: StoreData;
@@ -274,6 +274,38 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
     const next = { ...mgr, ...patch };
     setMgr(next); persist({ managerSettings: next });
   };
+
+  // Auto discount input local string states to allow empty inputs
+  const [discValStr, setDiscValStr] = useState('');
+  const [discMinStr, setDiscMinStr] = useState('');
+  const [discMaxStr, setDiscMaxStr] = useState('');
+
+  const handleDiscValChange = (val: string) => {
+    setDiscValStr(val);
+    const n = Number(val);
+    updateMgr({ autoDiscountValue: isNaN(n) ? 0 : n });
+  };
+
+  const handleDiscMinChange = (val: string) => {
+    setDiscMinStr(val);
+    const n = Number(val);
+    updateMgr({ autoDiscountMinSubtotal: isNaN(n) ? 0 : n });
+  };
+
+  const handleDiscMaxChange = (val: string) => {
+    setDiscMaxStr(val);
+    const n = Number(val);
+    updateMgr({ autoDiscountMaxSubtotal: isNaN(n) ? 0 : n });
+  };
+
+  useEffect(() => {
+    if (view === 'discount') {
+      setDiscValStr(mgr.autoDiscountValue ? String(mgr.autoDiscountValue) : '');
+      setDiscMinStr(mgr.autoDiscountMinSubtotal ? String(mgr.autoDiscountMinSubtotal) : '');
+      setDiscMaxStr(mgr.autoDiscountMaxSubtotal ? String(mgr.autoDiscountMaxSubtotal) : '');
+    }
+  }, [view, mgr.autoDiscountValue, mgr.autoDiscountMinSubtotal, mgr.autoDiscountMaxSubtotal]);
+
   const updateSavings = (patch: Partial<SavingsGoal>) => {
     const next = { ...savings, ...patch };
     setSavings(next); persist({ savingsGoal: next });
@@ -535,6 +567,93 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         <ToggleRow label="Restock Suggestions" checked={mgr.restockSuggestions} onChange={v => updateMgr({ restockSuggestions: v })} />
         <ToggleRow label="Inventory Alerts" checked={mgr.inventoryAlerts} onChange={v => updateMgr({ inventoryAlerts: v })} />
         <ToggleRow label="Low Stock Notifications" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />
+      </div>
+    </SubPage>
+  );
+
+  if (view === 'discount') return (
+    <SubPage title="Automatic Discounts" onBack={() => setView('home')}>
+      <div className={`${card} px-4 divide-y divide-border`}>
+        <ToggleRow
+          label="Enable Automatic Discount"
+          description="Automatically calculate and apply a discount at checkout if criteria are met."
+          checked={mgr.autoDiscountEnabled ?? false}
+          onChange={v => updateMgr({ autoDiscountEnabled: v })}
+        />
+      </div>
+
+      {mgr.autoDiscountEnabled && (
+        <div className={`${card} p-4 space-y-4 animate-fade-in`}>
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">Discount Type</label>
+            <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden">
+              {([['percentage', 'Percentage (%)'], ['flat', 'Flat Amount (₦)']] as const).map(([type, label]) => (
+                <button
+                  key={type}
+                  onClick={() => updateMgr({ autoDiscountType: type })}
+                  className={`flex-1 px-3 py-2 text-xs font-display font-semibold transition-all ${
+                    mgr.autoDiscountType === type ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">
+              Discount Value {mgr.autoDiscountType === 'percentage' ? '(%)' : '(₦)'}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                value={discValStr}
+                onChange={e => handleDiscValChange(e.target.value)}
+                className={inputClass + ' flex-1 font-display font-bold text-sm'}
+                placeholder="0"
+              />
+              <span className="text-sm font-bold text-primary">
+                {mgr.autoDiscountType === 'percentage' ? '%' : '₦'}
+              </span>
+            </div>
+          </div>
+
+          <div className="border-t border-border/60 pt-3">
+            <h4 className="text-xs font-display font-bold text-muted-foreground uppercase mb-2">Conditions (Criteria)</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-1">Min Subtotal (₦)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={discMinStr}
+                  onChange={e => handleDiscMinChange(e.target.value)}
+                  className={inputClass + ' font-mono text-xs'}
+                  placeholder="0"
+                />
+                <span className="text-[9px] text-muted-foreground block mt-0.5">e.g. above 10,000</span>
+              </div>
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-1">Max Subtotal (₦)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={discMaxStr}
+                  onChange={e => handleDiscMaxChange(e.target.value)}
+                  className={inputClass + ' font-mono text-xs'}
+                  placeholder="0"
+                />
+                <span className="text-[9px] text-muted-foreground block mt-0.5">e.g. below 50,000</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="p-3 bg-success/10 border border-success/20 rounded-xl text-[11px] text-success leading-relaxed">
+        <strong>How it works:</strong> Automatic discounts apply in the shopping cart when the subtotal falls within your defined criteria range. You can always override or edit the discount manually during checkout.
       </div>
     </SubPage>
   );
@@ -1331,6 +1450,16 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         {/* Right column — settings tiles */}
         <div className="md:col-span-7 space-y-3">
           <SettingTile icon="🏷️" color="#F2C94C" title="Pricing" desc="Manage profit margin and pricing." right={<><p className="text-[10px] text-muted-foreground">Default Margin</p><p className="text-base font-display font-bold text-primary">{mgr.defaultMargin}%</p></>} onClick={() => setView('pricing')} />
+          <SettingTile icon="💸" color="#10B981" title="Discounts" desc="Automatic checkout discount settings."
+            right={<>
+              <p className="text-[10px] text-muted-foreground">{mgr.autoDiscountEnabled ? 'Active' : 'Disabled'}</p>
+              {mgr.autoDiscountEnabled && (
+                <p className="text-sm font-display font-bold text-success">
+                  {mgr.autoDiscountType === 'percentage' ? `${mgr.autoDiscountValue}%` : `₦${(mgr.autoDiscountValue || 0).toLocaleString()}`}
+                </p>
+              )}
+            </>}
+            onClick={() => setView('discount')} />
           <SettingTile icon="📦" color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />
           <SettingTile icon="🐖" color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}
             right={<div className="text-right space-y-1">

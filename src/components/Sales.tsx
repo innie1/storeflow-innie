@@ -34,7 +34,9 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
 
   // checkout form
   const [discount, setDiscount] = useState('');
+  const [discountManuallyEdited, setDiscountManuallyEdited] = useState(false);
   const [paidAmount, setPaidAmount] = useState('');
+  const [paidAmountManuallyEdited, setPaidAmountManuallyEdited] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>(() => {
     return (localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer';
   });
@@ -163,14 +165,48 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
   const paidNum = Math.min(total, Math.max(0, Number(paidAmount) || 0));
   const balance = Math.max(0, total - paidNum);
 
+  const calculateAutoDiscount = (sub: number) => {
+    if (!managerSettings?.autoDiscountEnabled) return 0;
+    const minSub = managerSettings.autoDiscountMinSubtotal || 0;
+    const maxSub = managerSettings.autoDiscountMaxSubtotal || 0;
+    const isMinMet = !minSub || sub >= minSub;
+    const isMaxMet = !maxSub || sub <= maxSub;
+    
+    if (isMinMet && isMaxMet) {
+      if (managerSettings.autoDiscountType === 'percentage') {
+        const val = managerSettings.autoDiscountValue || 0;
+        return Math.round(sub * (val / 100));
+      } else {
+        return managerSettings.autoDiscountValue || 0;
+      }
+    }
+    return 0;
+  };
+
+  // Recalculate automatic discount when subtotal changes (if not manually overridden)
+  useEffect(() => {
+    if (checkoutOpen && !discountManuallyEdited && managerSettings?.autoDiscountEnabled) {
+      const amt = calculateAutoDiscount(cartSubtotal);
+      setDiscount(amt > 0 ? String(amt) : '');
+      if (!paidAmountManuallyEdited) {
+        setPaidAmount(String(Math.max(0, cartSubtotal - amt)));
+      }
+    }
+  }, [cartSubtotal, checkoutOpen, discountManuallyEdited, paidAmountManuallyEdited, managerSettings]);
+
   const openCheckout = (preset?: number) => {
     if (cart.length === 0 && !preset) return showToast('Cart is empty', 'error');
-    setDiscount('');
+    setDiscountManuallyEdited(false);
+    setPaidAmountManuallyEdited(false);
+    
+    const sub = preset ?? cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
+    const initialDiscount = calculateAutoDiscount(sub);
+    
+    setDiscount(initialDiscount > 0 ? String(initialDiscount) : '');
     setMethod((localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer');
     setSaveAs('paid');
     setCustomerName(''); setCustomerPhone(''); setDueDate(''); setCustomerNote('');
-    const sub = preset ?? cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
-    setPaidAmount(String(sub));
+    setPaidAmount(String(Math.max(0, sub - initialDiscount)));
     setCheckoutOpen(true);
   };
 
@@ -210,6 +246,7 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
   // auto switch to pending when balance > 0
   const onPaidChange = (v: string) => {
     setPaidAmount(v);
+    setPaidAmountManuallyEdited(true);
     const p = Math.min(total, Math.max(0, Number(v) || 0));
     if (total - p > 0) setSaveAs('pending'); else setSaveAs('paid');
   };
@@ -397,83 +434,82 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
       {checkoutOpen && (
         <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setCheckoutOpen(false)}>
           <div className="w-full max-w-md bg-card border-t sm:border border-border rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 bg-card border-b border-border p-4 flex items-center justify-between">
+            <div className="sticky top-0 bg-card border-b border-border p-3 flex items-center justify-between">
               <div>
-                <h3 className="font-display font-bold text-lg">Checkout</h3>
-                <p className="text-[11px] text-muted-foreground">{cartCount} item{cartCount !== 1 ? 's' : ''}</p>
+                <h3 className="font-display font-bold text-base">Checkout</h3>
+                <p className="text-[10px] text-muted-foreground">{cartCount} item{cartCount !== 1 ? 's' : ''}</p>
               </div>
-              <button onClick={() => setCheckoutOpen(false)} className="text-destructive text-xl">×</button>
+              <button onClick={() => setCheckoutOpen(false)} className="text-destructive text-lg">×</button>
             </div>
 
-            <div className="p-4 space-y-4">
+            <div className="p-3 space-y-3">
               {/* Order summary */}
-              <div className="rounded-xl bg-surface-2/60 p-3 space-y-2">
-                <p className="text-xs font-display font-bold text-muted-foreground uppercase">Order Summary</p>
+              <div className="rounded-lg bg-surface-2/60 p-2.5 space-y-1.5">
+                <p className="text-[10px] font-display font-bold text-muted-foreground uppercase">Order Summary</p>
                 {cart.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
+                  <div key={i} className="flex items-center gap-2 text-xs">
                     <div className="flex-1 min-w-0">
-                      <p className="truncate">{item.productName}</p>
-                      <p className="text-[10px] text-muted-foreground">₦{item.unitPrice.toLocaleString()} each</p>
+                      <p className="truncate font-medium">{item.productName}</p>
+                      <p className="text-[9px] text-muted-foreground">₦{item.unitPrice.toLocaleString()} each</p>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button onClick={() => changeCartQty(i, -1)} className="w-6 h-6 rounded bg-card border border-border">−</button>
-                      <span className="w-6 text-center text-xs font-bold">{item.quantity}</span>
-                      <button onClick={() => changeCartQty(i, 1)} className="w-6 h-6 rounded bg-card border border-border">+</button>
-                      <button onClick={() => changeCartQty(i, -item.quantity)} className="w-6 h-6 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center justify-center font-bold text-sm ml-1 active:scale-90 transition-transform" title="Remove item">×</button>
+                      <button onClick={() => changeCartQty(i, -1)} className="w-5 h-5 rounded bg-card border border-border flex items-center justify-center text-xs font-bold">−</button>
+                      <span className="w-5 text-center text-xs font-bold">{item.quantity}</span>
+                      <button onClick={() => changeCartQty(i, 1)} className="w-5 h-5 rounded bg-card border border-border flex items-center justify-center text-xs font-bold">+</button>
+                      <button onClick={() => changeCartQty(i, -item.quantity)} className="w-5 h-5 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center justify-center font-bold text-xs ml-0.5 active:scale-90 transition-transform" title="Remove item">×</button>
                     </div>
-                    <span className="w-20 text-right text-primary font-display font-bold text-sm">₦{(item.unitPrice * item.quantity).toLocaleString()}</span>
+                    <span className="w-16 text-right text-primary font-display font-bold text-xs">₦{(item.unitPrice * item.quantity).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="space-y-1 text-sm">
+              <div className="space-y-1 text-xs">
                 <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>₦{cartSubtotal.toLocaleString()}</span></div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Discount</span>
-                  <input type="number" value={discount} placeholder="0" onChange={e => setDiscount(e.target.value)}
-                    className="w-24 p-1.5 rounded bg-surface-2 border border-border text-right text-sm" />
+                  <input type="number" value={discount} placeholder="0" onChange={e => { setDiscount(e.target.value); setDiscountManuallyEdited(true); }}
+                    className="w-20 p-1 rounded bg-surface-2 border border-border text-right text-xs" />
                 </div>
-                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Profit</span><span className="text-success">₦{cartProfit.toLocaleString()}</span></div>
-                <div className="flex justify-between font-display font-bold pt-1 border-t border-border">
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Profit</span><span className="text-success">₦{cartProfit.toLocaleString()}</span></div>
+                <div className="flex justify-between font-display font-bold pt-1 border-t border-border text-sm">
                   <span>Total</span><span className="text-primary">₦{total.toLocaleString()}</span>
                 </div>
               </div>
 
               {/* Payment */}
-              <div className="space-y-2">
-                <p className="text-xs font-display font-bold text-muted-foreground uppercase">Payment</p>
-                <div className="rounded-xl border-2 border-primary/40 p-3">
-                  <p className="text-[10px] text-muted-foreground mb-1">Customer Paid</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">₦</span>
-                    <input autoFocus type="number" value={paidAmount} onChange={e => onPaidChange(e.target.value)}
-                      className="flex-1 bg-transparent text-xl font-display font-bold focus:outline-none" />
-                    <button onClick={() => onPaidChange(String(total))} className="text-[10px] text-primary px-2 py-1 rounded bg-primary/10">Full</button>
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-display font-bold text-muted-foreground uppercase">Payment</p>
+                <div className="flex items-center justify-between rounded-lg border border-primary/30 p-2 bg-surface-2/40">
+                  <span className="text-xs font-display font-semibold text-muted-foreground">Customer Paid</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground text-xs">₦</span>
+                    <input type="number" value={paidAmount} onChange={e => onPaidChange(e.target.value)}
+                      className="w-24 bg-card border border-border rounded px-1.5 py-0.5 text-right text-sm font-display font-bold focus:outline-none focus:border-primary" />
+                    <button onClick={() => onPaidChange(String(total))} className="text-[10px] text-primary px-1.5 py-0.5 rounded bg-primary/10 hover:bg-primary/20 font-semibold">Full</button>
                   </div>
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
                   {[1000, 2000, 5000, 10000].map(v => (
                     <button key={v} onClick={() => onPaidChange(String(paidNum + v))}
-                      className="p-1.5 rounded-lg border border-primary/30 text-primary text-[11px] font-display font-semibold">+{v / 1000}k</button>
+                      className="py-1 rounded-lg border border-primary/20 text-primary text-[10px] font-display font-semibold">+{v / 1000}k</button>
                   ))}
                 </div>
-                <div className="flex justify-between text-sm pt-1">
+                <div className="flex justify-between text-xs pt-0.5">
                   <span className="text-muted-foreground">Balance</span>
                   <span className={`font-display font-bold ${balanceTone}`}>₦{balance.toLocaleString()}</span>
                 </div>
               </div>
 
               {/* Method */}
-              <div className="space-y-2">
-                <p className="text-xs font-display font-bold text-muted-foreground uppercase">Payment Method</p>
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-display font-bold text-muted-foreground uppercase">Payment Method</p>
                 <div className="grid grid-cols-4 gap-1.5">
-                  {([['transfer', '🏦', 'Transfer'], ['pos', '💳', 'Card'], ['cash', '💵', 'Cash'], ['mixed', '👥', 'Mixed']] as const).map(([m, icon, label]) => (
+                  {([['transfer', 'Transfer'], ['pos', 'Card'], ['cash', 'Cash'], ['mixed', 'Mixed']] as const).map(([m, label]) => (
                     <button key={m} onClick={() => setMethod(m)}
-                      className={`p-2 rounded-lg border text-center ${
-                        method === m ? 'border-success bg-success/10' : 'border-border bg-surface-2'
+                      className={`py-1.5 rounded-lg border text-center text-xs font-display font-semibold transition-all ${
+                        method === m ? 'border-success bg-success/10 text-success-foreground' : 'border-border bg-surface-2 text-muted-foreground'
                       }`}>
-                      <div className="text-base">{icon}</div>
-                      <div className="text-[10px] font-display font-semibold">{label}</div>
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -481,24 +517,20 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
 
               {/* Save as */}
               {balance > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-display font-bold text-muted-foreground uppercase">Save as</p>
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-display font-bold text-muted-foreground uppercase">Save as</p>
+                  <div className="grid grid-cols-2 gap-1.5">
                     <button onClick={() => setSaveAs('paid')}
-                      className={`p-3 rounded-xl border text-left text-xs ${saveAs === 'paid' ? 'border-success bg-success/10' : 'border-border bg-surface-2'}`}>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className={`w-3 h-3 rounded-full border ${saveAs === 'paid' ? 'bg-success border-success' : 'border-muted-foreground'}`} />
-                        <span className="font-display font-bold">Paid in Full</span>
-                      </div>
-                      <p className="text-muted-foreground">Mark as completely paid</p>
+                      className={`py-1.5 px-3 rounded-lg border text-center text-xs font-display font-semibold transition-all ${
+                        saveAs === 'paid' ? 'border-success bg-success/10 text-success-foreground' : 'border-border bg-surface-2 text-muted-foreground'
+                      }`}>
+                      Paid in Full
                     </button>
                     <button onClick={() => setSaveAs('pending')}
-                      className={`p-3 rounded-xl border text-left text-xs ${saveAs === 'pending' ? 'border-warning bg-warning/10' : 'border-border bg-surface-2'}`}>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className={`w-3 h-3 rounded-full border ${saveAs === 'pending' ? 'bg-warning border-warning' : 'border-muted-foreground'}`} />
-                        <span className="font-display font-bold">Pending Payment</span>
-                      </div>
-                      <p className="text-muted-foreground">Save balance for customer</p>
+                      className={`py-1.5 px-3 rounded-lg border text-center text-xs font-display font-semibold transition-all ${
+                        saveAs === 'pending' ? 'border-warning bg-warning/10 text-warning-foreground' : 'border-border bg-surface-2 text-muted-foreground'
+                      }`}>
+                      Pending Payment
                     </button>
                   </div>
                 </div>
@@ -506,30 +538,38 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
 
               {/* Customer */}
               {(saveAs === 'pending' || customerOpen) && (
-                <div className="space-y-2 rounded-xl border border-border p-3 bg-surface-2/40">
-                  <p className="text-xs font-display font-bold flex items-center justify-between">
-                    <span>👤 Customer {saveAs === 'pending' ? '(required)' : '(optional)'}</span>
-                    {saveAs !== 'pending' && <button onClick={() => setCustomerOpen(false)} className="text-muted-foreground">×</button>}
-                  </p>
-                  <input placeholder="Customer name" value={customerName} onChange={e => setCustomerName(e.target.value)}
-                    className="w-full p-2 rounded-lg bg-card border border-border text-sm" />
-                  <input placeholder="Phone (for WhatsApp)" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
-                    className="w-full p-2 rounded-lg bg-card border border-border text-sm" />
-                  <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                    className="w-full p-2 rounded-lg bg-card border border-border text-sm" />
-                  <textarea placeholder="Notes (optional)" value={customerNote} onChange={e => setCustomerNote(e.target.value)} rows={2}
-                    className="w-full p-2 rounded-lg bg-card border border-border text-sm" />
+                <div className="space-y-1.5 rounded-lg border border-border p-2 bg-surface-2/40">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-display font-bold text-muted-foreground uppercase">👤 Customer {saveAs === 'pending' ? '(required)' : '(optional)'}</span>
+                    {saveAs !== 'pending' && (
+                      <button onClick={() => setCustomerOpen(false)} className="text-destructive text-[10px] font-semibold hover:underline">
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input placeholder="Name" value={customerName} onChange={e => setCustomerName(e.target.value)}
+                      className="p-1.5 rounded bg-card border border-border text-xs w-full" />
+                    <input placeholder="Phone" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
+                      className="p-1.5 rounded bg-card border border-border text-xs w-full" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                      className="p-1.5 rounded bg-card border border-border text-xs w-full text-muted-foreground" />
+                    <input placeholder="Notes" value={customerNote} onChange={e => setCustomerNote(e.target.value)}
+                      className="p-1.5 rounded bg-card border border-border text-xs w-full" />
+                  </div>
                 </div>
               )}
               {saveAs !== 'pending' && !customerOpen && (
-                <button onClick={() => setCustomerOpen(true)} className="w-full p-3 rounded-xl bg-surface-2 border border-border text-left text-xs flex items-center justify-between">
-                  <span>👤 Customer (Optional)</span>
-                  <span className="text-muted-foreground">›</span>
+                <button onClick={() => setCustomerOpen(true)} className="w-full py-1.5 px-3 rounded-lg bg-surface-2 border border-border text-left text-[11px] flex items-center justify-between text-muted-foreground hover:bg-surface-2/80 transition-colors">
+                  <span>👤 Add Customer Details (Optional)</span>
+                  <span>+</span>
                 </button>
               )}
 
               <button onClick={handleConfirm}
-                className="w-full p-3.5 rounded-xl bg-success text-white font-display font-bold text-sm active:scale-[0.98]">
+                className="w-full py-2.5 rounded-xl bg-success text-white font-display font-bold text-sm active:scale-[0.98]">
                 🔒 Save Sale
               </button>
             </div>
