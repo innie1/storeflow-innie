@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore } from '@/lib/store-data';
 import StoreAccess from '@/components/StoreAccess';
+import StoreSwitcher from '@/components/StoreSwitcher';
 import Dashboard from '@/components/Dashboard';
 import Inventory from '@/components/Inventory';
 import Sales from '@/components/Sales';
@@ -20,6 +21,24 @@ import GamesAnalytics from '@/components/games/GamesAnalytics';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 import Marketplace from '@/components/Marketplace';
+import {
+  Home,
+  Package,
+  CircleDollarSign,
+  Sparkles,
+  MoreHorizontal,
+  ShoppingCart,
+  Receipt,
+  CreditCard,
+  History,
+  TrendingUp,
+  Settings as SettingsIcon,
+  Lock,
+  ChevronDown,
+  Gamepad2,
+  Gamepad
+} from 'lucide-react';
+
 
 
 const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
@@ -50,6 +69,47 @@ const GAMES_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
+const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
+  switch (id) {
+    case 'dashboard':
+      return <Home className={className} />;
+    case 'inventory':
+      return <Package className={className} />;
+    case 'sales':
+      return isActive ? (
+        <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center text-slate-950 font-bold text-xs shrink-0 select-none">
+          $
+        </div>
+      ) : (
+        <CircleDollarSign className={className} />
+      );
+    case 'manager':
+      return <Sparkles className={className} />;
+    case 'marketplace':
+      return <ShoppingCart className={className} />;
+    case 'expenses':
+      return <Receipt className={className} />;
+    case 'pending':
+      return <CreditCard className={className} />;
+    case 'history':
+      return <History className={className} />;
+    case 'roi':
+      return <TrendingUp className={className} />;
+    case 'settings':
+      return <SettingsIcon className={className} />;
+    case 'games-dashboard':
+      return <Gamepad2 className={className} />;
+    case 'games-history':
+      return <History className={className} />;
+    case 'games-analytics':
+      return <TrendingUp className={className} />;
+    case 'games-settings':
+      return <Gamepad className={className} />;
+    default:
+      return null;
+  }
+};
+
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
   const [tab, setTab] = useState<TabId>('dashboard');
@@ -58,6 +118,7 @@ export default function Index() {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showLockConfirm, setShowLockConfirm] = useState(false);
+  const [showSwitcher, setShowSwitcher] = useState(false);
   const [scanCart, setScanCart] = useState<{ product: Product; qty: number }[]>([]);
   const [newProductPrompt, setNewProductPrompt] = useState<{ barcode: string; name: string; costPrice: string; sellingPrice: string; quantity: string } | null>(null);
 
@@ -211,10 +272,10 @@ export default function Index() {
                 tab === t.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
               }`}
             >
-              <span className="text-lg relative">
-                {t.icon}
+              <span className="relative flex items-center justify-center">
+                {renderTabIcon(t.id, tab === t.id, "w-4.5 h-4.5")}
                 {t.id === 'manager' && unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-destructive" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
                 )}
               </span>
               <span>{t.label}</span>
@@ -231,7 +292,7 @@ export default function Index() {
                   tab === m.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
                 }`}
               >
-                <span className="text-lg">{m.icon}</span>
+                <span className="flex items-center justify-center">{renderTabIcon(m.id, tab === m.id, "w-4.5 h-4.5")}</span>
                 <span>{m.label}</span>
               </button>
             ))}
@@ -244,7 +305,7 @@ export default function Index() {
             onClick={() => setShowLockConfirm(true)}
             className="w-full py-2.5 px-3 rounded-xl bg-destructive/10 text-destructive border border-destructive/20 text-xs font-display font-semibold hover:bg-destructive/20 transition-colors flex items-center justify-center gap-2"
           >
-            <span>🔒</span> Lock Store
+            <Lock className="w-3.5 h-3.5" /> Lock Store
           </button>
           <div className="text-[10px] text-center text-muted-foreground">
             Version 1.0 · Innie Group
@@ -254,23 +315,31 @@ export default function Index() {
 
       {/* Main Layout Area */}
       <div className="flex-1 flex flex-col md:pl-64">
-        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="font-display font-bold text-lg"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
-            <p className="text-xs text-muted-foreground">{tab === 'settings' ? 'Settings' : store.storeName}</p>
+        <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-5 py-3.5 flex items-center justify-between">
+          <div className="flex flex-col text-left">
+            <h1 className="font-display font-black text-xl text-foreground tracking-tight select-none">StoreFlow</h1>
+            <button 
+              onClick={() => setShowSwitcher(true)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors font-semibold mt-0.5"
+              title="Switch Store"
+            >
+              <span className="truncate max-w-[120px]">{store.storeName}</span>
+              <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+            </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setShowLockConfirm(true)}
-              className="md:hidden px-3 py-1.5 rounded-full bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-full bg-black/40 border border-border/80 text-xs text-foreground font-display font-semibold hover:bg-black/75 hover:border-yellow-500/30 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
             >
-              <span>🔒</span> Lock Store
+              <Lock className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
+              <span>Lock Store</span>
             </button>
             <button
               onClick={() => { setTab('settings'); setShowMoreMenu(false); }}
-              className={`md:hidden w-9 h-9 rounded-full overflow-hidden flex items-center justify-center transition-all border-2 ${
-                tab === 'settings' ? 'border-primary' : 'border-border hover:border-primary/40'
+              className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center transition-all border-2 shrink-0 ${
+                tab === 'settings' ? 'border-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.35)]' : 'border-border/80 hover:border-yellow-500/40'
               }`}
               aria-label="Profile"
             >
@@ -334,7 +403,7 @@ export default function Index() {
             />
           </div>
           <div className={tab === 'sales' ? 'block' : 'hidden'}>
-            <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} />
+            <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} isActive={tab === 'sales'} />
           </div>
           <div className={tab === 'expenses' ? 'block' : 'hidden'}>
             <Expenses store={store} onUpdate={setStore} />
@@ -378,33 +447,38 @@ export default function Index() {
         {/* Bottom Nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
           <div className="flex justify-around max-w-3xl mx-auto">
-            {mainTabs.map(t => (
-              <button
-                key={t.id}
-                onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
-                className={`flex flex-col items-center py-2 px-3 text-xs transition-colors relative ${
-                  tab === t.id ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <span className="text-lg mb-0.5 relative">
-                  {t.icon}
-                  {t.id === 'manager' && unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-destructive" />
-                  )}
-                </span>
-                <span className="font-display font-semibold">{t.label}</span>
-              </button>
-            ))}
+            {mainTabs.map(t => {
+              const isActive = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
+                  className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all relative ${
+                    isActive ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <span className="mb-1 relative flex items-center justify-center h-5 w-5">
+                    {renderTabIcon(t.id, isActive)}
+                    {t.id === 'manager' && unreadCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                    )}
+                  </span>
+                  <span className="font-display font-bold leading-tight">{t.label}</span>
+                </button>
+              );
+            })}
             {/* More button */}
             <div className="relative">
               <button
                 onClick={() => setShowMoreMenu(!showMoreMenu)}
-                className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
-                  moreItems.some(m => m.id === tab) ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all ${
+                  moreItems.some(m => m.id === tab) ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <span className="text-lg mb-0.5">•••</span>
-                <span className="font-display font-semibold">More</span>
+                <span className="mb-1 flex items-center justify-center h-5 w-5">
+                  <MoreHorizontal className="w-5 h-5" />
+                </span>
+                <span className="font-display font-bold leading-tight">More</span>
               </button>
               {showMoreMenu && (
                 <>
@@ -415,10 +489,10 @@ export default function Index() {
                         key={m.id}
                         onClick={() => { setTab(m.id); setShowMoreMenu(false); }}
                         className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-display font-semibold transition-colors ${
-                          tab === m.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
+                          tab === m.id ? 'bg-yellow-500/10 text-yellow-500' : 'text-foreground hover:bg-surface-2'
                         }`}
                       >
-                        <span>{m.icon}</span>
+                        <span className="flex items-center justify-center">{renderTabIcon(m.id, tab === m.id, "w-4.5 h-4.5")}</span>
                         {m.label}
                       </button>
                     ))}
@@ -518,6 +592,13 @@ export default function Index() {
         </div>
       )}
 
+      {showSwitcher && (
+        <StoreSwitcher
+          currentCode={store.accessCode}
+          onSwitch={handleStoreLoaded}
+          onClose={() => setShowSwitcher(false)}
+        />
+      )}
       <ToastContainer />
       <InstallPrompt />
     </div>

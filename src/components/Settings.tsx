@@ -14,6 +14,26 @@ import { compileBackupPayload, triggerBackupExport, restoreBackupPayload, Backup
 import { LocalBackup, getLocalBackups, saveLocalBackup, deleteLocalBackup } from '@/lib/backup-db';
 import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
 import { generateInsights } from '@/lib/manager-intel';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Rocket,
+  ShoppingCart,
+  CreditCard,
+  Package,
+  Tag,
+  Download,
+  Cpu,
+  Heart,
+  MessageSquare,
+  Home,
+  PiggyBank,
+  BarChart3,
+  Trash2,
+  ShieldCheck,
+  RefreshCw
+} from 'lucide-react';
 
 export type LockTimer = '1h' | '12h' | 'never';
 
@@ -85,14 +105,17 @@ function IconBadge({ children, color }: { children: React.ReactNode; color: stri
   );
 }
 
-function SubPage({ title, onBack, children }: { title: string; onBack: () => void; children: React.ReactNode }) {
+function SubPage({ title, subtitle, onBack, children }: { title: string; subtitle?: string; onBack: () => void; children: React.ReactNode }) {
   return (
-    <div className="animate-fade-in max-w-md mx-auto space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="w-9 h-9 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground">
-          ‹
+    <div className="animate-fade-in max-w-md mx-auto space-y-5">
+      <div className="flex items-start gap-3.5">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0 mt-0.5 transition-colors" aria-label="Back">
+          <ChevronLeft className="w-5 h-5" />
         </button>
-        <h2 className="font-display font-bold text-lg">{title}</h2>
+        <div>
+          <h2 className="font-display font-bold text-2xl text-foreground leading-tight">{title}</h2>
+          {subtitle && <p className="text-xs text-muted-foreground mt-1 leading-snug">{subtitle}</p>}
+        </div>
       </div>
       {children}
     </div>
@@ -102,6 +125,7 @@ function SubPage({ title, onBack, children }: { title: string; onBack: () => voi
 // ============ MAIN ============
 export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   const [view, setView] = useState<View>('home');
+  const [searchQuery, setSearchQuery] = useState('');
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
   const [theme, setTheme] = useState<ThemeId>(getTheme());
   const [showTrash, setShowTrash] = useState(false);
@@ -461,6 +485,20 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         <ToggleRow label="Enable Flow" description="Master switch — turn on for insights, forecasts and advice." checked={mgr.enabled} onChange={v => updateMgr({ enabled: v })} />
       </div>
 
+      {!mgr.enabled && (
+        <div className="flex flex-col items-center justify-center py-16 px-4 space-y-5">
+          <div className="flex justify-center items-center drop-shadow-[0_4px_12px_rgba(99,102,241,0.15)]">
+            <Mascot size={140} mood="sleeping" animate={mgr.mascotAnimations} />
+          </div>
+          <div className="text-center space-y-1.5 max-w-xs">
+            <p className="font-display font-bold text-base text-foreground">Flow is resting 💤</p>
+            <p className="text-xs text-muted-foreground leading-normal">
+              Flow is currently asleep. Toggle the switch above to wake him up and unlock forecasts, advice, and real-time business helpers.
+            </p>
+          </div>
+        </div>
+      )}
+
       {mgr.enabled && (
         <>
           {/* Forecasts */}
@@ -495,6 +533,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
             <ToggleRow label="Savings Planner" checked={mgr.savingsPlanner} onChange={toggleSavings} />
             <ToggleRow label="Voice Notes" checked={mgr.voiceFeatures} onChange={v => updateMgr({ voiceFeatures: v })} />
             <ToggleRow label="Auto-Listen on Sales" description="Mic starts automatically when you open the Sales page." checked={mgr.autoVoiceListen} onChange={v => updateMgr({ autoVoiceListen: v })} />
+            <ToggleRow label="Auto Print Receipts" description="Automatically trigger receipt printing after recording a sale." checked={mgr.autoPrintReceipt} onChange={v => updateMgr({ autoPrintReceipt: v })} />
             <ToggleRow label="Business Questions" checked={mgr.businessQuestions} onChange={v => updateMgr({ businessQuestions: v })} />
           </div>
 
@@ -749,12 +788,40 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   );
 
   if (view === 'data') return (
-    <SubPage title="Data & Storage" onBack={() => setView('home')}>
-      <div className="grid grid-cols-2 gap-2">
-        <DataTile icon="🔄" label="Switch Store" onClick={() => setShowSwitcher(true)} />
-        <DataTile icon="🗑" label={`Recently Deleted${trashCount ? ` (${trashCount})` : ''}`} onClick={() => setShowTrash(true)} />
-        <DataTile icon="💾" label="Backups & Restore" onClick={() => setView('backups')} />
-        <DataTile icon="⬆️" label="Raw Export" onClick={() => setShowExport(true)} />
+    <SubPage title="Data & Storage" subtitle="Manage your store data safely" onBack={() => setView('home')}>
+      <div className="grid grid-cols-2 gap-3">
+        <DataTile 
+          icon={<RefreshCw className="w-4.5 h-4.5" />} 
+          label="Switch Store" 
+          subtitle="Switch between your stores"
+          iconBg="rgba(99, 102, 241, 0.15)"
+          iconColor="#818CF8"
+          onClick={() => setShowSwitcher(true)} 
+        />
+        <DataTile 
+          icon={<Trash2 className="w-4.5 h-4.5" />} 
+          label={trashCount ? `Recently Deleted (${trashCount})` : 'Recently Deleted'}
+          subtitle="View and restore deleted items"
+          iconBg="rgba(239, 68, 68, 0.15)"
+          iconColor="#F87171"
+          onClick={() => setShowTrash(true)} 
+        />
+        <DataTile 
+          icon={<ShieldCheck className="w-4.5 h-4.5" />} 
+          label="Backups & Restore" 
+          subtitle="Backup and restore your data"
+          iconBg="rgba(59, 130, 246, 0.15)"
+          iconColor="#60A5FA"
+          onClick={() => setView('backups')} 
+        />
+        <DataTile 
+          icon={<Download className="w-4.5 h-4.5" />} 
+          label="Raw Export" 
+          subtitle="Export your data (CSV)"
+          iconBg="rgba(16, 185, 129, 0.15)"
+          iconColor="#34D399"
+          onClick={() => setShowExport(true)} 
+        />
       </div>
       {showTrash && (
         <RecentlyDeleted
@@ -774,12 +841,21 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         <ExportSheet store={store} onClose={() => setShowExport(false)} />
       )}
 
-      <div className="pt-6 border-t border-border mt-4">
+      <div className="pt-5 border-t border-border mt-5">
         <button
           onClick={() => setShowDeleteModal(true)}
-          className="w-full p-3.5 rounded-xl bg-destructive/10 hover:bg-destructive/20 border border-destructive/25 text-destructive font-display font-bold text-sm transition-colors flex items-center justify-center gap-2"
+          className="w-full p-4.5 rounded-2xl bg-red-950/20 hover:bg-red-950/30 border border-red-500/25 text-left flex items-center justify-between transition-all duration-200 active:scale-[0.99] group"
         >
-          🗑️ Delete Store Permanent Action
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-red-500/15 text-red-400 flex items-center justify-center shrink-0">
+              <Trash2 className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <h4 className="font-display font-bold text-sm text-red-400">Delete Store</h4>
+              <p className="text-[11px] text-red-500/80 leading-snug mt-0.5">Permanent Action · This action cannot be undone.</p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-red-500/50 group-hover:text-red-400 transition-colors" />
         </button>
       </div>
 
@@ -1191,139 +1267,139 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
   if (view === 'help') {
     const topics = [
       {
-        id: 'start', icon: '🚀', title: 'Getting Started',
+        id: 'start', icon: <Rocket className="w-4 h-4" />, iconBg: 'rgba(239, 68, 68, 0.12)', iconColor: '#F87171', title: 'Getting Started',
         body: (
           <div className="space-y-2">
-            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+            <ol className="list-decimal list-inside space-y-1 text-xs text-muted-foreground leading-relaxed">
               {['Create your store profile', 'Add your products', 'Record sales daily', 'Record expenses', 'Set profit margins', 'Configure savings goals', 'Turn on Flow for insights and recommendations', 'Review your dashboard regularly'].map((s, i) => <li key={i}>{s}</li>)}
             </ol>
-            <p className="text-[11px] text-muted-foreground italic mt-1">The more data you record, the smarter StoreFlow becomes.</p>
+            <p className="text-[10px] text-muted-foreground italic mt-1.5">The more data you record, the smarter StoreFlow becomes.</p>
           </div>
         ),
       },
       {
-        id: 'sales', icon: '🛒', title: 'Making a Sale',
+        id: 'sales', icon: <ShoppingCart className="w-4 h-4" />, iconBg: 'rgba(99, 102, 241, 0.12)', iconColor: '#818CF8', title: 'Making a Sale',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <ol className="list-decimal list-inside space-y-1">
               {['Open the Sales page', 'Search or select products', 'Add products to cart', 'Click Complete Sale', 'Select payment type', 'Save sale'].map((s, i) => <li key={i}>{s}</li>)}
             </ol>
-            <p className="text-[11px] italic">Inventory automatically updates after each sale.</p>
+            <p className="text-[10px] italic mt-1">Inventory automatically updates after each sale.</p>
           </div>
         ),
       },
       {
-        id: 'partial', icon: '💳', title: 'Partial Payments',
+        id: 'partial', icon: <CreditCard className="w-4 h-4" />, iconBg: 'rgba(245, 158, 11, 0.12)', iconColor: '#FBBF24', title: 'Partial Payments',
         body: (
-          <div className="space-y-3 text-sm text-muted-foreground">
+          <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
             <p>When a customer pays part of their total, StoreFlow automatically creates a Pending Balance. The sale is still recorded fully.</p>
-            <div className="bg-surface-2 border border-border rounded-lg p-3 text-xs space-y-1">
+            <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11px] space-y-1.5">
               <div className="flex justify-between"><span>Customer buys</span><strong className="text-foreground">₦2,500</strong></div>
               <div className="flex justify-between"><span>Customer pays</span><strong className="text-foreground">₦2,000</strong></div>
-              <div className="flex justify-between border-t border-border pt-1 mt-1"><span>Pending balance</span><strong className="text-warning">₦500</strong></div>
+              <div className="flex justify-between border-t border-border pt-1 mt-1"><span>Pending balance</span><strong className="text-warning font-bold">₦500</strong></div>
             </div>
             <div>
               <p className="font-semibold text-foreground/80 mb-1">When customer pays later:</p>
-              <ol className="list-decimal list-inside space-y-1 text-xs">
+              <ol className="list-decimal list-inside space-y-1 text-[11px]">
                 {['Open Pending Balance', 'Tap Record Payment', 'Enter amount paid', 'Balance updates automatically'].map((s, i) => <li key={i}>{s}</li>)}
               </ol>
             </div>
-            <p className="text-[11px] italic">Find all balances at: Sales → Pending Balances</p>
+            <p className="text-[10px] italic">Find all balances at: Sales → Pending Balances</p>
           </div>
         ),
       },
       {
-        id: 'inventory', icon: '📦', title: 'Adding Products',
+        id: 'inventory', icon: <Package className="w-4 h-4" />, iconBg: 'rgba(249, 115, 22, 0.12)', iconColor: '#FB923C', title: 'Adding Products',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>Go to <strong className="text-foreground">Inventory → Add Product</strong> and enter:</p>
-            <ul className="space-y-1 text-xs">
+            <ul className="space-y-1 text-[11px]">
               {['Product Name', 'Category', 'Cost Price', 'Selling Price', 'Quantity', 'Barcode (optional)'].map(f => (
-                <li key={f} className="flex items-center gap-1.5"><span className="text-primary text-xs">●</span>{f}</li>
+                <li key={f} className="flex items-center gap-1.5"><span className="text-primary text-[6px]">●</span>{f}</li>
               ))}
             </ul>
           </div>
         ),
       },
       {
-        id: 'pricing', icon: '🏷️', title: 'Auto Pricing',
+        id: 'pricing', icon: <Tag className="w-4 h-4" />, iconBg: 'rgba(234, 179, 8, 0.12)', iconColor: '#FACC15', title: 'Auto Pricing',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>When Auto Pricing is on, StoreFlow suggests a selling price based on cost + desired margin.</p>
-            <div className="bg-surface-2 border border-border rounded-lg p-3 text-xs space-y-1">
+            <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11px] space-y-1.5">
               <div className="flex justify-between"><span>Cost Price</span><strong className="text-foreground">₦1,000</strong></div>
               <div className="flex justify-between"><span>Margin</span><strong className="text-foreground">20%</strong></div>
-              <div className="flex justify-between border-t border-border pt-1 mt-1"><span>Suggested Price</span><strong className="text-success">₦1,200</strong></div>
+              <div className="flex justify-between border-t border-border pt-1 mt-1"><span>Suggested Price</span><strong className="text-success font-bold">₦1,200</strong></div>
             </div>
-            <p className="text-[11px] italic">Enable in Settings → Pricing.</p>
+            <p className="text-[10px] italic">Enable in Settings → Pricing.</p>
           </div>
         ),
       },
       {
-        id: 'batch', icon: '📥', title: 'Batch Import',
+        id: 'batch', icon: <Download className="w-4 h-4" />, iconBg: 'rgba(16, 185, 129, 0.12)', iconColor: '#34D399', title: 'Batch Import',
         body: (
-          <p className="text-sm text-muted-foreground">Import multiple products at once. Before saving, StoreFlow shows a preview screen where you can edit products, correct prices or names, and remove mistakes — then approve and save all at once.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">Import multiple products at once. Before saving, StoreFlow shows a preview screen where you can edit products, correct prices or names, and remove mistakes — then approve and save all at once.</p>
         ),
       },
       {
-        id: 'flow', icon: '🤖', title: 'Flow Assistant',
+        id: 'flow', icon: <Cpu className="w-4 h-4" />, iconBg: 'rgba(6, 182, 212, 0.12)', iconColor: '#22D3EE', title: 'Flow Assistant',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>Flow analyzes your sales, expenses, inventory, debts, and trends to give tailored recommendations.</p>
-            <ul className="space-y-1 text-xs">
+            <ul className="space-y-1 text-[11px]">
               {['Predict revenue and profits', 'Detect slow and fast-moving products', 'Suggest savings targets', 'Analyze rent and expense impact', 'Forecast busy periods and daily sales', 'Answer business questions (Ask Advice)', 'Suggest products worth stocking'].map(f => (
-                <li key={f} className="flex items-center gap-1.5"><span className="text-success text-xs">●</span>{f}</li>
+                <li key={f} className="flex items-center gap-1.5"><span className="text-success text-[6px]">●</span>{f}</li>
               ))}
             </ul>
-            <p className="text-[11px] italic">Flow helps you make smarter decisions — it does not replace them.</p>
+            <p className="text-[10px] italic mt-1">Flow helps you make smarter decisions — it does not replace them.</p>
           </div>
         ),
       },
       {
-        id: 'health', icon: '💚', title: 'Store Health Score',
+        id: 'health', icon: <Heart className="w-4 h-4" />, iconBg: 'rgba(244, 63, 94, 0.12)', iconColor: '#F43F5E', title: 'Store Health Score',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>Your Store Health Score reflects overall business performance based on revenue, profit, expenses, inventory levels, savings progress, and outstanding balances. A higher score means a healthier, more profitable business.</p>
-            <p className="text-[11px] italic">Tap the score on your dashboard for a full breakdown.</p>
+            <p className="text-[10px] italic">Tap the score on your dashboard for a full breakdown.</p>
           </div>
         ),
       },
       {
-        id: 'requests', icon: '💬', title: 'Customer Requests',
+        id: 'requests', icon: <MessageSquare className="w-4 h-4" />, iconBg: 'rgba(20, 184, 166, 0.12)', iconColor: '#2DD4BF', title: 'Customer Requests',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>When a customer asks for a product you don't have, record their request. StoreFlow tracks the product name, frequency, number of requests, and last request date.</p>
             <p>Flow uses this data to recommend which products to stock next.</p>
           </div>
         ),
       },
       {
-        id: 'rent', icon: '🏠', title: 'Rent Analysis',
+        id: 'rent', icon: <Home className="w-4 h-4" />, iconBg: 'rgba(59, 130, 246, 0.12)', iconColor: '#60A5FA', title: 'Rent Analysis',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p><strong className="text-foreground">Rented store:</strong> Flow calculates weekly and monthly savings targets to cover rent, including a 10% buffer for increases. It also shows how rent affects your profitability.</p>
             <p><strong className="text-foreground">Owned store:</strong> Flow estimates annual savings, emergency reserves, and property maintenance suggestions.</p>
-            <p className="text-[11px] italic">Configure in Settings → Edit Profile.</p>
+            <p className="text-[10px] italic">Configure in Settings → Edit Profile.</p>
           </div>
         ),
       },
       {
-        id: 'savings', icon: '🐖', title: 'Savings Plan',
+        id: 'savings', icon: <PiggyBank className="w-4 h-4" />, iconBg: 'rgba(244, 63, 94, 0.12)', iconColor: '#FB7185', title: 'Savings Plan',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>Choose between percentage saving (e.g. 10% of profit) or a fixed amount (e.g. ₦5,000 weekly or ₦20,000 monthly). Plans can be enabled or paused at any time.</p>
-            <p className="text-[11px] italic">Set up in Settings → Savings Plan.</p>
+            <p className="text-[10px] italic">Set up in Settings → Savings Plan.</p>
           </div>
         ),
       },
       {
-        id: 'graphs', icon: '📊', title: 'Graphs & Activity',
+        id: 'graphs', icon: <BarChart3 className="w-4 h-4" />, iconBg: 'rgba(139, 92, 246, 0.12)', iconColor: '#A78BFA', title: 'Graphs & Activity',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>The Sales Activity graph shows 30-minute intervals by default (Today view). Switch timeframes:</p>
-            <ul className="space-y-1 text-xs">
+            <ul className="space-y-1 text-[11px]">
               {['Today (hourly)', '7 Days', '14 Days', '30 Days', '1 Year', 'Lifetime'].map(f => (
-                <li key={f} className="flex items-center gap-1.5"><span className="text-primary text-xs">●</span>{f}</li>
+                <li key={f} className="flex items-center gap-1.5"><span className="text-primary text-[6px]">●</span>{f}</li>
               ))}
             </ul>
             <p>The Dashboard Sales Trend chart can also be filtered by Today, 1 Week, 14 Days, 30 Days, or All Time.</p>
@@ -1331,38 +1407,69 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         ),
       },
       {
-        id: 'trash', icon: '🗑️', title: 'Data Recovery',
+        id: 'trash', icon: <Trash2 className="w-4 h-4" />, iconBg: 'rgba(239, 68, 68, 0.12)', iconColor: '#F87171', title: 'Data Recovery',
         body: (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>Nothing is permanently deleted immediately. Deleted products, sales, expenses, and categories all go to Trash and can be restored at any time.</p>
-            <p className="text-[11px] italic">Access via: Settings → Data & Storage → Recently Deleted</p>
+            <p className="text-[10px] italic">Access via: Settings → Data & Storage → Recently Deleted</p>
           </div>
         ),
       },
     ];
 
+    const filteredTopics = topics.filter(topic => {
+      const query = searchQuery.trim().toLowerCase();
+      if (!query) return true;
+      return topic.title.toLowerCase().includes(query) || topic.id.toLowerCase().includes(query);
+    });
+
     return (
-      <SubPage title="Help Center" onBack={() => setView('support')}>
-        <div className={`${card} px-4 divide-y divide-border`}>
-          {topics.map(topic => (
-            <div key={topic.id}>
-              <button
-                className="w-full flex items-center gap-3 py-3.5 text-left"
-                onClick={() => setHelpOpen(helpOpen === topic.id ? null : topic.id)}
-              >
-                <span className="text-xl shrink-0 w-7 text-center">{topic.icon}</span>
-                <span className="flex-1 text-sm font-display font-semibold text-foreground">{topic.title}</span>
-                <span className="shrink-0 text-muted-foreground text-xs">
-                  {helpOpen === topic.id ? '▴' : '▾'}
-                </span>
-              </button>
-              {helpOpen === topic.id && (
-                <div className="pb-4 pl-10 pr-1 animate-fade-in">
-                  {topic.body}
-                </div>
-              )}
+      <SubPage title="Help Center" subtitle="Learn, explore and grow your business" onBack={() => { setView('support'); setSearchQuery(''); }}>
+        <div className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border shadow-sm">
+          {filteredTopics.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              No matching help articles found.
             </div>
-          ))}
+          ) : (
+            filteredTopics.map(topic => {
+              const isOpen = helpOpen === topic.id;
+              return (
+                <div key={topic.id} className="transition-all">
+                  <button
+                    className="w-full flex items-center justify-between p-4 text-left transition-colors hover:bg-surface-2/70 active:bg-surface-2 group"
+                    onClick={() => setHelpOpen(isOpen ? null : topic.id)}
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: topic.iconBg, color: topic.iconColor }}>
+                        {topic.icon}
+                      </div>
+                      <span className="text-sm font-display font-semibold text-foreground group-hover:text-primary transition-colors">{topic.title}</span>
+                    </div>
+                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-90 text-primary' : ''}`} />
+                  </button>
+                  {isOpen && (
+                    <div className="p-5 bg-black/15 border-t border-border/80 animate-fade-in">
+                      {topic.body}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+          
+          {/* Search bar inside the card container at the bottom */}
+          <div className="p-4 border-t border-border/60 bg-black/5">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search help articles..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-xs focus:outline-none focus:border-primary transition-colors"
+              />
+            </div>
+          </div>
         </div>
       </SubPage>
     );
@@ -1566,11 +1673,16 @@ function SettingTile({ icon, color, title, desc, right, onClick }: { icon: strin
   );
 }
 
-function DataTile({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+function DataTile({ icon, label, subtitle, onClick, iconBg, iconColor }: { icon: React.ReactNode; label: string; subtitle: string; onClick: () => void; iconBg: string; iconColor: string }) {
   return (
-    <button onClick={onClick} className="p-4 rounded-2xl bg-card shadow-card flex flex-col items-center gap-2 hover:ring-1 hover:ring-primary/30 transition-all">
-      <span className="text-2xl">{icon}</span>
-      <span className="text-xs font-display font-semibold text-center">{label}</span>
+    <button onClick={onClick} className="p-4.5 rounded-2xl bg-card border border-border flex flex-col gap-3.5 hover:border-primary/40 transition-all text-left w-full cursor-pointer active:scale-[0.98]">
+      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: iconBg, color: iconColor }}>
+        {icon}
+      </div>
+      <div className="space-y-1">
+        <h4 className="font-display font-bold text-sm text-foreground">{label}</h4>
+        <p className="text-[11px] text-muted-foreground leading-tight">{subtitle}</p>
+      </div>
     </button>
   );
 }

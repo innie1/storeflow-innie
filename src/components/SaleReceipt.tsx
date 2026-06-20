@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { StoreData, Sale } from '@/types/store';
+import { printSystem } from '@/lib/print-engine';
+import { showToast } from '@/components/Toast';
 
 interface SaleReceiptProps {
   store: StoreData;
@@ -49,6 +51,28 @@ export default function SaleReceipt({ store, sale, onClose }: SaleReceiptProps) 
     const phone = buyerPhone.replace(/\D/g, ''); // Remove non-digits
     const whatsappUrl = `https://wa.me/${phone}?text=${text}`;
     window.open(whatsappUrl, '_blank');
+  };
+
+  const handlePrint = () => {
+    const receiptData = {
+      storeName: store.storeName,
+      storeType: profile?.storeType,
+      location: profile?.location,
+      phone: profile?.phone,
+      email: profile?.email,
+      saleId: sale.id,
+      date: sale.date,
+      items: [{
+        name: sale.productName,
+        quantity: sale.quantity,
+        unitPrice: sale.unitPrice,
+        total: sale.total
+      }],
+      total: sale.total,
+    };
+    printSystem(receiptData).catch(err => {
+      showToast('Printing failed: ' + err.message, 'error');
+    });
   };
 
   return (
@@ -107,23 +131,29 @@ export default function SaleReceipt({ store, sale, onClose }: SaleReceiptProps) 
         </div>
 
         {/* Actions */}
-        <div className="grid grid-cols-3 gap-2 mt-4">
+        <div className="grid grid-cols-2 gap-2 mt-4">
           <button
-            onClick={handleShare}
-            className="p-3 rounded-lg bg-surface-2 border border-border text-foreground font-display font-semibold hover:bg-surface-3 transition-colors text-xs"
+            onClick={handlePrint}
+            className="p-3 rounded-lg bg-[#E8C34E] text-slate-950 font-display font-bold hover:opacity-90 transition-opacity text-xs flex items-center justify-center gap-1.5"
           >
-            📤 Share
+            🖨️ Print
           </button>
           <button
             onClick={handleWhatsAppShare}
             disabled={!buyerPhone}
-            className="p-3 rounded-lg bg-success text-success-foreground font-display font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+            className="p-3 rounded-lg bg-success text-success-foreground font-display font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed text-xs flex items-center justify-center gap-1.5"
           >
             💬 WhatsApp
           </button>
           <button
+            onClick={handleShare}
+            className="p-3 rounded-lg bg-surface-2 border border-border text-foreground font-display font-semibold hover:bg-surface-3 transition-colors text-xs flex items-center justify-center gap-1.5"
+          >
+            📤 Share
+          </button>
+          <button
             onClick={onClose}
-            className="p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity text-xs"
+            className="p-3 rounded-lg bg-slate-700 text-white font-display font-bold hover:opacity-90 transition-opacity text-xs flex items-center justify-center"
           >
             ✕ Close
           </button>

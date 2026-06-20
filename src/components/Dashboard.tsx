@@ -376,15 +376,31 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
   const recs = managerEnabled ? generateRecommendations(store) : [];
   const flowMood = useMemo(() => {
     if (!managerEnabled) return 'sleeping';
+    
+    // Auto-sleep past 9 PM or before 6 AM
+    const currentHour = new Date().getHours();
+    const isSleepTime = currentHour >= 21 || currentHour < 6;
+    if (isSleepTime) return 'sleeping';
+
+    const hasZeroStock = store.products.length > 0 && store.products.every(p => p.quantity === 0);
     const hasLowStock = store.products.some(p => p.quantity <= 3);
     const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
     const isGoalAchieved = store.savingsGoal && store.savingsGoal.saved >= store.savingsGoal.amount && store.savingsGoal.amount > 0;
     
+    if (hasZeroStock) return 'panic';
     if (isGoalAchieved) return 'celebrating';
+    
+    // Performance checks
     if (health.overall >= 80) return 'confident';
     if (health.overall >= 65) return 'happy';
-    if (hasLowStock) return 'concerned';
-    if (hasDebt || health.overall < 50) return 'worried';
+    
+    // Open but not performing well: resting
+    if (health.overall >= 45 && health.overall < 65) return 'resting';
+    
+    if (hasLowStock || hasDebt) return 'concerned';
+    if (health.overall < 45 && health.overall >= 25) return 'worried';
+    if (health.overall < 25) return 'angry';
+    
     return 'neutral';
   }, [store, managerEnabled, health.overall]);
 
@@ -453,11 +469,11 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           <button
             onClick={() => toggleBreakdown('revenue')}
             className={`w-full p-5 rounded-2xl bg-card shadow-card text-left transition-all ${
-              activeBreakdown === 'revenue' ? 'ring-1 ring-primary/40' : 'hover:bg-surface-2'
+              activeBreakdown === 'revenue' ? 'ring-1 ring-yellow-500/40' : 'hover:bg-surface-2'
             }`}
           >
             <p className="text-sm text-muted-foreground font-display">Revenue</p>
-            <p className="font-display font-bold text-[2.4rem] leading-tight text-primary tracking-tight">
+            <p className="font-display font-bold text-[2.4rem] leading-tight text-yellow-500 tracking-tight">
               ₦{stats.totalRevenue.toLocaleString()}
             </p>
             <p className={`text-sm font-display font-semibold mt-1 ${profitTone}`}>
@@ -564,7 +580,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
           {/* Breakdown Panels */}
           {activeBreakdown === 'revenue' && (
             <div className="p-4 rounded-xl bg-card shadow-card space-y-2 animate-fade-in">
-              <h3 className="font-display font-bold text-sm text-primary">Revenue Breakdown</h3>
+              <h3 className="font-display font-bold text-sm text-yellow-500">Revenue Breakdown</h3>
               {getRevenueBreakdown().length === 0 ? (
                 <p className="text-sm text-muted-foreground">No sales yet</p>
               ) : (
@@ -575,7 +591,7 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
                         <span className="text-foreground font-medium">{item.name}</span>
                         <span className="text-muted-foreground ml-2 text-xs">{item.qty} sold</span>
                       </div>
-                      <span className="text-primary font-bold">₦{item.revenue.toLocaleString()}</span>
+                      <span className="text-yellow-500 font-bold">₦{item.revenue.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -708,9 +724,9 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
                 )}
 
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2 rounded-lg bg-primary/10 text-center">
-                    <p className="text-[10px] text-primary uppercase">Range Revenue</p>
-                    <p className="font-display font-bold text-sm text-primary">₦{rangeTotal.toLocaleString()}</p>
+                  <div className="p-2 rounded-lg bg-yellow-500/10 text-center">
+                    <p className="text-[10px] text-yellow-500 uppercase">Range Revenue</p>
+                    <p className="font-display font-bold text-sm text-yellow-500">₦{rangeTotal.toLocaleString()}</p>
                   </div>
                   <div className="p-2 rounded-lg bg-surface-2 text-center">
                     <p className="text-[10px] text-muted-foreground uppercase">Transactions</p>
@@ -790,8 +806,8 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
                 </div>
               </div>
               <div className="flex gap-3 mb-2 text-[11px]">
-                <span className="flex items-center gap-1.5 text-primary">
-                  <span className="w-3 h-0.5 bg-primary rounded" /> Revenue
+                <span className="flex items-center gap-1.5 text-yellow-500">
+                  <span className="w-3 h-0.5 bg-yellow-500 rounded" /> Revenue
                 </span>
                 <span className="flex items-center gap-1.5 text-success">
                   <span className="w-3 h-0.5 bg-success rounded" /> Profit

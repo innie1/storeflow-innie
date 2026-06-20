@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Product } from '@/types/store';
 import { showToast } from '@/components/Toast';
+import { Mic } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ParsedItem { productId: string; productName: string; quantity: number; }
@@ -282,36 +283,30 @@ export default function VoiceSell({
   return (
     <>
       {/* ═══════════════════════════════════════════════════════════
-           AMBIENT VOICE BAR — slim, non-blocking, at top of Sales
+           AMBIENT VOICE BAR — high-fidelity redesign
          ═══════════════════════════════════════════════════════════ */}
       <div
-        className="rounded-2xl overflow-hidden transition-all duration-500"
+        className="rounded-2xl transition-all duration-300 border bg-gradient-to-r from-[#1d1844] to-[#120e2b]"
         style={ambientActive ? {
-          boxShadow: ambientListening
-            ? '0 0 0 2px hsl(var(--primary)/0.5), 0 0 16px hsl(var(--primary)/0.15)'
-            : '0 0 0 2px hsl(var(--primary)/0.25)',
-          animation: ambientListening ? 'ambient-glow 2s ease-in-out infinite' : 'none',
-        } : {}}
+          borderColor: '#E8C34E',
+          boxShadow: '0 0 14px rgba(232, 195, 78, 0.2)',
+        } : {
+          borderColor: '#27224f',
+        }}
       >
-        <div className={`flex items-center gap-2.5 p-2.5 rounded-2xl border transition-all duration-300 ${
-          ambientActive
-            ? 'bg-primary/8 border-primary/30'
-            : 'bg-card border-border'
-        }`}>
-          {/* Voice indicator dot */}
+        <div className="flex items-center gap-3 p-3">
+          {/* Mic Button container */}
           <button
             onClick={toggleAmbient}
-            className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
+            className={`shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-300 ${
               ambientActive
-                ? ambientListening
-                  ? 'bg-primary text-primary-foreground shadow-lg'
-                  : 'bg-primary/60 text-primary-foreground'
-                : 'bg-surface-2 border border-border text-muted-foreground hover:border-primary/30'
+                ? 'bg-[#E8C34E] text-slate-950 shadow-md active:scale-95'
+                : 'bg-white/5 border border-[#3c356d] text-slate-300 hover:border-[#E8C34E]/40 active:scale-95'
             }`}
             style={ambientListening ? { animation: 'mic-pop 1.5s ease-in-out infinite' } : {}}
             aria-label={ambientActive ? 'Stop voice listening' : 'Start voice listening'}
           >
-            🎙
+            <Mic className="w-5 h-5 shrink-0 fill-current" strokeWidth={ambientActive ? 2.5 : 2} />
           </button>
 
           {/* Status text */}
@@ -321,61 +316,90 @@ export default function VoiceSell({
                 <div className="flex items-center gap-1.5">
                   <span className="relative flex h-2 w-2 shrink-0">
                     <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                      ambientListening ? 'bg-primary animate-ping' : 'bg-primary/40'
+                      ambientListening ? 'bg-[#E8C34E] animate-ping' : 'bg-[#E8C34E]/40'
                     }`} />
                     <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                      ambientListening ? 'bg-primary' : 'bg-primary/40'
+                      ambientListening ? 'bg-[#E8C34E]' : 'bg-[#E8C34E]/40'
                     }`} />
                   </span>
-                  <span className="text-xs font-display font-semibold text-primary truncate">
-                    {ambientListening ? 'Voice Active — speak to add items' : 'Reconnecting…'}
+                  <span className="text-xs font-display font-bold text-[#E8C34E]">
+                    Voice Active — speak to add items
                   </span>
                 </div>
                 {lastHeard && (
-                  <p className="text-[10px] text-muted-foreground truncate mt-0.5 pl-3.5">
+                  <p className="text-[10px] text-slate-400 truncate mt-0.5 pl-3.5 italic">
                     Heard: "{lastHeard}"
                   </p>
                 )}
               </>
             ) : (
-              <p className="text-xs text-muted-foreground font-display">
-                Tap mic to enable voice selling
-              </p>
+              <div>
+                <p className="text-xs font-display font-bold text-white">
+                  Voice Selling
+                </p>
+                <p className="text-[10px] text-slate-400 font-display mt-0.5">
+                  Tap to enable voice selling
+                </p>
+              </div>
             )}
           </div>
 
-          {/* Right side: item count or toggle hint */}
-          {ambientActive && (
-            <div className="shrink-0 flex items-center gap-2">
-              {addedCount > 0 && (
-                <span className="text-[10px] font-display font-bold text-success bg-success/10 px-2 py-0.5 rounded-full">
-                  +{addedCount}
-                </span>
-              )}
+          {/* Right side sound visualizer or actions */}
+          <div className="shrink-0 flex items-center gap-3">
+            {/* Added count indicator */}
+            {ambientActive && addedCount > 0 && (
+              <span className="text-[10px] font-display font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                +{addedCount}
+              </span>
+            )}
+
+            {/* Sound waves visualizer */}
+            <div className="flex items-center gap-0.5 h-5 shrink-0">
+              {[
+                { h: 'h-1.5', d: '0s' },
+                { h: 'h-3.5', d: '0.15s' },
+                { h: 'h-2.5', d: '0.3s' },
+                { h: 'h-4.5', d: '0.45s' },
+                { h: 'h-3.5', d: '0.6s' },
+                { h: 'h-2.5', d: '0.75s' },
+                { h: 'h-1.5', d: '0.9s' }
+              ].map((bar, i) => (
+                <div
+                  key={i}
+                  className="w-[2px] bg-[#818cf8] rounded-full origin-center"
+                  style={{
+                    height: bar.h === 'h-1.5' ? '6px' : bar.h === 'h-2.5' ? '10px' : bar.h === 'h-3.5' ? '14px' : '18px',
+                    animation: ambientListening 
+                      ? 'wave-pulse 0.4s infinite alternate ease-in-out' 
+                      : 'wave-pulse 1.6s infinite alternate ease-in-out',
+                    animationDelay: bar.d,
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Stop action button */}
+            {ambientActive && (
               <button
                 onClick={stopAmbient}
-                className="text-[10px] font-display font-semibold text-destructive/80 hover:text-destructive px-2 py-1 rounded-lg hover:bg-destructive/10 transition-colors"
+                className="text-xs font-display font-bold text-[#f43f5e] hover:text-rose-400 pl-1 shrink-0 transition-colors"
               >
                 Stop
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── CSS for ambient glow animation ── */}
+      {/* ── CSS Animations ── */}
       <style>{`
-        @keyframes ambient-glow {
-          0%, 100% { box-shadow: 0 0 0 2px hsl(var(--primary)/0.4), 0 0 12px hsl(var(--primary)/0.1); }
-          50% { box-shadow: 0 0 0 2px hsl(var(--primary)/0.7), 0 0 20px hsl(var(--primary)/0.25); }
-        }
-        @keyframes border-pulse {
-          0%, 100% { border-color: rgba(232, 195, 78, 0.3); box-shadow: 0 0 4px rgba(232,195,78,0.05); }
-          50% { border-color: rgba(232, 195, 78, 1); box-shadow: 0 0 12px rgba(232,195,78,0.25); }
+        @keyframes wave-pulse {
+          0% { transform: scaleY(0.4); }
+          100% { transform: scaleY(1.4); }
         }
         @keyframes mic-pop {
           0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.12); }
+          50% { transform: scale(1.08); }
         }
       `}</style>
     </>

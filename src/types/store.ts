@@ -202,6 +202,7 @@ export interface ManagerSettings {
   voiceFeatures: boolean;
   autoVoiceListen: boolean;
   weeklyRecap: boolean;
+  autoPrintReceipt?: boolean;
   customerRequests: boolean;
   businessAdvice: boolean;
   businessExpansion: boolean;
@@ -240,6 +241,14 @@ export interface ManagerSettings {
   autoDiscountValue?: number;
   autoDiscountMinSubtotal?: number;
   autoDiscountMaxSubtotal?: number;
+  // Receipts Customization Settings
+  receiptLogoEnabled?: boolean;
+  receiptStoreName?: string;
+  receiptPhone?: string;
+  receiptAddress?: string;
+  receiptFooterMessage?: string;
+  receiptWidth?: '58mm' | '80mm' | 'standard';
+  receiptCurrency?: string;
 }
 
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
@@ -254,6 +263,7 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   voiceFeatures: true,
   autoVoiceListen: false,
   weeklyRecap: true,
+  autoPrintReceipt: false,
   customerRequests: true,
   businessAdvice: true,
   businessExpansion: true,
@@ -286,7 +296,26 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   autoDiscountValue: 0,
   autoDiscountMinSubtotal: 0,
   autoDiscountMaxSubtotal: 0,
+  receiptLogoEnabled: true,
+  receiptStoreName: '',
+  receiptPhone: '',
+  receiptAddress: '',
+  receiptFooterMessage: 'Thank you for your patronage! 🙏',
+  receiptWidth: '58mm',
+  receiptCurrency: '₦',
 };
+
+export interface PrintedReceipt {
+  id: string;
+  receiptNumber: string;
+  date: string;
+  items: { productName: string; quantity: number; unitPrice: number; total: number }[];
+  customerName?: string;
+  paymentStatus: 'paid' | 'pending' | 'debt_payment';
+  amount: number;
+  balance: number;
+  printerUsed?: string;
+}
 
 export interface StoreData {
   storeName: string;
@@ -306,6 +335,7 @@ export interface StoreData {
   pendingPayments?: PendingPayment[];
   flowNotifications?: FlowNotification[];
   memoryArchive?: MemoryEntry[];
+  printedReceipts?: PrintedReceipt[];
   createdAt: string;
   profile?: StoreProfile;
   coins?: number;

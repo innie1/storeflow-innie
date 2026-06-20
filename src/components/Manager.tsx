@@ -288,7 +288,7 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
             <h4 className="font-display font-bold text-base">{selected.label} – {fmtPlusInterval(selected.minute, interval)}</h4>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Sales</p><p className="font-display font-bold">{selected.sales}</p></div>
-              <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Revenue</p><p className="font-display font-bold text-primary text-xs">₦{Math.round(selected.revenue).toLocaleString()}</p></div>
+              <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Revenue</p><p className="font-display font-bold text-yellow-500 text-xs">₦{Math.round(selected.revenue).toLocaleString()}</p></div>
               <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Profit</p><p className="font-display font-bold text-success text-xs">₦{Math.round(selected.profit).toLocaleString()}</p></div>
             </div>
             <button onClick={() => setSelected(null)} className="w-full mt-2 p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-bold text-sm">Close</button>
@@ -723,31 +723,6 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.enabled]);
 
-  if (!settings.enabled) {
-    const enable = () => {
-      const updated = { ...store, managerSettings: { ...settings, enabled: true } };
-      saveStore(updated); onUpdate(updated);
-      showToast('Flow activated');
-      onEnable?.();
-    };
-    return (
-      <div className="animate-fade-in space-y-4">
-        <div className="p-6 rounded-2xl bg-card shadow-card text-center space-y-4">
-          <div className="flex justify-center"><Mascot size={120} mood="sleeping" /></div>
-          <MascotBadge on={false} />
-          <h2 className="font-display font-bold text-xl text-foreground">Flow is sleeping</h2>
-          <p className="text-sm text-muted-foreground max-w-xs mx-auto">Wake Flow up to unlock insights, forecasts, recommendations and savings plans tailored to your store.</p>
-          <ul className="text-left text-sm text-muted-foreground max-w-xs mx-auto space-y-1.5">
-            {['Business Insights', 'Revenue Forecasts', 'Expense Analysis', 'Product Suggestions', 'Savings Plans', 'FLOW Rewards'].map(x => (
-              <li key={x} className="flex items-center gap-2"><span className="text-success">✓</span>{x}</li>
-            ))}
-          </ul>
-          <button onClick={enable} className="w-full max-w-xs mx-auto p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity">Activate Flow</button>
-        </div>
-      </div>
-    );
-  }
-
   const insights = generateInsights(store, '7d');
   const recs = generateRecommendations(store);
   const requests = topCustomerRequests(store, 6);
@@ -755,15 +730,31 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const unreadCount = (store.flowNotifications || []).filter(n => !n.read).length;
   const flowMood = useMemo(() => {
     const health = healthScore(store);
+    
+    // Auto-sleep past 9 PM or before 6 AM
+    const currentHour = new Date().getHours();
+    const isSleepTime = currentHour >= 21 || currentHour < 6;
+    if (isSleepTime) return 'sleeping';
+
+    const hasZeroStock = store.products.length > 0 && store.products.every(p => p.quantity === 0);
     const hasLowStock = store.products.some(p => p.quantity <= 3);
     const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
     const isGoalAchieved = savings && savings.saved >= savings.amount && savings.amount > 0;
     
+    if (hasZeroStock) return 'panic';
     if (isGoalAchieved) return 'celebrating';
+    
+    // Performance checks
     if (health.overall >= 80) return 'confident';
     if (health.overall >= 65) return 'happy';
-    if (hasLowStock) return 'concerned';
-    if (hasDebt || health.overall < 50) return 'worried';
+    
+    // Open but not performing well: resting
+    if (health.overall >= 45 && health.overall < 65) return 'resting';
+    
+    if (hasLowStock || hasDebt) return 'concerned';
+    if (health.overall < 45 && health.overall >= 25) return 'worried';
+    if (health.overall < 25) return 'angry';
+    
     return 'neutral';
   }, [store, savings]);
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -811,6 +802,31 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   const advice = generateAdvice(store);
   const advicePriorityColor: Record<string, string> = { critical: 'border-destructive/40 bg-destructive/5', high: 'border-warning/40 bg-warning/5', medium: 'border-primary/20 bg-surface-2', low: 'border-border bg-surface-2' };
   const adviceIconBg: Record<string, string> = { critical: 'bg-destructive/10', high: 'bg-warning/10', medium: 'bg-primary/10', low: 'bg-surface-3' };
+
+  if (!settings.enabled) {
+    const enable = () => {
+      const updated = { ...store, managerSettings: { ...settings, enabled: true } };
+      saveStore(updated); onUpdate(updated);
+      showToast('Flow activated');
+      onEnable?.();
+    };
+    return (
+      <div className="animate-fade-in space-y-4">
+        <div className="p-6 rounded-2xl bg-card shadow-card text-center space-y-4">
+          <div className="flex justify-center"><Mascot size={120} mood="sleeping" /></div>
+          <MascotBadge on={false} />
+          <h2 className="font-display font-bold text-xl text-foreground">Flow is sleeping</h2>
+          <p className="text-sm text-muted-foreground max-w-xs mx-auto">Wake Flow up to unlock insights, forecasts, recommendations and savings plans tailored to your store.</p>
+          <ul className="text-left text-sm text-muted-foreground max-w-xs mx-auto space-y-1.5">
+            {['Business Insights', 'Revenue Forecasts', 'Expense Analysis', 'Product Suggestions', 'Savings Plans', 'FLOW Rewards'].map(x => (
+              <li key={x} className="flex items-center gap-2"><span className="text-success">✓</span>{x}</li>
+            ))}
+          </ul>
+          <button onClick={enable} className="w-full max-w-xs mx-auto p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity">Activate Flow</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in flow-card-enter-anim space-y-4">
@@ -1010,7 +1026,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
                       <span className={`text-[10px] font-display font-bold ${confColor}`}>{f.confidencePct}% confidence</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] text-muted-foreground">Expected Revenue</p><p className="font-display font-bold text-primary">₦{Math.round(f.expectedRevenue).toLocaleString()}</p></div>
+                      <div><p className="text-[10px] text-muted-foreground">Expected Revenue</p><p className="font-display font-bold text-yellow-500">₦{Math.round(f.expectedRevenue).toLocaleString()}</p></div>
                       <div><p className="text-[10px] text-muted-foreground">Expected Profit</p><p className="font-display font-bold text-success">₦{Math.round(f.expectedProfit).toLocaleString()}</p></div>
                     </div>
                     <div className="mt-2 h-1.5 rounded-full bg-surface-3 overflow-hidden">

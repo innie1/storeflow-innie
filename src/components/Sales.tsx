@@ -5,6 +5,19 @@ import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import VoiceSell from '@/components/VoiceSell';
+import { printSystem } from '@/lib/print-engine';
+import {
+  Search,
+  SlidersHorizontal,
+  Zap,
+  Plus,
+  ArrowUp,
+  User,
+  BarChart3,
+  Mic,
+  QrCode,
+  AlertTriangle
+} from 'lucide-react';
 
 interface CartItem {
   productId: string;
@@ -18,9 +31,10 @@ interface SalesProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
   managerSettings?: ManagerSettings;
+  isActive?: boolean;
 }
 
-export default function Sales({ store, onUpdate, managerSettings }: SalesProps) {
+export default function Sales({ store, onUpdate, managerSettings, isActive = true }: SalesProps) {
   const [search, setSearch] = useState('');
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
@@ -31,6 +45,14 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customQtyFor, setCustomQtyFor] = useState<string | null>(null);
   const [customQty, setCustomQty] = useState('1');
+  const [filterLowStock, setFilterLowStock] = useState(false);
+
+  // Automatically shut down voice selling when navigating away
+  useEffect(() => {
+    if (!isActive) {
+      setVoiceActive(false);
+    }
+  }, [isActive]);
 
   // checkout form
   const [discount, setDiscount] = useState('');
@@ -99,9 +121,10 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
       const matchCat = category === 'All' || p.category === category;
       const q = search.toLowerCase().trim();
       const matchSearch = !q || p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
-      return matchCat && matchSearch;
+      const matchLow = !filterLowStock || p.quantity <= 3;
+      return matchCat && matchSearch && matchLow;
     });
-  }, [store.products, topSellerIds, category, search]);
+  }, [store.products, topSellerIds, category, search, filterLowStock]);
 
   const addToCart = (productId: string, qty: number) => {
     const product = store.products.find(p => p.id === productId);
@@ -230,7 +253,31 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
         customerNote: saveAs === 'pending' ? customerNote.trim() || undefined : undefined,
       });
     onUpdate(result.store);
-    if (result.sales[0]) setLastSale(result.sales[0]);
+    const sale = result.sales[0];
+    if (sale) {
+      setLastSale(sale);
+      if (managerSettings?.autoPrintReceipt) {
+        const receiptData = {
+          storeName: store.storeName,
+          storeType: store.profile?.storeType,
+          location: store.profile?.location,
+          phone: store.profile?.phone,
+          email: store.profile?.email,
+          saleId: sale.id,
+          date: sale.date,
+          items: [{
+            name: sale.productName,
+            quantity: sale.quantity,
+            unitPrice: sale.unitPrice,
+            total: sale.total
+          }],
+          total: sale.total,
+        };
+        printSystem(receiptData).catch(err => {
+          console.error("Auto print failed:", err);
+        });
+      }
+    }
     showToast(result.pending ? `Saved as pending · balance ₦${result.pending.balance.toLocaleString()}` : `Sale complete — ₦${total.toLocaleString()}`);
     setCart([]); setCheckoutOpen(false);
   };
@@ -254,20 +301,38 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
 
   return (
     <div className="animate-fade-in w-full max-w-2xl mx-auto space-y-4 pb-28">
-      {/* Today hero */}
-      <div className="rounded-2xl p-4 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border border-primary/20">
-        <div className="flex items-center justify-between mb-3">
+      {/* Today's Sales Summary Card - High-Fidelity Themed Gradient */}
+      <div className="rounded-2xl p-4 bg-gradient-to-br from-yellow-500/10 via-card/95 to-card border border-yellow-500/20 shadow-card flex flex-col gap-3">
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Today's Sales</p>
-            <p className="font-display text-2xl font-bold text-primary">₦{todayRevenue.toLocaleString()}</p>
+            <p className="text-[10px] font-display font-bold text-slate-400 uppercase tracking-wider">Today's Sales (Revenue)</p>
+            <h2 className="text-2xl font-display font-black text-yellow-500 mt-0.5">₦{todayRevenue.toLocaleString()}</h2>
           </div>
-          <button onClick={() => setScanning(true)}
-            className="w-11 h-11 rounded-xl bg-primary/15 border border-primary/30 text-primary text-lg flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="Scan barcode">🔳</button>
+          <div className="w-11 h-11 rounded-xl border border-yellow-500/25 bg-yellow-500/10 flex items-center justify-center text-yellow-500">
+            <BarChart3 className="w-5 h-5" />
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-surface-2/60 p-2"><p className="text-[10px] text-muted-foreground">Sales</p><p className="text-sm font-display font-semibold">{todayCount}</p></div>
-          <div className="rounded-lg bg-surface-2/60 p-2"><p className="text-[10px] text-muted-foreground">Profit</p><p className="text-sm font-display font-semibold text-success">₦{todayProfit.toLocaleString()}</p></div>
+        <div className="grid grid-cols-2 gap-3.5">
+          {/* Sales card */}
+          <div className="bg-surface-2 border border-border/40 rounded-2xl p-3 flex items-center justify-between shadow-sm">
+            <div>
+              <p className="text-[11px] text-slate-400 font-display font-semibold">Sales Count</p>
+              <p className="text-lg font-display font-black text-foreground mt-0.5">{todayCount}</p>
+            </div>
+            <div className="w-7 h-7 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-yellow-500 shrink-0">
+              <User className="w-4 h-4" />
+            </div>
+          </div>
+          {/* Profit card */}
+          <div className="bg-surface-2 border border-border/40 rounded-2xl p-3 flex items-center justify-between shadow-sm">
+            <div>
+              <p className="text-[11px] text-slate-400 font-display font-semibold">Net Profit</p>
+              <p className="text-lg font-display font-black text-emerald-400 mt-0.5">₦{todayProfit.toLocaleString()}</p>
+            </div>
+            <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <ArrowUp className="w-4 h-4 stroke-[3]" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -286,36 +351,45 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
         />
       )}
 
-      <div className="relative">
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="🔍 Search products..."
-          className={`w-full p-3 pr-10 rounded-xl bg-card border text-sm focus:outline-none transition-all duration-300 ${
-            voiceActive && voiceListening
-              ? 'border-[#E8C34E] shadow-[0_0_12px_rgba(232,195,78,0.25)] animate-[border-pulse_2s_infinite_ease-in-out]'
-              : voiceActive
-              ? 'border-[#E8C34E]/60 shadow-[0_0_8px_rgba(232,195,78,0.1)]'
-              : 'border-border focus:border-primary'
-          }`}
-        />
-        <button
-          onClick={() => setVoiceActive(!voiceActive)}
-          className={`absolute right-3 top-3 text-lg transition-all active:scale-90 ${
-            voiceActive
-              ? 'text-[#E8C34E]'
-              : 'text-muted-foreground hover:text-[#E8C34E]'
-          }`}
-          style={voiceActive && voiceListening ? { animation: 'mic-pop 1.5s ease-in-out infinite' } : {}}
-          title={voiceActive ? 'Stop voice listening' : 'Start voice listening'}
-          aria-label={voiceActive ? 'Stop voice listening' : 'Start voice listening'}
-        >
-          🎙
-        </button>
+      {/* Search and Filters */}
+      <div className="relative flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search products..."
+            className="w-full pl-10 pr-20 py-3 rounded-xl bg-surface-1 border border-border/40 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-300"
+          />
+          {/* Barcode scanner action inside search bar */}
+          <button
+            onClick={() => setScanning(true)}
+            className="absolute right-10 top-3 text-slate-400 hover:text-primary active:scale-90 transition-transform"
+            title="Scan barcode"
+            aria-label="Scan barcode"
+          >
+            <QrCode className="w-5 h-5" />
+          </button>
+          
+          {/* Sliders filter action inside search bar */}
+          <button
+            onClick={() => {
+              setFilterLowStock(prev => !prev);
+              showToast(filterLowStock ? "Showing all products" : "Filtering low stock products");
+            }}
+            className={`absolute right-3.5 top-3.5 active:scale-90 transition-transform ${
+              filterLowStock ? 'text-primary' : 'text-slate-400 hover:text-foreground'
+            }`}
+            title="Filter low stock"
+            aria-label="Filter low stock"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {voiceActive && cart.length > 0 && (
-        <div className="rounded-xl border border-[#E8C34E]/20 bg-[#E8C34E]/5 p-3 space-y-2">
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
           <div className="flex items-center justify-between border-b border-border/40 pb-1.5">
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-display font-bold text-primary uppercase tracking-wider">🎙️ Voice Added Items</span>
@@ -355,7 +429,7 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
           {categories.map(c => (
             <button key={c} onClick={() => setCategory(c)}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-display font-semibold border transition-colors ${
-                category === c ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border'
+                category === c ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-muted-foreground border-border/20'
               }`}>{c}</button>
           ))}
         </div>
@@ -374,32 +448,61 @@ export default function Sales({ store, onUpdate, managerSettings }: SalesProps) 
             const isLow = p.quantity <= 3;
             const inCart = cart.find(c => c.productId === p.id)?.quantity ?? 0;
             return (
-              <div key={p.id} className="relative rounded-xl bg-card border border-border p-3 flex flex-col justify-between min-h-[152px]">
+              <div key={p.id} className="relative rounded-2xl bg-card border border-border/40 p-3.5 flex flex-col justify-between min-h-[185px]">
                 {isTop && (
-                  <span className="absolute top-1.5 right-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-display font-semibold">★ TOP</span>
+                  <span className="absolute top-3 right-3 text-[9px] px-1.5 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary font-display font-bold">
+                    ★ TOP
+                  </span>
                 )}
                 <div>
-                  <p className="text-sm font-display font-semibold text-foreground line-clamp-2 pr-12">{p.name}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{avail} left</p>
-                  <div className="flex gap-1 mt-1 flex-wrap">
-                    {isFast && <span className="text-[9px] text-warning">🔥 Fast</span>}
-                    {isLow && <span className="text-[9px] text-destructive">⚠ Low</span>}
+                  <p className="text-sm font-display font-bold text-foreground line-clamp-1 pr-12">{p.name}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{avail} left</p>
+                  <div className="flex gap-1.5 mt-1 flex-wrap">
+                    {isFast && <span className="text-[9px] text-primary bg-primary/5 px-1.5 py-0.5 rounded-md border border-primary/20">🔥 Fast</span>}
+                    {isLow && (
+                      <span className="text-[10px] text-rose-400 flex items-center gap-1 font-display font-bold mt-0.5">
+                        ⚠️ Low stock
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="mt-2 space-y-1.5">
-                  <span className="text-primary font-display font-bold text-sm block">₦{p.sellingPrice.toLocaleString()}</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => handleInstantSell(p.id)} disabled={p.quantity < 1}
-                      className="flex-1 h-8 rounded-md bg-success text-white text-[11px] font-display font-bold disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center gap-1"
-                      aria-label="Instant sell">⚡ Sell</button>
-                    <button onClick={() => handleQuickAdd(p.id)} disabled={avail < 1}
-                      className="w-8 h-8 rounded-md bg-primary text-primary-foreground font-bold text-base disabled:opacity-40 active:scale-95 transition-transform relative"
-                      aria-label="Add to cart">
-                      +{inCart > 0 && <span className="absolute -top-1 -right-1 bg-destructive text-white text-[9px] rounded-full w-3.5 h-3.5 flex items-center justify-center">{inCart}</span>}
+                <div className="mt-2 space-y-2">
+                  <span className="text-primary font-display font-black text-sm block">
+                    ₦{p.sellingPrice.toLocaleString()}
+                  </span>
+                  
+                  {/* Buttons Row */}
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => handleInstantSell(p.id)}
+                      disabled={p.quantity < 1}
+                      className="flex-1 h-9 rounded-xl bg-[hsl(var(--quick-sell-bg))] text-[hsl(var(--quick-sell-foreground))] text-xs font-display font-black hover:bg-[hsl(var(--quick-sell-hover))] disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center gap-1 shadow-sm transition-colors duration-200"
+                      aria-label="Instant sell"
+                    >
+                      ⚡ Sell
+                    </button>
+                    <button
+                      onClick={() => handleQuickAdd(p.id)}
+                      disabled={avail < 1}
+                      className="w-9 h-9 rounded-full bg-yellow-500 text-slate-950 font-black text-lg hover:bg-yellow-400 disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center shadow-sm relative shrink-0"
+                      aria-label="Add to cart"
+                    >
+                      <Plus className="w-4 h-4 stroke-[3]" />
+                      {inCart > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                          {inCart}
+                        </span>
+                      )}
                     </button>
                   </div>
-                  <button onClick={() => { setCustomQtyFor(p.id); setCustomQty('1'); }}
-                    className="w-full h-6 rounded-md bg-surface-2 text-muted-foreground text-[10px]">Custom qty</button>
+                  
+                  {/* Custom qty Button */}
+                  <button
+                    onClick={() => { setCustomQtyFor(p.id); setCustomQty('1'); }}
+                    className="w-full h-8 rounded-xl bg-surface-2 text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors text-[10px] font-display font-semibold"
+                  >
+                    Custom qty
+                  </button>
                 </div>
               </div>
             );

@@ -149,7 +149,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
         <div className="grid grid-cols-3 gap-2">
           <div className="p-2 rounded-lg bg-surface-2 text-center">
             <p className="text-[10px] text-muted-foreground uppercase">Revenue</p>
-            <p className="font-display font-bold text-sm text-primary">₦{stats.totalRevenue.toLocaleString()}</p>
+            <p className="font-display font-bold text-sm text-yellow-500">₦{stats.totalRevenue.toLocaleString()}</p>
           </div>
           <div className="p-2 rounded-lg bg-surface-2 text-center">
             <p className="text-[10px] text-muted-foreground uppercase">Expenses</p>

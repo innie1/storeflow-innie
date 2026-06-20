@@ -14,159 +14,168 @@
 @layer base {
   /* ---------- GRAPHITE (default) ---------- */
   :root {
-    --background: 240 10% 5%;          /* #0D0D0F */
-    --foreground: 0 0% 93%;            /* #EDEDED */
+    --background: 240 8% 5%;            /* Sleek dark charcoal: #0b0b0d */
+    --foreground: 240 5% 90%;           /* Soft white: #e3e3e6 */
 
-    --card: 225 13% 10%;               /* #16181D */
-    --card-foreground: 0 0% 93%;
+    --card: 240 6% 10%;                 /* Premium dark grey: #17171a */
+    --card-foreground: 240 5% 90%;
 
-    --popover: 225 13% 11%;
-    --popover-foreground: 0 0% 93%;
+    --popover: 240 6% 11%;
+    --popover-foreground: 240 5% 90%;
 
-    --primary: 45 87% 62%;             /* #F2C94C */
-    --primary-foreground: 240 10% 5%;
+    --primary: 45 92% 58%;              /* Elegant rich gold: #f5c53c */
+    --primary-foreground: 240 8% 5%;
 
-    --secondary: 225 10% 14%;
-    --secondary-foreground: 0 0% 93%;
+    --secondary: 240 6% 14%;
+    --secondary-foreground: 240 5% 90%;
 
-    --muted: 225 10% 14%;
-    --muted-foreground: 220 6% 57%;    /* #8A8F98 */
+    --muted: 240 6% 14%;
+    --muted-foreground: 240 4% 60%;     /* Clear grey: #949499 */
 
-    --accent: 45 87% 62%;
-    --accent-foreground: 240 10% 5%;
+    --accent: 45 92% 58%;
+    --accent-foreground: 240 8% 5%;
 
-    --destructive: 0 72% 60%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 225 10% 16%;
-    --input: 225 10% 16%;
-    --ring: 45 87% 62%;
+    --border: 240 5% 15%;               /* Premium subtle border: #232326 */
+    --input: 240 5% 15%;
+    --ring: 45 92% 58%;
 
     --radius: 1rem;
 
-    --gold: 45 87% 62%;
-    --gold-dim: 45 60% 38%;
-    --gold-glow: 45 87% 75%;
-    --surface-1: 225 13% 10%;
-    --surface-2: 225 11% 13%;
-    --surface-3: 225 10% 17%;
-    --success: 145 63% 42%;            /* #27AE60 */
+    --gold: 45 92% 58%;
+    --gold-dim: 45 70% 36%;
+    --gold-glow: 45 92% 70%;
+    --surface-1: 240 6% 10%;
+    --surface-2: 240 6% 13%;
+    --surface-3: 240 6% 16%;
+    --success: 142 70% 45%;
     --success-foreground: 0 0% 100%;
-    --warning: 45 87% 62%;
+    --warning: 45 92% 58%;
+    --quick-sell-bg: 45 92% 58%;
+    --quick-sell-hover: 45 92% 50%;
+    --quick-sell-foreground: 240 8% 5%;
 
     /* Chart-aware tokens (raw HSL channels for recharts) */
-    --chart-revenue: 45 87% 62%;
-    --chart-profit: 145 63% 49%;
-    --chart-grid: 225 10% 18%;
-    --chart-axis: 220 6% 50%;
-    --chart-tooltip-bg: 225 13% 11%;
-    --chart-tooltip-border: 225 10% 18%;
+    --chart-revenue: 45 92% 58%;
+    --chart-profit: 142 70% 45%;
+    --chart-grid: 240 5% 16%;
+    --chart-axis: 240 4% 50%;
+    --chart-tooltip-bg: 240 6% 11%;
+    --chart-tooltip-border: 240 5% 16%;
 
-    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.4), 0 8px 24px hsl(0 0% 0% / 0.25);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
     --font-body: 'DM Mono', monospace;
     --font-display: 'Syne', sans-serif;
   }
 
-  /* ---------- BLUE SKY ---------- */
+  /* ---------- BLUE SKY (Midnight Navy) ---------- */
   .theme-blue {
-    --background: 210 100% 98%;        /* #F5FAFF */
-    --foreground: 0 0% 10%;            /* #1A1A1A */
+    --background: 220 28% 7%;           /* Midnight navy: #0b0e14 */
+    --foreground: 210 20% 92%;          /* Icy white: #e6ebf2 */
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 10%;
+    --card: 220 24% 12%;                /* Deep navy card: #151b26 */
+    --card-foreground: 210 20% 92%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 10%;
+    --popover: 220 24% 13%;
+    --popover-foreground: 210 20% 92%;
 
-    --primary: 207 92% 60%;            /* #3BA4F7 */
-    --primary-foreground: 0 0% 100%;
+    --primary: 205 92% 62%;             /* Electric sky blue: #44a8f7 */
+    --primary-foreground: 220 28% 7%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 0 0% 10%;
+    --secondary: 220 20% 17%;
+    --secondary-foreground: 210 20% 92%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 210 12% 54%;   /* #7A8A9A */
+    --muted: 220 20% 17%;
+    --muted-foreground: 215 12% 60%;    /* Muted blue-grey: #8c9bb0 */
 
-    --accent: 207 92% 60%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 205 92% 62%;
+    --accent-foreground: 220 28% 7%;
 
-    --destructive: 358 100% 67%;       /* #FF5A5F */
+    --destructive: 358 88% 62%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 30% 92%;
-    --input: 210 30% 92%;
-    --ring: 207 92% 60%;
+    --border: 220 20% 19%;              /* Crisp navy border: #273142 */
+    --input: 220 20% 19%;
+    --ring: 205 92% 62%;
 
-    --gold: 207 92% 60%;               /* primary alias for legacy classes */
-    --gold-dim: 207 60% 70%;
-    --gold-glow: 207 92% 75%;
-    --surface-1: 0 0% 100%;
-    --surface-2: 210 40% 97%;
-    --surface-3: 210 30% 94%;
-    --success: 145 63% 49%;            /* #2ECC71 */
+    --gold: 205 92% 62%;
+    --gold-dim: 205 70% 40%;
+    --gold-glow: 205 92% 75%;
+    --surface-1: 220 24% 12%;
+    --surface-2: 220 20% 15%;
+    --surface-3: 220 18% 18%;
+    --success: 145 68% 46%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 55%;
+    --warning: 38 92% 58%;
+    --quick-sell-bg: 205 92% 62%;
+    --quick-sell-hover: 205 92% 52%;
+    --quick-sell-foreground: 220 28% 7%;
 
-    --chart-revenue: 207 92% 60%;
-    --chart-profit: 145 63% 49%;
-    --chart-grid: 210 30% 90%;
-    --chart-axis: 210 12% 54%;
-    --chart-tooltip-bg: 0 0% 100%;
-    --chart-tooltip-border: 210 30% 88%;
+    --chart-revenue: 45 92% 58%;
+    --chart-profit: 145 68% 46%;
+    --chart-grid: 220 20% 18%;
+    --chart-axis: 215 12% 54%;
+    --chart-tooltip-bg: 220 24% 13%;
+    --chart-tooltip-border: 220 20% 18%;
 
-    --shadow-card: 0 1px 2px hsl(207 50% 70% / 0.08), 0 8px 24px hsl(207 50% 60% / 0.08);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(6, 12, 23, 0.5);
     --font-body: 'Inter', sans-serif;
     --font-display: 'Inter', sans-serif;
   }
 
-  /* ---------- GREEN FOREST ---------- */
+  /* ---------- GREEN FOREST (Sage Charcoal) ---------- */
   .theme-forest {
-    --background: 162 35% 9%;          /* #0F1F1A */
-    --foreground: 120 30% 93%;         /* #E8F5E9 */
+    --background: 160 10% 6%;           /* Charcoal with moss/forest tint: #0f1110 */
+    --foreground: 120 15% 92%;          /* Soft minty white: #e3e8e4 */
 
-    --card: 165 28% 13%;               /* #162A24 */
-    --card-foreground: 120 30% 93%;
+    --card: 160 12% 10%;                /* Dark moss charcoal card: #151b18 */
+    --card-foreground: 120 15% 92%;
 
-    --popover: 165 28% 14%;
-    --popover-foreground: 120 30% 93%;
+    --popover: 160 12% 11%;
+    --popover-foreground: 120 15% 92%;
 
-    --primary: 145 63% 42%;            /* #27AE60 */
-    --primary-foreground: 0 0% 100%;
+    --primary: 142 52% 58%;             /* Mint emerald green: #58d68d */
+    --primary-foreground: 160 10% 6%;
 
-    --secondary: 165 22% 17%;
-    --secondary-foreground: 120 30% 93%;
+    --secondary: 160 10% 15%;
+    --secondary-foreground: 120 15% 92%;
 
-    --muted: 165 22% 17%;
-    --muted-foreground: 150 10% 60%;
+    --muted: 160 10% 15%;
+    --muted-foreground: 150 8% 60%;     /* Sage grey: #8fa093 */
 
-    --accent: 145 50% 60%;             /* #6FCF97 */
-    --accent-foreground: 162 35% 9%;
+    --accent: 142 52% 58%;
+    --accent-foreground: 160 10% 6%;
 
-    --destructive: 0 80% 63%;          /* #EB5757 */
+    --destructive: 0 82% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 165 20% 19%;
-    --input: 165 20% 19%;
-    --ring: 145 63% 42%;
+    --border: 160 10% 16%;              /* Subtle dark forest border: #242926 */
+    --input: 160 10% 16%;
+    --ring: 142 52% 58%;
 
-    --gold: 145 63% 42%;
-    --gold-dim: 145 40% 30%;
-    --gold-glow: 145 60% 60%;
-    --surface-1: 165 28% 13%;
-    --surface-2: 165 24% 16%;
-    --surface-3: 165 20% 20%;
-    --success: 145 60% 55%;
+    --gold: 142 52% 58%;
+    --gold-dim: 142 40% 36%;
+    --gold-glow: 142 52% 70%;
+    --surface-1: 160 12% 10%;
+    --surface-2: 160 10% 13%;
+    --surface-3: 160 8% 16%;
+    --success: 142 52% 58%;
     --success-foreground: 0 0% 100%;
-    --warning: 45 87% 62%;             /* #F2C94C */
+    --warning: 45 88% 60%;
+    --quick-sell-bg: 160 84% 37%;
+    --quick-sell-hover: 160 84% 28%;
+    --quick-sell-foreground: 0 0% 100%;
 
-    --chart-revenue: 145 50% 60%;      /* light green */
-    --chart-profit: 145 70% 50%;       /* brighter neon */
-    --chart-grid: 165 20% 20%;
-    --chart-axis: 150 10% 55%;
-    --chart-tooltip-bg: 165 28% 14%;
-    --chart-tooltip-border: 165 20% 22%;
+    --chart-revenue: 45 92% 58%;
+    --chart-profit: 145 70% 50%;
+    --chart-grid: 160 10% 16%;
+    --chart-axis: 150 8% 54%;
+    --chart-tooltip-bg: 160 12% 11%;
+    --chart-tooltip-border: 160 10% 16%;
 
-    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.4), 0 8px 24px hsl(145 50% 10% / 0.4);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(10, 16, 13, 0.5);
     --font-body: 'DM Mono', monospace;
     --font-display: 'Syne', sans-serif;
   }
