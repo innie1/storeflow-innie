@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { saveStore, getPendingSummary } from '@/lib/store-data';
 import {
@@ -281,7 +282,7 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
           )}
         </>
       )}
-      {selected && (
+      {selected && createPortal(
         <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setSelected(null)}>
           <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-4 animate-slide-up space-y-2" onClick={e => e.stopPropagation()}>
             <h4 className="font-display font-bold text-base">{selected.label} – {fmtPlusInterval(selected.minute, interval)}</h4>
@@ -292,7 +293,8 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
             </div>
             <button onClick={() => setSelected(null)} className="w-full mt-2 p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-bold text-sm">Close</button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -815,7 +817,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
       <style>{`
         @keyframes flow-card-enter {
           from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
+          to { opacity: 1; transform: none; }
         }
         @keyframes bar-grow-wave {
           from { transform: scaleY(0); }
@@ -1271,8 +1273,14 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
       )}
 
       {/* Modals */}
-      {showBreakdown && <HealthBreakdownModal store={store} onClose={() => setShowBreakdown(false)} />}
-      {showNotifications && <NotificationDrawer store={store} onClose={() => setShowNotifications(false)} onUpdate={onUpdate} />}
+      {showBreakdown && createPortal(
+        <HealthBreakdownModal store={store} onClose={() => setShowBreakdown(false)} />,
+        document.body
+      )}
+      {showNotifications && createPortal(
+        <NotificationDrawer store={store} onClose={() => setShowNotifications(false)} onUpdate={onUpdate} />,
+        document.body
+      )}
     </div>
   );
 }
