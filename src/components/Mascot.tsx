@@ -78,6 +78,40 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Determine current active mood (check active store hours or fallback to late night auto-sleep)
+  const nowTime = new Date();
+  const currentHours = nowTime.getHours();
+  const currentMinutes = nowTime.getMinutes();
+  const currentMinutesTotal = currentHours * 60 + currentMinutes;
+
+  let isClosingTime = false;
+  if (storeClosingTime) {
+    const [closeH, closeM] = storeClosingTime.split(':').map(Number);
+    let openH = 6;
+    let openM = 0;
+    if (storeOpeningTime) {
+      const [oH, oM] = storeOpeningTime.split(':').map(Number);
+      if (!isNaN(oH) && !isNaN(oM)) {
+        openH = oH;
+        openM = oM;
+      }
+    }
+    if (!isNaN(closeH) && !isNaN(closeM)) {
+      const closeTotal = closeH * 60 + closeM;
+      const openTotal = openH * 60 + openM;
+
+      if (closeTotal > openTotal) {
+        isClosingTime = currentMinutesTotal >= closeTotal || currentMinutesTotal < openTotal;
+      } else {
+        isClosingTime = currentMinutesTotal >= closeTotal && currentMinutesTotal < openTotal;
+      }
+    } else {
+      isClosingTime = currentHours >= 21 || currentHours < 6;
+    }
+  } else {
+    isClosingTime = currentHours >= 21 || currentHours < 6;
+  }
+
   // Monitor theme changes
   useEffect(() => {
     const checkTheme = () => {
@@ -271,40 +305,6 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   }, [message]);
 
   const isTalking = !!message;
-
-  // Determine current active mood (check active store hours or fallback to late night auto-sleep)
-  const nowTime = new Date();
-  const currentHours = nowTime.getHours();
-  const currentMinutes = nowTime.getMinutes();
-  const currentMinutesTotal = currentHours * 60 + currentMinutes;
-
-  let isClosingTime = false;
-  if (storeClosingTime) {
-    const [closeH, closeM] = storeClosingTime.split(':').map(Number);
-    let openH = 6;
-    let openM = 0;
-    if (storeOpeningTime) {
-      const [oH, oM] = storeOpeningTime.split(':').map(Number);
-      if (!isNaN(oH) && !isNaN(oM)) {
-        openH = oH;
-        openM = oM;
-      }
-    }
-    if (!isNaN(closeH) && !isNaN(closeM)) {
-      const closeTotal = closeH * 60 + closeM;
-      const openTotal = openH * 60 + openM;
-
-      if (closeTotal > openTotal) {
-        isClosingTime = currentMinutesTotal >= closeTotal || currentMinutesTotal < openTotal;
-      } else {
-        isClosingTime = currentMinutesTotal >= closeTotal && currentMinutesTotal < openTotal;
-      }
-    } else {
-      isClosingTime = currentHours >= 21 || currentHours < 6;
-    }
-  } else {
-    isClosingTime = currentHours >= 21 || currentHours < 6;
-  }
 
   const isSleepingState = !isManagerEnabled || ((isSleeping || isClosingTime) && !wakeOverride);
   const isMorningBathing = !isClosingTime && currentMinutesTotal >= 360 && currentMinutesTotal <= 510 && (mood === 'idle' || mood === 'neutral');
