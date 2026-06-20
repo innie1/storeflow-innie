@@ -1,10 +1,27 @@
 import { useState, useMemo, useEffect } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import BarcodeScanner from '@/components/BarcodeScanner';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+const CODE39_MAP: Record<string, string> = {
+  '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000',
+  '4': '000110001', '5': '100110000', '6': '001110000', '7': '000100101',
+  '8': '100100100', '9': '001100100',
+  'A': '100001001', 'B': '001001001', 'C': '101001000', 'D': '000011001',
+  'E': '100011000', 'F': '001011000', 'G': '000001101', 'H': '100001100',
+  'I': '001001100', 'J': '000011100',
+  'K': '100000011', 'L': '001000011', 'M': '101000010', 'N': '000010011',
+  'O': '100010010', 'P': '001010010', 'Q': '000000111', 'R': '100000110',
+  'S': '001000110', 'T': '000010110',
+  'U': '110000001', 'V': '011000001', 'W': '111000000', 'X': '010010001',
+  'Y': '110010000', 'Z': '011010000',
+  '-': '010000101', '.': '110000100', ' ': '011000100', '$': '010101000',
+  '/': '010100010', '+': '010001010', '%': '000101010', '*': '010010100'
+};
 
 interface InventoryProps {
   store: StoreData;
@@ -74,6 +91,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [quizAnswers, setQuizAnswers] = useState({ q1: '', q2: '', q3: '' });
   const [quizError, setQuizError] = useState('');
   const [confirmText, setConfirmText] = useState('');
+
+  const [countMode, setCountMode] = useState(false);
+  const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
+  const [showAuditHistory, setShowAuditHistory] = useState(false);
+  const [selectedBarcodeProduct, setSelectedBarcodeProduct] = useState<Product | null>(null);
+  const [selectedTransferProduct, setSelectedTransferProduct] = useState<Product | null>(null);
+  const [transferQty, setTransferQty] = useState('');
+  const [transferDestCode, setTransferDestCode] = useState('');
 
   const lowThreshold = getLowStockThreshold();
   let products = store.products;
@@ -309,6 +334,76 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     showToast(`Restocked ${entries.length} item${entries.length > 1 ? 's' : ''} ${funding === 'new_money' ? '(new money)' : '(from balance)'}`);
   };
 
+  const handlePrintBarcode = (product: Product) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return showToast('Popup blocker is active', 'error');
+    
+    const svgElement = document.getElementById(`barcode-svg-${product.id}`);
+    if (!svgElement) return showToast('Barcode element not found', 'error');
+    
+    const svgHtml = svgElement.outerHTML;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Barcode Label - ${product.name}</title>
+          <style>
+            body {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              font-family: monospace;
+              padding: 20px;
+              margin: 0;
+              background-color: white;
+            }
+            .title {
+              font-size: 14px;
+              font-weight: bold;
+              margin-bottom: 5px;
+              text-align: center;
+              color: black;
+            }
+            .code {
+              font-size: 12px;
+              margin-top: 5px;
+              letter-spacing: 3px;
+              font-weight: bold;
+              color: black;
+            }
+            svg {
+              max-width: 100%;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="title">${product.name}</div>
+          ${svgHtml}
+          <div class="code">${product.barcode}</div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleAutoGenerateBarcode = (product: Product) => {
+    const code = `SF${Math.floor(100000 + Math.random() * 900000)}`;
+    const existing = store.products.find(p => p.barcode === code);
+    if (existing) {
+      return handleAutoGenerateBarcode(product); // retry
+    }
+    const updated = updateProduct(store, product.id, { barcode: code });
+    onUpdate(updated);
+    setSelectedBarcodeProduct(updated.products.find(p => p.id === product.id) || null);
+    showToast('✓ Saved auto-generated barcode');
+  };
+
   const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm";
 
   return (
@@ -346,7 +441,63 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         >
           📝 Buy List
         </button>
+        <button
+          onClick={() => setCountMode(true)}
+          className="px-4 py-2.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-sm font-display font-semibold hover:bg-warning/20"
+          title="Audit product stock counts and adjust inventory"
+        >
+          📋 Count Audit
+        </button>
       </div>
+
+      {countMode && (
+        <div className="p-4 rounded-xl bg-warning/10 border border-warning/20 mb-4 flex flex-wrap items-center justify-between gap-3 text-left">
+          <div>
+            <h3 className="font-display font-bold text-warning text-sm flex items-center gap-1.5">
+              📋 Stock Count Mode Active
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Enter the physical quantities found on store shelves. Audits will adjust stock and log variances.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowAuditHistory(true)}
+              className="px-3.5 py-2 rounded-lg bg-surface-2 border border-border text-foreground hover:bg-surface-3 text-xs font-semibold animate-pulse"
+            >
+              📜 Audit History
+            </button>
+            <button
+              onClick={() => {
+                let updated = store;
+                Object.entries(auditCounts).forEach(([pId, act]) => {
+                  const prod = store.products.find(p => p.id === pId);
+                  if (prod) {
+                    updated = recordStockCountAudit(updated, pId, prod.name, prod.quantity, act);
+                  }
+                });
+                onUpdate(updated);
+                setAuditCounts({});
+                setCountMode(false);
+                showToast('✓ Stock counts reconciled');
+              }}
+              disabled={Object.keys(auditCounts).length === 0}
+              className="px-3.5 py-2 rounded-lg bg-warning text-slate-950 hover:opacity-90 disabled:opacity-50 text-xs font-bold"
+            >
+              ✓ Reconcile Audits ({Object.keys(auditCounts).length})
+            </button>
+            <button
+              onClick={() => {
+                setCountMode(false);
+                setAuditCounts({});
+              }}
+              className="px-3.5 py-2 rounded-lg bg-surface-2 border border-border text-xs font-semibold text-destructive hover:bg-destructive/10"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {filterLowStock && (
         <div className="mb-3 flex items-center gap-2">
@@ -370,53 +521,107 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold" title={`Barcode: ${p.barcode}`}>✓</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="text-xs text-muted-foreground truncate text-left">
                   {p.category}
                   {p.addedAt && <span className="ml-1.5">• {new Date(p.addedAt).toLocaleDateString()}</span>}
                 </p>
               </div>
-              <div className="w-20 shrink-0 text-right text-xs space-y-0.5">
-                <p className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</p>
-                <p className="text-primary">₦{p.sellingPrice.toLocaleString()}</p>
-                {(() => {
-                  const margin = p.sellingPrice - p.costPrice;
-                  const pct = p.costPrice > 0 ? (margin / p.costPrice) * 100 : 0;
-                  const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
-                  return <p className={cls}>+{pct.toFixed(0)}%</p>;
-                })()}
-              </div>
-              <div className={`w-12 shrink-0 text-center ${p.quantity <= lowThreshold ? 'text-destructive' : p.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
-                <p className="text-lg font-bold leading-none">{p.quantity}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">stock</p>
-              </div>
-              <div className="flex flex-col gap-1 shrink-0">
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setScanForProduct(p)}
-                    title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
-                    className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center ${p.barcode ? 'bg-success/20 text-success' : 'bg-surface-3 text-foreground'}`}
-                  >
-                    📷
-                  </button>
-                  <button
-                    onClick={() => addToShoppingList(p)}
-                    title="Add to shopping list"
-                    className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center relative ${inList ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-foreground'}`}
-                  >
-                    🛒
-                    {inList && (
-                      <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
-                        {inList.quantity}
-                      </span>
+
+              {countMode ? (
+                <div className="flex items-center gap-3 bg-surface-2/45 p-2 rounded-lg border border-border/40 shrink-0">
+                  <div className="text-right">
+                    <p className="text-[10px] text-muted-foreground">Expected</p>
+                    <p className="font-bold text-sm text-foreground">{p.quantity}</p>
+                  </div>
+                  <div className="w-16">
+                    <p className="text-[10px] text-muted-foreground">Actual</p>
+                    <input
+                      type="number"
+                      value={auditCounts[p.id] ?? ''}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          const next = { ...auditCounts };
+                          delete next[p.id];
+                          setAuditCounts(next);
+                        } else {
+                          setAuditCounts({ ...auditCounts, [p.id]: Number(val) });
+                        }
+                      }}
+                      placeholder="--"
+                      className="w-full p-1 text-center text-xs font-semibold rounded bg-surface-3 border border-border text-foreground focus:outline-none focus:border-warning"
+                    />
+                  </div>
+                  <div className="text-center min-w-[48px]">
+                    <p className="text-[10px] text-muted-foreground">Variance</p>
+                    {auditCounts[p.id] !== undefined ? (
+                      (() => {
+                        const expected = p.quantity;
+                        const actual = auditCounts[p.id];
+                        const diff = actual - expected;
+                        const color = diff === 0 ? 'text-success' : diff > 0 ? 'text-blue-400' : 'text-destructive';
+                        const sign = diff > 0 ? '+' : '';
+                        return <p className={`font-bold text-xs ${color}`}>{sign}{diff}</p>;
+                      })()
+                    ) : (
+                      <p className="text-xs text-muted-foreground font-semibold">--</p>
                     )}
-                  </button>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center">↑</button>
-                  <button onClick={() => { setEditProduct({ ...p }); setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category)); setEditCustomCategoryVal(p.category); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center">✎</button>
-                  <button onClick={() => handleDelete(p)} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive flex items-center justify-center">✕</button>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="w-20 shrink-0 text-right text-xs space-y-0.5">
+                    <p className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</p>
+                    <p className="text-primary">₦{p.sellingPrice.toLocaleString()}</p>
+                    {(() => {
+                      const margin = p.sellingPrice - p.costPrice;
+                      const pct = p.costPrice > 0 ? (margin / p.costPrice) * 100 : 0;
+                      const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
+                      return <p className={cls}>+{pct.toFixed(0)}%</p>;
+                    })()}
+                  </div>
+                  <div className={`w-12 shrink-0 text-center ${p.quantity <= lowThreshold ? 'text-destructive' : p.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
+                    <p className="text-lg font-bold leading-none">{p.quantity}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">stock</p>
+                  </div>
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setScanForProduct(p)}
+                        title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
+                        className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center ${p.barcode ? 'bg-success/20 text-success' : 'bg-surface-3 text-foreground'}`}
+                      >
+                        📷
+                      </button>
+                      <button
+                        onClick={() => setSelectedBarcodeProduct(p)}
+                        title="View / Generate barcode labels"
+                        className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center ${p.barcode ? 'bg-primary/20 text-primary animate-pulse' : 'bg-surface-3 text-foreground'}`}
+                      >
+                        📊
+                      </button>
+                      <button
+                        onClick={() => addToShoppingList(p)}
+                        title="Add to shopping list"
+                        className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center relative ${inList ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-foreground'}`}
+                      >
+                        🛒
+                        {inList && (
+                          <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
+                            {inList.quantity}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center" title="Restock">↑</button>
+                      <button onClick={() => { setSelectedTransferProduct(p); setTransferQty(''); setTransferDestCode(''); }} title="Transfer stock to sister store" className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-warning flex items-center justify-center">🚚</button>
+                      <button onClick={() => { setEditProduct({ ...p }); setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category)); setEditCustomCategoryVal(p.category); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center" title="Edit">✎</button>
+                      <button onClick={() => handleDelete(p)} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive flex items-center justify-center" title="Delete">✕</button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           );
         })}
@@ -600,6 +805,66 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               </div>
             </div>
             <button onClick={handleEdit} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Changes</button>
+
+            {/* Price History Section */}
+            {(() => {
+              const priceHistory = editProduct.priceHistory || [];
+              if (priceHistory.length === 0) return null;
+              return (
+                <div className="pt-3 border-t border-border/60 space-y-2 mt-3 text-left">
+                  <p className="text-xs font-display font-bold text-primary flex items-center gap-1.5">
+                    📈 Cost Price History
+                  </p>
+                  {priceHistory.length >= 2 && (
+                    <div className="h-28 w-full bg-surface-2 p-1.5 rounded-lg border border-border">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={priceHistory}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
+                          <XAxis
+                            dataKey="date"
+                            tickFormatter={(str) => {
+                              try {
+                                return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                              } catch {
+                                return '';
+                              }
+                            }}
+                            tick={{ fill: '#94a3b8', fontSize: 8 }}
+                          />
+                          <YAxis
+                            tick={{ fill: '#94a3b8', fontSize: 8 }}
+                            domain={['auto', 'auto']}
+                          />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#1e293b', borderColor: '#d97706', borderRadius: '6px', padding: '6px' }}
+                            labelStyle={{ color: '#f59e0b', fontSize: 9, fontWeight: 'bold' }}
+                            itemStyle={{ color: '#f8fafc', fontSize: 9 }}
+                            labelFormatter={(lbl) => {
+                              try {
+                                return new Date(lbl).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+                              } catch {
+                                return String(lbl);
+                              }
+                            }}
+                          />
+                          <Line type="monotone" dataKey="costPrice" stroke="#d97706" strokeWidth={1.5} dot={{ fill: '#d97706', r: 2 }} name="Cost" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                  <div className="max-h-24 overflow-y-auto space-y-1 text-[10px]">
+                    {priceHistory.slice().reverse().map((h, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-surface-2 p-1.5 rounded border border-border">
+                        <span className="text-muted-foreground">
+                          {new Date(h.date).toLocaleDateString('en-GB')} {new Date(h.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span className="font-semibold text-primary">₦{h.costPrice.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </Modal>
         );
@@ -834,6 +1099,226 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 </div>
               </>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {showAuditHistory && (
+        <Modal title="Stock Count Audits" onClose={() => setShowAuditHistory(false)}>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground text-left">
+              Recent discrepancy adjustments logged from shelf counts.
+            </p>
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+              {(store.stockCountAudits || []).map(audit => (
+                <div key={audit.id} className="p-2.5 rounded-lg bg-surface-2 border border-border text-xs flex justify-between items-center">
+                  <div className="text-left">
+                    <p className="font-semibold text-foreground">{audit.product}</p>
+                    <p className="text-[10px] text-muted-foreground">{new Date(audit.date).toLocaleString('en-GB')}</p>
+                  </div>
+                  <div className="text-right font-mono">
+                    <p className="text-muted-foreground">Exp: {audit.expected} | Act: {audit.actual}</p>
+                    <p className={`font-bold ${audit.variance === 0 ? 'text-success' : audit.variance > 0 ? 'text-blue-400' : 'text-destructive'}`}>
+                      Var: {audit.variance > 0 ? '+' : ''}{audit.variance}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {(!store.stockCountAudits || store.stockCountAudits.length === 0) && (
+                <p className="text-center text-muted-foreground py-6 text-xs">No audits logged yet.</p>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {selectedBarcodeProduct && (
+        <Modal title="Barcode Label Generator" onClose={() => setSelectedBarcodeProduct(null)}>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground text-left">
+              Visual representation of the product's barcode for label scanning.
+            </p>
+            
+            {selectedBarcodeProduct.barcode ? (
+              <div className="space-y-4">
+                <div className="flex justify-center p-4 bg-white rounded-lg border border-border" id={`barcode-container-${selectedBarcodeProduct.id}`}>
+                  {(() => {
+                    const value = selectedBarcodeProduct.barcode || '';
+                    const cleanValue = value.toUpperCase().replace(/[^0-9A-Z\-.\s$/+%*]/g, '');
+                    const fullText = `*${cleanValue}*`;
+                    const narrowWidth = 1.5;
+                    const wideWidth = narrowWidth * 3;
+                    const interSpace = narrowWidth;
+                    const height = 60;
+                    
+                    let currentX = 0;
+                    const bars: JSX.Element[] = [];
+                    
+                    for (let i = 0; i < fullText.length; i++) {
+                      const char = fullText[i];
+                      const pattern = CODE39_MAP[char];
+                      if (!pattern) continue;
+                      
+                      for (let j = 0; j < 9; j++) {
+                        const isBar = j % 2 === 0;
+                        const isWide = pattern[j] === '1';
+                        const width = isWide ? wideWidth : narrowWidth;
+                        
+                        if (isBar) {
+                          bars.push(
+                            <rect
+                              key={`${i}-${j}`}
+                              x={currentX}
+                              y={0}
+                              width={width}
+                              height={height}
+                              fill="black"
+                            />
+                          );
+                        }
+                        currentX += width;
+                      }
+                      currentX += interSpace;
+                    }
+                    
+                    return (
+                      <div className="flex flex-col items-center">
+                        <svg
+                          id={`barcode-svg-${selectedBarcodeProduct.id}`}
+                          width={Math.max(200, currentX)}
+                          height={height}
+                          viewBox={`0 0 ${currentX} ${height}`}
+                        >
+                          {bars}
+                        </svg>
+                        <span className="mt-2 text-xs font-mono font-bold text-black tracking-widest">{value}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handlePrintBarcode(selectedBarcodeProduct)}
+                    className="p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90"
+                  >
+                    🖨️ Print Label
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleAutoGenerateBarcode(selectedBarcodeProduct);
+                    }}
+                    className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border"
+                  >
+                    🔄 Regenerate
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-surface-2 border border-border text-center text-xs text-muted-foreground">
+                  No barcode code linked to this product yet.
+                </div>
+                <button
+                  onClick={() => handleAutoGenerateBarcode(selectedBarcodeProduct)}
+                  className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90"
+                >
+                  ✨ Auto-Generate Barcode SKU
+                </button>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {selectedTransferProduct && (
+        <Modal title={`Transfer: ${selectedTransferProduct.name}`} onClose={() => setSelectedTransferProduct(null)}>
+          <div className="space-y-4 text-left">
+            <p className="text-xs text-muted-foreground">
+              Move stock directly to another store. This adjusts quantities in both stores immediately.
+            </p>
+            
+            <div className="p-3 rounded-lg bg-surface-2 border border-border flex justify-between items-center text-xs">
+              <span>Current Stock:</span>
+              <span className="font-bold text-primary">{selectedTransferProduct.quantity} units</span>
+            </div>
+            
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground uppercase">Destination Store</label>
+              {(() => {
+                const sisterStores = getStoreIndex().filter(s => s.code !== store.accessCode);
+                return (
+                  <div className="space-y-2">
+                    {sisterStores.length > 0 ? (
+                      <select
+                        value={transferDestCode}
+                        onChange={e => setTransferDestCode(e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">Select sister store...</option>
+                        {sisterStores.map(s => (
+                          <option key={s.code} value={s.code}>{s.name} ({s.code})</option>
+                        ))}
+                        <option value="MANUAL">Enter Code Manually...</option>
+                      </select>
+                    ) : null}
+                    
+                    {(sisterStores.length === 0 || transferDestCode === 'MANUAL') && (
+                      <input
+                        value={transferDestCode === 'MANUAL' ? '' : transferDestCode}
+                        onChange={e => setTransferDestCode(e.target.value)}
+                        placeholder="Enter destination store access code (e.g. ABCXYZ)"
+                        className={inputClass}
+                      />
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+            
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground uppercase">Transfer Quantity</label>
+              <input
+                type="number"
+                min="1"
+                max={selectedTransferProduct.quantity}
+                value={transferQty}
+                onChange={e => setTransferQty(e.target.value)}
+                placeholder={`Max: ${selectedTransferProduct.quantity}`}
+                className={inputClass}
+              />
+            </div>
+            
+            <button
+              onClick={() => {
+                const qty = Number(transferQty);
+                if (!transferDestCode || qty <= 0 || qty > selectedTransferProduct.quantity) {
+                  return showToast('Invalid destination store or transfer quantity', 'error');
+                }
+                let destCode = transferDestCode.trim().toUpperCase();
+                if (destCode === 'MANUAL') {
+                  return showToast('Please enter store code', 'error');
+                }
+                if (destCode === store.accessCode) {
+                  return showToast('Cannot transfer to current store', 'error');
+                }
+                
+                const targetStore = loadStore(destCode);
+                if (!targetStore) {
+                  return showToast(`Store code "${destCode}" not found in system`, 'error');
+                }
+                
+                const updated = transferStock(store, selectedTransferProduct.id, qty, destCode);
+                onUpdate(updated);
+                setSelectedTransferProduct(null);
+                setTransferQty('');
+                setTransferDestCode('');
+                showToast(`✓ Transferred ${qty} unit(s) of ${selectedTransferProduct.name} to store ${destCode}`);
+              }}
+              className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90 text-sm"
+            >
+              🚚 Complete Transfer
+            </button>
           </div>
         </Modal>
       )}

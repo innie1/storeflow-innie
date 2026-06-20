@@ -842,3 +842,291 @@ export function generateFlowReport(store: StoreData): string {
 
   return text;
 }
+
+// ─── Top Opportunities ────────────────────────────────────────────────────────
+export interface OpportunityCard {
+  title: string;
+  description: string;
+  impact: string;
+  actionLabel: string;
+}
+
+export function getTopOpportunities(store: StoreData): OpportunityCard[] {
+  const opps: OpportunityCard[] = [];
+  
+  // 1. High request volume items
+  const reqs = topCustomerRequests(store, 2);
+  reqs.forEach(r => {
+    opps.push({
+      title: `Stock Requested Item: ${r.text}`,
+      description: `Customers requested this item ${r.count} times. Adding it to inventory can capture direct unmet demand.`,
+      impact: "High Revenue Boost",
+      actionLabel: "Add to Inventory"
+    });
+  });
+
+  // 2. Fast sellers running low on stock
+  const stock = inventoryIntelligence(store);
+  const criticalRestocks = stock.filter(f => f.urgency === 'critical');
+  if (criticalRestocks.length > 0) {
+    const item = criticalRestocks[0];
+    opps.push({
+      title: `Restock Fast Mover: ${item.product.name}`,
+      description: `Only ${item.daysLeft === Infinity ? 0 : item.daysLeft} days of stock remaining based on recent sales. Restock ${item.restockQty} units.`,
+      impact: `₦${(item.product.sellingPrice * item.restockQty).toLocaleString()} Revenue`,
+      actionLabel: "Order Stock"
+    });
+  }
+
+  // 3. Reduce spending on dead stock
+  const neverSold = analyzeSales(store).neverSold;
+  if (neverSold.length > 0) {
+    opps.push({
+      title: `Reduce spending on ${neverSold[0].name}`,
+      description: `This product has been in stock for ${neverSold[0].daysInStock} days with zero sales. Avoid bulk restocking this item.`,
+      impact: "Free Up Working Capital",
+      actionLabel: "Adjust Buying"
+    });
+  }
+
+  // 4. Default opportunities if list is short
+  if (opps.length < 3) {
+    opps.push({
+      title: "Set Up Branded Receipts",
+      description: "Customize receipt headers, footer messages, and QR codes to drive customer loyalty and brand retention.",
+      impact: "Brand Equity Grow",
+      actionLabel: "Customize Receipts"
+    });
+    opps.push({
+      title: "Expand to Game Services",
+      description: "Launch snooker, PlayStation, or table tennis sessions during slow retail periods to optimize space utility.",
+      impact: "₦15,000+ Extra Profit/wk",
+      actionLabel: "Enable Game Services"
+    });
+  }
+
+  return opps.slice(0, 4);
+}
+
+// ─── Profit Leak Detector ─────────────────────────────────────────────────────
+export interface ProfitLeak {
+  category: 'expense' | 'dead_stock' | 'unpaid_debt' | 'poor_margin' | 'stock_loss';
+  title: string;
+  description: string;
+  amountLeak: number;
+  recommendation: string;
+}
+
+export function getProfitLeaks(store: StoreData): ProfitLeak[] {
+  const leaks: ProfitLeak[] = [];
+  const now = new Date();
+  
+  // 1. Unpaid customer debts
+  const pending = getPendingSummary(store);
+  if (pending.totalOwed > 0) {
+    leaks.push({
+      category: 'unpaid_debt',
+      title: 'Outstanding Customer Debts',
+      description: `You have ₦${pending.totalOwed.toLocaleString()} tied up in unpaid invoices across ${pending.customerCount} customers.`,
+      amountLeak: pending.totalOwed,
+      recommendation: 'Send direct WhatsApp reminders to customers with overdue balances.'
+    });
+  }
+
+  // 2. Dead stock tying up capital
+  let deadStockValue = 0;
+  const last30 = store.sales.filter(s => (now.getTime() - new Date(s.date).getTime()) < 30 * 86400000);
+  const soldIds = new Set(last30.map(s => s.productId));
+  store.products.forEach(p => {
+    if (!soldIds.has(p.id) && p.quantity > 0) {
+      deadStockValue += p.costPrice * p.quantity;
+    }
+  });
+  if (deadStockValue > 0) {
+    leaks.push({
+      category: 'dead_stock',
+      title: 'Dormant Inventory Assets',
+      description: `₦${deadStockValue.toLocaleString()} in working capital is locked in inventory items that haven't sold in 30 days.`,
+      amountLeak: deadStockValue,
+      recommendation: 'Initiate a clearance discount or bundle slow movers with fast-selling products.'
+    });
+  }
+
+  // 3. Poor profit margins
+  let thinMarginCount = 0;
+  store.products.forEach(p => {
+    if (p.costPrice > 0) {
+      const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
+      if (margin < 0.15) thinMarginCount++;
+    }
+  });
+  if (thinMarginCount > 0) {
+    leaks.push({
+      category: 'poor_margin',
+      title: `${thinMarginCount} Products with Low Margin`,
+      description: 'Multiple items are priced too close to cost, eroding potential profits after overhead expenses.',
+      amountLeak: thinMarginCount * 500, // estimated leak index
+      recommendation: 'Review item price margins and adjust target margin markup to at least 25%.'
+    });
+  }
+
+  // 4. Excessive expenses
+  const series7 = dailySeries(store, 7);
+  const rev7 = series7.reduce((s, d) => s + d.revenue, 0);
+  const exp7 = series7.reduce((s, d) => s + d.expenses, 0);
+  if (exp7 > rev7 * 0.40 && rev7 > 0) {
+    leaks.push({
+      category: 'expense',
+      title: 'High Overhead-to-Sales Ratio',
+      description: `Weekly operating expenses (₦${exp7.toLocaleString()}) consume ${Math.round(exp7 / rev7 * 100)}% of sales revenue.`,
+      amountLeak: exp7 - (rev7 * 0.20),
+      recommendation: 'Evaluate utilities, salaries, or transport costs and cap discretionary spending.'
+    });
+  }
+
+  // 5. Stock losses from Audits
+  const audits = store.stockCountAudits || [];
+  const negativeVarianceTotal = audits
+    .filter(a => a.variance < 0)
+    .reduce((sum, a) => sum + Math.abs(a.variance), 0);
+  if (negativeVarianceTotal > 0) {
+    leaks.push({
+      category: 'stock_loss',
+      title: 'Recurring Physical Inventory Shrinkage',
+      description: `${negativeVarianceTotal} units have been recorded as lost during stock counts.`,
+      amountLeak: negativeVarianceTotal * 1000, // estimated cost
+      recommendation: 'Audit cash registers regularly and limit staff edit permissions on products.'
+    });
+  }
+
+  return leaks;
+}
+
+// ─── Seasonal Predictions ─────────────────────────────────────────────────────
+export interface SeasonalPrediction {
+  periodName: string;
+  expectedTrend: 'increase' | 'decrease' | 'stable';
+  details: string;
+  suggestedItems: string[];
+}
+
+export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0-11
+  
+  const predictions: SeasonalPrediction[] = [];
+
+  // 1. Back to School (August - September)
+  if (currentMonth === 7 || currentMonth === 8) {
+    predictions.push({
+      periodName: 'Back-to-School Season',
+      expectedTrend: 'increase',
+      details: 'Stationery, notebooks, snacks, and beverage rolls experience higher local demand as school terms resume.',
+      suggestedItems: ['Peak Milk Sachet Roll', 'Cabin Biscuit', 'Sugar Packet']
+    });
+  }
+
+  // 2. Holiday Festive (November - December)
+  if (currentMonth === 10 || currentMonth === 11) {
+    predictions.push({
+      periodName: 'Christmas Festive Period',
+      expectedTrend: 'increase',
+      details: 'Heavy demand on provisions, soft drinks (Minerals), alcoholic drinks, and bulk ingredients for celebrations.',
+      suggestedItems: ['Macaroni', 'Rice Mango', 'Guinness Stout', 'Pepsi']
+    });
+  }
+
+  // 3. Easter/Spring (March - April)
+  if (currentMonth === 2 || currentMonth === 3) {
+    predictions.push({
+      periodName: 'Easter Festive Season',
+      expectedTrend: 'increase',
+      details: 'Higher local retail traffic for groceries, soft drinks, and packaged items during public holiday weekends.',
+      suggestedItems: ['Mineral', 'Super Pack Carton', 'Viju Baked']
+    });
+  }
+
+  // Fallback default predictions
+  predictions.push({
+    periodName: 'Mid-Year Supplier Adjustments',
+    expectedTrend: 'stable',
+    details: 'General wholesale prices tend to shift. Focus on locked-in supplier contracts for stable margins.',
+    suggestedItems: ['Garri Mix', 'Palm Oil', 'Egg Crate']
+  });
+
+  return predictions;
+}
+
+// ─── Weather Impact Insights ──────────────────────────────────────────────────
+export interface WeatherInsight {
+  weatherCondition: string;
+  effect: string;
+  impactDetails: string;
+  suggestedAction: string;
+}
+
+export function getWeatherInsights(store: StoreData, activeCondition: 'hot' | 'rainy' | 'cold'): WeatherInsight {
+  if (activeCondition === 'hot') {
+    return {
+      weatherCondition: 'Sunny / Hot Weather ☀️',
+      effect: 'Beverages and cold liquids demand increases by estimated 25-30%.',
+      impactDetails: 'High temperature drives foot traffic to coolers. Sachet water, carbonated cans, and bottled juices turn over faster.',
+      suggestedAction: 'Ensure drink coolers are active, restocked, and ice levels are maintained.'
+    };
+  } else if (activeCondition === 'rainy') {
+    return {
+      weatherCondition: 'Rainy Weather 🌧️',
+      effect: 'Local store drop-ins decrease; indoor grocery items dominate.',
+      impactDetails: 'Rain limits walking customers. Delivery, WhatsApp ordering, or bulk food purchases (rice, garri) rise relative to single cold drinks.',
+      suggestedAction: 'Offer WhatsApp order deliveries and promote home-cooking pantry essentials.'
+    };
+  } else {
+    return {
+      weatherCondition: 'Cold / Harmattan Weather 🍃',
+      effect: 'Hot beverages, tea packs, and moisturizers demand spikes.',
+      impactDetails: 'Harmattan winds drive demand for hot Milo/Nescafé, butter rolls, and skincare products.',
+      suggestedAction: 'Increase stock of powdered tea, coffee, and dry skin protection items.'
+    };
+  }
+}
+
+// ─── Smart Discounts ──────────────────────────────────────────────────────────
+export interface DiscountRecommendation {
+  productName: string;
+  productId: string;
+  stockQty: number;
+  costPrice: number;
+  sellingPrice: number;
+  suggestedDiscountPct: number;
+  expectedLiftPct: number;
+  marginImpact: string;
+}
+
+export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
+  const recs: DiscountRecommendation[] = [];
+  const now = new Date();
+  
+  // Find products that have been in stock for over 14 days with no sales and have quantity > 5
+  const last14DaysSales = store.sales.filter(s => (now.getTime() - new Date(s.date).getTime()) < 14 * 86400000);
+  const soldIds = new Set(last14DaysSales.map(s => s.productId));
+  
+  store.products.forEach(p => {
+    if (!soldIds.has(p.id) && p.quantity > 5 && p.costPrice > 0) {
+      const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
+      if (margin > 0.15) {
+        recs.push({
+          productName: p.name,
+          productId: p.id,
+          stockQty: p.quantity,
+          costPrice: p.costPrice,
+          sellingPrice: p.sellingPrice,
+          suggestedDiscountPct: 10,
+          expectedLiftPct: 40,
+          marginImpact: `Reduces markup margin from ${Math.round(margin * 100)}% to ${Math.round((margin - 0.10) * 100)}%.`
+        });
+      }
+    }
+  });
+
+  return recs.slice(0, 3);
+}

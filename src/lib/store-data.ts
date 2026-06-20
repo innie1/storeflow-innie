@@ -1,4 +1,9 @@
-import { Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, Investment, StoreCategory, GameService, GameSession } from '@/types/store';
+import { 
+  Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, 
+  Investment, StoreCategory, GameService, GameSession,
+  Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift, 
+  CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer
+} from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
 
@@ -279,7 +284,13 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>): Stor
   }
   const updated = {
     ...store,
-    products: [...store.products, { ...product, id: generateId(), initialQuantity: product.quantity, addedAt: now }],
+    products: [...store.products, { 
+      ...product, 
+      id: generateId(), 
+      initialQuantity: product.quantity, 
+      addedAt: now,
+      priceHistory: product.costPrice > 0 ? [{ costPrice: product.costPrice, date: now }] : []
+    }],
     investments: newInvestments,
     expenses: newExpenses,
   };
@@ -290,7 +301,16 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>): Stor
 export function updateProduct(store: StoreData, id: string, updates: Partial<Product>): StoreData {
   const updated = {
     ...store,
-    products: store.products.map(p => p.id === id ? { ...p, ...updates } : p),
+    products: store.products.map(p => {
+      if (p.id === id) {
+        const newHistory = [...(p.priceHistory || [])];
+        if (updates.costPrice !== undefined && updates.costPrice !== p.costPrice && updates.costPrice > 0) {
+          newHistory.push({ costPrice: updates.costPrice, date: new Date().toISOString() });
+        }
+        return { ...p, ...updates, priceHistory: newHistory };
+      }
+      return p;
+    }),
   };
   saveStore(updated);
   return updated;
@@ -444,11 +464,16 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
       batchId,
       funding,
     });
+    const currentPriceHistory = p.priceHistory || (p.costPrice > 0 ? [{ costPrice: p.costPrice, date: p.addedAt || now }] : []);
+    const newPriceHistory = entry.costPrice > 0 
+      ? [...currentPriceHistory, { costPrice: entry.costPrice, date: now }]
+      : currentPriceHistory;
     return {
       ...p,
       quantity: Math.round((p.quantity + entry.quantity) * 100) / 100,
       costPrice: entry.costPrice > 0 ? entry.costPrice : p.costPrice,
       initialQuantity: p.initialQuantity ?? p.quantity,
+      priceHistory: newPriceHistory
     };
   });
 
@@ -698,14 +723,73 @@ export function recordCheckout(
       sales: updated.sales.map(s => newSales.some(x => x.id === s.id) ? { ...s, paymentMethod: opts.method } : s),
     };
   }
+
+  // Update customer record
+  if (opts.customerName) {
+    const nowStr = new Date().toISOString();
+    const customers = updated.customers || [];
+    let cust = customers.find(c => c.name.toLowerCase() === opts.customerName!.toLowerCase());
+    const itemsSummary = pendingItems.map(pi => `${pi.productName} (x${pi.quantity})`).join(', ');
+    const purchase = { date: nowStr, amount: total, items: itemsSummary };
+    
+    if (cust) {
+      const updatedCust: Customer = {
+        ...cust,
+        phone: opts.customerPhone || cust.phone,
+        totalPurchases: cust.totalPurchases + total,
+        outstandingDebt: cust.outstandingDebt + balance,
+        lastPurchaseDate: nowStr,
+        purchaseHistory: [purchase, ...(cust.purchaseHistory || [])],
+        visitsCount: cust.visitsCount + 1,
+        loyaltyPoints: cust.loyaltyPoints + Math.floor(total / 1000)
+      };
+      updated = {
+        ...updated,
+        customers: customers.map(c => c.id === cust!.id ? updatedCust : c)
+      };
+    } else {
+      const newCust: Customer = {
+        id: pid(),
+        name: opts.customerName,
+        phone: opts.customerPhone || '',
+        totalPurchases: total,
+        outstandingDebt: balance,
+        lastPurchaseDate: nowStr,
+        purchaseHistory: [purchase],
+        visitsCount: 1,
+        loyaltyPoints: Math.floor(total / 1000)
+      };
+      updated = {
+        ...updated,
+        customers: [newCust, ...customers]
+      };
+    }
+  }
+
   saveStore(updated);
   return { store: updated, sales: newSales, pending };
 }
 
 export function addPaymentToPending(store: StoreData, id: string, amount: number, method: PaymentMethod = 'cash'): StoreData {
   const list = store.pendingPayments || [];
+  // Reduce outstanding customer debt if customer name matches
+  const p = list.find(x => x.id === id);
+  let updatedCustomers = store.customers || [];
+  if (p && p.customerName) {
+    updatedCustomers = updatedCustomers.map(c => {
+      if (c.name.toLowerCase() === p.customerName.toLowerCase()) {
+        return {
+          ...c,
+          outstandingDebt: Math.max(0, c.outstandingDebt - amount)
+        };
+      }
+      return c;
+    });
+  }
+
   const updated: StoreData = {
     ...store,
+    customers: updatedCustomers,
     pendingPayments: list.map(p => {
       if (p.id !== id) return p;
       const newPaid = Math.min(p.total, p.paid + Math.max(0, amount));
@@ -758,3 +842,403 @@ export function getPendingSummary(store: StoreData) {
   const overdue = list.filter(p => p.dueDate && new Date(p.dueDate) < new Date());
   return { totalOwed, customerCount, collectedThisMonth, recoveryRate, overdue, list };
 }
+
+// ─── Customer Helpers ─────────────────────────────────────────────────────────
+export function addCustomer(store: StoreData, customer: Omit<Customer, 'id' | 'totalPurchases' | 'outstandingDebt' | 'purchaseHistory' | 'loyaltyPoints' | 'visitsCount'>): StoreData {
+  const newCust: Customer = {
+    ...customer,
+    id: generateId(),
+    totalPurchases: 0,
+    outstandingDebt: 0,
+    purchaseHistory: [],
+    loyaltyPoints: 0,
+    visitsCount: 0
+  };
+  const updated = {
+    ...store,
+    customers: [newCust, ...(store.customers || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function updateCustomer(store: StoreData, id: string, updates: Partial<Customer>): StoreData {
+  const updated = {
+    ...store,
+    customers: (store.customers || []).map(c => c.id === id ? { ...c, ...updates } : c)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteCustomer(store: StoreData, id: string): StoreData {
+  const updated = {
+    ...store,
+    customers: (store.customers || []).filter(c => c.id !== id)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Supplier Helpers ─────────────────────────────────────────────────────────
+export function addSupplier(store: StoreData, supplier: Omit<Supplier, 'id'>): StoreData {
+  const newSup: Supplier = {
+    ...supplier,
+    id: generateId()
+  };
+  const updated = {
+    ...store,
+    suppliers: [newSup, ...(store.suppliers || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function updateSupplier(store: StoreData, id: string, updates: Partial<Supplier>): StoreData {
+  const updated = {
+    ...store,
+    suppliers: (store.suppliers || []).map(s => s.id === id ? { ...s, ...updates } : s)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteSupplier(store: StoreData, id: string): StoreData {
+  const updated = {
+    ...store,
+    suppliers: (store.suppliers || []).filter(s => s.id !== id)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Business Goals ───────────────────────────────────────────────────────────
+export function addGoal(store: StoreData, goal: Omit<BusinessGoal, 'id' | 'completed'>): StoreData {
+  const newGoal: BusinessGoal = {
+    ...goal,
+    id: generateId(),
+    completed: goal.current >= goal.target
+  };
+  const updated = {
+    ...store,
+    goals: [newGoal, ...(store.goals || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function updateGoal(store: StoreData, id: string, updates: Partial<BusinessGoal>): StoreData {
+  const updated = {
+    ...store,
+    goals: (store.goals || []).map(g => {
+      if (g.id !== id) return g;
+      const combined = { ...g, ...updates };
+      return {
+        ...combined,
+        completed: combined.current >= combined.target
+      };
+    })
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteGoal(store: StoreData, id: string): StoreData {
+  const updated = {
+    ...store,
+    goals: (store.goals || []).filter(g => g.id !== id)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Flow Memory Timeline ────────────────────────────────────────────────────
+export function addMemoryTimelineEvent(store: StoreData, event: Omit<MemoryEvent, 'id'>): StoreData {
+  const newEv: MemoryEvent = {
+    ...event,
+    id: generateId()
+  };
+  const updated = {
+    ...store,
+    memoryTimeline: [newEv, ...(store.memoryTimeline || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Diary Helpers ────────────────────────────────────────────────────────────
+export function addDiaryEntry(store: StoreData, text: string, audioData?: string): StoreData {
+  const newEntry: DiaryEntry = {
+    id: generateId(),
+    text,
+    date: new Date().toISOString(),
+    audioData
+  };
+  const updated = {
+    ...store,
+    diaryEntries: [newEntry, ...(store.diaryEntries || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteDiaryEntry(store: StoreData, id: string): StoreData {
+  const updated = {
+    ...store,
+    diaryEntries: (store.diaryEntries || []).filter(d => d.id !== id)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Staff Management Helpers ─────────────────────────────────────────────────
+export function addStaffMember(store: StoreData, staff: Omit<StaffMember, 'id'>): StoreData {
+  const newStaff: StaffMember = {
+    ...staff,
+    id: generateId()
+  };
+  const updated = {
+    ...store,
+    staffMembers: [newStaff, ...(store.staffMembers || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function updateStaffMember(store: StoreData, id: string, updates: Partial<StaffMember>): StoreData {
+  const updated = {
+    ...store,
+    staffMembers: (store.staffMembers || []).map(s => s.id === id ? { ...s, ...updates } : s)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteStaffMember(store: StoreData, id: string): StoreData {
+  const updated = {
+    ...store,
+    staffMembers: (store.staffMembers || []).filter(s => s.id !== id)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Shift Tracking Helpers ───────────────────────────────────────────────────
+export function startShift(store: StoreData, staffId: string, staffName: string, openingCash: number): StoreData {
+  const newShift: Shift = {
+    id: generateId(),
+    staffId,
+    staffName,
+    startTime: new Date().toISOString(),
+    salesMade: 0,
+    revenue: 0,
+    openingCash
+  };
+  const updated = {
+    ...store,
+    shifts: [newShift, ...(store.shifts || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function endShift(store: StoreData, id: string, closingCash: number): StoreData {
+  const updated = {
+    ...store,
+    shifts: (store.shifts || []).map(s => {
+      if (s.id !== id) return s;
+      return {
+        ...s,
+        endTime: new Date().toISOString(),
+        closingCash
+      };
+    })
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Cash Session Drawer Helpers ──────────────────────────────────────────────
+export function recordCashSession(store: StoreData, session: Omit<CashSession, 'id'>): StoreData {
+  const newSession: CashSession = {
+    ...session,
+    id: generateId()
+  };
+  const updated = {
+    ...store,
+    cashSessions: [newSession, ...(store.cashSessions || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Lost Sale Helpers ────────────────────────────────────────────────────────
+export function recordLostSale(store: StoreData, productName: string, quantity: number): StoreData {
+  const newSale: LostSale = {
+    id: generateId(),
+    productName,
+    date: new Date().toISOString(),
+    quantity
+  };
+  const updated = {
+    ...store,
+    lostSales: [newSale, ...(store.lostSales || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Wishlist Helpers ─────────────────────────────────────────────────────────
+export function addWishlistItem(store: StoreData, name: string, estimatedCost: number, notes?: string): StoreData {
+  const newItem: WishlistItem = {
+    id: generateId(),
+    name,
+    estimatedCost,
+    notes,
+    dateAdded: new Date().toISOString()
+  };
+  const updated = {
+    ...store,
+    wishlist: [newItem, ...(store.wishlist || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteWishlistItem(store: StoreData, id: string): StoreData {
+  const updated = {
+    ...store,
+    wishlist: (store.wishlist || []).filter(w => w.id !== id)
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Stock Count Mode Auditing ────────────────────────────────────────────────
+export function recordStockCountAudit(store: StoreData, productId: string, productName: string, expected: number, actual: number): StoreData {
+  const variance = actual - expected;
+  const auditEntry = {
+    id: generateId(),
+    date: new Date().toISOString(),
+    expected,
+    actual,
+    variance,
+    product: productName
+  };
+  
+  // Adjust the product's actual stock quantity in the inventory to match actual count
+  const updatedProducts = store.products.map(p => p.id === productId ? { ...p, quantity: actual } : p);
+  
+  const updated = {
+    ...store,
+    products: updatedProducts,
+    stockCountAudits: [auditEntry, ...(store.stockCountAudits || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Inventory Multi-Store Transfers ──────────────────────────────────────────
+export function transferStock(
+  sourceStore: StoreData,
+  productId: string,
+  quantity: number,
+  destStoreCode: string
+): StoreData {
+  const product = sourceStore.products.find(p => p.id === productId);
+  if (!product || product.quantity < quantity || quantity <= 0) return sourceStore;
+
+  const now = new Date().toISOString();
+  
+  // Decrease source stock
+  let updatedSource = {
+    ...sourceStore,
+    products: sourceStore.products.map(p => p.id === productId ? { ...p, quantity: Math.round((p.quantity - quantity) * 100) / 100 } : p),
+    transfers: [
+      {
+        id: generateId(),
+        productId,
+        productName: product.name,
+        quantity,
+        sourceStoreCode: sourceStore.accessCode,
+        destStoreCode,
+        date: now
+      },
+      ...(sourceStore.transfers || [])
+    ]
+  };
+
+  // Load and update destination store
+  const destStore = loadStore(destStoreCode);
+  if (destStore) {
+    let destProducts = [...destStore.products];
+    const destProd = destProducts.find(p => p.name.toLowerCase() === product.name.toLowerCase() || (product.barcode && p.barcode === product.barcode));
+    
+    if (destProd) {
+      destProducts = destProducts.map(p => p.id === destProd.id ? { ...p, quantity: Math.round((p.quantity + quantity) * 100) / 100 } : p);
+    } else {
+      // Add product as new in destination store
+      destProducts.push({
+        id: generateId(),
+        name: product.name,
+        costPrice: product.costPrice,
+        sellingPrice: product.sellingPrice,
+        quantity,
+        category: product.category,
+        barcode: product.barcode,
+        addedAt: now,
+        initialQuantity: quantity,
+        priceHistory: product.costPrice > 0 ? [{ costPrice: product.costPrice, date: now }] : []
+      });
+    }
+
+    const updatedDest: StoreData = {
+      ...destStore,
+      products: destProducts,
+      transfers: [
+        {
+          id: generateId(),
+          productId: destProd ? destProd.id : 'new',
+          productName: product.name,
+          quantity,
+          sourceStoreCode: sourceStore.accessCode,
+          destStoreCode,
+          date: now
+        },
+        ...(destStore.transfers || [])
+      ]
+    };
+    saveStore(updatedDest);
+  }
+
+  saveStore(updatedSource);
+  return updatedSource;
+}
+
+// ─── Business Document Vault Helpers ──────────────────────────────────────────
+export function addVaultDocument(store: StoreData, name: string, category: string, fileContent: string, fileSizeKB: number): StoreData {
+  const newDoc: VaultDocument = {
+    id: generateId(),
+    name,
+    category,
+    dateAdded: new Date().toISOString(),
+    fileContent,
+    fileSize: fileSizeKB
+  };
+  const updated = {
+    ...store,
+    documents: [newDoc, ...(store.documents || [])]
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteVaultDocument(store: StoreData, id: string): StoreData {
+  const updated = {
+    ...store,
+    documents: (store.documents || []).filter(d => d.id !== id)
+  };
+  saveStore(updated);
+  return updated;
+}
+

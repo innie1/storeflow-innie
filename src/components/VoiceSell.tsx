@@ -52,7 +52,8 @@ function lev(a: string, b: string): number {
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 function parseTranscript(raw: string, products: Product[]): ParsedItem[] {
-  const tokens = raw.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  const corrected = raw.replace(/\bgary\b/gi, 'garri');
+  const tokens = corrected.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
   const results: ParsedItem[] = [];
   const used = new Set<number>();
 

@@ -7,7 +7,9 @@ import {
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
   generateNotifications, ActivityRange, ActivityBucket, generateFlowReport,
+  getTopOpportunities, getProfitLeaks
 } from '@/lib/manager-intel';
+import { getLowStockThreshold } from '@/lib/settings';
 import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward } from '@/lib/flow-memory';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotBadge } from '@/components/Mascot';
@@ -596,7 +598,7 @@ function NotificationDrawer({ store, onClose, onUpdate }: { store: StoreData; on
 
 
 // Typewriter component for Flow greetings and text outputs
-export function Typewriter({ text, speed = 50 }: { text: string; speed?: number }) {
+export function Typewriter({ text, speed = 50, speak = false }: { text: string; speed?: number; speak?: boolean }) {
   const [displayedText, setDisplayedText] = useState('');
   const [index, setIndex] = useState(0);
 
@@ -614,6 +616,49 @@ export function Typewriter({ text, speed = 50 }: { text: string; speed?: number 
       return () => clearTimeout(timeout);
     }
   }, [index, text, speed]);
+
+  // Natural human-sounding speech synthesis read-out
+  useEffect(() => {
+    if (speak && text && typeof window !== 'undefined' && window.speechSynthesis) {
+      // Cancel any ongoing speech synthesis first
+      window.speechSynthesis.cancel();
+
+      // Clean up markdown/extra formatting symbols for cleaner voice speech
+      const cleanText = text
+        .replace(/[*#_~`>\[\]()-]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      
+      const setVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        // Look for premium / natural sounding en-US / en-GB voices
+        const preferredVoice = voices.find(v => 
+          (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Premium')) && 
+          v.lang.startsWith('en')
+        ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+        
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+        }
+      };
+
+      setVoice();
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = setVoice;
+      }
+
+      utterance.rate = 0.95; // More human/natural rate
+      utterance.pitch = 1.0;
+
+      window.speechSynthesis.speak(utterance);
+
+      return () => {
+        window.speechSynthesis.cancel();
+      };
+    }
+  }, [text, speak]);
 
   const isDone = index >= text.length;
 
@@ -694,6 +739,63 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
   }, [tab]);
 
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
+
+  const weeklyChallenges = useMemo(() => {
+    const last7Days = store.sales.filter(s => (Date.now() - new Date(s.date).getTime()) < 7 * 86400000);
+    const last7Expenses = (store.expenses || []).filter(e => (Date.now() - new Date(e.date).getTime()) < 7 * 86400000);
+    
+    let debtRecovered = 0;
+    (store.pendingPayments || []).forEach(p => {
+      p.events.forEach(ev => {
+        if ((Date.now() - new Date(ev.date).getTime()) < 7 * 86400000 && ev.method) {
+          debtRecovered += ev.amount;
+        }
+      });
+    });
+
+    const revenue = last7Days.reduce((s, x) => s + x.total, 0);
+    const profit = last7Days.reduce((s, x) => s + x.profit, 0);
+    const expenses = last7Expenses.reduce((s, x) => s + x.amount, 0);
+    
+    return [
+      {
+        id: 'c-sales',
+        title: 'Sales Booster',
+        description: 'Record at least 10 sales in the last 7 days.',
+        target: 10,
+        current: last7Days.length,
+        rewardCoins: 5,
+        completed: last7Days.length >= 10
+      },
+      {
+        id: 'c-profit',
+        title: 'Profit Maximizer',
+        description: 'Earn ₦15,000 in net profit in the last 7 days.',
+        target: 15000,
+        current: profit,
+        rewardCoins: 10,
+        completed: profit >= 15000
+      },
+      {
+        id: 'c-expense',
+        title: 'Overhead Saver',
+        description: 'Keep weekly operating expenses below ₦10,000.',
+        target: 10000,
+        current: expenses,
+        rewardCoins: 5,
+        completed: expenses < 10000 && last7Days.length > 0
+      },
+      {
+        id: 'c-debt',
+        title: 'Debt Recovery Specialist',
+        description: 'Recover ₦5,000 in outstanding customer debt in the last 7 days.',
+        target: 5000,
+        current: debtRecovered,
+        rewardCoins: 8,
+        completed: debtRecovered >= 5000
+      }
+    ];
+  }, [store]);
 
   // Record streak + FLOW on mount
   useEffect(() => {
@@ -813,7 +915,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
     return (
       <div className="animate-fade-in space-y-4">
         <div className="p-6 rounded-2xl bg-card shadow-card text-center space-y-4">
-          <div className="flex justify-center"><Mascot size={120} mood="sleeping" /></div>
+          <div className="flex justify-center"><Mascot size={120} mood="sleeping" store={store} /></div>
           <MascotBadge on={false} />
           <h2 className="font-display font-bold text-xl text-foreground">Flow is sleeping</h2>
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">Wake Flow up to unlock insights, forecasts, recommendations and savings plans tailored to your store.</p>
@@ -898,7 +1000,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
             </div>
           </div>
           <div className="flex-shrink-0 flex flex-col items-center gap-1">
-            <Mascot size={72} mood={flowMood} animate={settings.mascotAnimations !== false} />
+            <Mascot size={72} mood={flowMood} animate={settings.mascotAnimations !== false} store={store} />
             {/* Notification bell */}
             <button onClick={() => setShowNotifications(true)} className="relative w-8 h-8 rounded-full bg-surface-2 border border-border flex items-center justify-center text-sm">
               🔔
@@ -921,7 +1023,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
 
       {/* ─── OVERVIEW ─────────────────────────────────────────────────────── */}
       {tab === 'overview' && (
-        <div className="space-y-4 animate-fade-in">
+        <div className="space-y-4 animate-fade-in text-left">
           <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} animate={settings.numericAnimations !== false} />
 
           {/* Next Best Action */}
@@ -939,7 +1041,201 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
             </div>
           )}
 
+          {/* Top Opportunities Card */}
+          {(() => {
+            const opps = getTopOpportunities(store);
+            if (opps.length === 0) return null;
+            return (
+              <div className="p-4 rounded-2xl bg-card border border-primary/20 shadow-card space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">🚀</span>
+                  <div>
+                    <h3 className="font-display font-bold text-sm">Top Opportunities</h3>
+                    <p className="text-[10px] text-slate-400 font-semibold">Flow recommendations to boost revenue</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {opps.map((o, idx) => (
+                    <div key={idx} className="p-3 rounded-xl bg-surface-2 border border-border flex flex-col justify-between">
+                      <div>
+                        <p className="font-display font-bold text-xs text-foreground line-clamp-1">{o.title}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1 leading-normal line-clamp-2">{o.description}</p>
+                      </div>
+                      <div className="flex justify-between items-center mt-2.5 pt-2 border-t border-border/40">
+                        <span className="text-[9px] bg-primary/10 text-primary font-bold px-1.5 py-0.5 rounded-full">{o.impact}</span>
+                        <span className="text-[9px] text-muted-foreground font-semibold flex items-center gap-0.5">{o.actionLabel} ›</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Profit Leak Detector Card */}
+          {(() => {
+            const leaks = getProfitLeaks(store);
+            if (leaks.length === 0) return null;
+            const leakTotal = leaks.reduce((s, l) => s + l.amountLeak, 0);
+            return (
+              <div className="p-4 rounded-2xl bg-card border border-destructive/25 shadow-card space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base">🚨</span>
+                    <div>
+                      <h3 className="font-display font-bold text-sm">Profit Leak Detector</h3>
+                      <p className="text-[10px] text-slate-400">Flow identified capital leakage factors</p>
+                    </div>
+                  </div>
+                  {leakTotal > 0 && (
+                    <span className="text-[10px] bg-destructive/10 text-destructive border border-destructive/20 px-2 py-0.5 rounded-full font-bold">
+                      Leak Index: ₦{leakTotal.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {leaks.map((l, idx) => (
+                    <div key={idx} className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
+                      <div className="flex justify-between items-start">
+                        <p className="font-display font-bold text-xs text-foreground flex items-center gap-1">
+                          <span>⚠️</span> {l.title}
+                        </p>
+                        <span className="text-[9px] font-mono font-bold text-destructive">
+                          -₦{l.amountLeak.toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{l.description}</p>
+                      <p className="text-[10px] text-emerald-400 mt-1.5 bg-emerald-500/5 p-1.5 rounded border border-emerald-500/10">
+                        💡 <strong>Recommendation:</strong> {l.recommendation}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Smart Restocking Buy List */}
+          {(() => {
+            const threshold = getLowStockThreshold();
+            const lowStockItems = store.products.filter(p => p.quantity <= threshold);
+            if (lowStockItems.length === 0) return null;
+            
+            const totalRestockCost = lowStockItems.reduce((sum, p) => {
+              const target = Math.max(threshold * 4, 10);
+              const suggested = Math.max(1, target - p.quantity);
+              return sum + (p.costPrice * suggested);
+            }, 0);
+            
+            return (
+              <div className="p-4 rounded-2xl bg-card border border-warning/20 shadow-card space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base">📋</span>
+                    <div>
+                      <h3 className="font-display font-bold text-sm">Smart Restocking List</h3>
+                      <p className="text-[10px] text-slate-400">Estimated capital required to replenish low stock</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-display font-bold text-warning">
+                    ₦{totalRestockCost.toLocaleString()}
+                  </span>
+                </div>
+                
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {lowStockItems.map(p => {
+                    const target = Math.max(threshold * 4, 10);
+                    const suggested = Math.max(1, target - p.quantity);
+                    const cost = p.costPrice * suggested;
+                    return (
+                      <div key={p.id} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-xs border border-border text-left">
+                        <div>
+                          <p className="font-semibold text-foreground">{p.name}</p>
+                          <p className="text-[9px] text-muted-foreground font-semibold">Stock: {p.quantity} left · Suggest: +{suggested}</p>
+                        </div>
+                        <span className="font-mono text-primary font-bold">₦{cost.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Weekly Challenges */}
+          <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">🏆</span>
+                <div>
+                  <h3 className="font-display font-bold text-sm">Weekly Challenges</h3>
+                  <p className="text-[10px] text-slate-400">Complete goals to accumulate FLOW reward coins</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold text-primary">
+                {weeklyChallenges.filter(c => c.completed).length} / {weeklyChallenges.length} Done
+              </span>
+            </div>
+            <div className="space-y-2">
+              {weeklyChallenges.map(c => (
+                <div key={c.id} className={`p-3 rounded-xl border flex justify-between items-center ${c.completed ? 'bg-success/5 border-success/20' : 'bg-surface-2 border-border'}`}>
+                  <div className="flex-1 min-w-0 pr-3">
+                    <p className={`font-display font-bold text-xs ${c.completed ? 'text-success line-through opacity-75' : 'text-foreground'}`}>
+                      {c.title}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">{c.description}</p>
+                    
+                    {/* Progress bar */}
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full bg-surface-3 overflow-hidden">
+                        <div 
+                          className={`h-full transition-all ${c.completed ? 'bg-success' : 'bg-primary'}`} 
+                          style={{ width: `${Math.min(100, (c.current / c.target) * 100)}%` }} 
+                        />
+                      </div>
+                      <span className="text-[9px] font-mono text-slate-400 shrink-0 font-bold">
+                        {c.current.toLocaleString()} / {c.target.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] bg-gold/10 text-gold border border-gold/30 px-1.5 py-0.5 rounded font-bold">
+                      +{c.rewardCoins} FLOW
+                    </span>
+                    {c.completed && (
+                      <p className="text-[10px] text-success font-bold mt-1">✓ Claimed</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <MoneyOwedCard store={store} />
+
+          {/* Memory Timeline */}
+          {(() => {
+            const events = store.memoryTimeline || [];
+            if (events.length === 0) return null;
+            return (
+              <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
+                <h3 className="font-display font-bold text-sm text-left">⏳ Store Milestones & Timeline</h3>
+                <div className="relative pl-4 border-l border-border/80 space-y-4 text-left ml-2 py-1">
+                  {events.slice(0, 5).map((e, idx) => (
+                    <div key={e.id || idx} className="relative">
+                      {/* Dot */}
+                      <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-primary border-2 border-card ring-2 ring-primary/20" />
+                      <div>
+                        <p className="text-[10px] text-slate-400">{new Date(e.date).toLocaleDateString('en-GB')} {new Date(e.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className="font-display font-bold text-xs text-foreground mt-0.5">{e.title}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">{e.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Inventory alerts */}
           {(() => {
@@ -1216,7 +1512,7 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
                 <span className="text-xs">🤖</span>
                 <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">Flow's Analysis Breakdown</h4>
               </div>
-              <Typewriter text={adviceReport} speed={12} />
+              <Typewriter text={adviceReport} speed={30} speak={true} />
             </div>
           )}
 

@@ -433,14 +433,14 @@ export default function Dashboard({ store, onNavigate }: DashboardProps) {
               </div>
             ) : (
               <button onClick={() => onNavigate('manager')} className="p-4 rounded-2xl bg-card shadow-card text-left">
-                <div className="flex justify-center mb-1"><Mascot size={56} mood="sleeping" /></div>
+                <div className="flex justify-center mb-1"><Mascot size={56} mood="sleeping" store={store} /></div>
                 <p className="text-xs text-muted-foreground text-center">Store Manager is off</p>
                 <p className="text-[10px] text-primary text-center mt-1 font-display font-semibold">Tap to enable →</p>
               </button>
             )}
             <div className="p-4 rounded-2xl bg-card shadow-card flex flex-col">
               <div className="flex items-center gap-2 mb-2">
-                <Mascot size={36} mood={flowMood} />
+                <Mascot size={36} mood={flowMood} store={store} />
                 <div className="flex-1 min-w-0">
                   <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
                   <MascotBadge on={managerEnabled} />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { loadStore } from '@/lib/store-data';
 import { addFlowReward } from '@/lib/flow-memory';
+import { StoreData } from '@/types/store';
 import { 
   CircleDollarSign, 
   TrendingUp, 
@@ -33,9 +34,10 @@ interface MascotProps {
   mood?: MascotMood;
   className?: string;
   animate?: boolean;
+  store?: StoreData;
 }
 
-export default function Mascot({ size = 64, mood = 'idle', className = '', animate = true }: MascotProps) {
+export default function Mascot({ size = 64, mood = 'idle', className = '', animate = true, store }: MascotProps) {
   const [activeTheme, setActiveTheme] = useState<'graphite' | 'blue' | 'forest'>('graphite');
   const [overrideMood, setOverrideMood] = useState<MascotMood | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -55,7 +57,9 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   // New States for edge-aware & speech-aware logic
   const [isManagerEnabled, setIsManagerEnabled] = useState(true);
   const [bubbleShiftX, setBubbleShiftX] = useState<number>(0);
+  const [bubblePosition, setBubblePosition] = useState<'above' | 'below'>('above');
   const [isMouthTalking, setIsMouthTalking] = useState(false);
+  const lastSalesCountRef = useRef<number | null>(null);
 
   // Occasional activity state
   const [activity, setActivity] = useState<'soccer-ball' | 'drinking-water' | 'shaking-clock' | 'staring-phone' | 'reading-book' | 'listening-music' | 'walking-off-left' | 'walking-off-right' | null>(null);
@@ -92,18 +96,28 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     return () => observer.disconnect();
   }, []);
 
-  // Sleep inactivity timer (45 seconds of no user mascot interaction)
+  // Session-load welcome greeting (only once per session)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !sessionStorage.getItem('storeflow_session_greeted')) {
+      sessionStorage.setItem('storeflow_session_greeted', 'true');
+      const timer = setTimeout(() => {
+        triggerSpeech("Welcome to the shop! Let's make some sales! 🛒✨", 'happy', 5000);
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Sleep inactivity timer (3 minutes of no user mascot interaction)
   const resetInactivity = () => {
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     
     if (isSleeping) {
-      setIsSleeping(false);
-      triggerSpeech("Welcome back! I missed the store.", 'happy');
+      setIsSleeping(false); // Wake up silently
     }
     
     inactivityTimer.current = setTimeout(() => {
       setIsSleeping(true);
-    }, 45000);
+    }, 180000); // 3 minutes timeout
   };
 
   useEffect(() => {
@@ -129,6 +143,26 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
               setStoreClosingTime(activeStore.profile?.closingTime || null);
               setStoreOpeningTime(activeStore.profile?.openingTime || null);
               setIsManagerEnabled(activeStore.managerSettings?.enabled !== false);
+              
+              // Local storage fallback for detecting sales if store prop is not provided
+              if (!store && activeStore.sales) {
+                const newSalesCount = activeStore.sales.length;
+                if (lastSalesCountRef.current !== null && newSalesCount > lastSalesCountRef.current) {
+                  const saleDiff = newSalesCount - lastSalesCountRef.current;
+                  const latestSales = activeStore.sales.slice(-saleDiff);
+                  const totalAmount = latestSales.reduce((sum, s) => sum + s.total, 0);
+                  
+                  const celebrationPhrases = [
+                    `Awesome! We just sold items for ₦${totalAmount.toLocaleString()}! 💵🎉`,
+                    `Ka-ching! A new sale of ₦${totalAmount.toLocaleString()} recorded! 🚀💰`,
+                    `Nice job! ₦${totalAmount.toLocaleString()} added to revenue! Keep it up! 🛒✨`,
+                    `Another customer served! ₦${totalAmount.toLocaleString()} sale completed! 🥳📦`
+                  ];
+                  triggerSpeech(celebrationPhrases[Math.floor(Math.random() * celebrationPhrases.length)], 'celebrating', 5000);
+                  triggerConfetti();
+                }
+                lastSalesCountRef.current = newSalesCount;
+              }
               return;
             }
           }
@@ -144,7 +178,29 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     fetchHours();
     const interval = setInterval(fetchHours, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [store]);
+
+  // Real-time sale awareness when store is passed as prop
+  useEffect(() => {
+    if (store && store.sales) {
+      const newSalesCount = store.sales.length;
+      if (lastSalesCountRef.current !== null && newSalesCount > lastSalesCountRef.current) {
+        const saleDiff = newSalesCount - lastSalesCountRef.current;
+        const latestSales = store.sales.slice(-saleDiff);
+        const totalAmount = latestSales.reduce((sum, s) => sum + s.total, 0);
+        
+        const celebrationPhrases = [
+          `Awesome! We just sold items for ₦${totalAmount.toLocaleString()}! 💵🎉`,
+          `Ka-ching! A new sale of ₦${totalAmount.toLocaleString()} recorded! 🚀💰`,
+          `Nice job! ₦${totalAmount.toLocaleString()} added to revenue! Keep it up! 🛒✨`,
+          `Another customer served! ₦${totalAmount.toLocaleString()} sale completed! 🥳📦`
+        ];
+        triggerSpeech(celebrationPhrases[Math.floor(Math.random() * celebrationPhrases.length)], 'celebrating', 5000);
+        triggerConfetti();
+      }
+      lastSalesCountRef.current = newSalesCount;
+    }
+  }, [store?.sales?.length, store]);
 
   // Speech-aware mouth animation timing
   useEffect(() => {
@@ -166,28 +222,51 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     };
   }, [message]);
 
-  // Edge-aware speech bubble shift calculation
+  // Edge-aware speech bubble positioning (above/below and horizontal shifting)
   useEffect(() => {
-    if (message && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const bubbleWidth = 170; // Midpoint of min-w (130px) and max-w (210px)
-      const padding = 16; // Edge safety offset
-      
-      let shiftX = 0;
-      
-      const absoluteLeft = rect.left + rect.width / 2 - bubbleWidth / 2;
-      const absoluteRight = rect.left + rect.width / 2 + bubbleWidth / 2;
-      
-      if (absoluteLeft < padding) {
-        shiftX = padding - absoluteLeft;
-      } else if (absoluteRight > window.innerWidth - padding) {
-        shiftX = (window.innerWidth - padding) - absoluteRight;
+    const handleLayout = () => {
+      if (message && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        
+        // 1. Horizontal shift
+        const bubbleWidth = 170; // Midpoint of min-w (130px) and max-w (210px)
+        const padding = 16; // Edge safety offset
+        let shiftX = 0;
+        const absoluteLeft = rect.left + rect.width / 2 - bubbleWidth / 2;
+        const absoluteRight = rect.left + rect.width / 2 + bubbleWidth / 2;
+        
+        if (absoluteLeft < padding) {
+          shiftX = padding - absoluteLeft;
+        } else if (absoluteRight > window.innerWidth - padding) {
+          shiftX = (window.innerWidth - padding) - absoluteRight;
+        }
+        setBubbleShiftX(shiftX);
+
+        // 2. Vertical position (above vs below)
+        // If the Mascot's top edge is less than 130px from the viewport top,
+        // flip the bubble to render below him.
+        if (rect.top < 130) {
+          setBubblePosition('below');
+        } else {
+          setBubblePosition('above');
+        }
+      } else {
+        setBubbleShiftX(0);
+        setBubblePosition('above');
       }
-      
-      setBubbleShiftX(shiftX);
-    } else {
-      setBubbleShiftX(0);
+    };
+
+    handleLayout();
+
+    if (message) {
+      window.addEventListener('scroll', handleLayout, { passive: true });
+      window.addEventListener('resize', handleLayout);
     }
+
+    return () => {
+      window.removeEventListener('scroll', handleLayout);
+      window.removeEventListener('resize', handleLayout);
+    };
   }, [message]);
 
   const isTalking = !!message;
@@ -264,71 +343,113 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
       // 45% chance to trigger a random activity
       if (Math.random() < 0.45) {
-        const activities: ('soccer-ball' | 'drinking-water' | 'shaking-clock' | 'staring-phone' | 'reading-book' | 'listening-music' | 'walking-off')[] = [
-          'soccer-ball',
-          'drinking-water',
-          'shaking-clock',
-          'staring-phone',
-          'reading-book',
-          'listening-music',
-          'walking-off'
-        ];
-        const chosen = activities[Math.floor(Math.random() * activities.length)];
+        const isAngryOrPanic = currentMood === 'angry' || currentMood === 'panic' || currentMood === 'worried' || currentMood === 'concerned';
 
-        if (chosen === 'walking-off') {
-          const direction = Math.random() < 0.5 ? 'left' : 'right';
-          setActivity(direction === 'left' ? 'walking-off-left' : 'walking-off-right');
-          
-          const speechOptions = [
-            "Be right back! Checking the warehouse! 🏃‍♂️",
-            "Taking a quick stretch break off-screen! 🚪💨",
-            "Checking on the suppliers real quick... 📦",
-            "BRB! Checking if the door is locked... 🔒💨"
+        if (isAngryOrPanic) {
+          const angryActivities: ('staring-phone' | 'walking-off' | 'drinking-water')[] = [
+            'staring-phone',
+            'walking-off',
+            'drinking-water'
           ];
-          triggerSpeech(speechOptions[Math.floor(Math.random() * speechOptions.length)], 'happy', 4500);
+          const chosen = angryActivities[Math.floor(Math.random() * angryActivities.length)];
 
-          setTimeout(() => {
-            setActivity(null);
-          }, 5000);
-        } else {
-          setActivity(chosen);
-          
-          if (chosen === 'soccer-ball') {
-            const speech = ["Watch my heading skills! ⚽🕺", "Heading time! Goaaal! 🥅⚽", "Pogo bounce! ⚽💥"];
-            triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 3500);
-            setOverrideMood('happy');
-          } else if (chosen === 'drinking-water') {
-            const speech = ["Stay hydrated! 🥤💦", "Gotta drink water... 🥛", "Refresh break! 💧😎"];
-            triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 3500);
-            setOverrideMood('happy');
-          } else if (chosen === 'shaking-clock') {
-            const speech = ["Time is money! Let's make sales! ⏰💵", "Shake it up! Store hours are active! ⏳⏰", "Ring ring! High sales time! 🔔"];
-            triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'excited', 3500);
-            setOverrideMood('excited');
-          } else if (chosen === 'staring-phone') {
-            const speech = ["Checking incoming WhatsApp requests... 📲👀", "Staring at my phone... any new orders? 📱", "Browsing inventory sheets... 📊📱"];
-            triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'thinking', 3500);
-            setOverrideMood('thinking');
-          } else if (chosen === 'reading-book') {
-            const speech = ["Reading 'How to scale a retail store'! 📖🧠", "Learning some new marketing tricks... 📚🤓", "Studying our sales analytics! 📈📖"];
-            triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'thinking', 3500);
-            setOverrideMood('thinking');
-          } else if (chosen === 'listening-music') {
-            const speech = ["Vibing to some retail jams! 🎧🎶", "Music makes restocking faster! 🎵🔥", "Listening to my favorite beats! 🎧🕺"];
-            triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 3500);
-            setOverrideMood('happy');
+          if (chosen === 'walking-off') {
+            const direction = Math.random() < 0.5 ? 'left' : 'right';
+            setActivity(direction === 'left' ? 'walking-off-left' : 'walking-off-right');
+            const speechOptions = [
+              "Going to search for customers outside... 🚶‍♂️💢",
+              "Need a quick walk to clear my head... 😤💨",
+              "Checking if the competitor is stealing our customers! 🔍😡"
+            ];
+            triggerSpeech(speechOptions[Math.floor(Math.random() * speechOptions.length)], 'angry', 5000);
+            setTimeout(() => setActivity(null), 5000);
+          } else {
+            setActivity(chosen);
+            if (chosen === 'staring-phone') {
+              const speech = [
+                "Why is the revenue graph so flat? 📉📱❌",
+                "Checking competitor prices... they are lower! 😠📱",
+                "Reading negative reviews... we must improve! 📱🤦‍♂️"
+              ];
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'angry', 5000);
+              setOverrideMood('angry');
+            } else if (chosen === 'drinking-water') {
+              const speech = [
+                "Drinking water to calm my anger... 💧😤",
+                "Gotta cool down... 🥛🥵",
+                "Drinking coffee to survive this day... ☕️😫"
+              ];
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'concerned', 5000);
+              setOverrideMood('concerned');
+            }
+            setTimeout(() => {
+              setActivity(null);
+              setOverrideMood(null);
+            }, 5000);
           }
+        } else {
+          // Standard stable activities
+          const activities: ('soccer-ball' | 'drinking-water' | 'shaking-clock' | 'staring-phone' | 'reading-book' | 'listening-music' | 'walking-off')[] = [
+            'soccer-ball',
+            'drinking-water',
+            'shaking-clock',
+            'staring-phone',
+            'reading-book',
+            'listening-music',
+            'walking-off'
+          ];
+          const chosen = activities[Math.floor(Math.random() * activities.length)];
 
-          setTimeout(() => {
-            setActivity(null);
-            setOverrideMood(null);
-          }, 4000);
+          if (chosen === 'walking-off') {
+            const direction = Math.random() < 0.5 ? 'left' : 'right';
+            setActivity(direction === 'left' ? 'walking-off-left' : 'walking-off-right');
+            const speechOptions = [
+              "Be right back! Checking the warehouse! 🏃‍♂️",
+              "Taking a quick stretch break off-screen! 🚪💨",
+              "Checking on the suppliers real quick... 📦",
+              "BRB! Checking if the door is locked... 🔒💨"
+            ];
+            triggerSpeech(speechOptions[Math.floor(Math.random() * speechOptions.length)], 'happy', 5000);
+            setTimeout(() => setActivity(null), 5000);
+          } else {
+            setActivity(chosen);
+            if (chosen === 'soccer-ball') {
+              const speech = ["Watch my heading skills! ⚽🕺", "Heading time! Goaaal! 🥅⚽", "Pogo bounce! ⚽💥"];
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 5000);
+              setOverrideMood('happy');
+            } else if (chosen === 'drinking-water') {
+              const speech = ["Stay hydrated! 🥤💦", "Gotta drink water... 🥛", "Refresh break! 💧😎"];
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 5000);
+              setOverrideMood('happy');
+            } else if (chosen === 'shaking-clock') {
+              const speech = ["Time is money! Let's make sales! ⏰💵", "Shake it up! Store hours are active! ⏳⏰", "Ring ring! High sales time! 🔔"];
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'excited', 5000);
+              setOverrideMood('excited');
+            } else if (chosen === 'staring-phone') {
+              const speech = ["Checking incoming WhatsApp requests... 📲👀", "Staring at my phone... any new orders? 📱", "Browsing inventory sheets... 📊📱"];
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'thinking', 5000);
+              setOverrideMood('thinking');
+            } else if (chosen === 'reading-book') {
+              const speech = ["Reading 'How to scale a retail store'! 📖🧠", "Learning some new marketing tricks... 📚🤓", "Studying our sales analytics! 📈📖"];
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'thinking', 5000);
+              setOverrideMood('thinking');
+            } else if (chosen === 'listening-music') {
+              const speech = ["Vibing to some retail jams! 🎧🎶", "Music makes restocking faster! 🎵🔥", "Listening to my favorite beats! 🎧🕺"];
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 5000);
+              setOverrideMood('happy');
+            }
+
+            setTimeout(() => {
+              setActivity(null);
+              setOverrideMood(null);
+            }, 5000);
+          }
         }
       }
     }, 28000);
 
     return () => clearInterval(interval);
-  }, [animate, isSleepingState, isMorningBathing, boxStage, overrideMood, message, tapCount]);
+  }, [animate, isSleepingState, isMorningBathing, boxStage, overrideMood, message, tapCount, currentMood]);
 
 
   // Helper to show speech bubble and override mood
@@ -593,9 +714,11 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       <circle cx="41" cy="32" r="1.8" fill="#0b0b12" />
     </g>
   ) : currentMood === 'happy' || currentMood === 'celebrating' ? (
-    <g style={{ transformOrigin: 'center 33px' }}>
-      <path d="M18 35 q5 -5 10 0" stroke="#0b0b12" strokeWidth="3" fill="none" strokeLinecap="round" />
-      <path d="M36 35 q5 -5 10 0" stroke="#0b0b12" strokeWidth="3" fill="none" strokeLinecap="round" />
+    <g className={`${animate ? "animate-[eye-blink_4.5s_infinite]" : ""} ${eyeOffsetClass}`} style={{ transformOrigin: 'center 33px' }}>
+      <circle cx="23" cy="33" r="3.5" fill="#0b0b12" />
+      <circle cx="41" cy="33" r="3.5" fill="#0b0b12" />
+      <circle cx="21.5" cy="31.5" r="1" fill="#ffffff" />
+      <circle cx="39.5" cy="31.5" r="1" fill="#ffffff" />
     </g>
   ) : currentMood === 'resting' ? (
     <g className={`${animate ? "animate-[eye-blink_4.5s_infinite]" : ""} ${eyeOffsetClass}`} style={{ transformOrigin: 'center 33px' }}>
@@ -637,19 +760,16 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     <path d="M26 43 q6 -3 12 0" stroke="#0b0b12" strokeWidth="2.2" fill="none" strokeLinecap="round" />
   ) : currentMood === 'sleeping' ? (
     <path d="M28 43 h8" stroke="#0b0b12" strokeWidth="2.2" strokeLinecap="round" />
-  ) : currentMood === 'celebrating' || currentMood === 'happy' || currentMood === 'confident' ? (
-    <path d="M22 41 q10 8 20 0" stroke="#0b0b12" strokeWidth="3" fill="none" strokeLinecap="round" />
   ) : currentMood === 'angry' ? (
     <path d="M24 44 q8 -4 16 0" stroke="#0b0b12" strokeWidth="2.5" fill="none" strokeLinecap="round" />
   ) : currentMood === 'panic' ? (
     <ellipse cx="32" cy="43" rx="4" ry="5" fill="#0b0b12" />
-  ) : currentMood === 'resting' ? (
-    <path d="M26 43 h12" stroke="#0b0b12" strokeWidth="2.2" strokeLinecap="round" />
   ) : currentMood === 'bathing' ? (
     /* Cute bubble-blowing round mouth */
     <circle cx="32" cy="42" r="2.8" stroke="#0b0b12" strokeWidth="2" fill="#ffffff" />
   ) : (
-    <path d="M25 41 q7 4 14 0" stroke="#0b0b12" strokeWidth="2" fill="none" strokeLinecap="round" />
+    // Default and other stable states use a small calm smile
+    <path d="M25 41 q7 4 14 0" stroke="#0b0b12" strokeWidth="2.5" fill="none" strokeLinecap="round" />
   );
 
   const cheeks = (
@@ -796,15 +916,13 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const animClass = !animate ? '' :
     activity === 'soccer-ball' ? 'animate-[mascot-heading_0.8s_infinite_ease-in-out]' :
     currentMood === 'sleeping' ? 'mascot-float-anim' :
-    currentMood === 'resting' ? 'mascot-rest-anim' :
     currentMood === 'bathing' ? 'mascot-bath-anim' :
-    currentMood === 'celebrating' || currentMood === 'excited' ? 'mascot-excited-anim' :
     currentMood === 'thinking' ? 'mascot-think-anim' :
-    currentMood === 'happy' ? 'mascot-happy-anim' :
+    currentMood === 'excited' ? 'mascot-excited-anim' :
     currentMood === 'worried' || currentMood === 'concerned' ? 'mascot-worried-anim' :
     currentMood === 'angry' ? 'mascot-angry-anim' :
     currentMood === 'panic' ? 'mascot-panic-anim' :
-    'mascot-float-anim';
+    '';
 
   const walkClass = 
     activity === 'walking-off-left' ? 'animate-walk-left' :
@@ -1021,20 +1139,30 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       {/* Speech Bubble - Screen Boundary Aware */}
       {message && (
         <div 
-          className="absolute bottom-full left-1/2 mb-3 z-50 pointer-events-none"
+          className={`absolute ${bubblePosition === 'above' ? 'bottom-full mb-3' : 'top-full mt-3'} left-1/2 z-50 pointer-events-none`}
           style={{
             transform: `translateX(calc(-50% + ${bubbleShiftX}px))`,
           }}
         >
-          <div className="bg-slate-900 border border-border px-3 py-1.5 rounded-xl text-xs text-foreground font-display font-bold shadow-lg animate-bounce-subtle select-none whitespace-normal text-center min-w-[130px] max-w-[210px]">
+          <div className="bg-slate-900 border border-border px-3 py-1.5 rounded-xl text-xs text-foreground font-display font-bold shadow-lg animate-bounce-subtle select-none whitespace-normal text-center min-w-[130px] max-w-[210px] relative">
             <p className="leading-snug">{message}</p>
-            <div 
-              className="absolute top-full -mt-1 w-2.5 h-2.5 bg-slate-900 border-r border-b border-border rotate-45" 
-              style={{
-                left: `calc(50% - ${bubbleShiftX}px)`,
-                transform: 'translateX(-50%) rotate(45deg)'
-              }}
-            />
+            {bubblePosition === 'above' ? (
+              <div 
+                className="absolute top-full -mt-1 w-2.5 h-2.5 bg-slate-900 border-r border-b border-border rotate-45" 
+                style={{
+                  left: `calc(50% - ${bubbleShiftX}px)`,
+                  transform: 'translateX(-50%) rotate(45deg)'
+                }}
+              />
+            ) : (
+              <div 
+                className="absolute bottom-full -mb-1 w-2.5 h-2.5 bg-slate-900 border-l border-t border-border rotate-45" 
+                style={{
+                  left: `calc(50% - ${bubbleShiftX}px)`,
+                  transform: 'translateX(-50%) rotate(45deg)'
+                }}
+              />
+            )}
           </div>
         </div>
       )}

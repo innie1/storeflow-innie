@@ -1,3 +1,9 @@
+export interface PriceHistoryEntry {
+  costPrice: number;
+  date: string;
+  supplierName?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -8,6 +14,7 @@ export interface Product {
   initialQuantity?: number;
   addedAt?: string;
   barcode?: string;
+  priceHistory?: PriceHistoryEntry[];
 }
 
 export interface Restock {
@@ -190,6 +197,136 @@ export interface SavingsGoal {
   frequency?: SavingsFrequency;
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  address?: string;
+  totalPurchases: number;
+  outstandingDebt: number;
+  lastPurchaseDate?: string;
+  purchaseHistory: { date: string; amount: number; items: string }[];
+  loyaltyPoints: number;
+  visitsCount: number;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  phone: string;
+  whatsApp?: string;
+  address?: string;
+  productsSupplied: string[];
+  lastPurchaseDate?: string;
+  lastPricePaid?: number;
+}
+
+export interface BusinessGoal {
+  id: string;
+  category: 'revenue' | 'profit' | 'savings' | 'debt' | 'inventory';
+  label: string;
+  target: number;
+  current: number;
+  deadline?: string;
+  completed: boolean;
+}
+
+export interface MemoryEvent {
+  id: string;
+  type: 'milestone' | 'record';
+  title: string;
+  date: string;
+  description: string;
+}
+
+export interface DiaryEntry {
+  id: string;
+  text: string;
+  date: string;
+  audioData?: string; // compressed base64 Voice Note data URI
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  pin: string;
+  role: 'admin' | 'manager' | 'cashier';
+  permissions: {
+    sales: boolean;
+    inventory: boolean;
+    reports: boolean;
+    settings: boolean;
+  };
+}
+
+export interface Shift {
+  id: string;
+  staffId: string;
+  staffName: string;
+  startTime: string;
+  endTime?: string;
+  salesMade: number;
+  revenue: number;
+  openingCash: number;
+  closingCash?: number;
+}
+
+export interface CashSession {
+  id: string;
+  date: string;
+  openingCash: number;
+  salesCash: number;
+  expenses: number;
+  expectedCash: number;
+  actualCash: number;
+  notes?: string;
+}
+
+export interface LostSale {
+  id: string;
+  productName: string;
+  date: string;
+  quantity: number;
+}
+
+export interface WishlistItem {
+  id: string;
+  name: string;
+  estimatedCost: number;
+  notes?: string;
+  dateAdded: string;
+}
+
+export interface InventoryTransfer {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  sourceStoreCode: string;
+  destStoreCode: string;
+  date: string;
+}
+
+export interface VaultDocument {
+  id: string;
+  name: string;
+  category: string;
+  dateAdded: string;
+  fileContent: string; // base64
+  fileSize: number; // in KB
+}
+
+export interface BusinessChallenge {
+  id: string;
+  title: string;
+  description: string;
+  target: number;
+  current: number;
+  rewardCoins: number;
+  completed: boolean;
+  expiryDate: string;
+}
+
 export interface ManagerSettings {
   enabled: boolean;
   revenueForecasts: boolean;
@@ -249,6 +386,11 @@ export interface ManagerSettings {
   receiptFooterMessage?: string;
   receiptWidth?: '58mm' | '80mm' | 'standard';
   receiptCurrency?: string;
+  receiptWebsite?: string;
+  receiptQrCode?: string;
+  receiptWhatsApp?: string;
+  // Weather
+  weatherImpactEnabled?: boolean;
 }
 
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
@@ -303,6 +445,10 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   receiptFooterMessage: 'Thank you for your patronage! 🙏',
   receiptWidth: '58mm',
   receiptCurrency: '₦',
+  receiptWebsite: '',
+  receiptQrCode: '',
+  receiptWhatsApp: '',
+  weatherImpactEnabled: true,
 };
 
 export interface PrintedReceipt {
@@ -342,10 +488,26 @@ export interface StoreData {
   lastDailyClaim?: string;
   marketplaceListings?: any[];
   registeredSuppliers?: any[];
+  
+  // Feature expansion variables
+  customers?: Customer[];
+  suppliers?: Supplier[];
+  goals?: BusinessGoal[];
+  memoryTimeline?: MemoryEvent[];
+  diaryEntries?: DiaryEntry[];
+  staffMembers?: StaffMember[];
+  shifts?: Shift[];
+  cashSessions?: CashSession[];
+  lostSales?: LostSale[];
+  wishlist?: WishlistItem[];
+  documents?: VaultDocument[];
+  challenges?: BusinessChallenge[];
+  stockCountAudits?: { id: string; date: string; expected: number; actual: number; variance: number; product: string }[];
+  transfers?: InventoryTransfer[];
 }
 
 
 export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending' | 'marketplace'
-  | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings';
-
+  | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings'
+  | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer';

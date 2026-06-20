@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
 import { StoreData, Sale, PaymentMethod, ManagerSettings } from '@/types/store';
-import { recordCheckout, getTopSellers, findProductByBarcode } from '@/lib/store-data';
+import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import VoiceSell from '@/components/VoiceSell';
 import { printSystem } from '@/lib/print-engine';
+import { getSmartDiscounts } from '@/lib/manager-intel';
 import {
   Search,
   SlidersHorizontal,
@@ -46,6 +47,10 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [customQtyFor, setCustomQtyFor] = useState<string | null>(null);
   const [customQty, setCustomQty] = useState('1');
   const [filterLowStock, setFilterLowStock] = useState(false);
+
+  const [showLostSaleModal, setShowLostSaleModal] = useState(false);
+  const [lostSaleName, setLostSaleName] = useState('');
+  const [lostSaleQty, setLostSaleQty] = useState('1');
 
   // Automatically shut down voice selling when navigating away
   useEffect(() => {
@@ -187,6 +192,36 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const total = Math.max(0, cartSubtotal - discountNum);
   const paidNum = Math.min(total, Math.max(0, Number(paidAmount) || 0));
   const balance = Math.max(0, total - paidNum);
+
+  const handleRecordLostSale = () => {
+    if (!lostSaleName.trim() || Number(lostSaleQty) <= 0) {
+      return showToast('Enter product name and quantity', 'error');
+    }
+    const updated = recordLostSale(store, lostSaleName.trim(), Number(lostSaleQty));
+    onUpdate(updated);
+    setShowLostSaleModal(false);
+    setLostSaleName('');
+    setLostSaleQty('1');
+    showToast('✓ Lost sale recorded for Flow demand analysis');
+  };
+
+  const cartSmartDiscounts = useMemo(() => {
+    const recs = getSmartDiscounts(store);
+    return cart.map(item => {
+      const rec = recs.find(r => r.productId === item.productId);
+      if (rec) {
+        const discountAmt = Math.round(item.unitPrice * item.quantity * (rec.suggestedDiscountPct / 100));
+        return {
+          productId: item.productId,
+          productName: item.productName,
+          suggestedPct: rec.suggestedDiscountPct,
+          discountAmount: discountAmt,
+          reason: `Clearance of slow-moving stock`
+        };
+      }
+      return null;
+    }).filter((r): r is NonNullable<typeof r> => r !== null);
+  }, [cart, store]);
 
   const calculateAutoDiscount = (sub: number) => {
     if (!managerSettings?.autoDiscountEnabled) return 0;
@@ -386,7 +421,39 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             <SlidersHorizontal className="w-4 h-4" />
           </button>
         </div>
+      {/* Log Lost Sale quick link */}
+      <div className="flex justify-between items-center text-left">
+        <p className="text-xs text-muted-foreground">Tap ⚡ to sell, + to add to cart</p>
+        <button
+          onClick={() => {
+            setLostSaleName('');
+            setLostSaleQty('1');
+            setShowLostSaleModal(true);
+          }}
+          className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-[10px] text-muted-foreground hover:text-foreground font-display font-bold transition-colors flex items-center gap-1 shrink-0"
+        >
+          📝 Log Lost Sale
+        </button>
       </div>
+
+      {search && visibleProducts.length === 0 && (
+        <div className="rounded-2xl p-6 bg-destructive/5 border border-destructive/20 text-center space-y-3">
+          <p className="text-sm text-slate-300 font-display font-medium">No products found matching "{search}"</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Did a customer ask for an out-of-stock or unstocked item? Log it as a lost sale so Flow can analyze demand patterns.
+          </p>
+          <button
+            onClick={() => {
+              setLostSaleName(search);
+              setLostSaleQty('1');
+              setShowLostSaleModal(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-destructive text-white text-xs font-display font-bold hover:bg-destructive/90 active:scale-95 transition-transform shadow-md"
+          >
+            📝 Record Lost Sale for "{search}"
+          </button>
+        </div>
+      )}
 
       {voiceActive && cart.length > 0 && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
@@ -571,8 +638,33 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Discount</span>
                   <input type="number" value={discount} placeholder="0" onChange={e => { setDiscount(e.target.value); setDiscountManuallyEdited(true); }}
-                    className="w-20 p-1 rounded bg-surface-2 border border-border text-right text-xs" />
+                    className="w-20 p-1 rounded bg-surface-2 border border-border text-right text-xs text-foreground" />
                 </div>
+
+                {/* Smart Discounts Recommendations */}
+                {cartSmartDiscounts.length > 0 && (
+                  <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20 my-1 space-y-1 text-left">
+                    <p className="text-[9px] font-display font-bold text-yellow-500 uppercase tracking-wider flex items-center gap-1">
+                      ✨ Flow Smart Discount Promo
+                    </p>
+                    {cartSmartDiscounts.map(sd => (
+                      <button
+                        key={sd.productId}
+                        type="button"
+                        onClick={() => {
+                          setDiscount(String(sd.discountAmount));
+                          setDiscountManuallyEdited(true);
+                          showToast(`Applied ₦${sd.discountAmount} discount for ${sd.productName}`);
+                        }}
+                        className="w-full flex items-center justify-between p-1 bg-surface-2 hover:border-yellow-500/50 border border-border rounded text-[9px] font-semibold transition-colors text-foreground"
+                      >
+                        <span>Apply {sd.suggestedPct}% off slow-moving <span className="font-bold">{sd.productName}</span></span>
+                        <span className="text-success font-bold">-₦{sd.discountAmount}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Profit</span><span className="text-success">₦{cartProfit.toLocaleString()}</span></div>
                 <div className="flex justify-between font-display font-bold pt-1 border-t border-border text-sm">
                   <span>Total</span><span className="text-primary">₦{total.toLocaleString()}</span>
@@ -686,7 +778,49 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       )}
 
 
-      {lastSale && <SaleReceipt store={store} sale={lastSale} onClose={() => setLastSale(null)} />}
+      {showLostSaleModal && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowLostSaleModal(false)}>
+          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-3 text-left animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="font-display font-bold text-base">Record Lost Sale</h3>
+              <button onClick={() => setShowLostSaleModal(false)} className="text-xl text-muted-foreground hover:text-foreground">×</button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Log sales lost due to lack of stock so that Flow can recommend replenishment.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase font-bold">Product Name</label>
+                <input
+                  type="text"
+                  value={lostSaleName}
+                  onChange={e => setLostSaleName(e.target.value)}
+                  placeholder="e.g. Peak Milk"
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase font-bold">Quantity Requested</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={lostSaleQty}
+                  onChange={e => setLostSaleQty(e.target.value)}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                />
+              </div>
+              <button
+                onClick={handleRecordLostSale}
+                className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90 text-sm"
+              >
+                Log Lost Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {lastSale && <SaleReceipt store={store} sale={lastSale} onClose={() => setLastSale(null)} onUpdateStore={onUpdate} />}
     </div>
   );
 }

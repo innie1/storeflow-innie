@@ -21,6 +21,16 @@ import GamesAnalytics from '@/components/games/GamesAnalytics';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 import Marketplace from '@/components/Marketplace';
+import Customers from '@/components/Customers';
+import Suppliers from '@/components/Suppliers';
+import Goals from '@/components/Goals';
+import Diary from '@/components/Diary';
+import Documents from '@/components/Documents';
+import Academy from '@/components/Academy';
+import Achievements from '@/components/Achievements';
+import Wishlist from '@/components/Wishlist';
+import StaffManagement from '@/components/StaffManagement';
+import CashDrawer from '@/components/CashDrawer';
 import {
   Home,
   Package,
@@ -36,7 +46,17 @@ import {
   Lock,
   ChevronDown,
   Gamepad2,
-  Gamepad
+  Gamepad,
+  Users,
+  Warehouse,
+  Target,
+  BookOpen,
+  FolderArchive,
+  GraduationCap,
+  Trophy,
+  Star,
+  Briefcase,
+  Coins
 } from 'lucide-react';
 
 
@@ -51,6 +71,16 @@ const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
 
 const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'marketplace', label: 'Marketplace', icon: '🛒' },
+  { id: 'customers', label: 'Customers', icon: '👥' },
+  { id: 'suppliers', label: 'Suppliers', icon: '🏬' },
+  { id: 'goals', label: 'Goals', icon: '🎯' },
+  { id: 'diary', label: 'Business Diary', icon: '📓' },
+  { id: 'documents', label: 'Doc Vault', icon: '📂' },
+  { id: 'academy', label: 'Flow Academy', icon: '🎓' },
+  { id: 'achievements', label: 'Achievements', icon: '🏆' },
+  { id: 'wishlist', label: 'Wishlist', icon: '🌟' },
+  { id: 'staff', label: 'Staff Accounts', icon: '💼' },
+  { id: 'cash-drawer', label: 'Cash Drawer', icon: '💵' },
   { id: 'expenses', label: 'Expenses', icon: '🧾' },
   { id: 'pending', label: 'Pending Payments', icon: '💳' },
   { id: 'history', label: 'History', icon: '📋' },
@@ -105,6 +135,26 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
       return <TrendingUp className={className} />;
     case 'games-settings':
       return <Gamepad className={className} />;
+    case 'customers':
+      return <Users className={className} />;
+    case 'suppliers':
+      return <Warehouse className={className} />;
+    case 'goals':
+      return <Target className={className} />;
+    case 'diary':
+      return <BookOpen className={className} />;
+    case 'documents':
+      return <FolderArchive className={className} />;
+    case 'academy':
+      return <GraduationCap className={className} />;
+    case 'achievements':
+      return <Trophy className={className} />;
+    case 'wishlist':
+      return <Star className={className} />;
+    case 'staff':
+      return <Briefcase className={className} />;
+    case 'cash-drawer':
+      return <Coins className={className} />;
     default:
       return null;
   }
@@ -425,6 +475,36 @@ export default function Index() {
           </div>
           <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
             <Marketplace store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'customers' ? 'block' : 'hidden'}>
+            <Customers store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'suppliers' ? 'block' : 'hidden'}>
+            <Suppliers store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'goals' ? 'block' : 'hidden'}>
+            <Goals store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'diary' ? 'block' : 'hidden'}>
+            <Diary store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'documents' ? 'block' : 'hidden'}>
+            <Documents store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'academy' ? 'block' : 'hidden'}>
+            <Academy store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'achievements' ? 'block' : 'hidden'}>
+            <Achievements store={store} />
+          </div>
+          <div className={tab === 'wishlist' ? 'block' : 'hidden'}>
+            <Wishlist store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'staff' ? 'block' : 'hidden'}>
+            <StaffManagement store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'cash-drawer' ? 'block' : 'hidden'}>
+            <CashDrawer store={store} onUpdate={setStore} />
           </div>
           {isGames && (
             <>

@@ -488,7 +488,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       {!mgr.enabled && (
         <div className="flex flex-col items-center justify-center py-16 px-4 space-y-5">
           <div className="flex justify-center items-center drop-shadow-[0_4px_12px_rgba(99,102,241,0.15)]">
-            <Mascot size={140} mood="sleeping" animate={mgr.mascotAnimations} />
+            <Mascot size={140} mood="sleeping" animate={mgr.mascotAnimations} store={store} />
           </div>
           <div className="text-center space-y-1.5 max-w-xs">
             <p className="font-display font-bold text-base text-foreground">Flow is resting 💤</p>
@@ -717,7 +717,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         <button onClick={() => setShowSavingsModal(true)} className="w-full p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold">Edit Savings Plan</button>
       </div>
       {showSavingsModal && (
-        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} animate={mgr.mascotAnimations} />
+        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} animate={mgr.mascotAnimations} store={store} />
       )}
     </SubPage>
   );
@@ -1519,7 +1519,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
           <button onClick={() => setView('flow')} className={`${card} w-full p-4 text-left hover:ring-1 hover:ring-primary/30 transition-all border ${mgr.enabled ? 'border-success/30 bg-gradient-to-br from-success/10 to-transparent' : 'border-border'}`}>
             <div className="flex items-start gap-3">
               <div className="shrink-0">
-                <Mascot size={64} mood={mgr.enabled ? 'happy' : 'sleeping'} animate={mgr.mascotAnimations} />
+                <Mascot size={64} mood={mgr.enabled ? 'happy' : 'sleeping'} animate={mgr.mascotAnimations} store={store} />
               </div>
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-center gap-2">
@@ -1610,7 +1610,7 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
       {showTrash && <RecentlyDeleted store={store} onUpdate={onUpdate} onClose={() => setShowTrash(false)} />}
       {showSwitcher && <StoreSwitcher currentCode={store.accessCode} onSwitch={onUpdate} onClose={() => setShowSwitcher(false)} />}
       {showSavingsModal && (
-        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} animate={mgr.mascotAnimations} />
+        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} animate={mgr.mascotAnimations} store={store} />
       )}
       {showContactPopup && (
         <ContactOptionsSheet storeName={store.storeName} onClose={() => setShowContactPopup(false)} />
@@ -1698,7 +1698,7 @@ function SupportRow({ icon, label, onClick }: { icon: string; label: string; onC
 }
 
 // --- Savings setup modal ---
-function SavingsModal({ initial, onClose, onSave, animate = true }: { initial: SavingsGoal; onClose: () => void; onSave: (g: SavingsGoal) => void; animate?: boolean }) {
+function SavingsModal({ initial, onClose, onSave, animate = true, store }: { initial: SavingsGoal; onClose: () => void; onSave: (g: SavingsGoal) => void; animate?: boolean; store?: StoreData }) {
   const [g, setG] = useState<SavingsGoal>(initial);
   const inp = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary";
   const freqs: SavingsFrequency[] = ['daily', 'weekly', 'monthly'];
@@ -1707,7 +1707,7 @@ function SavingsModal({ initial, onClose, onSave, animate = true }: { initial: S
       <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-3 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
-            <Mascot size={36} mood="happy" animate={animate} />
+            <Mascot size={36} mood="happy" animate={animate} store={store} />
             <h3 className="font-display font-bold text-lg">Set Up Savings Plan</h3>
           </div>
           <button onClick={onClose} className="text-xl text-muted-foreground hover:text-foreground">×</button>
