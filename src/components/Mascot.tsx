@@ -357,22 +357,24 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           if (chosen === 'walking-off') {
             const direction = Math.random() < 0.5 ? 'left' : 'right';
             setActivity(direction === 'left' ? 'walking-off-left' : 'walking-off-right');
+            const duration = getActivityDuration(direction === 'left' ? 'walking-off-left' : 'walking-off-right');
             const speechOptions = [
               "Going to search for customers outside... 🚶‍♂️💢",
               "Need a quick walk to clear my head... 😤💨",
               "Checking if the competitor is stealing our customers! 🔍😡"
             ];
-            triggerSpeech(speechOptions[Math.floor(Math.random() * speechOptions.length)], 'angry', 5000);
-            setTimeout(() => setActivity(null), 5000);
+            triggerSpeech(speechOptions[Math.floor(Math.random() * speechOptions.length)], 'angry', duration);
+            setTimeout(() => setActivity(null), duration);
           } else {
             setActivity(chosen);
+            const duration = getActivityDuration(chosen);
             if (chosen === 'staring-phone') {
               const speech = [
                 "Why is the revenue graph so flat? 📉📱❌",
                 "Checking competitor prices... they are lower! 😠📱",
                 "Reading negative reviews... we must improve! 📱🤦‍♂️"
               ];
-              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'angry', 5000);
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'angry', duration);
               setOverrideMood('angry');
             } else if (chosen === 'drinking-water') {
               const speech = [
@@ -380,13 +382,13 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
                 "Gotta cool down... 🥛🥵",
                 "Drinking coffee to survive this day... ☕️😫"
               ];
-              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'concerned', 5000);
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'concerned', duration);
               setOverrideMood('concerned');
             }
             setTimeout(() => {
               setActivity(null);
               setOverrideMood(null);
-            }, 5000);
+            }, duration);
           }
         } else {
           // Standard stable activities
@@ -404,46 +406,48 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           if (chosen === 'walking-off') {
             const direction = Math.random() < 0.5 ? 'left' : 'right';
             setActivity(direction === 'left' ? 'walking-off-left' : 'walking-off-right');
+            const duration = getActivityDuration(direction === 'left' ? 'walking-off-left' : 'walking-off-right');
             const speechOptions = [
               "Be right back! Checking the warehouse! 🏃‍♂️",
               "Taking a quick stretch break off-screen! 🚪💨",
               "Checking on the suppliers real quick... 📦",
               "BRB! Checking if the door is locked... 🔒💨"
             ];
-            triggerSpeech(speechOptions[Math.floor(Math.random() * speechOptions.length)], 'happy', 5000);
-            setTimeout(() => setActivity(null), 5000);
+            triggerSpeech(speechOptions[Math.floor(Math.random() * speechOptions.length)], 'happy', duration);
+            setTimeout(() => setActivity(null), duration);
           } else {
             setActivity(chosen);
+            const duration = getActivityDuration(chosen);
             if (chosen === 'soccer-ball') {
               const speech = ["Watch my heading skills! ⚽🕺", "Heading time! Goaaal! 🥅⚽", "Pogo bounce! ⚽💥"];
-              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 5000);
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', duration);
               setOverrideMood('happy');
             } else if (chosen === 'drinking-water') {
               const speech = ["Stay hydrated! 🥤💦", "Gotta drink water... 🥛", "Refresh break! 💧😎"];
-              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 5000);
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', duration);
               setOverrideMood('happy');
             } else if (chosen === 'shaking-clock') {
               const speech = ["Time is money! Let's make sales! ⏰💵", "Shake it up! Store hours are active! ⏳⏰", "Ring ring! High sales time! 🔔"];
-              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'excited', 5000);
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'excited', duration);
               setOverrideMood('excited');
             } else if (chosen === 'staring-phone') {
               const speech = ["Checking incoming WhatsApp requests... 📲👀", "Staring at my phone... any new orders? 📱", "Browsing inventory sheets... 📊📱"];
-              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'thinking', 5000);
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'thinking', duration);
               setOverrideMood('thinking');
             } else if (chosen === 'reading-book') {
               const speech = ["Reading 'How to scale a retail store'! 📖🧠", "Learning some new marketing tricks... 📚🤓", "Studying our sales analytics! 📈📖"];
-              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'thinking', 5000);
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'thinking', duration);
               setOverrideMood('thinking');
             } else if (chosen === 'listening-music') {
               const speech = ["Vibing to some retail jams! 🎧🎶", "Music makes restocking faster! 🎵🔥", "Listening to my favorite beats! 🎧🕺"];
-              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', 5000);
+              triggerSpeech(speech[Math.floor(Math.random() * speech.length)], 'happy', duration);
               setOverrideMood('happy');
             }
 
             setTimeout(() => {
               setActivity(null);
               setOverrideMood(null);
-            }, 5000);
+            }, duration);
           }
         }
       }
@@ -784,11 +788,11 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const renderMascotBody = () => {
     // Determine posture rotation angle / scale
     let bodyTransform = '';
-    if (posture === 'tilt-left') bodyTransform = 'rotate(-2.5) translate(-1px, 0)';
-    else if (posture === 'tilt-right') bodyTransform = 'rotate(2.5) translate(1px, 0)';
+    if (posture === 'tilt-left') bodyTransform = 'rotate(-2.5) translate(-1, 0)';
+    else if (posture === 'tilt-right') bodyTransform = 'rotate(2.5) translate(1, 0)';
 
     const lidTransform = boxStage >= 1 
-      ? "translate(-14px, -12px) rotate(-35deg)" 
+      ? "translate(-14, -12) rotate(-35deg)" 
       : "";
 
     const renderEgg = () => {
@@ -904,7 +908,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   };
 
   const animClass = !animate ? '' :
-    activity === 'soccer-ball' ? 'animate-[mascot-heading_0.8s_infinite_ease-in-out]' :
+    activity === 'soccer-ball' ? 'animate-[mascot-soccer-kick_7s_forwards_ease-in-out]' :
     currentMood === 'sleeping' ? 'mascot-float-anim' :
     currentMood === 'bathing' ? 'mascot-bath-anim' :
     currentMood === 'thinking' ? 'mascot-think-anim' :
@@ -1039,9 +1043,43 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           80% { transform: translateX(200px) scaleX(1); }
           100% { transform: translateX(0) scaleX(1); }
         }
-        @keyframes soccer-ball-bounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-16px); }
+        @keyframes soccer-ball-timeline {
+          /* 0% to 56.8%: Bouncing on head */
+          0%, 14.2%, 28.4%, 42.6%, 56.8% { transform: translate(0, 0); }
+          7.1%, 21.3%, 35.5%, 49.7% { transform: translate(0, -18px); }
+          
+          /* 56.8% to 64.3% (4.0s to 4.5s): Falls next to him on ground */
+          64.3% { transform: translate(-26px, 38px) rotate(-180deg); }
+          
+          /* 64.3% to 80% (4.5s to 5.6s): Rest on floor */
+          80% { transform: translate(-26px, 38px) rotate(-180deg); }
+          
+          /* 80% to 83% (5.6s to 5.8s): Hit by Mascot's body kick */
+          83% { transform: translate(-24px, 36px) rotate(-160deg); }
+          
+          /* 83% to 94.3% (5.8s to 6.6s): Flies off screen fast to the left */
+          94.3%, 100% { transform: translate(-180px, -20px) rotate(-720deg); }
+        }
+        @keyframes mascot-soccer-kick {
+          /* 0% to 56.8%: body bounce */
+          0%, 14.2%, 28.4%, 42.6%, 56.8% { transform: translateY(0) scaleY(1); }
+          7.1%, 21.3%, 35.5%, 49.7% { transform: translateY(1.5px) scaleY(0.97); }
+          
+          /* 56.8% to 80%: normal standing, looking down */
+          80% { transform: translate(0, 0) rotate(0deg); }
+          
+          /* 80% to 83% (5.6s to 5.8s): lean/kick to the left! */
+          83% { transform: translate(-5px, 2px) rotate(-12deg); }
+          
+          /* 83% to 87% (5.8s to 6.1s): recoil after kick */
+          87% { transform: translate(3px, -1px) rotate(6deg); }
+          
+          /* 87% to 100%: recover */
+          95%, 100% { transform: translate(0, 0) rotate(0deg); }
+        }
+        @keyframes phone-glow {
+          0% { filter: drop-shadow(0 0 1px rgba(56, 189, 248, 0.4)); }
+          100% { filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.95)); }
         }
         @keyframes drinking-tilt {
           0%, 100% { transform: rotate(0deg); }
@@ -1192,71 +1230,14 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
         {sweatDrop}
         {angryStress}
 
-        {/* Occasional Activity Elements */}
+        {/* Occasional Environment Activity Elements */}
         {activity === 'soccer-ball' && (
-          <g className="animate-[soccer-ball-bounce_0.8s_infinite_ease-in-out]" style={{ transformOrigin: '32px 10px' }}>
+          <g className="animate-[soccer-ball-timeline_7s_forwards_ease-in-out]" style={{ transformOrigin: '32px 10px' }}>
             <circle cx="32" cy="10" r="4.5" fill="#ffffff" stroke="#0b0b12" strokeWidth="0.8" />
             <path d="M32 7.5 l1 1 l-0.5 1.5 l-1 0 l-0.5 -1.5 z" fill="#0b0b12" />
             <path d="M29 9 l-1.2 0.4 l-0.2 1.3 l0.8 0.6 l1.1 -0.5 z" fill="#0b0b12" />
             <path d="M35 9 l1.2 0.4 l0.2 1.3 l-0.8 0.6 l-1.1 -0.5 z" fill="#0b0b12" />
             <path d="M30 13 l0.8 -1.2 h1.4 l0.8 1.2 l-1.5 0.5 z" fill="#0b0b12" />
-          </g>
-        )}
-
-        {activity === 'drinking-water' && (
-          <g className="animate-[drinking-tilt_1.2s_infinite_ease-in-out]" style={{ transformOrigin: '32px 42px' }}>
-            <path d="M42 46 l2 -8 h5 l2 8 z" fill="#38bdf8" opacity="0.8" stroke="#0ea5e9" strokeWidth="0.8" />
-            <path d="M43 43 h6" stroke="#ffffff" strokeWidth="1" strokeLinecap="round" opacity="0.6" />
-            <line x1="45" y1="38" x2="35" y2="42" stroke="#f43f5e" strokeWidth="1.2" strokeLinecap="round" />
-          </g>
-        )}
-
-        {activity === 'shaking-clock' && (
-          <g className="animate-[clock-vibrate_0.15s_infinite]" style={{ transformOrigin: '48px 46px' }}>
-            <circle cx="48" cy="46" r="4.5" fill="#f43f5e" stroke="#0b0b12" strokeWidth="0.8" />
-            <circle cx="44.5" cy="41.5" r="1.5" fill="#94a3b8" />
-            <circle cx="51.5" cy="41.5" r="1.5" fill="#94a3b8" />
-            <line x1="44.5" y1="41.5" x2="46" y2="43" stroke="#0b0b12" strokeWidth="0.8" />
-            <line x1="51.5" y1="41.5" x2="50" y2="43" stroke="#0b0b12" strokeWidth="0.8" />
-            <line x1="45" y1="50.5" x2="44" y2="52" stroke="#0b0b12" strokeWidth="1" />
-            <line x1="51" y1="50.5" x2="52" y2="52" stroke="#0b0b12" strokeWidth="1" />
-            <line x1="48" y1="46" x2="48" y2="43" stroke="#0b0b12" strokeWidth="0.6" />
-            <line x1="48" y1="46" x2="50" y2="46" stroke="#0b0b12" strokeWidth="0.6" />
-          </g>
-        )}
-
-        {activity === 'staring-phone' && (
-          <g className="animate-pulse" style={{ transformOrigin: '46px 45px' }}>
-            <rect x="42" y="38" width="8" height="13" rx="1.5" fill="#1e293b" stroke="#64748b" strokeWidth="0.8" />
-            <rect x="43" y="39" width="6" height="10" rx="0.5" fill="#22d3ee" opacity="0.85" />
-            <circle cx="46" cy="50" r="0.4" fill="#ffffff" />
-          </g>
-        )}
-
-        {activity === 'reading-book' && (
-          <g className="animate-[book-float_1.5s_infinite_ease-in-out]" style={{ transformOrigin: '32px 50px' }}>
-            <path d="M22 50 q10 -3 20 0 l1 4 q-10 -3 -20 0 z" fill="#b45309" />
-            <path d="M23 49.5 q9 -2.5 18 0 l-0.5 3.5 q-9 -2.5 -18 0 z" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="0.3" />
-            <path d="M23 49.5 v3.5" stroke="#cbd5e1" strokeWidth="0.5" />
-            <path d="M41 49.5 v3.5" stroke="#cbd5e1" strokeWidth="0.5" />
-            <line x1="25" y1="51" x2="30" y2="51" stroke="#64748b" strokeWidth="0.4" />
-            <line x1="25" y1="52" x2="29" y2="52" stroke="#64748b" strokeWidth="0.4" />
-            <line x1="33" y1="51" x2="38" y2="51" stroke="#64748b" strokeWidth="0.4" />
-            <line x1="33" y1="52" x2="37" y2="52" stroke="#64748b" strokeWidth="0.4" />
-          </g>
-        )}
-
-        {activity === 'listening-music' && (
-          <g>
-            <path d="M14 26 A18 18 0 0 1 50 26" fill="none" stroke="#6366f1" strokeWidth="2.5" />
-            <rect x="10" y="24" width="5" height="9" rx="2" fill="#4338ca" stroke="#312e81" strokeWidth="0.8" />
-            <rect x="49" y="24" width="5" height="9" rx="2" fill="#4338ca" stroke="#312e81" strokeWidth="0.8" />
-            <g opacity="0.9">
-              <path d="M12 14 v-4 h3 v1.5 h-3" fill="none" stroke="#6366f1" strokeWidth="0.8" className="animate-[float-note_1.8s_infinite]" style={{ animationDelay: '0s' }} />
-              <circle cx="11" cy="14" r="1.2" fill="#6366f1" />
-              <path d="M50 12 v-4 h3 v1.5 h-3" fill="none" stroke="#8b5cf6" strokeWidth="0.8" className="animate-[float-note_1.8s_infinite]" style={{ animationDelay: '0.9s' }} />
-              <circle cx="49" cy="12" r="1.2" fill="#8b5cf6" />
-            </g>
           </g>
         )}
 
@@ -1284,6 +1265,88 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           {cheeks}
           {eyeShape}
           {mouth}
+
+          {/* Occasional Body-Attached Activity Elements */}
+          {activity === 'drinking-water' && (
+            <g className="animate-[drinking-tilt_1.2s_infinite_ease-in-out]" style={{ transformOrigin: '32px 46px' }}>
+              {/* Arm holding bottle */}
+              <path d="M36 44 Q 40 40 43 41" stroke="#0b0b12" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+              {/* Bottle Body (Transparent plastic look) */}
+              <rect x="42" y="33" width="7" height="13" rx="1.5" fill="none" stroke="#cbd5e1" strokeWidth="0.8" />
+              <path d="M44.5 33 v-2 h2 v2" fill="none" stroke="#cbd5e1" strokeWidth="0.8" />
+              {/* Bottle Cap (Blue cap) */}
+              <rect x="44" y="29.5" width="3" height="1.5" fill="#3b82f6" rx="0.5" />
+              {/* Water inside (Translucent blue) */}
+              <rect x="42.5" y="37" width="6" height="8.5" rx="1" fill="#38bdf8" opacity="0.7" />
+              {/* Brand Label (White band) */}
+              <rect x="42.1" y="35" width="6.8" height="2.5" fill="#ffffff" />
+              <rect x="43" y="36.8" width="5" height="1" fill="#22c55e" rx="0.3" />
+            </g>
+          )}
+
+          {activity === 'shaking-clock' && (
+            <g className="animate-[clock-vibrate_0.15s_infinite]" style={{ transformOrigin: '48px 46px' }}>
+              <circle cx="48" cy="46" r="4.5" fill="#f43f5e" stroke="#0b0b12" strokeWidth="0.8" />
+              <circle cx="44.5" cy="41.5" r="1.5" fill="#94a3b8" />
+              <circle cx="51.5" cy="41.5" r="1.5" fill="#94a3b8" />
+              <line x1="44.5" y1="41.5" x2="46" y2="43" stroke="#0b0b12" strokeWidth="0.8" />
+              <line x1="51.5" y1="41.5" x2="50" y2="43" stroke="#0b0b12" strokeWidth="0.8" />
+              <line x1="45" y1="50.5" x2="44" y2="52" stroke="#0b0b12" strokeWidth="1" />
+              <line x1="51" y1="50.5" x2="52" y2="52" stroke="#0b0b12" strokeWidth="1" />
+              <line x1="48" y1="46" x2="48" y2="43" stroke="#0b0b12" strokeWidth="0.6" />
+              <line x1="48" y1="46" x2="50" y2="46" stroke="#0b0b12" strokeWidth="0.6" />
+            </g>
+          )}
+
+          {activity === 'staring-phone' && (
+            <g className="animate-[phone-glow_1.5s_infinite_alternate]" style={{ transformOrigin: '47px 44px' }}>
+              {/* Arm holding phone */}
+              <path d="M36 45 Q 42 44 45 42" stroke="#0b0b12" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+              {/* Phone body */}
+              <rect x="44" y="34" width="10" height="16" rx="2" fill="#0f172a" stroke="#d97706" strokeWidth="1.2" />
+              {/* Screen */}
+              <rect x="45.2" y="35.2" width="7.6" height="13.6" rx="1" fill="#38bdf8" />
+              {/* Charts on screen */}
+              <rect x="46.5" y="37" width="5" height="2" rx="0.5" fill="#f59e0b" />
+              <rect x="46.5" y="40" width="4" height="2" rx="0.5" fill="#10b981" />
+              <rect x="46.5" y="43" width="5" height="2" rx="0.5" fill="#ffffff" />
+              <circle cx="49" cy="47.5" r="0.6" fill="#ffffff" opacity="0.8" />
+            </g>
+          )}
+
+          {activity === 'reading-book' && (
+            <g className="animate-[book-float_1.5s_infinite_ease-in-out]" style={{ transformOrigin: '32px 50px' }}>
+              <path d="M22 50 q10 -3 20 0 l1 4 q-10 -3 -20 0 z" fill="#b45309" />
+              <path d="M23 49.5 q9 -2.5 18 0 l-0.5 3.5 q-9 -2.5 -18 0 z" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="0.3" />
+              <path d="M23 49.5 v3.5" stroke="#cbd5e1" strokeWidth="0.5" />
+              <path d="M41 49.5 v3.5" stroke="#cbd5e1" strokeWidth="0.5" />
+              <line x1="25" y1="51" x2="30" y2="51" stroke="#64748b" strokeWidth="0.4" />
+              <line x1="25" y1="52" x2="29" y2="52" stroke="#64748b" strokeWidth="0.4" />
+              <line x1="33" y1="51" x2="38" y2="51" stroke="#64748b" strokeWidth="0.4" />
+              <line x1="33" y1="52" x2="37" y2="52" stroke="#64748b" strokeWidth="0.4" />
+            </g>
+          )}
+
+          {activity === 'listening-music' && (
+            <g>
+              {/* Headphone headband */}
+              <path d="M12 28 A 20 20 0 0 1 52 28" fill="none" stroke="#1e293b" strokeWidth="1.5" />
+              <path d="M11 28 A 21 21 0 0 1 53 28" fill="none" stroke="#f43f5e" strokeWidth="3.2" strokeLinecap="round" />
+              {/* Left ear cup */}
+              <rect x="7" y="23" width="6" height="12" rx="2.5" fill="#f43f5e" stroke="#991b1b" strokeWidth="1" />
+              <rect x="9.5" y="25" width="2.2" height="8" rx="1" fill="#ffffff" opacity="0.35" />
+              {/* Right ear cup */}
+              <rect x="51" y="23" width="6" height="12" rx="2.5" fill="#f43f5e" stroke="#991b1b" strokeWidth="1" />
+              <rect x="52.3" y="25" width="2.2" height="8" rx="1" fill="#ffffff" opacity="0.35" />
+
+              <g opacity="0.9">
+                <path d="M12 14 v-4 h3 v1.5 h-3" fill="none" stroke="#6366f1" strokeWidth="0.8" className="animate-[float-note_1.8s_infinite]" style={{ animationDelay: '0s' }} />
+                <circle cx="11" cy="14" r="1.2" fill="#6366f1" />
+                <path d="M50 12 v-4 h3 v1.5 h-3" fill="none" stroke="#8b5cf6" strokeWidth="0.8" className="animate-[float-note_1.8s_infinite]" style={{ animationDelay: '0.9s' }} />
+                <circle cx="49" cy="12" r="1.2" fill="#8b5cf6" />
+              </g>
+            </g>
+          )}
 
           {/* Soap bubbles on head when bathing */}
           {currentMood === 'bathing' && (
@@ -1313,3 +1376,19 @@ export function MascotBadge({ on }: { on: boolean }) {
     </span>
   );
 }
+
+const getActivityDuration = (act: string): number => {
+  switch (act) {
+    case 'listening-music': return 10000;
+    case 'soccer-ball': return 7000;
+    case 'staring-phone': return 8000;
+    case 'reading-book': return 8000;
+    case 'drinking-water': return 6000;
+    case 'shaking-clock': return 5000;
+    case 'walking-off-left':
+    case 'walking-off-right':
+    case 'walking-off':
+      return 5000;
+    default: return 5000;
+  }
+};
