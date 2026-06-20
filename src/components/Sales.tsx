@@ -421,6 +421,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             <SlidersHorizontal className="w-4 h-4" />
           </button>
         </div>
+      </div>
       {/* Log Lost Sale quick link */}
       <div className="flex justify-between items-center text-left">
         <p className="text-xs text-muted-foreground">Tap ⚡ to sell, + to add to cart</p>
