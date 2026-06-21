@@ -374,18 +374,30 @@ export function clearInventory(store: StoreData): StoreData {
 }
 
 export function deleteSale(store: StoreData, id: string): StoreData {
-  const sale = store.sales.find(s => s.id === id);
-  if (!sale) return store;
+  const salesToDelete = store.sales.filter(s => s.id === id || (s.transactionId && s.transactionId === id));
+  if (salesToDelete.length === 0) return store;
+  
+  let nextTrash = store.trash || [];
+  for (const sale of salesToDelete) {
+    const item: TrashItem = {
+      id: generateId(),
+      kind: 'sale',
+      deletedAt: new Date().toISOString(),
+      payload: sale,
+    };
+    nextTrash = [item, ...nextTrash];
+  }
+  
   const updated = {
     ...store,
-    sales: store.sales.filter(s => s.id !== id),
-    trash: pushTrash(store, 'sale', sale),
+    sales: store.sales.filter(s => s.id !== id && (!s.transactionId || s.transactionId !== id)),
+    trash: nextTrash,
   };
   saveStore(updated);
   return updated;
 }
 
-export function recordSale(store: StoreData, productId: string, quantity: number, actorName?: string, actorRole?: string): StoreData {
+export function recordSale(store: StoreData, productId: string, quantity: number, actorName?: string, actorRole?: string, transactionId?: string): StoreData {
   const product = store.products.find(p => p.id === productId);
   if (!product || product.quantity < quantity) return store;
   if (quantity <= 0) return store;
@@ -399,6 +411,7 @@ export function recordSale(store: StoreData, productId: string, quantity: number
     total: Math.round(product.sellingPrice * quantity * 100) / 100,
     profit: Math.round((product.sellingPrice - product.costPrice) * quantity * 100) / 100,
     date: new Date().toISOString(),
+    transactionId,
   };
 
   let updated = {
@@ -707,11 +720,12 @@ export function recordCheckout(
   let updated = store;
   const newSales: Sale[] = [];
   const pendingItems: PendingPaymentItem[] = [];
+  const transactionId = pid();
 
   for (const it of items) {
     const p = updated.products.find(p => p.id === it.productId);
     if (!p || p.quantity < it.quantity) continue;
-    updated = recordSale(updated, it.productId, it.quantity);
+    updated = recordSale(updated, it.productId, it.quantity, undefined, undefined, transactionId);
     const created = updated.sales[0];
     newSales.push(created);
     pendingItems.push({

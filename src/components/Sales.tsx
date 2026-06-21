@@ -40,7 +40,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [category, setCategory] = useState<string>('All');
-  const [lastSale, setLastSale] = useState<Sale | null>(null);
+  const [lastSales, setLastSales] = useState<Sale[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -288,27 +288,35 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         customerNote: saveAs === 'pending' ? customerNote.trim() || undefined : undefined,
       });
     onUpdate(result.store);
-    const sale = result.sales[0];
-    if (sale) {
-      setLastSale(sale);
+    if (result.sales.length > 0) {
+      setLastSales(result.sales);
       if (managerSettings?.autoPrintReceipt) {
+        const totalSum = result.sales.reduce((sum, s) => sum + s.total, 0);
         const receiptData = {
           storeName: store.storeName,
           storeType: store.profile?.storeType,
           location: store.profile?.location,
           phone: store.profile?.phone,
           email: store.profile?.email,
-          saleId: sale.id,
-          date: sale.date,
-          items: [{
-            name: sale.productName,
-            quantity: sale.quantity,
-            unitPrice: sale.unitPrice,
-            total: sale.total
-          }],
-          total: sale.total,
+          receiptNumber: result.sales[0].transactionId || result.sales[0].id,
+          date: result.sales[0].date,
+          items: result.sales.map(s => ({
+            productName: s.productName,
+            name: s.productName,
+            quantity: s.quantity,
+            unitPrice: s.unitPrice,
+            total: s.total
+          })),
+          subtotal: totalSum,
+          discount: discountNum,
+          total: Math.max(0, totalSum - discountNum),
+          paid: paidNum,
+          balance: balance,
+          paymentMethod: method,
+          footerMessage: managerSettings.receiptFooterMessage || 'Thank you for your patronage! 🙏',
+          receiptCurrency: managerSettings.receiptCurrency || '₦',
         };
-        printSystem(receiptData).catch(err => {
+        printSystem(receiptData, managerSettings.receiptWidth || '58mm').catch(err => {
           console.error("Auto print failed:", err);
         });
       }
@@ -821,7 +829,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         </div>
       )}
 
-      {lastSale && <SaleReceipt store={store} sale={lastSale} onClose={() => setLastSale(null)} onUpdateStore={onUpdate} />}
+      {lastSales && <SaleReceipt store={store} sale={lastSales} onClose={() => setLastSales(null)} onUpdateStore={onUpdate} />}
     </div>
   );
 }

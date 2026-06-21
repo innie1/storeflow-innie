@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
+import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId } from '@/types/store';
 import { saveStore, getPendingSummary } from '@/lib/store-data';
 import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
@@ -14,11 +14,13 @@ import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier,
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotBadge } from '@/components/Mascot';
 import { FlowIcon } from '@/components/FlowIcon';
+import NotificationDrawer from '@/components/NotificationDrawer';
 
 interface ManagerProps {
   store: StoreData;
   onUpdate: (s: StoreData) => void;
   onEnable?: () => void;
+  onNavigate?: (tab: TabId) => void;
 }
 
 type ManagerTab = 'overview' | 'predictions' | 'analysis' | 'advice';
@@ -158,7 +160,7 @@ function StoreHealthCard({ store, onOpenBreakdown, animate = true }: { store: St
 }
 
 // ─── Money Owed Card ──────────────────────────────────────────────────────────
-function MoneyOwedCard({ store }: { store: StoreData }) {
+function MoneyOwedCard({ store, onClick }: { store: StoreData; onClick?: () => void }) {
   const s = getPendingSummary(store);
   if (s.list.length === 0) return null;
   const advices: string[] = [];
@@ -169,7 +171,12 @@ function MoneyOwedCard({ store }: { store: StoreData }) {
   const repeat = [...nameCount.entries()].sort((a, b) => b[1] - a[1])[0];
   if (repeat && repeat[1] >= 2) advices.push(`${repeat[0]} has delayed payment ${repeat[1]} times.`);
   return (
-    <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
+    <div 
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      className={`w-full text-left p-4 rounded-2xl bg-card shadow-card space-y-3 border border-transparent transition-colors ${onClick ? 'cursor-pointer hover:border-warning/30' : ''}`}
+    >
       <div className="flex items-start justify-between">
         <div><h3 className="font-display font-bold text-sm">💳 Money Owed To You</h3><p className="text-[11px] text-muted-foreground">Outstanding customer balances</p></div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-display font-bold ${s.recoveryRate >= 70 ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'}`}>{s.recoveryRate}% recovered</span>
@@ -543,57 +550,7 @@ function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: S
   );
 }
 
-// ─── Notification Drawer ──────────────────────────────────────────────────────
-function NotificationDrawer({ store, onClose, onUpdate }: { store: StoreData; onClose: () => void; onUpdate: (s: StoreData) => void }) {
-  const notes = store.flowNotifications || [];
-  const markAllRead = () => {
-    const updated = { ...store, flowNotifications: notes.map(n => ({ ...n, read: true })) };
-    saveStore(updated); onUpdate(updated);
-  };
-
-  useEffect(() => {
-    if (notes.some(n => !n.read)) {
-      const updated = { ...store, flowNotifications: notes.map(n => ({ ...n, read: true })) };
-      saveStore(updated); onUpdate(updated);
-    }
-  }, [notes, store, onUpdate]);
-  const toneStyle: Record<string, string> = {
-    success: 'bg-success/10 border-success/30 text-success',
-    warning: 'bg-warning/10 border-warning/30 text-warning',
-    info: 'bg-primary/10 border-primary/30 text-primary',
-    danger: 'bg-destructive/10 border-destructive/30 text-destructive',
-  };
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end" onClick={onClose}>
-      <div className="w-full bg-card rounded-t-3xl shadow-2xl animate-slide-up max-h-[80vh] flex flex-col" style={{ maxWidth: '448px', margin: '0 auto' }} onClick={e => e.stopPropagation()}>
-        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1.5 rounded-full bg-border" /></div>
-        <div className="px-5 py-3 flex items-center justify-between border-b border-border">
-          <h3 className="font-display font-bold text-lg">Flow Notifications</h3>
-          <div className="flex items-center gap-3">
-            {notes.some(n => !n.read) && <button onClick={markAllRead} className="text-xs text-primary font-display font-semibold">Mark all read</button>}
-            <button onClick={onClose} className="text-xl text-muted-foreground leading-none">×</button>
-          </div>
-        </div>
-        <div className="overflow-y-auto flex-1 p-4 space-y-2">
-          {notes.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No notifications yet.</p>
-          ) : (
-            [...notes].reverse().map(n => (
-              <div key={n.id} className={`p-3 rounded-xl border flex items-start gap-3 ${toneStyle[n.tone]} ${n.read ? 'opacity-60' : ''}`}>
-                <span className="text-xl">{n.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-display font-semibold">{n.text}</p>
-                  <p className="text-[10px] mt-0.5 opacity-70">{new Date(n.date).toLocaleString()}</p>
-                </div>
-                {!n.read && <span className="w-2 h-2 rounded-full bg-current flex-shrink-0 mt-1.5" />}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+// ─── Notification Drawer removed inline ──────────────────────────────────────
 
 
 
@@ -749,7 +706,7 @@ export function useCountUp(target: number, durationMs = 1500) {
 }
 
 // ─── Main Manager ─────────────────────────────────────────────────────────────
-export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
+export default function Manager({ store, onUpdate, onEnable, onNavigate }: ManagerProps) {
   const [tab, setTab] = useState<ManagerTab>('overview');
   const [requestText, setRequestText] = useState('');
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -1255,7 +1212,38 @@ export default function Manager({ store, onUpdate, onEnable }: ManagerProps) {
             </div>
           </div>
 
-          <MoneyOwedCard store={store} />
+          {/* Quick Actions / Shortcuts */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => onNavigate?.('cash-drawer')}
+              className="p-3 rounded-xl bg-card border border-border hover:border-primary/30 transition-all flex items-center justify-between text-left group shadow-card"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-base bg-primary/10 w-8 h-8 rounded-lg flex items-center justify-center">💵</span>
+                <div className="min-w-0">
+                  <p className="font-display font-bold text-xs text-foreground group-hover:text-primary transition-colors">Open Cash Drawer</p>
+                  <p className="text-[10px] text-muted-foreground truncate">View cash flows & shifts</p>
+                </div>
+              </div>
+              <span className="text-muted-foreground group-hover:text-primary transition-colors font-bold text-sm">›</span>
+            </button>
+            
+            <button
+              onClick={() => onNavigate?.('pending')}
+              className="p-3 rounded-xl bg-card border border-border hover:border-warning/30 transition-all flex items-center justify-between text-left group shadow-card"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-base bg-warning/10 w-8 h-8 rounded-lg flex items-center justify-center">💳</span>
+                <div className="min-w-0">
+                  <p className="font-display font-bold text-xs text-foreground group-hover:text-warning transition-colors">Pending Payments</p>
+                  <p className="text-[10px] text-muted-foreground truncate">Track customer debts</p>
+                </div>
+              </div>
+              <span className="text-muted-foreground group-hover:text-warning transition-colors font-bold text-sm">›</span>
+            </button>
+          </div>
+
+          <MoneyOwedCard store={store} onClick={() => onNavigate?.('pending')} />
 
           {/* Memory Timeline */}
           {(() => {

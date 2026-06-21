@@ -139,6 +139,20 @@ export default function ManagerDashboard({ store, onNavigate }: ManagerDashboard
               <span>Manage Stock</span>
             </button>
             <button 
+              onClick={() => onNavigate('expenses')} 
+              className="p-4 rounded-xl bg-surface-2 hover:bg-surface-3 border border-border/60 transition-colors text-center text-xs font-display font-bold text-foreground cursor-pointer flex flex-col items-center gap-1.5"
+            >
+              <span className="text-lg">🧾</span>
+              <span>Log Expense</span>
+            </button>
+            <button 
+              onClick={() => onNavigate('cash-drawer')} 
+              className="p-4 rounded-xl bg-surface-2 hover:bg-surface-3 border border-border/60 transition-colors text-center text-xs font-display font-bold text-foreground cursor-pointer flex flex-col items-center gap-1.5"
+            >
+              <span className="text-lg">💵</span>
+              <span>Open Cash Drawer</span>
+            </button>
+            <button 
               onClick={() => onNavigate('customers')} 
               className="p-4 rounded-xl bg-surface-2 hover:bg-surface-3 border border-border/60 transition-colors text-center text-xs font-display font-bold text-foreground cursor-pointer flex flex-col items-center gap-1.5"
             >

@@ -3,6 +3,7 @@ import { StoreData, TabId, Product } from '@/types/store';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore } from '@/lib/store-data';
 import StoreAccess from '@/components/StoreAccess';
 import StoreSwitcher from '@/components/StoreSwitcher';
+import NotificationDrawer from '@/components/NotificationDrawer';
 import Dashboard from '@/components/Dashboard';
 import Inventory from '@/components/Inventory';
 import Sales from '@/components/Sales';
@@ -89,6 +90,129 @@ const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'history', label: 'History', icon: '📋' },
   { id: 'roi', label: 'ROI Tracker', icon: '📈' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
+];
+
+interface MoreSubItem {
+  label: string;
+  tabId: TabId;
+  icon?: string;
+}
+
+interface MoreCategory {
+  id: string;
+  label: string;
+  icon: string;
+  subItems: MoreSubItem[];
+}
+
+const MORE_CATEGORIES: MoreCategory[] = [
+  {
+    id: 'marketplace',
+    label: 'Marketplace',
+    icon: '🛒',
+    subItems: [
+      { label: 'Product Discovery', tabId: 'marketplace', icon: '🔍' },
+      { label: 'Supplier Discovery', tabId: 'marketplace', icon: '🏭' },
+      { label: 'Nearby Suppliers', tabId: 'marketplace', icon: '📍' },
+      { label: 'Price Comparison', tabId: 'marketplace', icon: '⚖️' },
+      { label: 'Sell Excess Inventory', tabId: 'marketplace', icon: '📦' },
+      { label: 'Trending Products', tabId: 'marketplace', icon: '📈' },
+      { label: 'Marketplace Deals', tabId: 'marketplace', icon: '🏷️' },
+      { label: 'Supplier Registration', tabId: 'marketplace', icon: '📝' },
+    ]
+  },
+  {
+    id: 'communication',
+    label: 'Communication Center',
+    icon: '💬',
+    subItems: [
+      { label: 'Customer Messages', tabId: 'communication-center', icon: '👥' },
+      { label: 'Supplier Messages', tabId: 'communication-center', icon: '🏬' },
+      { label: 'Employee Messages', tabId: 'communication-center', icon: '💼' },
+      { label: 'WhatsApp Templates', tabId: 'communication-center', icon: '📱' },
+      { label: 'Message History', tabId: 'communication-center', icon: '📜' },
+    ]
+  },
+  {
+    id: 'goals',
+    label: 'Goals',
+    icon: '🎯',
+    subItems: [
+      { label: 'Revenue Goals', tabId: 'goals', icon: '💰' },
+      { label: 'Profit Goals', tabId: 'goals', icon: '📈' },
+      { label: 'Savings Goals', tabId: 'goals', icon: '🏦' },
+      { label: 'Inventory Goals', tabId: 'goals', icon: '📦' },
+      { label: 'Progress Tracking', tabId: 'goals', icon: '📊' },
+    ]
+  },
+  {
+    id: 'finance',
+    label: 'Finance Center',
+    icon: '💰',
+    subItems: [
+      { label: 'Expenses', tabId: 'expenses', icon: '🧾' },
+      { label: 'Pending Payments', tabId: 'pending', icon: '💳' },
+      { label: 'Cash Drawer', tabId: 'cash-drawer', icon: '💵' },
+      { label: 'Margin Calculator', tabId: 'roi', icon: '🧮' },
+      { label: 'ROI Tracker', tabId: 'roi', icon: '📈' },
+    ]
+  },
+  {
+    id: 'business_tools',
+    label: 'Business Tools',
+    icon: '🛠️',
+    subItems: [
+      { label: 'Business Diary', tabId: 'diary', icon: '📓' },
+      { label: 'Document Vault', tabId: 'documents', icon: '📂' },
+      { label: 'Flow Academy', tabId: 'academy', icon: '🎓' },
+      { label: 'Achievements', tabId: 'achievements', icon: '🏆' },
+    ]
+  },
+  {
+    id: 'growth',
+    label: 'Growth Center',
+    icon: '🚀',
+    subItems: [
+      { label: 'Wishlist', tabId: 'wishlist', icon: '🌟' },
+      { label: 'Sales Forecast', tabId: 'manager', icon: '🔮' },
+      { label: 'Store Health', tabId: 'manager', icon: '❤️' },
+      { label: 'Marketing Center', tabId: 'communication-center', icon: '📢' },
+      { label: 'Customer Feedback', tabId: 'manager', icon: '💬' },
+    ]
+  },
+  {
+    id: 'staff_accounts',
+    label: 'Staff Accounts',
+    icon: '👥',
+    subItems: [
+      { label: 'Staff List', tabId: 'staff', icon: '💼' },
+      { label: 'Shift Tallies', tabId: 'cash-drawer', icon: '📋' },
+      { label: 'Performance Tracker', tabId: 'staff', icon: '📊' },
+    ]
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: '📊',
+    subItems: [
+      { label: 'Sales History', tabId: 'history', icon: '📋' },
+      { label: 'Expense History', tabId: 'history', icon: '🧾' },
+      { label: 'Restock History', tabId: 'history', icon: '📦' },
+      { label: 'Audit Logs', tabId: 'settings', icon: '🔐' },
+    ]
+  },
+  {
+    id: 'settings_section',
+    label: 'Settings',
+    icon: '⚙️',
+    subItems: [
+      { label: 'General Settings', tabId: 'settings', icon: '🔧' },
+      { label: 'Receipt Setup', tabId: 'settings', icon: '🖨️' },
+      { label: 'Access Code', tabId: 'settings', icon: '🔑' },
+      { label: 'Backup & Restore', tabId: 'settings', icon: '💾' },
+      { label: 'Danger Zone', tabId: 'settings', icon: '⚠️' },
+    ]
+  }
 ];
 
 const GAMES_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
@@ -212,6 +336,16 @@ export default function Index() {
   const [switchPinBuffer, setSwitchPinBuffer] = useState('');
   const [showSwitchPassField, setShowSwitchPassField] = useState(false);
 
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
+  const toggleCategory = (catId: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [catId]: !prev[catId]
+    }));
+  };
+
   const isGames = store?.category === 'games';
 
   const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;
@@ -226,6 +360,39 @@ export default function Index() {
   const allowedMoreItems = useMemo(() => {
     return moreItems.filter(t => isTabAllowed(t.id, currentUser));
   }, [moreItems, currentUser]);
+
+  const allowedCategories = useMemo(() => {
+    if (isGames) {
+      const allowedSubs = GAMES_MORE_ITEMS.filter(sub => isTabAllowed(sub.id, currentUser)).map(sub => ({
+        label: sub.label,
+        tabId: sub.id,
+        icon: '⚙️'
+      }));
+      return [{
+        id: 'settings_section',
+        label: 'Settings',
+        icon: '⚙️',
+        subItems: allowedSubs
+      }].filter(cat => cat.subItems.length > 0);
+    }
+    return MORE_CATEGORIES.map(cat => {
+      const allowedSubs = cat.subItems.filter(sub => isTabAllowed(sub.tabId, currentUser));
+      return {
+        ...cat,
+        subItems: allowedSubs
+      };
+    }).filter(cat => cat.subItems.length > 0);
+  }, [currentUser, isGames]);
+
+  useEffect(() => {
+    const parentCat = MORE_CATEGORIES.find(cat => cat.subItems.some(sub => sub.tabId === tab));
+    if (parentCat) {
+      setExpandedCategories(prev => ({
+        ...prev,
+        [parentCat.id]: true
+      }));
+    }
+  }, [tab]);
 
   // When switching to a games store, ensure the active tab is valid for it
   useEffect(() => {
@@ -395,20 +562,48 @@ export default function Index() {
             </button>
           ))}
 
-          <div className="pt-4 mt-4 border-t border-border">
-            <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">Tools & Settings</p>
-            {allowedMoreItems.map(m => (
-              <button
-                key={m.id}
-                onClick={() => setTab(m.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors ${
-                  tab === m.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
-                }`}
-              >
-                <span className="flex items-center justify-center">{renderTabIcon(m.id, tab === m.id, "w-4.5 h-4.5")}</span>
-                <span>{m.label}</span>
-              </button>
-            ))}
+          <div className="pt-4 mt-4 border-t border-border space-y-2">
+            <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">More Features</p>
+            {allowedCategories.map(cat => {
+              const isExpanded = !!expandedCategories[cat.id];
+              const hasActiveSub = cat.subItems.some(sub => tab === sub.tabId);
+              return (
+                <div key={cat.id} className="space-y-1">
+                  <button
+                    onClick={() => toggleCategory(cat.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors ${
+                      hasActiveSub ? 'text-primary' : 'text-foreground hover:bg-surface-2'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-base">{cat.icon}</span>
+                      <span>{cat.label}</span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-primary' : 'text-muted-foreground'}`} />
+                  </button>
+                  
+                  {isExpanded && (
+                    <div className="pl-4 space-y-1 border-l border-border ml-5 animate-slide-down">
+                      {cat.subItems.map(sub => {
+                        const isSubActive = tab === sub.tabId;
+                        return (
+                          <button
+                            key={sub.label}
+                            onClick={() => setTab(sub.tabId)}
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-display font-semibold text-left transition-colors ${
+                              isSubActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <span className="text-xs">{sub.icon}</span>
+                            <span>{sub.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -442,6 +637,20 @@ export default function Index() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Global Notification Bell */}
+            <button
+              onClick={() => setShowNotifications(true)}
+              className="relative w-9 h-9 rounded-full bg-surface-2 hover:bg-surface-3 border border-border flex items-center justify-center text-sm transition-all active:scale-95 cursor-pointer"
+              title="Notifications"
+            >
+              🔔
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={() => setShowSwitchUser(true)}
               className="px-3.5 py-1.5 rounded-full bg-black/40 border border-border/80 hover:border-yellow-500/40 text-xs text-foreground font-display font-semibold transition-all flex items-center gap-2 shadow-sm active:scale-95 cursor-pointer"
@@ -732,7 +941,7 @@ export default function Index() {
             <Expenses store={store} onUpdate={setStore} />
           </div>
           <div className={tab === 'manager' ? 'block' : 'hidden'}>
-            <Manager store={store} onUpdate={setStore} />
+            <Manager store={store} onUpdate={setStore} onNavigate={handleNavigate} />
           </div>
           <div className={tab === 'pending' ? 'block' : 'hidden'}>
             <PendingPayments store={store} onUpdate={setStore} />
@@ -828,7 +1037,7 @@ export default function Index() {
               <button
                 onClick={() => setShowMoreMenu(!showMoreMenu)}
                 className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all cursor-pointer ${
-                  allowedMoreItems.some(m => m.id === tab) ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
+                  allowedCategories.some(cat => cat.subItems.some(sub => sub.tabId === tab)) ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <span className="mb-1 flex items-center justify-center h-5 w-5">
@@ -836,25 +1045,6 @@ export default function Index() {
                 </span>
                 <span className="font-display font-bold leading-tight">More</span>
               </button>
-              {showMoreMenu && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
-                  <div className="absolute bottom-full right-0 mb-2 w-44 bg-card shadow-card border border-border rounded-xl overflow-hidden z-50 animate-fade-in">
-                    {allowedMoreItems.map(m => (
-                      <button
-                        key={m.id}
-                        onClick={() => { setTab(m.id); setShowMoreMenu(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-display font-semibold transition-colors cursor-pointer ${
-                          tab === m.id ? 'bg-yellow-500/10 text-yellow-500' : 'text-foreground hover:bg-surface-2'
-                        }`}
-                      >
-                        <span className="flex items-center justify-center">{renderTabIcon(m.id, tab === m.id, "w-4.5 h-4.5")}</span>
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
             </div>
           </div>
         </nav>
@@ -953,6 +1143,81 @@ export default function Index() {
           currentCode={store.accessCode}
           onSwitch={handleStoreLoaded}
           onClose={() => setShowSwitcher(false)}
+        />
+      )}
+
+      {/* Mobile More Menu Bottom Sheet */}
+      {showMoreMenu && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end animate-fade-in" onClick={() => setShowMoreMenu(false)}>
+          <div 
+            className="w-full bg-card border-t border-border rounded-t-3xl shadow-2xl p-5 max-h-[75vh] overflow-y-auto space-y-4 animate-slide-up flex flex-col no-scrollbar"
+            style={{ maxWidth: '480px', margin: '0 auto' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drawer Handle */}
+            <div className="flex justify-center -mt-2"><div className="w-10 h-1.5 rounded-full bg-border" /></div>
+            
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <h3 className="font-display font-bold text-base">More Tools & Features</h3>
+              <button onClick={() => setShowMoreMenu(false)} className="text-muted-foreground text-sm font-semibold hover:underline">Done</button>
+            </div>
+            
+            <div className="space-y-2">
+              {allowedCategories.map(cat => {
+                const isExpanded = !!expandedCategories[cat.id];
+                const hasActiveSub = cat.subItems.some(sub => tab === sub.tabId);
+                return (
+                  <div key={cat.id} className="border border-border/80 rounded-xl overflow-hidden bg-surface-2/40">
+                    <button
+                      onClick={() => toggleCategory(cat.id)}
+                      className={`w-full flex items-center justify-between p-3.5 text-xs font-display font-semibold transition-colors ${
+                        hasActiveSub ? 'bg-primary/5 text-primary' : 'text-foreground'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-base">{cat.icon}</span>
+                        <span>{cat.label}</span>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-primary' : 'text-muted-foreground'}`} />
+                    </button>
+                    
+                    {isExpanded && (
+                      <div className="px-3.5 pb-3 pt-1 grid grid-cols-2 gap-2 bg-background/40 border-t border-border/50 animate-slide-down">
+                        {cat.subItems.map(sub => {
+                          const isSubActive = tab === sub.tabId;
+                          return (
+                            <button
+                              key={sub.label}
+                              onClick={() => {
+                                setTab(sub.tabId);
+                                setShowMoreMenu(false);
+                              }}
+                              className={`flex items-center gap-2 p-2.5 rounded-lg text-[11px] font-display font-semibold text-left transition-colors border ${
+                                isSubActive 
+                                  ? 'bg-primary/10 text-primary border-primary/20' 
+                                  : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                              }`}
+                            >
+                              <span className="text-xs">{sub.icon}</span>
+                              <span className="truncate">{sub.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNotifications && (
+        <NotificationDrawer
+          store={store}
+          onClose={() => setShowNotifications(false)}
+          onUpdate={setStore}
         />
       )}
       <ToastContainer />

@@ -473,6 +473,25 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
             </div>
           </div>
 
+          {/* Quick Actions Panel */}
+          <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card space-y-2">
+            <h3 className="font-display font-bold text-xs uppercase tracking-wider text-muted-foreground">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onNavigate('sales')}
+                className="py-2.5 px-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                💰 Record Sale
+              </button>
+              <button
+                onClick={() => onNavigate('expenses')}
+                className="py-2.5 px-3 rounded-xl bg-destructive/10 text-destructive border border-destructive/20 font-display font-bold text-xs hover:bg-destructive/20 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                🧾 Log Expense
+              </button>
+            </div>
+          </div>
+
           <button
             onClick={() => toggleBreakdown('revenue')}
             className={`w-full p-5 rounded-2xl bg-card shadow-card border text-left transition-all cursor-pointer ${

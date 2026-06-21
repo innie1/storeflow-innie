@@ -23,13 +23,13 @@ interface HistoryEntry {
   amount: number;
   amountColor: string;
   icon: string;
-  raw: Sale | Restock | Expense;
+  raw: Sale | Sale[] | Restock | Expense;
 }
 
 export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<HistoryFilter>('all');
-  const [viewReceipt, setViewReceipt] = useState<Sale | null>(null);
+  const [viewReceipt, setViewReceipt] = useState<Sale | Sale[] | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDelId, setConfirmDelId] = useState<HistoryEntry | null>(null);
   const [showTrash, setShowTrash] = useState(false);
@@ -41,7 +41,38 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
     const items: HistoryEntry[] = [];
 
     if (filter === 'all' || filter === 'sales') {
+      const groupedSales = new Map<string, Sale[]>();
+      const singleSales: Sale[] = [];
       store.sales.forEach(s => {
+        if (s.transactionId) {
+          const arr = groupedSales.get(s.transactionId) || [];
+          arr.push(s);
+          groupedSales.set(s.transactionId, arr);
+        } else {
+          singleSales.push(s);
+        }
+      });
+
+      groupedSales.forEach((group, txId) => {
+        const total = group.reduce((sum, s) => sum + s.total, 0);
+        const totalQty = group.reduce((sum, s) => sum + s.quantity, 0);
+        const firstSale = group[0];
+        items.push({
+          id: txId,
+          type: 'sale',
+          date: firstSale.date,
+          title: group.length === 1 ? firstSale.productName : `Sale — ${group.length} items`,
+          subtitle: group.length === 1 
+            ? `${firstSale.quantity} × ₦${firstSale.unitPrice.toLocaleString()}` 
+            : `${totalQty} items`,
+          amount: total,
+          amountColor: 'text-primary',
+          icon: '💰',
+          raw: group,
+        });
+      });
+
+      singleSales.forEach(s => {
         items.push({
           id: s.id,
           type: 'sale',
@@ -227,7 +258,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             <div
               className="flex-1 min-w-0 cursor-pointer"
               onClick={() => {
-                if (entry.type === 'sale') setViewReceipt(entry.raw as Sale);
+                if (entry.type === 'sale') setViewReceipt(entry.raw as Sale | Sale[]);
                 else if (entry.type === 'restock') {
                   const r = entry.raw as Restock;
                   const batch = r.batchId

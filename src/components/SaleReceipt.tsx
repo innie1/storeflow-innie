@@ -5,14 +5,15 @@ import { showToast } from '@/components/Toast';
 
 interface SaleReceiptProps {
   store: StoreData;
-  sale: Sale;
+  sale: Sale | Sale[];
   onClose: () => void;
   onUpdateStore?: (store: StoreData) => void;
 }
 
 export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: SaleReceiptProps) {
   const profile = store.profile;
-  const date = new Date(sale.date);
+  const salesList = Array.isArray(sale) ? sale : [sale];
+  const date = new Date(salesList[0]?.date || Date.now());
   const [buyerPhone, setBuyerPhone] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const settings = store.managerSettings || {};
@@ -28,12 +29,17 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
     if (settings.receiptWhatsApp) receipt += `  WA: ${settings.receiptWhatsApp}\n`;
     receipt += `==============================\n`;
     receipt += `Date: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
-    receipt += `Receipt #: ${sale.id.toUpperCase()}\n`;
+    const receiptNum = salesList[0]?.transactionId || salesList[0]?.id || '';
+    receipt += `Receipt #: ${receiptNum.toUpperCase()}\n`;
     receipt += `------------------------------\n`;
-    receipt += `${sale.productName}\n`;
-    receipt += `  ${sale.quantity} × ₦${sale.unitPrice.toLocaleString()} = ₦${sale.total.toLocaleString()}\n`;
+    let totalSum = 0;
+    salesList.forEach(s => {
+      receipt += `${s.productName}\n`;
+      receipt += `  ${s.quantity} × ₦${s.unitPrice.toLocaleString()} = ₦${s.total.toLocaleString()}\n`;
+      totalSum += s.total;
+    });
     receipt += `------------------------------\n`;
-    receipt += `TOTAL: ₦${sale.total.toLocaleString()}\n`;
+    receipt += `TOTAL: ₦${totalSum.toLocaleString()}\n`;
     receipt += `==============================\n`;
     receipt += `  ${settings.receiptFooterMessage || 'Thank you for your patronage! 🙏'}\n`;
     return receipt;
@@ -60,27 +66,28 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   };
 
   const handlePrint = () => {
+    const totalSum = salesList.reduce((sum, s) => sum + s.total, 0);
     const receiptData = {
       storeName: settings.receiptStoreName || store.storeName,
       storeType: profile?.storeType,
       storeAddress: settings.receiptAddress || profile?.location,
       storePhone: settings.receiptPhone || profile?.phone,
       email: profile?.email,
-      receiptNumber: sale.id,
-      date: sale.date,
-      items: [{
-        productName: sale.productName,
-        name: sale.productName,
-        quantity: sale.quantity,
-        unitPrice: sale.unitPrice,
-        total: sale.total
-      }],
-      subtotal: sale.total,
+      receiptNumber: salesList[0]?.transactionId || salesList[0]?.id || '',
+      date: salesList[0]?.date || new Date().toISOString(),
+      items: salesList.map(s => ({
+        productName: s.productName,
+        name: s.productName,
+        quantity: s.quantity,
+        unitPrice: s.unitPrice,
+        total: s.total
+      })),
+      subtotal: totalSum,
       discount: 0,
-      total: sale.total,
-      paid: sale.total,
+      total: totalSum,
+      paid: totalSum,
       balance: 0,
-      paymentMethod: sale.paymentMethod || 'transfer',
+      paymentMethod: salesList[0]?.paymentMethod || 'transfer',
       footerMessage: settings.receiptFooterMessage || 'Thank you for your patronage! 🙏',
       receiptCurrency: settings.receiptCurrency || '₦',
     };
@@ -174,23 +181,27 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
               <span>{date.toLocaleDateString()}</span>
               <span>{date.toLocaleTimeString()}</span>
             </div>
-            <p className="text-muted-foreground">Receipt #: {sale.id.slice(0, 8).toUpperCase()}</p>
+            <p className="text-muted-foreground">Receipt #: {(salesList[0]?.transactionId || salesList[0]?.id || '').slice(0, 8).toUpperCase()}</p>
 
             <div className="border-t border-dashed border-border my-2" />
 
-            <div>
-              <p className="text-foreground font-semibold">{sale.productName}</p>
-              <div className="flex justify-between text-muted-foreground">
-                <span>{sale.quantity} × ₦{sale.unitPrice.toLocaleString()}</span>
-                <span>₦{sale.total.toLocaleString()}</span>
-              </div>
+            <div className="space-y-3">
+              {salesList.map((s, idx) => (
+                <div key={s.id || idx}>
+                  <p className="text-foreground font-semibold">{s.productName}</p>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>{s.quantity} × ₦{s.unitPrice.toLocaleString()}</span>
+                    <span>₦{s.total.toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="border-t border-dashed border-border my-2" />
 
             <div className="flex justify-between font-bold text-foreground text-sm">
               <span>TOTAL</span>
-              <span className="text-primary">₦{sale.total.toLocaleString()}</span>
+              <span className="text-primary">₦{salesList.reduce((sum, s) => sum + s.total, 0).toLocaleString()}</span>
             </div>
 
             <div className="border-t border-dashed border-border my-2" />

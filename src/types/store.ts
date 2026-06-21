@@ -42,6 +42,7 @@ export interface Sale {
   date: string;
   pendingPaymentId?: string;
   paymentMethod?: PaymentMethod;
+  transactionId?: string;
 }
 
 export interface PendingPaymentItem {
@@ -538,4 +539,5 @@ export interface CommunicationMessage {
 export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending' | 'marketplace'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings'
-  | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer' | 'activity-log' | 'communication-center';
+  | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer' | 'activity-log' | 'communication-center'
+  | 'more';
