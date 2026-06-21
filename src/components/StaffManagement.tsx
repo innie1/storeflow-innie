@@ -20,7 +20,7 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
   // Form states for adding staff
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
-  const [role, setRole] = useState<'admin' | 'manager' | 'cashier'>('cashier');
+  const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>('cashier');
   
   // Permissions states
   const [salesAccess, setSalesAccess] = useState(true);
@@ -37,9 +37,16 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
   const handleAddStaff = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !pin.trim()) {
-      showToast('Name and security PIN are required', 'error');
+      showToast('Name and security credentials are required', 'error');
       return;
     }
+
+    const sensitive = role === 'admin' || role === 'manager';
+    if (!sensitive && (pin.length < 4 || pin.length > 6 || /[^0-9]/.test(pin))) {
+      showToast('Security PIN must be a 4 to 6 digit numeric code', 'error');
+      return;
+    }
+
     const nextStore = addStaffMember(store, {
       name: name.trim(),
       pin: pin.trim(),
@@ -59,6 +66,13 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
   const handleEditStaff = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStaff || !name.trim() || !pin.trim()) return;
+
+    const sensitive = role === 'admin' || role === 'manager';
+    if (!sensitive && (pin.length < 4 || pin.length > 6 || /[^0-9]/.test(pin))) {
+      showToast('Security PIN must be a 4 to 6 digit numeric code', 'error');
+      return;
+    }
+
     const nextStore = updateStaffMember(store, editingStaff.id, {
       name: name.trim(),
       pin: pin.trim(),
@@ -346,18 +360,24 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
                     <option value="cashier">Cashier</option>
                     <option value="manager">Manager</option>
                     <option value="admin">Admin</option>
+                    <option value="inventory">Inventory Staff</option>
+                    <option value="accountant">Accountant</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="custom">Custom Role</option>
                   </select>
                 </div>
 
                 <div className="space-y-1 text-left">
-                  <label className="text-xs text-muted-foreground uppercase font-bold">4-Digit Security PIN</label>
+                  <label className="text-xs text-muted-foreground uppercase font-bold">
+                    {role === 'admin' || role === 'manager' ? 'Password' : 'Security PIN (4-6 digits)'}
+                  </label>
                   <input 
                     type="password" 
-                    maxLength={4}
+                    maxLength={role === 'admin' || role === 'manager' ? undefined : 6}
                     value={pin} 
-                    onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="e.g. 1234"
-                    className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500 tracking-widest font-mono text-center"
+                    onChange={e => setPin(role === 'admin' || role === 'manager' ? e.target.value : e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder={role === 'admin' || role === 'manager' ? 'e.g. securePass12' : 'e.g. 123456'}
+                    className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500 font-mono text-center"
                   />
                 </div>
               </div>

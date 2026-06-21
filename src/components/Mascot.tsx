@@ -35,9 +35,10 @@ interface MascotProps {
   className?: string;
   animate?: boolean;
   store?: StoreData;
+  role?: string;
 }
 
-export default function Mascot({ size = 64, mood = 'idle', className = '', animate = true, store }: MascotProps) {
+export default function Mascot({ size = 64, mood = 'idle', className = '', animate = true, store, role }: MascotProps) {
   const [activeTheme, setActiveTheme] = useState<'graphite' | 'blue' | 'forest'>('graphite');
   const [overrideMood, setOverrideMood] = useState<MascotMood | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -56,6 +57,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
   // New States for edge-aware & speech-aware logic
   const [isManagerEnabled, setIsManagerEnabled] = useState(true);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [bubbleShiftX, setBubbleShiftX] = useState<number>(0);
   const [bubblePosition, setBubblePosition] = useState<'above' | 'below'>('above');
   const [isMouthTalking, setIsMouthTalking] = useState(false);
@@ -130,17 +132,62 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     return () => observer.disconnect();
   }, []);
 
+  // Track active user role
+  useEffect(() => {
+    if (role) {
+      setCurrentUserRole(role);
+      return;
+    }
+    const checkRole = () => {
+      try {
+        const raw = sessionStorage.getItem('storeflow_active_user');
+        if (raw) {
+          const user = JSON.parse(raw);
+          setCurrentUserRole(user.role || null);
+        } else {
+          setCurrentUserRole(null);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    checkRole();
+    const interval = setInterval(checkRole, 2000);
+    return () => clearInterval(interval);
+  }, [role]);
+
+  // Keep isManagerEnabled in sync with store prop updates
+  useEffect(() => {
+    if (store && store.managerSettings) {
+      setIsManagerEnabled(store.managerSettings.enabled !== false);
+    }
+  }, [store?.managerSettings?.enabled, store]);
+
   // Session-load welcome greeting (only once per session)
   useEffect(() => {
     if (!isManagerEnabled || isClosingTime) return;
     if (typeof window !== 'undefined' && !sessionStorage.getItem('storeflow_session_greeted')) {
       sessionStorage.setItem('storeflow_session_greeted', 'true');
       const timer = setTimeout(() => {
-        triggerSpeech("Welcome to the shop! Let's make some sales! 🛒✨", 'happy', 5000);
+        let welcomeMsg = "Welcome to the shop! Let's make some sales! 🛒✨";
+        if (currentUserRole === 'owner') {
+          welcomeMsg = "Welcome back, Boss! Ready to look at our profit insights today? 📊👑";
+        } else if (currentUserRole === 'manager') {
+          welcomeMsg = "Welcome, Manager! Let's keep operations smooth and track inventory! 📋🚀";
+        } else if (currentUserRole === 'cashier') {
+          welcomeMsg = "Welcome! Let's check out some sales and serve our customers! 🛒💵";
+        } else if (currentUserRole === 'inventory') {
+          welcomeMsg = "Hi there! Let's inspect stock levels and get restocked today! 📦🔍";
+        } else if (currentUserRole === 'accountant') {
+          welcomeMsg = "Hello! Let's balance the records and manage our expenses! 💸📉";
+        } else if (currentUserRole === 'supervisor') {
+          welcomeMsg = "Welcome, Supervisor! Let's check store performance and staff tracking! 🌟📋";
+        }
+        triggerSpeech(welcomeMsg, 'happy', 5000);
       }, 1200);
       return () => clearTimeout(timer);
     }
-  }, [isManagerEnabled, isClosingTime]);
+  }, [isManagerEnabled, isClosingTime, currentUserRole]);
 
   // Sleep inactivity timer (3 minutes of no user mascot interaction)
   const resetInactivity = () => {
@@ -624,15 +671,57 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     }
 
     // Standard tap response
-    const singleTaps = [
+    let singleTaps = [
       { text: "Hey! 👋", mood: 'happy' as MascotMood },
       { text: "That tickles! 😄", mood: 'happy' as MascotMood },
       { text: "I'm working! 📊", mood: 'thinking' as MascotMood },
       { text: "Need something?", mood: 'idle' as MascotMood },
-      { text: "Yes boss? 🫡", mood: 'confident' as MascotMood },
-      { text: "Flow is online & offline! 🔌", mood: 'confident' as MascotMood },
-      { text: "Careful with the inventory!", mood: 'concerned' as MascotMood }
+      { text: "Flow is online & offline! 🔌", mood: 'confident' as MascotMood }
     ];
+
+    if (currentUserRole === 'owner') {
+      singleTaps = [
+        { text: "Yes, Boss? Ready to scale this business? 👑", mood: 'confident' as MascotMood },
+        { text: "Profits are looking good! Keep up the great work! 💰📈", mood: 'happy' as MascotMood },
+        { text: "Your store health is currently doing well. Let's aim higher! 🌟", mood: 'happy' as MascotMood },
+        { text: "Need to check sensitive backup files or settings? 🔒", mood: 'thinking' as MascotMood },
+        { text: "I'm analyzing our margins right now, Boss! 📊", mood: 'thinking' as MascotMood }
+      ];
+    } else if (currentUserRole === 'manager') {
+      singleTaps = [
+        { text: "How can I help you manage the store today? 📋", mood: 'idle' as MascotMood },
+        { text: "Let's check for any low stock warnings! ⚠️📦", mood: 'concerned' as MascotMood },
+        { text: "Ensure staff shifts are running smoothly! 🚀", mood: 'confident' as MascotMood },
+        { text: "Restock orders are ready to be verified! 📝", mood: 'thinking' as MascotMood }
+      ];
+    } else if (currentUserRole === 'cashier') {
+      singleTaps = [
+        { text: "Ready to checkout the next order? 🛒💵", mood: 'happy' as MascotMood },
+        { text: "Remember to verify payments carefully! 💳", mood: 'concerned' as MascotMood },
+        { text: "Let's record high sales today! 💸✨", mood: 'confident' as MascotMood },
+        { text: "Need to check the drawer balance? 🏦", mood: 'thinking' as MascotMood }
+      ];
+    } else if (currentUserRole === 'inventory') {
+      singleTaps = [
+        { text: "Let's count some stock! 📦", mood: 'happy' as MascotMood },
+        { text: "Low stock items need our attention! ⚠️", mood: 'concerned' as MascotMood },
+        { text: "Are all supplier invoices recorded? 📝", mood: 'thinking' as MascotMood },
+        { text: "Keep the shelves full! 🛒", mood: 'confident' as MascotMood }
+      ];
+    } else if (currentUserRole === 'accountant') {
+      singleTaps = [
+        { text: "Ready to balance the expenses? 💸📉", mood: 'thinking' as MascotMood },
+        { text: "Let's review the profit margins! 📊", mood: 'confident' as MascotMood },
+        { text: "Let's check outstanding balances! 💳", mood: 'concerned' as MascotMood }
+      ];
+    } else if (currentUserRole === 'supervisor') {
+      singleTaps = [
+        { text: "Monitoring staff activities closely! 🔎", mood: 'thinking' as MascotMood },
+        { text: "Let's review overall store health metrics! 📊", mood: 'confident' as MascotMood },
+        { text: "Cashier shifts look active today! 🌟", mood: 'happy' as MascotMood }
+      ];
+    }
+
     const picked = singleTaps[Math.floor(Math.random() * singleTaps.length)];
     triggerSpeech(picked.text, picked.mood, 2500);
   };
@@ -909,7 +998,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
   const animClass = !animate ? '' :
     activity === 'soccer-ball' ? 'animate-[mascot-soccer-kick_7s_forwards_ease-in-out]' :
-    currentMood === 'sleeping' ? 'mascot-float-anim' :
+    currentMood === 'sleeping' ? '' :
     currentMood === 'bathing' ? 'mascot-bath-anim' :
     currentMood === 'thinking' ? 'mascot-think-anim' :
     currentMood === 'excited' ? 'mascot-excited-anim' :

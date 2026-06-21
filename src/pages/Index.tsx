@@ -160,8 +160,35 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
   }
 };
 
+const isTabAllowed = (tabId: TabId, user: any) => {
+  if (!user) return false;
+  if (user.role === 'owner') return true;
+  switch (user.role) {
+    case 'manager':
+      return tabId !== 'settings' && tabId !== 'activity-log';
+    case 'cashier':
+      return ['dashboard', 'sales', 'history', 'cash-drawer'].includes(tabId);
+    case 'inventory':
+      return ['dashboard', 'inventory', 'suppliers', 'marketplace', 'wishlist'].includes(tabId);
+    case 'accountant':
+      return ['dashboard', 'expenses', 'roi', 'pending', 'cash-drawer'].includes(tabId);
+    case 'supervisor':
+      return ['dashboard', 'staff', 'cash-drawer'].includes(tabId);
+    case 'custom':
+      if (tabId === 'dashboard') return true;
+      if (['sales', 'history', 'cash-drawer'].includes(tabId) && user.permissions?.sales) return true;
+      if (['inventory', 'suppliers', 'marketplace', 'wishlist'].includes(tabId) && user.permissions?.inventory) return true;
+      if (['roi', 'expenses', 'pending'].includes(tabId) && user.permissions?.reports) return true;
+      if (tabId === 'settings' && user.permissions?.settings) return true;
+      return false;
+    default:
+      return false;
+  }
+};
+
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [tab, setTab] = useState<TabId>('dashboard');
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -172,6 +199,13 @@ export default function Index() {
   const [scanCart, setScanCart] = useState<{ product: Product; qty: number }[]>([]);
   const [newProductPrompt, setNewProductPrompt] = useState<{ barcode: string; name: string; costPrice: string; sellingPrice: string; quantity: string } | null>(null);
 
+  // Switch User modal states
+  const [showSwitchUser, setShowSwitchUser] = useState(false);
+  const [switchTargetUser, setSwitchTargetUser] = useState<any>(null);
+  const [switchPassword, setSwitchPassword] = useState('');
+  const [switchPinBuffer, setSwitchPinBuffer] = useState('');
+  const [showSwitchPassField, setShowSwitchPassField] = useState(false);
+
   const isGames = store?.category === 'games';
 
   const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;
@@ -179,20 +213,37 @@ export default function Index() {
   const mainTabs = isGames ? GAMES_MAIN_TABS : RETAIL_MAIN_TABS;
   const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;
 
+  const allowedMainTabs = useMemo(() => {
+    return mainTabs.filter(t => isTabAllowed(t.id, currentUser));
+  }, [mainTabs, currentUser]);
+
+  const allowedMoreItems = useMemo(() => {
+    return moreItems.filter(t => isTabAllowed(t.id, currentUser));
+  }, [moreItems, currentUser]);
+
   // When switching to a games store, ensure the active tab is valid for it
   useEffect(() => {
     if (!store) return;
-    const all = [...mainTabs, ...moreItems].map(t => t.id);
-    if (!all.includes(tab)) setTab(mainTabs[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store?.accessCode, store?.category]);
+    const allowedAll = [...allowedMainTabs, ...allowedMoreItems].map(t => t.id);
+    if (!allowedAll.includes(tab)) {
+      setTab(allowedMainTabs[0]?.id || 'dashboard');
+    }
+  }, [store?.accessCode, store?.category, currentUser, allowedMainTabs, allowedMoreItems, tab]);
 
   useEffect(() => {
     const code = getActiveSession();
     if (code) {
       const restored = loadStore(code);
-      if (restored) setStore(restored);
-      else clearSession();
+      const activeUser = sessionStorage.getItem('storeflow_active_user');
+      if (restored && activeUser) {
+        setStore(restored);
+        setCurrentUser(JSON.parse(activeUser));
+      } else {
+        clearSession();
+        sessionStorage.removeItem('storeflow_active_user');
+        setStore(null);
+        setCurrentUser(null);
+      }
     }
   }, []);
 
@@ -201,6 +252,10 @@ export default function Index() {
   }, [tab]);
 
   const handleStoreLoaded = useCallback((s: StoreData) => {
+    const activeUser = sessionStorage.getItem('storeflow_active_user');
+    if (activeUser) {
+      setCurrentUser(JSON.parse(activeUser));
+    }
     setStore(s);
     saveSession(s.accessCode);
   }, []);
@@ -212,7 +267,9 @@ export default function Index() {
 
   const handleLock = () => {
     clearSession();
+    sessionStorage.removeItem('storeflow_active_user');
     setStore(null);
+    setCurrentUser(null);
   };
 
   const handleBarcodeDetected = useCallback((code: string) => {
@@ -314,7 +371,7 @@ export default function Index() {
         {/* Sidebar Nav Links */}
         <div className="flex-1 py-4 overflow-y-auto px-3 space-y-1 no-scrollbar">
           <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">Main Menu</p>
-          {mainTabs.map(t => (
+          {allowedMainTabs.map(t => (
             <button
               key={t.id}
               onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); }}
@@ -334,7 +391,7 @@ export default function Index() {
 
           <div className="pt-4 mt-4 border-t border-border">
             <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">Tools & Settings</p>
-            {moreItems.map(m => (
+            {allowedMoreItems.map(m => (
               <button
                 key={m.id}
                 onClick={() => setTab(m.id)}
@@ -380,26 +437,18 @@ export default function Index() {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setShowLockConfirm(true)}
-              className="px-3.5 py-1.5 rounded-full bg-black/40 border border-border/80 text-xs text-foreground font-display font-semibold hover:bg-black/75 hover:border-yellow-500/30 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+              onClick={() => setShowSwitchUser(true)}
+              className="px-3.5 py-1.5 rounded-full bg-black/40 border border-border/80 hover:border-yellow-500/40 text-xs text-foreground font-display font-semibold transition-all flex items-center gap-2 shadow-sm active:scale-95 cursor-pointer"
             >
-              <Lock className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
-              <span>Lock Store</span>
+              <span>👤 {currentUser?.name}</span>
+              <span className="px-1.5 py-0.5 rounded bg-surface-2 border border-border/80 text-[9px] uppercase font-bold text-yellow-500">{currentUser?.role}</span>
             </button>
             <button
-              onClick={() => { setTab('settings'); setShowMoreMenu(false); }}
-              className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center transition-all border-2 shrink-0 ${
-                tab === 'settings' ? 'border-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.35)]' : 'border-border/80 hover:border-yellow-500/40'
-              }`}
-              aria-label="Profile"
+              onClick={() => setShowLockConfirm(true)}
+              className="w-9 h-9 rounded-full bg-destructive/10 text-destructive border border-destructive/25 flex items-center justify-center hover:bg-destructive/20 transition-all cursor-pointer active:scale-95"
+              title="Lock Store"
             >
-              {store.profile?.photo ? (
-                <img src={store.profile.photo} alt={store.storeName} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-surface-2 flex items-center justify-center">
-                  <span className="text-sm">👤</span>
-                </div>
-              )}
+              <Lock className="w-4 h-4" />
             </button>
           </div>
         </header>
@@ -433,16 +482,239 @@ export default function Index() {
               </div>
 
               <div className="flex gap-2">
-                <button onClick={() => setShowLockConfirm(false)} className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm">Cancel</button>
-                <button onClick={() => { setShowLockConfirm(false); handleLock(); }} className="flex-1 p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm">Lock Store</button>
+                <button onClick={() => setShowLockConfirm(false)} className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm cursor-pointer">Cancel</button>
+                <button onClick={() => { setShowLockConfirm(false); handleLock(); }} className="flex-1 p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm cursor-pointer">Lock Store</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Switch User Modal */}
+        {showSwitchUser && (
+          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => { setShowSwitchUser(false); setSwitchTargetUser(null); }}>
+            <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-4 text-left" onClick={e => e.stopPropagation()}>
+              {!switchTargetUser ? (
+                <>
+                  <div className="text-center space-y-1">
+                    <h3 className="font-display font-bold text-lg">Switch Staff User</h3>
+                    <p className="text-xs text-muted-foreground">Select the staff member to log in as.</p>
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
+                    {/* Owner Profile */}
+                    <button
+                      onClick={() => {
+                        setSwitchTargetUser({ id: 'owner', name: store.storeName + ' Owner', role: 'owner', isOwner: true });
+                        setShowSwitchPassField(true);
+                        setSwitchPassword('');
+                      }}
+                      className="w-full p-3 rounded-xl bg-surface-2 hover:bg-surface-3 border border-border/80 flex items-center justify-between text-xs cursor-pointer text-left font-semibold text-foreground transition-colors"
+                    >
+                      <div>
+                        <p>{store.storeName} Owner</p>
+                        <p className="text-[9px] text-yellow-500 uppercase font-bold mt-0.5">owner</p>
+                      </div>
+                      <span>Select ›</span>
+                    </button>
+                    {/* Staff Profiles */}
+                    {(store.staffMembers || []).map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setSwitchTargetUser({ id: s.id, name: s.name, role: s.role, isOwner: false });
+                          const sensitive = s.role === 'admin' || s.role === 'manager';
+                          setShowSwitchPassField(sensitive);
+                          if (sensitive) {
+                            setSwitchPassword('');
+                          } else {
+                            setSwitchPinBuffer('');
+                          }
+                        }}
+                        className="w-full p-3 rounded-xl bg-surface-2 hover:bg-surface-3 border border-border/80 flex items-center justify-between text-xs cursor-pointer text-left font-semibold text-foreground transition-colors"
+                      >
+                        <div>
+                          <p>{s.name}</p>
+                          <p className="text-[9px] text-yellow-500 uppercase font-bold mt-0.5">{s.role}</p>
+                        </div>
+                        <span>Select ›</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => setShowSwitchUser(false)} className="w-full py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs text-center cursor-pointer">
+                    Cancel
+                  </button>
+                </>
+              ) : showSwitchPassField ? (
+                /* Password input form */
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (switchTargetUser.isOwner) {
+                      if (switchPassword === store.managerSettings?.ownerPassword) {
+                        const ownerUser = {
+                          name: 'Owner',
+                          role: 'owner',
+                          permissions: { sales: true, inventory: true, reports: true, settings: true }
+                        };
+                        sessionStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
+                        setCurrentUser(ownerUser);
+                        setShowSwitchUser(false);
+                        setSwitchTargetUser(null);
+                        showToast('Welcome back Owner!');
+                      } else {
+                        showToast('Incorrect owner password', 'error');
+                      }
+                    } else {
+                      const staff = (store.staffMembers || []).find(s => s.id === switchTargetUser.id);
+                      if (staff && switchPassword === staff.pin) {
+                        const sessionUser = {
+                          id: staff.id,
+                          name: staff.name,
+                          role: staff.role,
+                          permissions: staff.permissions
+                        };
+                        sessionStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+                        setCurrentUser(sessionUser);
+                        setShowSwitchUser(false);
+                        setSwitchTargetUser(null);
+                        showToast(`Welcome back ${staff.name}!`);
+                      } else {
+                        showToast('Incorrect password', 'error');
+                      }
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="text-center space-y-1">
+                    <h3 className="font-display font-bold text-base">Enter Password</h3>
+                    <p className="text-xs text-muted-foreground">Credentials required for: {switchTargetUser.name}</p>
+                  </div>
+                  <input
+                    type="password"
+                    value={switchPassword}
+                    onChange={e => setSwitchPassword(e.target.value)}
+                    placeholder="Enter Password"
+                    autoFocus
+                    className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary text-center"
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setSwitchTargetUser(null)} className="flex-1 py-2 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs text-center cursor-pointer">
+                      Back
+                    </button>
+                    <button type="submit" className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs text-center cursor-pointer">
+                      Unlock
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* PIN input view */
+                <div className="space-y-4">
+                  <div className="text-center space-y-1">
+                    <h3 className="font-display font-bold text-base">Enter PIN Code</h3>
+                    <p className="text-xs text-muted-foreground">Verification required for: {switchTargetUser.name}</p>
+                  </div>
+
+                  <div className="flex justify-center gap-2 py-2">
+                    {[0, 1, 2, 3].map(idx => (
+                      <div
+                        key={idx}
+                        className={`w-3.5 h-3.5 rounded-full border border-border transition-all ${
+                          switchPinBuffer.length > idx ? 'bg-primary border-primary scale-110 gold-glow' : 'bg-surface-2'
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Pin Pad Grid */}
+                  <div className="grid grid-cols-3 gap-2 max-w-[240px] mx-auto pt-2">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(digit => (
+                      <button
+                        key={digit}
+                        onClick={() => {
+                          if (switchPinBuffer.length >= 6) return;
+                          const nextPin = switchPinBuffer + digit;
+                          setSwitchPinBuffer(nextPin);
+
+                          const staff = (store.staffMembers || []).find(s => s.id === switchTargetUser.id);
+                          if (staff && nextPin === staff.pin) {
+                            const sessionUser = {
+                              id: staff.id,
+                              name: staff.name,
+                              role: staff.role,
+                              permissions: staff.permissions
+                            };
+                            sessionStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+                            setCurrentUser(sessionUser);
+                            setShowSwitchUser(false);
+                            setSwitchTargetUser(null);
+                            showToast(`Welcome back ${staff.name}!`);
+                          } else if (staff && nextPin.length >= staff.pin.length) {
+                            setTimeout(() => {
+                              setSwitchPinBuffer('');
+                              showToast('Incorrect PIN', 'error');
+                            }, 150);
+                          }
+                        }}
+                        className="p-3 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border text-foreground font-display font-bold text-base active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                      >
+                        {digit}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setSwitchPinBuffer('')}
+                      className="p-3 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border text-destructive text-[10px] font-bold active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (switchPinBuffer.length >= 6) return;
+                        const nextPin = switchPinBuffer + '0';
+                        setSwitchPinBuffer(nextPin);
+
+                        const staff = (store.staffMembers || []).find(s => s.id === switchTargetUser.id);
+                        if (staff && nextPin === staff.pin) {
+                          const sessionUser = {
+                            id: staff.id,
+                            name: staff.name,
+                            role: staff.role,
+                            permissions: staff.permissions
+                          };
+                          sessionStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+                          setCurrentUser(sessionUser);
+                          setShowSwitchUser(false);
+                          setSwitchTargetUser(null);
+                          showToast(`Welcome back ${staff.name}!`);
+                        } else if (staff && nextPin.length >= staff.pin.length) {
+                          setTimeout(() => {
+                            setSwitchPinBuffer('');
+                            showToast('Incorrect PIN', 'error');
+                          }, 150);
+                        }
+                      }}
+                      className="p-3 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border text-foreground font-display font-bold text-base active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                    >
+                      0
+                    </button>
+                    <button
+                      onClick={() => setSwitchPinBuffer(p => p.slice(0, -1))}
+                      className="p-3 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border text-foreground text-xs font-bold active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                    >
+                      ⌫
+                    </button>
+                  </div>
+
+                  <button onClick={() => setSwitchTargetUser(null)} className="w-full mt-2 py-2 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs text-center cursor-pointer">
+                    Back
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 w-full max-w-5xl lg:max-w-6xl mx-auto space-y-6">
           <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
-            <Dashboard store={store} onNavigate={handleNavigate} />
+            <Dashboard store={store} onNavigate={handleNavigate} currentUser={currentUser} />
           </div>
           <div className={tab === 'inventory' ? 'block' : 'hidden'}>
             <Inventory
@@ -471,7 +743,7 @@ export default function Index() {
             <ROITracker store={store} onUpdate={setStore} />
           </div>
           <div className={tab === 'settings' ? 'block' : 'hidden'}>
-            <Settings store={store} onUpdate={setStore} onLock={handleLock} />
+            <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} />
           </div>
           <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
             <Marketplace store={store} onUpdate={setStore} />
@@ -527,13 +799,13 @@ export default function Index() {
         {/* Bottom Nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
           <div className="flex justify-around max-w-3xl mx-auto">
-            {mainTabs.map(t => {
+            {allowedMainTabs.map(t => {
               const isActive = tab === t.id;
               return (
                 <button
                   key={t.id}
                   onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
-                  className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all relative ${
+                  className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all relative cursor-pointer ${
                     isActive ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -551,8 +823,8 @@ export default function Index() {
             <div className="relative">
               <button
                 onClick={() => setShowMoreMenu(!showMoreMenu)}
-                className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all ${
-                  moreItems.some(m => m.id === tab) ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
+                className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all cursor-pointer ${
+                  allowedMoreItems.some(m => m.id === tab) ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <span className="mb-1 flex items-center justify-center h-5 w-5">
@@ -564,11 +836,11 @@ export default function Index() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
                   <div className="absolute bottom-full right-0 mb-2 w-44 bg-card shadow-card border border-border rounded-xl overflow-hidden z-50 animate-fade-in">
-                    {moreItems.map(m => (
+                    {allowedMoreItems.map(m => (
                       <button
                         key={m.id}
                         onClick={() => { setTab(m.id); setShowMoreMenu(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-display font-semibold transition-colors ${
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-display font-semibold transition-colors cursor-pointer ${
                           tab === m.id ? 'bg-yellow-500/10 text-yellow-500' : 'text-foreground hover:bg-surface-2'
                         }`}
                       >

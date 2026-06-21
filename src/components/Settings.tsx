@@ -10,7 +10,7 @@ import RecentlyDeleted from '@/components/RecentlyDeleted';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import ToggleRow from '@/components/Toggle';
 import Mascot from '@/components/Mascot';
-import { compileBackupPayload, triggerBackupExport, restoreBackupPayload, BackupPayload } from '@/lib/backup-system';
+import { compileBackupPayload, triggerBackupExport, restoreBackupPayload, BackupPayload, decryptBackup } from '@/lib/backup-system';
 import { LocalBackup, getLocalBackups, saveLocalBackup, deleteLocalBackup } from '@/lib/backup-db';
 import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
 import { generateInsights } from '@/lib/manager-intel';
@@ -65,12 +65,13 @@ export function getActiveSession(): string | null {
 type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
   | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
-  | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount';
+  | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount' | 'activity-log';
 
 interface SettingsProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
   onLock: () => void;
+  currentUser?: any;
 }
 
 const card = "bg-card shadow-card rounded-2xl";
@@ -123,7 +124,7 @@ function SubPage({ title, subtitle, onBack, children }: { title: string; subtitl
 }
 
 // ============ MAIN ============
-export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
+export default function Settings({ store, onUpdate, onLock, currentUser }: SettingsProps) {
   const [view, setView] = useState<View>('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
@@ -229,7 +230,21 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const payload = JSON.parse(event.target?.result as string) as BackupPayload;
+        let payload = JSON.parse(event.target?.result as string);
+        if (payload.version === '1.0-encrypted') {
+          const key = prompt("Enter Owner Password or Emergency Recovery Key to decrypt backup:");
+          if (!key) {
+            showToast('Decryption cancelled', 'error');
+            return;
+          }
+          try {
+            payload = decryptBackup(payload, key);
+          } catch (decErr: any) {
+            showToast(decErr.message || 'Incorrect decryption key', 'error');
+            return;
+          }
+        }
+        
         if (!payload.version || !payload.index) {
           showToast('Invalid StoreFlow backup file schema', 'error');
           return;
@@ -535,6 +550,105 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
             <ToggleRow label="Auto-Listen on Sales" description="Mic starts automatically when you open the Sales page." checked={mgr.autoVoiceListen} onChange={v => updateMgr({ autoVoiceListen: v })} />
             <ToggleRow label="Auto Print Receipts" description="Automatically trigger receipt printing after recording a sale." checked={mgr.autoPrintReceipt} onChange={v => updateMgr({ autoPrintReceipt: v })} />
             <ToggleRow label="Business Questions" checked={mgr.businessQuestions} onChange={v => updateMgr({ businessQuestions: v })} />
+          </div>
+
+          {/* Flow Speech Voice Selection */}
+          <div className="px-1 mt-4">
+            <SectionLabel>Flow Speech Voice</SectionLabel>
+          </div>
+          <div className={`${card} p-4 space-y-3`}>
+            <div>
+              <p className="text-sm font-display font-semibold text-foreground">Voice Preference</p>
+              <p className="text-[11px] text-muted-foreground leading-normal mt-0.5">
+                Choose the preferred voice style for Flow's spoken advice.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {[
+                { id: 'young-male' as const, label: 'Younger Male Voice 👦 (Default)', desc: 'Bright, energetic, and highly engaging' },
+                { id: 'male' as const, label: 'Male Voice 👨', desc: 'Deconstructive, deep, and professional' },
+                { id: 'female' as const, label: 'Female Voice 👩', desc: 'Warm, natural, and welcoming' }
+              ].map(voiceOpt => {
+                const isSelected = (mgr.voiceGender || 'young-male') === voiceOpt.id;
+                return (
+                  <button
+                    key={voiceOpt.id}
+                    onClick={() => {
+                      updateMgr({ voiceGender: voiceOpt.id });
+                      
+                      // Speak a small preview using standard SpeechSynthesis with selected voice characteristics
+                      if (typeof window !== 'undefined' && window.speechSynthesis) {
+                        window.speechSynthesis.cancel();
+                        const previewText = voiceOpt.id === 'young-male' ? "Hi, I am Flow! Ready to scale your store?" :
+                                            voiceOpt.id === 'male' ? "Hello. I am Flow, your business manager companion." :
+                                            "Hi there, I am Flow! Let's make some sales today.";
+                        const utterance = new SpeechSynthesisUtterance(previewText);
+                        
+                        const voices = window.speechSynthesis.getVoices();
+                        const enVoices = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
+                        const maleNames = ['david', 'mark', 'george', 'daniel', 'ravi', 'male', 'google us english male', 'google uk english male'];
+                        const femaleNames = ['zira', 'samantha', 'hazel', 'susan', 'heera', 'female', 'google us english female', 'google uk english female'];
+                        
+                        let selectedVoice = null;
+                        let pitch = 1.0;
+                        let rate = 0.95;
+                        
+                        if (voiceOpt.id === 'male') {
+                          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) || 
+                                          voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
+                          pitch = 0.95;
+                          rate = 0.92;
+                        } else if (voiceOpt.id === 'female') {
+                          selectedVoice = enVoices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name))) || 
+                                          voices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name)));
+                          pitch = 1.05;
+                          rate = 0.95;
+                        } else {
+                          // young-male
+                          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) || 
+                                          voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
+                          pitch = 1.35;
+                          rate = 0.98;
+                        }
+                        
+                        if (!selectedVoice) {
+                          selectedVoice = enVoices.find(v => 
+                            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Premium')) && 
+                            v.lang.startsWith('en')
+                          ) || enVoices[0] || voices[0];
+                        }
+                        
+                        if (selectedVoice) {
+                          utterance.voice = selectedVoice;
+                        }
+                        utterance.pitch = pitch;
+                        utterance.rate = rate;
+                        window.speechSynthesis.speak(utterance);
+                      }
+                    }}
+                    className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all ${
+                      isSelected
+                        ? 'bg-primary/10 border-primary/50 ring-1 ring-primary/30'
+                        : 'bg-surface-2 border-border hover:border-border-hover'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-display font-bold text-xs text-foreground">{voiceOpt.label}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{voiceOpt.desc}</p>
+                    </div>
+                    <span className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center shrink-0 ml-3 ${
+                      isSelected
+                        ? 'border-primary bg-primary'
+                        : 'border-muted-foreground/35'
+                    }`}>
+                      {isSelected && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary-foreground" />
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Graph Settings */}
@@ -976,7 +1090,13 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => {
-              triggerBackupExport();
+              const pw = prompt("Enter Owner Password to authorize and encrypt backup:");
+              if (!pw) return;
+              if (pw !== store.managerSettings?.ownerPassword) {
+                showToast("Incorrect owner password", "error");
+                return;
+              }
+              triggerBackupExport(store.managerSettings?.ownerPassword, store.managerSettings?.emergencyRecoveryKey);
               showToast('Backup file exported');
             }}
             className="p-4 rounded-2xl bg-card shadow-card flex flex-col items-center justify-center gap-2 hover:ring-1 hover:ring-primary/30 transition-all text-center"
@@ -1079,6 +1199,43 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
             </div>
           </div>
         )}
+      </SubPage>
+    );
+  }
+
+  if (view === 'activity-log') {
+    const logs = store.activityLogs || [];
+    return (
+      <SubPage title="Audit Activity Logs" subtitle="Secure tracking logs of actions performed in this store" onBack={() => setView('home')}>
+        <div className={`${card} p-5 space-y-4`}>
+          <h3 className="font-display font-bold text-base text-foreground">Action History</h3>
+          {logs.length === 0 ? (
+            <div className="text-center py-10 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+              <p className="text-muted-foreground text-xs">No activity logs recorded yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-3.5 max-h-[60vh] overflow-y-auto pr-1 no-scrollbar text-left">
+              {logs.map((log) => (
+                <div key={log.id} className="p-4 rounded-xl bg-slate-950 border border-border flex flex-col gap-2">
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <h4 className="font-display font-bold text-sm text-foreground">{log.user}</h4>
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-surface-2 border border-border/85 text-[8px] font-bold text-yellow-500 uppercase mt-1">
+                        {log.role}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-normal font-sans bg-surface-2/40 p-2.5 rounded-lg border border-border/30">
+                    {log.action}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </SubPage>
     );
   }
@@ -1603,6 +1760,9 @@ export default function Settings({ store, onUpdate, onLock }: SettingsProps) {
               ))}
             </div>} />
 
+          {currentUser?.role === 'owner' && (
+            <SettingTile icon="📋" color="#2F80ED" title="Audit Activity Logs" desc="View secure logs tracking actions performed in this store." onClick={() => setView('activity-log')} />
+          )}
           <SettingTile icon="🎧" color="#F2C94C" title="Support" desc="Help, FAQs and contact." onClick={() => setView('support')} />
         </div>
       </div>
@@ -1699,7 +1859,11 @@ function SupportRow({ icon, label, onClick }: { icon: string; label: string; onC
 
 // --- Savings setup modal ---
 function SavingsModal({ initial, onClose, onSave, animate = true, store }: { initial: SavingsGoal; onClose: () => void; onSave: (g: SavingsGoal) => void; animate?: boolean; store?: StoreData }) {
-  const [g, setG] = useState<SavingsGoal>(initial);
+  const [g, setG] = useState<SavingsGoal>({
+    ...initial,
+    dayOfWeek: initial.dayOfWeek || 'Monday',
+    timeOfDay: initial.timeOfDay || '08:00',
+  });
   const inp = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary";
   const freqs: SavingsFrequency[] = ['daily', 'weekly', 'monthly'];
   return (
@@ -1746,6 +1910,35 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
               <button key={f} onClick={() => setG({ ...g, frequency: f })} className={`flex-1 px-3 py-2 text-xs font-display font-semibold capitalize ${g.frequency === f ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{f}</button>
             ))}
           </div>
+        </div>
+
+        {g.frequency !== 'daily' && (
+          <div>
+            <label className="text-xs text-muted-foreground">Deduction Day</label>
+            <select
+              value={g.dayOfWeek || 'Monday'}
+              onChange={e => setG({ ...g, dayOfWeek: e.target.value })}
+              className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary focus:bg-surface-2 [&>option]:bg-card"
+            >
+              <option value="Monday">Monday</option>
+              <option value="Tuesday">Tuesday</option>
+              <option value="Wednesday">Wednesday</option>
+              <option value="Thursday">Thursday</option>
+              <option value="Friday">Friday</option>
+              <option value="Saturday">Saturday</option>
+              <option value="Sunday">Sunday</option>
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label className="text-xs text-muted-foreground">Deduction Time</label>
+          <input
+            type="time"
+            value={g.timeOfDay || '08:00'}
+            onChange={e => setG({ ...g, timeOfDay: e.target.value })}
+            className={inp}
+          />
         </div>
 
         <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-xs text-warning">

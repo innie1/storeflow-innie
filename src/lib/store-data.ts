@@ -250,6 +250,21 @@ export function saveStore(store: StoreData): void {
   }
 }
 
+export function recordActivityLog(store: StoreData, user?: string, role?: string, action?: string): StoreData {
+  if (!user || !action) return store;
+  const newLog = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    user,
+    role: role || 'owner',
+    action,
+    timestamp: new Date().toISOString(),
+  };
+  return {
+    ...store,
+    activityLogs: [newLog, ...(store.activityLogs || [])].slice(0, 1000),
+  };
+}
+
 function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | Expense): TrashItem[] {
   const item: TrashItem = {
     id: generateId(),
@@ -260,7 +275,7 @@ function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | 
   return [item, ...(store.trash || [])];
 }
 
-export function addProduct(store: StoreData, product: Omit<Product, 'id'>): StoreData {
+export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actorName?: string, actorRole?: string): StoreData {
   const now = new Date().toISOString();
   const costTotal = Math.round(product.costPrice * product.quantity * 100) / 100;
   const newInvestments = [...(store.investments || [])];
@@ -282,7 +297,7 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>): Stor
       source: 'restock',
     });
   }
-  const updated = {
+  let updated = {
     ...store,
     products: [...store.products, { 
       ...product, 
@@ -294,12 +309,16 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>): Stor
     investments: newInvestments,
     expenses: newExpenses,
   };
+  if (actorName) {
+    updated = recordActivityLog(updated, actorName, actorRole, `Added product: ${product.name} (${product.quantity} units)`);
+  }
   saveStore(updated);
   return updated;
 }
 
-export function updateProduct(store: StoreData, id: string, updates: Partial<Product>): StoreData {
-  const updated = {
+export function updateProduct(store: StoreData, id: string, updates: Partial<Product>, actorName?: string, actorRole?: string): StoreData {
+  const pName = store.products.find(p => p.id === id)?.name || 'Product';
+  let updated = {
     ...store,
     products: store.products.map(p => {
       if (p.id === id) {
@@ -312,18 +331,25 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
       return p;
     }),
   };
+  if (actorName) {
+    const details = updates.quantity !== undefined ? ` (set qty to ${updates.quantity})` : '';
+    updated = recordActivityLog(updated, actorName, actorRole, `Updated product: ${pName}${details}`);
+  }
   saveStore(updated);
   return updated;
 }
 
-export function deleteProduct(store: StoreData, id: string): StoreData {
+export function deleteProduct(store: StoreData, id: string, actorName?: string, actorRole?: string): StoreData {
   const product = store.products.find(p => p.id === id);
   if (!product) return store;
-  const updated = {
+  let updated = {
     ...store,
     products: store.products.filter(p => p.id !== id),
     trash: pushTrash(store, 'product', product),
   };
+  if (actorName) {
+    updated = recordActivityLog(updated, actorName, actorRole, `Deleted product: ${product.name}`);
+  }
   saveStore(updated);
   return updated;
 }
@@ -357,7 +383,7 @@ export function deleteSale(store: StoreData, id: string): StoreData {
   return updated;
 }
 
-export function recordSale(store: StoreData, productId: string, quantity: number): StoreData {
+export function recordSale(store: StoreData, productId: string, quantity: number, actorName?: string, actorRole?: string): StoreData {
   const product = store.products.find(p => p.id === productId);
   if (!product || product.quantity < quantity) return store;
   if (quantity <= 0) return store;
@@ -373,11 +399,14 @@ export function recordSale(store: StoreData, productId: string, quantity: number
     date: new Date().toISOString(),
   };
 
-  const updated = {
+  let updated = {
     ...store,
     products: store.products.map(p => p.id === productId ? { ...p, quantity: Math.round((p.quantity - quantity) * 100) / 100 } : p),
     sales: [sale, ...store.sales],
   };
+  if (actorName) {
+    updated = recordActivityLog(updated, actorName, actorRole, `Completed sale: ${product.name} × ${quantity} (Total: ₦${sale.total.toLocaleString()})`);
+  }
   saveStore(updated);
   return updated;
 }
@@ -518,16 +547,19 @@ export function findProductByBarcode(store: StoreData, barcode: string): Product
   return store.products.find(p => p.barcode === barcode);
 }
 
-export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'source'>): StoreData {
+export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'source'>, actorName?: string, actorRole?: string): StoreData {
   const newExpense: Expense = {
     ...expense,
     id: generateId(),
     source: 'manual',
   };
-  const updated: StoreData = {
+  let updated: StoreData = {
     ...store,
     expenses: [newExpense, ...(store.expenses || [])],
   };
+  if (actorName) {
+    updated = recordActivityLog(updated, actorName, actorRole, `Recorded expense: ${expense.category} - ₦${expense.amount.toLocaleString()}`);
+  }
   saveStore(updated);
   return updated;
 }
@@ -992,33 +1024,48 @@ export function deleteDiaryEntry(store: StoreData, id: string): StoreData {
 }
 
 // ─── Staff Management Helpers ─────────────────────────────────────────────────
-export function addStaffMember(store: StoreData, staff: Omit<StaffMember, 'id'>): StoreData {
+export function addStaffMember(store: StoreData, staff: Omit<StaffMember, 'id'>, actorName?: string, actorRole?: string): StoreData {
   const newStaff: StaffMember = {
     ...staff,
     id: generateId()
   };
-  const updated = {
+  let updated = {
     ...store,
     staffMembers: [newStaff, ...(store.staffMembers || [])]
   };
+  if (actorName) {
+    updated = recordActivityLog(updated, actorName, actorRole, `Registered staff account: ${staff.name} (${staff.role})`);
+  }
   saveStore(updated);
   return updated;
 }
 
-export function updateStaffMember(store: StoreData, id: string, updates: Partial<StaffMember>): StoreData {
-  const updated = {
+export function updateStaffMember(store: StoreData, id: string, updates: Partial<StaffMember>, actorName?: string, actorRole?: string): StoreData {
+  const staff = (store.staffMembers || []).find(s => s.id === id);
+  const staffName = staff?.name || 'Staff Member';
+  let updated = {
     ...store,
     staffMembers: (store.staffMembers || []).map(s => s.id === id ? { ...s, ...updates } : s)
   };
+  if (actorName) {
+    let desc = `Updated staff account details for: ${staffName}`;
+    if (updates.pin) desc = `Reset PIN for staff account: ${staffName}`;
+    updated = recordActivityLog(updated, actorName, actorRole, desc);
+  }
   saveStore(updated);
   return updated;
 }
 
-export function deleteStaffMember(store: StoreData, id: string): StoreData {
-  const updated = {
+export function deleteStaffMember(store: StoreData, id: string, actorName?: string, actorRole?: string): StoreData {
+  const staff = (store.staffMembers || []).find(s => s.id === id);
+  const staffName = staff?.name || 'Staff Member';
+  let updated = {
     ...store,
     staffMembers: (store.staffMembers || []).filter(s => s.id !== id)
   };
+  if (actorName) {
+    updated = recordActivityLog(updated, actorName, actorRole, `Deleted staff account: ${staffName}`);
+  }
   saveStore(updated);
   return updated;
 }

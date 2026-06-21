@@ -58,11 +58,47 @@ export function compileBackupPayload(): BackupPayload {
   };
 }
 
-/** Triggers a browser download of the full backup payload as a JSON file */
-export function triggerBackupExport(): void {
+// ─── XOR Encryption Helpers ──────────────────────────────────────────────────
+export function xorEncrypt(text: string, key: string): string {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return btoa(unescape(encodeURIComponent(result)));
+}
+
+export function xorDecrypt(base64: string, key: string): string {
+  const text = decodeURIComponent(escape(atob(base64)));
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return result;
+}
+
+/** Triggers a browser download of the full backup payload as a JSON file, optionally encrypted */
+export function triggerBackupExport(ownerPassword?: string, emergencyRecoveryKey?: string): void {
   const payload = compileBackupPayload();
-  const jsonString = JSON.stringify(payload, null, 2);
-  const blob = new Blob([jsonString], { type: 'application/json' });
+  let fileContent = '';
+
+  if (ownerPassword && emergencyRecoveryKey) {
+    const dataKey = Math.random().toString(36).substring(2, 10);
+    const jsonStr = JSON.stringify(payload);
+    const encryptedData = xorEncrypt(jsonStr, dataKey);
+    const pwHeader = xorEncrypt(dataKey, ownerPassword);
+    const rkHeader = xorEncrypt(dataKey, emergencyRecoveryKey);
+
+    fileContent = JSON.stringify({
+      version: '1.0-encrypted',
+      encryptedData,
+      pwHeader,
+      rkHeader
+    }, null, 2);
+  } else {
+    fileContent = JSON.stringify(payload, null, 2);
+  }
+
+  const blob = new Blob([fileContent], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   
   const a = document.createElement('a');
@@ -250,6 +286,45 @@ export function restoreBackupPayload(payload: BackupPayload): {
     salesMerged,
     expensesMerged,
   };
+}
+
+export function decryptBackup(encryptedPayload: any, decryptionKey: string): BackupPayload {
+  if (encryptedPayload.version !== '1.0-encrypted') {
+    return encryptedPayload as BackupPayload;
+  }
+  
+  const { encryptedData, pwHeader, rkHeader } = encryptedPayload;
+  let decryptedDataKey = '';
+  
+  // Try pwHeader
+  try {
+    decryptedDataKey = xorDecrypt(pwHeader, decryptionKey);
+  } catch {}
+  
+  let decryptedJson = '';
+  let parsed: any = null;
+  
+  if (decryptedDataKey) {
+    try {
+      decryptedJson = xorDecrypt(encryptedData, decryptedDataKey);
+      parsed = JSON.parse(decryptedJson);
+    } catch {}
+  }
+  
+  // Try rkHeader
+  if (!parsed || !parsed.stores) {
+    try {
+      decryptedDataKey = xorDecrypt(rkHeader, decryptionKey);
+      decryptedJson = xorDecrypt(encryptedData, decryptedDataKey);
+      parsed = JSON.parse(decryptedJson);
+    } catch {}
+  }
+  
+  if (!parsed || !parsed.stores) {
+    throw new Error('Incorrect decryption key');
+  }
+  
+  return parsed as BackupPayload;
 }
 
 /** Utility function to merge lists of objects by a key (like id) */

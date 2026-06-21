@@ -195,6 +195,9 @@ export interface SavingsGoal {
   saved: number;
   bankName?: string;
   frequency?: SavingsFrequency;
+  dayOfWeek?: string;
+  dayOfMonth?: number;
+  timeOfDay?: string;
 }
 
 export interface Customer {
@@ -250,13 +253,21 @@ export interface StaffMember {
   id: string;
   name: string;
   pin: string;
-  role: 'admin' | 'manager' | 'cashier';
+  role: 'owner' | 'admin' | 'manager' | 'cashier' | 'inventory' | 'accountant' | 'supervisor' | 'custom';
   permissions: {
     sales: boolean;
     inventory: boolean;
     reports: boolean;
     settings: boolean;
   };
+}
+
+export interface ActivityLog {
+  id: string;
+  user: string;
+  role: string;
+  action: string;
+  timestamp: string;
 }
 
 export interface Shift {
@@ -391,10 +402,12 @@ export interface ManagerSettings {
   receiptWhatsApp?: string;
   // Weather
   weatherImpactEnabled?: boolean;
+  voiceGender?: 'male' | 'female' | 'young-male';
 }
 
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   enabled: true,
+  voiceGender: 'young-male',
   revenueForecasts: true,
   profitForecasts: true,
   inventoryForecasts: true,
@@ -504,10 +517,11 @@ export interface StoreData {
   challenges?: BusinessChallenge[];
   stockCountAudits?: { id: string; date: string; expected: number; actual: number; variance: number; product: string }[];
   transfers?: InventoryTransfer[];
+  activityLogs?: ActivityLog[];
 }
 
 
 export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending' | 'marketplace'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings'
-  | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer';
+  | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer' | 'activity-log';

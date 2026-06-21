@@ -631,26 +631,70 @@ export function Typewriter({ text, speed = 50, speak = false }: { text: string; 
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       
+      // Get the active session and load store settings to read voiceGender
+      let voiceGender = 'young-male'; // Default
+      try {
+        const sessionRaw = localStorage.getItem('storeflow_session');
+        if (sessionRaw) {
+          const session = JSON.parse(sessionRaw);
+          const activeStoreRaw = localStorage.getItem(`storeflow_${session.accessCode}`);
+          if (activeStoreRaw) {
+            const activeStore = JSON.parse(activeStoreRaw);
+            if (activeStore.managerSettings?.voiceGender) {
+              voiceGender = activeStore.managerSettings.voiceGender;
+            }
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+      
       const setVoice = () => {
         const voices = window.speechSynthesis.getVoices();
-        // Look for premium / natural sounding en-US / en-GB voices
-        const preferredVoice = voices.find(v => 
-          (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Premium')) && 
-          v.lang.startsWith('en')
-        ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+        const enVoices = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
+        const maleNames = ['david', 'mark', 'george', 'daniel', 'ravi', 'male', 'google us english male', 'google uk english male'];
+        const femaleNames = ['zira', 'samantha', 'hazel', 'susan', 'heera', 'female', 'google us english female', 'google uk english female'];
         
-        if (preferredVoice) {
-          utterance.voice = preferredVoice;
+        let selectedVoice = null;
+        let pitch = 1.0;
+        let rate = 0.95;
+        
+        if (voiceGender === 'male') {
+          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) || 
+                          voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
+          pitch = 0.95;
+          rate = 0.92;
+        } else if (voiceGender === 'female') {
+          selectedVoice = enVoices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name))) || 
+                          voices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name)));
+          pitch = 1.05;
+          rate = 0.95;
+        } else {
+          // young-male (default)
+          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) || 
+                          voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
+          pitch = 1.35; // Higher pitch for younger male voice
+          rate = 0.98;
         }
+        
+        if (!selectedVoice) {
+          selectedVoice = enVoices.find(v => 
+            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Premium')) && 
+            v.lang.startsWith('en')
+          ) || enVoices[0] || voices[0];
+        }
+        
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
+        }
+        utterance.pitch = pitch;
+        utterance.rate = rate;
       };
 
       setVoice();
       if (window.speechSynthesis.onvoiceschanged !== undefined) {
         window.speechSynthesis.onvoiceschanged = setVoice;
       }
-
-      utterance.rate = 0.95; // More human/natural rate
-      utterance.pitch = 1.0;
 
       window.speechSynthesis.speak(utterance);
 
