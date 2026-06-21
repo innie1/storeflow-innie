@@ -31,6 +31,7 @@ import Achievements from '@/components/Achievements';
 import Wishlist from '@/components/Wishlist';
 import StaffManagement from '@/components/StaffManagement';
 import CashDrawer from '@/components/CashDrawer';
+import CommunicationCenter from '@/components/CommunicationCenter';
 import {
   Home,
   Package,
@@ -56,7 +57,8 @@ import {
   Trophy,
   Star,
   Briefcase,
-  Coins
+  Coins,
+  MessageSquare
 } from 'lucide-react';
 
 
@@ -73,6 +75,7 @@ const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'marketplace', label: 'Marketplace', icon: '🛒' },
   { id: 'customers', label: 'Customers', icon: '👥' },
   { id: 'suppliers', label: 'Suppliers', icon: '🏬' },
+  { id: 'communication-center', label: 'Communication Center', icon: '💬' },
   { id: 'goals', label: 'Goals', icon: '🎯' },
   { id: 'diary', label: 'Business Diary', icon: '📓' },
   { id: 'documents', label: 'Doc Vault', icon: '📂' },
@@ -155,6 +158,8 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
       return <Briefcase className={className} />;
     case 'cash-drawer':
       return <Coins className={className} />;
+    case 'communication-center':
+      return <MessageSquare className={className} />;
     default:
       return null;
   }
@@ -167,19 +172,20 @@ const isTabAllowed = (tabId: TabId, user: any) => {
     case 'manager':
       return tabId !== 'settings' && tabId !== 'activity-log';
     case 'cashier':
-      return ['dashboard', 'sales', 'history', 'cash-drawer'].includes(tabId);
+      return ['dashboard', 'sales', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
     case 'inventory':
-      return ['dashboard', 'inventory', 'suppliers', 'marketplace', 'wishlist'].includes(tabId);
+      return ['dashboard', 'inventory', 'suppliers', 'marketplace', 'wishlist', 'communication-center'].includes(tabId);
     case 'accountant':
-      return ['dashboard', 'expenses', 'roi', 'pending', 'cash-drawer'].includes(tabId);
+      return ['dashboard', 'expenses', 'roi', 'pending', 'cash-drawer', 'communication-center'].includes(tabId);
     case 'supervisor':
-      return ['dashboard', 'staff', 'cash-drawer'].includes(tabId);
+      return ['dashboard', 'staff', 'cash-drawer', 'communication-center'].includes(tabId);
     case 'custom':
       if (tabId === 'dashboard') return true;
       if (['sales', 'history', 'cash-drawer'].includes(tabId) && user.permissions?.sales) return true;
       if (['inventory', 'suppliers', 'marketplace', 'wishlist'].includes(tabId) && user.permissions?.inventory) return true;
       if (['roi', 'expenses', 'pending'].includes(tabId) && user.permissions?.reports) return true;
       if (tabId === 'settings' && user.permissions?.settings) return true;
+      if (tabId === 'communication-center') return true;
       return false;
     default:
       return false;
@@ -777,6 +783,9 @@ export default function Index() {
           </div>
           <div className={tab === 'cash-drawer' ? 'block' : 'hidden'}>
             <CashDrawer store={store} onUpdate={setStore} />
+          </div>
+          <div className={tab === 'communication-center' ? 'block' : 'hidden'}>
+            <CommunicationCenter store={store} onUpdate={setStore} currentUser={currentUser} />
           </div>
           {isGames && (
             <>

@@ -20,6 +20,7 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
   // Form states for adding staff
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
+  const [phone, setPhone] = useState('');
   const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>('cashier');
   
   // Permissions states
@@ -50,6 +51,7 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
     const nextStore = addStaffMember(store, {
       name: name.trim(),
       pin: pin.trim(),
+      phone: phone.trim(),
       role,
       permissions: {
         sales: salesAccess,
@@ -76,6 +78,7 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
     const nextStore = updateStaffMember(store, editingStaff.id, {
       name: name.trim(),
       pin: pin.trim(),
+      phone: phone.trim(),
       role,
       permissions: {
         sales: salesAccess,
@@ -133,6 +136,7 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
   const resetForm = () => {
     setName('');
     setPin('');
+    setPhone('');
     setRole('cashier');
     setSalesAccess(true);
     setInventoryAccess(false);
@@ -146,6 +150,7 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
     setEditingStaff(s);
     setName(s.name);
     setPin(s.pin);
+    setPhone(s.phone || '');
     setRole(s.role);
     setSalesAccess(s.permissions.sales);
     setInventoryAccess(s.permissions.inventory);
@@ -345,6 +350,17 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
                   value={name} 
                   onChange={e => setName(e.target.value)}
                   placeholder="e.g. Joy Okafor"
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
+                />
+              </div>
+
+              <div className="space-y-1 text-left">
+                <label className="text-xs text-muted-foreground uppercase font-bold">WhatsApp / Phone Number</label>
+                <input 
+                  type="text" 
+                  value={phone} 
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="e.g. 07025517388"
                   className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
                 />
               </div>

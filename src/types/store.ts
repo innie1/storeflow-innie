@@ -253,6 +253,7 @@ export interface StaffMember {
   id: string;
   name: string;
   pin: string;
+  phone?: string;
   role: 'owner' | 'admin' | 'manager' | 'cashier' | 'inventory' | 'accountant' | 'supervisor' | 'custom';
   permissions: {
     sales: boolean;
@@ -518,10 +519,22 @@ export interface StoreData {
   stockCountAudits?: { id: string; date: string; expected: number; actual: number; variance: number; product: string }[];
   transfers?: InventoryTransfer[];
   activityLogs?: ActivityLog[];
+  communicationHistory?: CommunicationMessage[];
+}
+
+export interface CommunicationMessage {
+  id: string;
+  recipientType: 'customer' | 'supplier' | 'employee' | 'custom';
+  recipientName: string;
+  recipientPhone: string;
+  messageText: string;
+  timestamp: string;
+  status: 'sent' | 'pending';
+  templateType?: string;
 }
 
 
 export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending' | 'marketplace'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings'
-  | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer' | 'activity-log';
+  | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer' | 'activity-log' | 'communication-center';
