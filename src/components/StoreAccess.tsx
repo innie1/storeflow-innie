@@ -29,6 +29,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   // Create / Access basic states
   const [storeName, setStoreName] = useState('');
   const [category, setCategory] = useState<StoreCategory>('retail');
+  const [retailType, setRetailType] = useState('provision_retail');
   const [accessCode, setAccessCode] = useState('');
   const [newCode, setNewCode] = useState('');
   const [accessMood, setAccessMood] = useState<MascotMood>('idle');
@@ -90,7 +91,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       setAccessMood('worried');
       return showToast('Enter a store name', 'error');
     }
-    const store = createStore(storeName.trim(), category);
+    const store = createStore(storeName.trim(), category, category === 'retail' ? retailType : undefined);
     setNewCode(store.accessCode);
     setLoadedStore(store);
     
@@ -204,7 +205,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
   const handleSelectLoginProfile = (user: { id: string; name: string; role: string; isOwner: boolean }) => {
     setSelectedUser(user);
-    if (user.isOwner || user.role === 'manager' || user.role === 'admin') {
+    if (user.isOwner) {
       setInputPassword('');
       setMode('login-password');
     } else {
@@ -254,7 +255,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   };
 
   const handlePinKeyPress = (digit: string) => {
-    if (pinBuffer.length >= 6) return;
+    if (pinBuffer.length >= 4) return;
     const nextPin = pinBuffer + digit;
     setPinBuffer(nextPin);
 
@@ -272,7 +273,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         };
         localStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
         onStoreLoaded(loadedStore);
-      } else if (staff && nextPin.length >= staff.pin.length) {
+      } else if (staff && nextPin.length >= 4) {
         // Clear pin after full length incorrect try
         setTimeout(() => {
           setPinBuffer('');
@@ -414,6 +415,26 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 ))}
               </div>
             </div>
+            {category === 'retail' && (
+              <div className="space-y-1">
+                <label className="block text-xs text-muted-foreground uppercase font-bold">Select Retail Type</label>
+                <select
+                  value={retailType}
+                  onChange={e => setRetailType(e.target.value)}
+                  className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary focus:bg-surface-2 [&>option]:bg-card"
+                >
+                  <option value="provision_retail">Sales of Provision (Retail Provision)</option>
+                  <option value="provision_wholesale">Wholesale for Provision</option>
+                  <option value="pharmacy">Pharmacy / Chemist</option>
+                  <option value="electronics">Electronics Store</option>
+                  <option value="gasoline">Gasoline / Gas Filling Station</option>
+                  <option value="other">Other / General Retail</option>
+                </select>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  * Sales or wholesale of provisions will preload default items. Other types start empty.
+                </p>
+              </div>
+            )}
             <button onClick={handleCreate} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Create Store
             </button>

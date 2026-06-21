@@ -63,6 +63,13 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const [isMouthTalking, setIsMouthTalking] = useState(false);
   const lastSalesCountRef = useRef<number | null>(null);
 
+  // New animations states
+  const [isSwelling, setIsSwelling] = useState(false);
+  const [showFlash, setShowFlash] = useState(false);
+  const [showPrintedPhoto, setShowPrintedPhoto] = useState(false);
+  const [isWearingGlasses, setIsWearingGlasses] = useState(false);
+  const [isBreathingAir, setIsBreathingAir] = useState(false);
+
   // Occasional activity state
   const [activity, setActivity] = useState<'soccer-ball' | 'drinking-water' | 'shaking-clock' | 'staring-phone' | 'reading-book' | 'listening-music' | 'walking-off-left' | 'walking-off-right' | null>(null);
 
@@ -366,6 +373,30 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     ? 'bathing'
     : mood;
 
+  // Occasional Air Breathing effect
+  useEffect(() => {
+    if (isSleepingState || !animate) return;
+    const interval = setInterval(() => {
+      if (Math.random() < 0.3) {
+        setIsBreathingAir(true);
+        setTimeout(() => setIsBreathingAir(false), 3000);
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isSleepingState, animate]);
+
+  // Occasional Eyeglasses effect
+  useEffect(() => {
+    if (isSleepingState || !animate) return;
+    const interval = setInterval(() => {
+      if (Math.random() < 0.25 && !isWearingGlasses) {
+        setIsWearingGlasses(true);
+        setTimeout(() => setIsWearingGlasses(false), 8000);
+      }
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [isSleepingState, animate, isWearingGlasses]);
+
   // Handle posturing shifts (look around/tilt) when not sleeping/resting/bathing
   useEffect(() => {
     if (currentMood === 'sleeping' || currentMood === 'resting' || currentMood === 'bathing' || activity) {
@@ -601,6 +632,26 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     if (isRapid) {
       const nextCount = tapCount + 1;
       setTapCount(nextCount);
+
+      if (nextCount === 5) {
+        setIsSwelling(true);
+        triggerSpeech("You want to know what I can do?", 'angry', 2000);
+        setTimeout(() => {
+          setIsSwelling(false);
+          setShowFlash(true);
+          setTimeout(() => setShowFlash(false), 200);
+          triggerSpeech("Say cheese! 📸", 'excited', 3000);
+          setShowPrintedPhoto(true);
+          setTimeout(() => {
+            setOverrideMood('happy');
+            triggerSpeech("A picture of you! Haha! Beautiful! 😊", 'happy', 3000);
+          }, 2000);
+          setTimeout(() => {
+            setShowPrintedPhoto(false);
+            setOverrideMood(null);
+          }, 7500);
+        }, 1500);
+      }
 
       if (nextCount === 12) {
         setBoxStage(1);
@@ -1011,6 +1062,10 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     activity === 'walking-off-left' ? 'animate-walk-left' :
     activity === 'walking-off-right' ? 'animate-walk-right' : '';
 
+  const swellStyle = isSwelling 
+    ? { transform: 'scale(1.5)', zIndex: 100, transition: 'transform 1.5s ease-out' } 
+    : { transition: 'transform 2.5s ease-in-out' };
+
   return (
     <div 
       ref={containerRef}
@@ -1019,7 +1074,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       onMouseUp={handlePressEnd}
       onTouchStart={handlePressStart}
       onTouchEnd={handlePressEnd}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, ...swellStyle }}
     >
       <style>{`
         @keyframes mascot-float {
@@ -1228,7 +1283,47 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
         .dodge-right { transform: translateX(35px) rotate(15deg) scale(0.95) !important; transition: transform 0.15s ease-out; }
         .dodge-spin { transform: rotate(360deg) scale(1.1) !important; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
         .dodge-hide { transform: translateY(45px) scale(0) !important; opacity: 0 !important; transition: all 0.3s ease-out; }
+        
+        @keyframes breath-rise {
+          0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+          15% { opacity: 0.8; }
+          100% { transform: translate(15px, -25px) scale(1.5); opacity: 0; }
+        }
+        @keyframes flash-animation {
+          0% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+        @keyframes polaroid-slide {
+          0% { transform: translate(-50%, -20px) scale(0.5); opacity: 0; }
+          15% { transform: translate(-50%, 0) scale(1) rotate(3deg); opacity: 1; }
+          85% { transform: translate(-50%, 0) scale(1) rotate(3deg); opacity: 1; }
+          100% { transform: translate(-50%, 30px) scale(0.8) rotate(3deg); opacity: 0; }
+        }
+        .animate-flash { animation: flash-animation 0.2s ease-out forwards; }
       `}</style>
+
+      {showFlash && (
+        <div className="fixed inset-0 bg-white z-[9999] pointer-events-none animate-flash" />
+      )}
+
+      {showPrintedPhoto && (
+        <div 
+          className="absolute top-full left-1/2 z-50 pointer-events-none"
+          style={{
+            transform: 'translateX(-50%)',
+          }}
+        >
+          <div className="bg-white p-2 shadow-2xl border border-slate-200 rounded text-center rotate-3 animate-[polaroid-slide_7.5s_ease-out_forwards] w-24 text-slate-800">
+            <div className="w-20 h-16 bg-gradient-to-tr from-sky-400 via-pink-400 to-yellow-200 border border-slate-300 flex items-center justify-center overflow-hidden relative rounded-sm">
+              <span className="text-2xl animate-[bounce_1.5s_infinite]">😊</span>
+              <div className="absolute inset-0 bg-white/10" />
+            </div>
+            <div className="pt-1.5 pb-0.5 text-[8px] font-sans font-black tracking-wide text-slate-500 uppercase">
+              YOU! 📸✨
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Confetti */}
       {confetti.map(c => (
@@ -1353,7 +1448,23 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           {renderMascotBody()}
           {cheeks}
           {eyeShape}
+          {isWearingGlasses && currentMood !== 'confident' && currentMood !== 'sleeping' && (
+            <g>
+              <circle cx="23" cy="33" r="5.5" fill="none" stroke="#eab308" strokeWidth="1.5" />
+              <circle cx="41" cy="33" r="5.5" fill="none" stroke="#eab308" strokeWidth="1.5" />
+              <line x1="28.5" y1="33" x2="35.5" y2="33" stroke="#eab308" strokeWidth="1.5" />
+              <line x1="17.5" y1="33" x2="13" y2="31" stroke="#eab308" strokeWidth="1.2" />
+              <line x1="46.5" y1="33" x2="51" y2="31" stroke="#eab308" strokeWidth="1.2" />
+            </g>
+          )}
           {mouth}
+          {isBreathingAir && currentMood !== 'sleeping' && (
+            <g fill="none" stroke="#cbd5e1" strokeWidth="1" opacity="0.8">
+              <circle cx="32" cy="42" r="1.5" className="animate-[breath-rise_2.5s_ease-out_forwards]" style={{ transformOrigin: '32px 42px' }} />
+              <circle cx="32" cy="42" r="2.2" className="animate-[breath-rise_2.5s_ease-out_forwards]" style={{ transformOrigin: '32px 42px', animationDelay: '0.6s' }} />
+              <circle cx="32" cy="42" r="3" className="animate-[breath-rise_2.5s_ease-out_forwards]" style={{ transformOrigin: '32px 42px', animationDelay: '1.2s' }} />
+            </g>
+          )}
 
           {/* Occasional Body-Attached Activity Elements */}
           {activity === 'drinking-water' && (

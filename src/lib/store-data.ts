@@ -192,11 +192,12 @@ const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
   { name: 'VR Games', icon: '🥽', price: 2000, enabled: false, order: 6 },
 ];
 
-export function createStore(storeName: string, category: StoreCategory = 'retail'): StoreData {
+export function createStore(storeName: string, category: StoreCategory = 'retail', retailType?: string): StoreData {
   const code = generateCode();
   const now = new Date().toISOString();
   const isRetail = category === 'retail';
-  const products = isRetail
+  const shouldPreload = isRetail && (!retailType || retailType === 'provision_retail' || retailType === 'provision_wholesale');
+  const products = shouldPreload
     ? DEFAULT_PRODUCTS.map(p => {
         const qty = Math.max(6, p.quantity);
         return { ...p, quantity: qty, id: generateId(), initialQuantity: qty, addedAt: now };
@@ -217,6 +218,7 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
     storeName,
     accessCode: code,
     category,
+    retailType,
     products,
     sales: [],
     restocks: [],

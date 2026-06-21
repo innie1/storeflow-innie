@@ -481,6 +481,7 @@ export interface StoreData {
   storeName: string;
   accessCode: string;
   category?: StoreCategory;
+  retailType?: string;
   products: Product[];
   sales: Sale[];
   restocks?: Restock[];

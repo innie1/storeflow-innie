@@ -527,13 +527,8 @@ export default function Index() {
                         key={s.id}
                         onClick={() => {
                           setSwitchTargetUser({ id: s.id, name: s.name, role: s.role, isOwner: false });
-                          const sensitive = s.role === 'admin' || s.role === 'manager';
-                          setShowSwitchPassField(sensitive);
-                          if (sensitive) {
-                            setSwitchPassword('');
-                          } else {
-                            setSwitchPinBuffer('');
-                          }
+                          setShowSwitchPassField(false);
+                          setSwitchPinBuffer('');
                         }}
                         className="w-full p-3 rounded-xl bg-surface-2 hover:bg-surface-3 border border-border/80 flex items-center justify-between text-xs cursor-pointer text-left font-semibold text-foreground transition-colors"
                       >
@@ -636,7 +631,7 @@ export default function Index() {
                       <button
                         key={digit}
                         onClick={() => {
-                          if (switchPinBuffer.length >= 6) return;
+                          if (switchPinBuffer.length >= 4) return;
                           const nextPin = switchPinBuffer + digit;
                           setSwitchPinBuffer(nextPin);
 
@@ -653,7 +648,7 @@ export default function Index() {
                             setShowSwitchUser(false);
                             setSwitchTargetUser(null);
                             showToast(`Welcome back ${staff.name}!`);
-                          } else if (staff && nextPin.length >= staff.pin.length) {
+                          } else if (staff && nextPin.length >= 4) {
                             setTimeout(() => {
                               setSwitchPinBuffer('');
                               showToast('Incorrect PIN', 'error');
@@ -673,7 +668,7 @@ export default function Index() {
                     </button>
                     <button
                       onClick={() => {
-                        if (switchPinBuffer.length >= 6) return;
+                        if (switchPinBuffer.length >= 4) return;
                         const nextPin = switchPinBuffer + '0';
                         setSwitchPinBuffer(nextPin);
 
@@ -690,7 +685,7 @@ export default function Index() {
                           setShowSwitchUser(false);
                           setSwitchTargetUser(null);
                           showToast(`Welcome back ${staff.name}!`);
-                        } else if (staff && nextPin.length >= staff.pin.length) {
+                        } else if (staff && nextPin.length >= 4) {
                           setTimeout(() => {
                             setSwitchPinBuffer('');
                             showToast('Incorrect PIN', 'error');
@@ -779,7 +774,7 @@ export default function Index() {
             <Wishlist store={store} onUpdate={setStore} />
           </div>
           <div className={tab === 'staff' ? 'block' : 'hidden'}>
-            <StaffManagement store={store} onUpdate={setStore} />
+            <StaffManagement store={store} onUpdate={setStore} currentUser={currentUser} />
           </div>
           <div className={tab === 'cash-drawer' ? 'block' : 'hidden'}>
             <CashDrawer store={store} onUpdate={setStore} />

@@ -22,6 +22,7 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [category, setCategory] = useState<StoreCategory>('retail');
+  const [retailType, setRetailType] = useState('provision_retail');
   const [stores, setStores] = useState(getStoreIndex());
 
   const switchTo = (storeCode: string) => {
@@ -43,7 +44,7 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
 
   const handleCreate = () => {
     if (!name.trim()) return showToast('Enter a store name', 'error');
-    const store = createStore(name.trim(), category);
+    const store = createStore(name.trim(), category, category === 'retail' ? retailType : undefined);
     saveSession(store.accessCode);
     showToast(`Created "${store.storeName}" — code ${store.accessCode}`);
     onSwitch(store);
@@ -127,6 +128,26 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
                 </button>
               ))}
             </div>
+            {category === 'retail' && (
+              <div className="space-y-1 text-left">
+                <label className="block text-xs text-muted-foreground uppercase font-bold">Select Retail Type</label>
+                <select
+                  value={retailType}
+                  onChange={e => setRetailType(e.target.value)}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary focus:bg-surface-2 [&>option]:bg-card"
+                >
+                  <option value="provision_retail">Sales of Provision (Retail Provision)</option>
+                  <option value="provision_wholesale">Wholesale for Provision</option>
+                  <option value="pharmacy">Pharmacy / Chemist</option>
+                  <option value="electronics">Electronics Store</option>
+                  <option value="gasoline">Gasoline / Gas Filling Station</option>
+                  <option value="other">Other / General Retail</option>
+                </select>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  * Provision retail/wholesale loads preloaded goods. Other types start empty.
+                </p>
+              </div>
+            )}
             <div className="flex gap-2">
               <button onClick={() => setMode('list')} className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold">Cancel</button>
               <button onClick={handleCreate} className="flex-1 p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold">Create & Switch</button>

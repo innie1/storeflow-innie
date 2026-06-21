@@ -11,9 +11,10 @@ import { showToast } from '@/components/Toast';
 interface StaffManagementProps {
   store: StoreData;
   onUpdate: (s: StoreData) => void;
+  currentUser?: any;
 }
 
-export default function StaffManagement({ store, onUpdate }: StaffManagementProps) {
+export default function StaffManagement({ store, onUpdate, currentUser }: StaffManagementProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
 
@@ -42,9 +43,8 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
       return;
     }
 
-    const sensitive = role === 'admin' || role === 'manager';
-    if (!sensitive && (pin.length < 4 || pin.length > 6 || /[^0-9]/.test(pin))) {
-      showToast('Security PIN must be a 4 to 6 digit numeric code', 'error');
+    if (pin.length !== 4 || /[^0-9]/.test(pin)) {
+      showToast('Security PIN must be exactly a 4-digit numeric code', 'error');
       return;
     }
 
@@ -69,9 +69,8 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
     e.preventDefault();
     if (!editingStaff || !name.trim() || !pin.trim()) return;
 
-    const sensitive = role === 'admin' || role === 'manager';
-    if (!sensitive && (pin.length < 4 || pin.length > 6 || /[^0-9]/.test(pin))) {
-      showToast('Security PIN must be a 4 to 6 digit numeric code', 'error');
+    if (pin.length !== 4 || /[^0-9]/.test(pin)) {
+      showToast('Security PIN must be exactly a 4-digit numeric code', 'error');
       return;
     }
 
@@ -171,12 +170,14 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
           </h2>
           <p className="text-sm text-muted-foreground">Manage employee roles, specify permissions access, and track cashier shifts.</p>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
-        >
-          <UserPlus className="w-4 h-4" /> Add Staff Member
-        </button>
+        {currentUser?.role === 'owner' && (
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" /> Add Staff Member
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -272,14 +273,16 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
                           {s.role}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => startEdit(s)} className="p-1.5 rounded bg-surface-2 border border-border text-muted-foreground hover:text-yellow-500 transition-all">
-                          <Edit className="w-3 h-3" />
-                        </button>
-                        <button onClick={() => handleDeleteStaff(s.id)} className="p-1.5 rounded bg-surface-2 border border-border text-muted-foreground hover:text-destructive transition-all">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
+                      {currentUser?.role === 'owner' && (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => startEdit(s)} className="p-1.5 rounded bg-surface-2 border border-border text-muted-foreground hover:text-yellow-500 transition-all">
+                            <Edit className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => handleDeleteStaff(s.id)} className="p-1.5 rounded bg-surface-2 border border-border text-muted-foreground hover:text-destructive transition-all">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-wrap text-[9px] font-mono text-muted-foreground">
@@ -385,14 +388,14 @@ export default function StaffManagement({ store, onUpdate }: StaffManagementProp
 
                 <div className="space-y-1 text-left">
                   <label className="text-xs text-muted-foreground uppercase font-bold">
-                    {role === 'admin' || role === 'manager' ? 'Password' : 'Security PIN (4-6 digits)'}
+                    Security PIN (4 digits)
                   </label>
                   <input 
                     type="password" 
-                    maxLength={role === 'admin' || role === 'manager' ? undefined : 6}
+                    maxLength={4}
                     value={pin} 
-                    onChange={e => setPin(role === 'admin' || role === 'manager' ? e.target.value : e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder={role === 'admin' || role === 'manager' ? 'e.g. securePass12' : 'e.g. 123456'}
+                    onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="e.g. 1234"
                     className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500 font-mono text-center"
                   />
                 </div>
