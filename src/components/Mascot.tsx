@@ -140,7 +140,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     }
     const checkRole = () => {
       try {
-        const raw = sessionStorage.getItem('storeflow_active_user');
+        const raw = localStorage.getItem('storeflow_active_user');
         if (raw) {
           const user = JSON.parse(raw);
           setCurrentUserRole(user.role || null);

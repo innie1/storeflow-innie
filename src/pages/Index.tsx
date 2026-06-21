@@ -240,13 +240,13 @@ export default function Index() {
     const code = getActiveSession();
     if (code) {
       const restored = loadStore(code);
-      const activeUser = sessionStorage.getItem('storeflow_active_user');
+      const activeUser = localStorage.getItem('storeflow_active_user');
       if (restored && activeUser) {
         setStore(restored);
         setCurrentUser(JSON.parse(activeUser));
       } else {
         clearSession();
-        sessionStorage.removeItem('storeflow_active_user');
+        localStorage.removeItem('storeflow_active_user');
         setStore(null);
         setCurrentUser(null);
       }
@@ -258,7 +258,7 @@ export default function Index() {
   }, [tab]);
 
   const handleStoreLoaded = useCallback((s: StoreData) => {
-    const activeUser = sessionStorage.getItem('storeflow_active_user');
+    const activeUser = localStorage.getItem('storeflow_active_user');
     if (activeUser) {
       setCurrentUser(JSON.parse(activeUser));
     }
@@ -273,7 +273,7 @@ export default function Index() {
 
   const handleLock = () => {
     clearSession();
-    sessionStorage.removeItem('storeflow_active_user');
+    localStorage.removeItem('storeflow_active_user');
     setStore(null);
     setCurrentUser(null);
   };
@@ -555,13 +555,13 @@ export default function Index() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (switchTargetUser.isOwner) {
-                      if (switchPassword === store.managerSettings?.ownerPassword) {
+                       if (switchPassword === store.managerSettings?.ownerPassword) {
                         const ownerUser = {
                           name: 'Owner',
                           role: 'owner',
                           permissions: { sales: true, inventory: true, reports: true, settings: true }
                         };
-                        sessionStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
+                        localStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
                         setCurrentUser(ownerUser);
                         setShowSwitchUser(false);
                         setSwitchTargetUser(null);
@@ -578,7 +578,7 @@ export default function Index() {
                           role: staff.role,
                           permissions: staff.permissions
                         };
-                        sessionStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+                        localStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
                         setCurrentUser(sessionUser);
                         setShowSwitchUser(false);
                         setSwitchTargetUser(null);
@@ -648,7 +648,7 @@ export default function Index() {
                               role: staff.role,
                               permissions: staff.permissions
                             };
-                            sessionStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+                            localStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
                             setCurrentUser(sessionUser);
                             setShowSwitchUser(false);
                             setSwitchTargetUser(null);
@@ -685,7 +685,7 @@ export default function Index() {
                             role: staff.role,
                             permissions: staff.permissions
                           };
-                          sessionStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+                          localStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
                           setCurrentUser(sessionUser);
                           setShowSwitchUser(false);
                           setSwitchTargetUser(null);

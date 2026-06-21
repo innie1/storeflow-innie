@@ -35,7 +35,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-export type LockTimer = '1h' | '12h' | 'never';
+export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
 
 const LOCK_TIMER_KEY = 'storeflow_lock_timer';
 const SESSION_KEY = 'storeflow_session';
@@ -48,7 +48,10 @@ export function saveSession(accessCode: string) {
   const s: SessionData = { accessCode, loginAt: Date.now(), lockTimer: getLockTimer() };
   localStorage.setItem(SESSION_KEY, JSON.stringify(s));
 }
-export function clearSession() { localStorage.removeItem(SESSION_KEY); }
+export function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem('storeflow_active_user');
+}
 export function getActiveSession(): string | null {
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) return null;
@@ -56,8 +59,14 @@ export function getActiveSession(): string | null {
     const session: SessionData = JSON.parse(raw);
     const timer = getLockTimer();
     if (timer === 'never') return session.accessCode;
-    const maxMs = timer === '1h' ? 3600000 : 43200000;
-    if (Date.now() - session.loginAt > maxMs) { clearSession(); return null; }
+    let maxMs = 3600000;
+    if (timer === '4h') maxMs = 4 * 3600000;
+    else if (timer === '8h') maxMs = 8 * 3600000;
+    else if (timer === '12h') maxMs = 12 * 3600000;
+    if (Date.now() - session.loginAt > maxMs) {
+      clearSession();
+      return null;
+    }
     return session.accessCode;
   } catch { return null; }
 }
@@ -885,6 +894,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         <h3 className="font-display font-bold text-sm">Auto Lock Timer</h3>
         {[
           { v: '1h' as LockTimer, l: '1 Hour' },
+          { v: '4h' as LockTimer, l: '4 Hours' },
+          { v: '8h' as LockTimer, l: '8 Hours' },
           { v: '12h' as LockTimer, l: '12 Hours' },
           { v: 'never' as LockTimer, l: 'Always Open' },
         ].map(opt => (

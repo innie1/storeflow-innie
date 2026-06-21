@@ -175,7 +175,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       role: 'owner',
       permissions: { sales: true, inventory: true, reports: true, settings: true }
     };
-    sessionStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
+    localStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
     onStoreLoaded(updatedStore);
   };
 
@@ -226,7 +226,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           role: 'owner',
           permissions: { sales: true, inventory: true, reports: true, settings: true }
         };
-        sessionStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
+        localStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
         onStoreLoaded(loadedStore);
       } else {
         setAccessMood('angry');
@@ -244,7 +244,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           role: staff.role,
           permissions: staff.permissions
         };
-        sessionStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+        localStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
         onStoreLoaded(loadedStore);
       } else {
         setAccessMood('angry');
@@ -270,7 +270,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           role: staff.role,
           permissions: staff.permissions
         };
-        sessionStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+        localStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
         onStoreLoaded(loadedStore);
       } else if (staff && nextPin.length >= staff.pin.length) {
         // Clear pin after full length incorrect try
