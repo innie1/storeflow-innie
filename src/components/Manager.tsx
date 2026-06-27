@@ -538,6 +538,7 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
   const [showNotifications, setShowNotifications] = useState(false);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [hasPatted, setHasPatted] = useState(() => localStorage.getItem('storeflow_flow_patted') === new Date().toISOString().split('T')[0]);
+  const [showArchive, setShowArchive] = useState(false);
   const [showPatHearts, setShowPatHearts] = useState(false);
   const [flowXP, setFlowXP] = useState(() => Number(localStorage.getItem('storeflow_flow_xp') || '0'));
   const [xpAnimation, setXpAnimation] = useState(false);
@@ -1323,6 +1324,70 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
               {adviceLoading ? '⏳ Analysing...' : '✨ Get Fresh Advice'}
             </button>
           </div>
+
+          {/* Past Notifications Archive Button */}
+          <div className="p-4 rounded-2xl bg-surface-2 border border-border/80 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📂</span>
+              <div className="text-left">
+                <p className="font-display font-bold text-xs text-foreground">Past Notifications Archive</p>
+                <p className="text-[10px] text-muted-foreground">View all read and closed system alerts ({store.flowNotifications?.length || 0})</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowArchive(true)}
+              className="px-3.5 py-1.5 bg-surface-3 hover:bg-surface-2 text-[11px] font-display font-bold border border-border rounded-xl transition cursor-pointer text-foreground"
+            >
+              View Archive
+            </button>
+          </div>
+
+          {/* Notification Archive Modal */}
+          {showArchive && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setShowArchive(false)}>
+              <div className="w-full max-w-md bg-card border border-border/60 rounded-2xl p-5 shadow-2xl max-h-[80vh] overflow-y-auto space-y-4 animate-scale-in text-left flex flex-col no-scrollbar" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-start border-b border-border pb-3">
+                  <div>
+                    <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2">
+                      <span>📂</span> Notification Archive
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground">Full history of alerts and insights from Flow.</p>
+                  </div>
+                  <button onClick={() => setShowArchive(false)} className="p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground">✕</button>
+                </div>
+
+                <div className="space-y-2 flex-1 overflow-y-auto max-h-[50vh] pr-1">
+                  {(store.flowNotifications || []).length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground text-xs">
+                      No notifications recorded in history yet.
+                    </div>
+                  ) : (
+                    (store.flowNotifications || []).map(n => (
+                      <div key={n.id} className={`p-3 rounded-xl border flex gap-3 text-left bg-surface-2 border-border/40`}>
+                        <span className="text-lg shrink-0 mt-0.5">{n.icon || '🔔'}</span>
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'System Alert'}</p>
+                          <p className="text-[11px] text-muted-foreground leading-normal">{n.description || n.text}</p>
+                          <p className="text-[9px] text-muted-foreground/60 font-mono pt-1">
+                            {new Date(n.date).toLocaleDateString()} · {new Date(n.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-border flex justify-end">
+                  <button
+                    onClick={() => setShowArchive(false)}
+                    className="px-4 py-2 bg-surface-2 hover:bg-surface-3 border border-border text-xs font-display font-bold rounded-xl transition cursor-pointer"
+                  >
+                    Close Archive
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Advice Report Card (Typewriter Analysis) */}
           {adviceReportVisible && adviceReport && (

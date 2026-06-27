@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
 
@@ -10,20 +9,32 @@ interface NotificationDrawerProps {
 }
 
 export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate }: NotificationDrawerProps) {
-  const notes = store.flowNotifications || [];
-  const markAllRead = () => {
-    const updated = { ...store, flowNotifications: notes.map(n => ({ ...n, read: true })) };
-    saveStore(updated); 
-    onUpdate(updated);
-  };
+  // Only display unread notifications in the tray
+  const notes = (store.flowNotifications || []).filter(n => !n.read);
 
-  useEffect(() => {
-    if (notes.some(n => !n.read)) {
-      const updated = { ...store, flowNotifications: notes.map(n => ({ ...n, read: true })) };
+  const handleClose = () => {
+    // Mark all notifications in the store as read when closing the tray
+    const allNotes = store.flowNotifications || [];
+    if (allNotes.some(n => !n.read)) {
+      const updated = { 
+        ...store, 
+        flowNotifications: allNotes.map(n => ({ ...n, read: true })) 
+      };
       saveStore(updated); 
       onUpdate(updated);
     }
-  }, [notes, store, onUpdate]);
+    onClose();
+  };
+
+  const markAllRead = () => {
+    const allNotes = store.flowNotifications || [];
+    const updated = { 
+      ...store, 
+      flowNotifications: allNotes.map(n => ({ ...n, read: true })) 
+    };
+    saveStore(updated); 
+    onUpdate(updated);
+  };
 
   const toneStyle: Record<string, string> = {
     success: 'bg-success/10 border-success/30 text-success',
@@ -33,7 +44,7 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end" onClick={handleClose}>
       <div className="w-full bg-card rounded-t-3xl shadow-2xl animate-slide-up max-h-[80vh] flex flex-col" style={{ maxWidth: '448px', margin: '0 auto' }} onClick={e => e.stopPropagation()}>
         <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1.5 rounded-full bg-border" /></div>
         <div className="px-5 py-3 flex items-center justify-between border-b border-border">
@@ -41,7 +52,7 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
             <h3 className="font-display font-bold text-base text-foreground">Notifications</h3>
             <p className="text-[10px] text-muted-foreground mt-0.5">Alerts, insights and forecasts from Flow</p>
           </div>
-          {notes.some(n => !n.read) && (
+          {notes.length > 0 && (
             <button onClick={markAllRead} className="text-xs text-primary font-display font-semibold hover:underline">
               Mark all read
             </button>
@@ -66,8 +77,8 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
                     {n.actionTab && onNavigate && (
                       <button
                         onClick={() => {
-                          onNavigate(n.actionTab!);
-                          if (onClose) onClose();
+                          if (onNavigate) onNavigate(n.actionTab!);
+                          handleClose();
                         }}
                         className="px-2.5 py-1 rounded bg-primary text-primary-foreground text-[9px] font-display font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
                       >
@@ -81,7 +92,7 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
           )}
         </div>
         <div className="p-4 border-t border-border">
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold hover:bg-surface-3 transition-colors">
+          <button onClick={handleClose} className="w-full py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold hover:bg-surface-3 transition-colors">
             Close
           </button>
         </div>
