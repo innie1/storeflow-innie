@@ -532,7 +532,22 @@ export interface PlannedRestock {
   date: string;
 }
 
+export interface LearnedProduct {
+  id: string;
+  name: string;
+  purchaseUnit: string;        // e.g., 'Carton', 'Roll', 'Pack'
+  sellingUnit: string;         // e.g., 'Bottle', 'Sachet', 'Pack'
+  unitsPerPurchase: number;    // e.g., 24
+  suggestedSellingPrice: number;
+  markup: number;              // percentage markup (e.g., 20)
+  lastPurchasePrice: number;
+  averagePurchasePrice: number;
+  dateLearned: string;         // ISO timestamp
+}
+
 export interface StoreData {
+  learnedProducts?: LearnedProduct[];
+  dismissedSimilarPairs?: string[];
   storeName: string;
   accessCode: string;
   category?: StoreCategory;

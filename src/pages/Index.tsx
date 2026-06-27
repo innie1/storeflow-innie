@@ -12,35 +12,34 @@ import InstallPrompt from '@/components/InstallPrompt';
 // Eager helper imports from settings
 import { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 
-// Lazy load secondary/heavy components to optimize bundle size and FCP
-const Inventory = lazy(() => import('@/components/Inventory'));
-const Sales = lazy(() => import('@/components/Sales'));
-const SalesHistory = lazy(() => import('@/components/SalesHistory'));
-const ReceiptScanner = lazy(() => import('@/components/ReceiptScanner'));
-const BarcodeScanner = lazy(() => import('@/components/BarcodeScanner'));
-const Settings = lazy(() => import('@/components/Settings'));
-const Expenses = lazy(() => import('@/components/Expenses'));
-const ROITracker = lazy(() => import('@/components/ROITracker'));
-const Manager = lazy(() => import('@/components/Manager'));
-const PendingPayments = lazy(() => import('@/components/PendingPayments'));
-const Marketplace = lazy(() => import('@/components/Marketplace'));
-const Customers = lazy(() => import('@/components/Customers'));
-const Suppliers = lazy(() => import('@/components/Suppliers'));
-const Goals = lazy(() => import('@/components/Goals'));
-const Diary = lazy(() => import('@/components/Diary'));
-const Documents = lazy(() => import('@/components/Documents'));
-const Academy = lazy(() => import('@/components/Academy'));
-const Achievements = lazy(() => import('@/components/Achievements'));
-const Wishlist = lazy(() => import('@/components/Wishlist'));
-const StaffManagement = lazy(() => import('@/components/StaffManagement'));
-const CashDrawer = lazy(() => import('@/components/CashDrawer'));
-const CommunicationCenter = lazy(() => import('@/components/CommunicationCenter'));
+import Inventory from '@/components/Inventory';
+import Sales from '@/components/Sales';
+import SalesHistory from '@/components/SalesHistory';
+import ReceiptScanner from '@/components/ReceiptScanner';
+import BarcodeScanner from '@/components/BarcodeScanner';
+import Settings from '@/components/Settings';
+import Expenses from '@/components/Expenses';
+import ROITracker from '@/components/ROITracker';
+import Manager from '@/components/Manager';
+import PendingPayments from '@/components/PendingPayments';
+import Marketplace from '@/components/Marketplace';
+import Customers from '@/components/Customers';
+import Suppliers from '@/components/Suppliers';
+import Goals from '@/components/Goals';
+import Diary from '@/components/Diary';
+import Documents from '@/components/Documents';
+import Academy from '@/components/Academy';
+import Achievements from '@/components/Achievements';
+import Wishlist from '@/components/Wishlist';
+import StaffManagement from '@/components/StaffManagement';
+import CashDrawer from '@/components/CashDrawer';
+import CommunicationCenter from '@/components/CommunicationCenter';
 
-// Games tabs lazy load
-const GamesDashboard = lazy(() => import('@/components/games/GamesDashboard'));
-const GamesSettings = lazy(() => import('@/components/games/GamesSettings'));
-const GamesHistory = lazy(() => import('@/components/games/GamesHistory'));
-const GamesAnalytics = lazy(() => import('@/components/games/GamesAnalytics'));
+// Games tabs
+import GamesDashboard from '@/components/games/GamesDashboard';
+import GamesSettings from '@/components/games/GamesSettings';
+import GamesHistory from '@/components/games/GamesHistory';
+import GamesAnalytics from '@/components/games/GamesAnalytics';
 import {
   Home,
   Package,

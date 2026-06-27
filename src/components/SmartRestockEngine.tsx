@@ -19,9 +19,11 @@ interface BuyListItem {
   category: string;
   currentStock: number;
   suggestedQty: number;
+  idealQty?: number;
   costPrice: number;
   sellingPrice: number;
   priorityScore: number;
+  priorityLabel: '🔴 High' | '🟡 Medium' | '🟢 Low';
   reason: string;
   supplier: string;
   isNewProduct?: boolean;
@@ -36,8 +38,9 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   const walletBalance = store.walletBalance || 0;
   const availableBudget = cashBalance + bankBalance + walletBalance;
 
-  // Desired coverage days default
+  // Buy List settings
   const [coverageDays, setCoverageDays] = useState(14);
+  const [buyOnlyToMin, setBuyOnlyToMin] = useState(false);
   const [itemsList, setItemsList] = useState<BuyListItem[]>([]);
   const [showAddNewForm, setShowAddNewForm] = useState(false);
   const [newProductName, setNewProductName] = useState('');
@@ -57,87 +60,75 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
 
     // Map existing products
     store.products.forEach(p => {
-      // Out-of-stock check / low stock check
       const isOutOfStock = p.quantity <= 0;
-      const isBelowMin = p.quantity < (p.minimumStock || 10);
+      const minStock = p.minimumStock || 5;
+      const isBelowMin = p.quantity < minStock;
       
       // Calculate sales velocity (last 30 days)
       const pSales = sales.filter(s => s.productId === p.id);
       const totalQtySold = pSales.reduce((sum, s) => sum + s.quantity, 0);
       const avgDailySales = totalQtySold / 30;
 
-      // Urgency Score
-      let stockUrgencyScore = 0;
-      if (isOutOfStock) stockUrgencyScore = 50;
-      else if (isBelowMin) stockUrgencyScore = 30;
-      else if (p.quantity / (avgDailySales || 0.1) <= 7) stockUrgencyScore = 20; // Runs out in a week
-
-      // Velocity Score
-      let velocityScore = 5;
-      if (avgDailySales >= 5) velocityScore = 40;
-      else if (avgDailySales >= 2) velocityScore = 30;
-      else if (avgDailySales >= 0.5) velocityScore = 20;
-
-      // Profit Contribution
-      const totalProfit = pSales.reduce((sum, s) => sum + s.profit, 0);
-      let profitScore = 5;
-      if (totalProfit >= 50000) profitScore = 25;
-      else if (totalProfit >= 10000) profitScore = 15;
-
-      // Customer Requests
-      const reqCount = requests.filter(r => r.text.toLowerCase().includes(p.name.toLowerCase())).length;
-      const requestScore = Math.min(50, reqCount * 5);
-
-      // Seasonality (Christmas, Rainy season, Back-to-school keywords)
-      let seasonalityScore = 0;
-      const currentMonth = new Date().getMonth(); // 0 = Jan, 11 = Dec
-      const lowerName = p.name.toLowerCase();
-      const lowerCat = p.category ? p.category.toLowerCase() : '';
-
-      if (currentMonth === 11 && (lowerName.includes('holiday') || lowerName.includes('decor') || lowerName.includes('gift') || lowerName.includes('toy') || lowerCat.includes('holiday'))) {
-        seasonalityScore = 25;
-      } else if ((currentMonth === 5 || currentMonth === 6 || currentMonth === 7) && (lowerName.includes('umbrella') || lowerName.includes('rain') || lowerName.includes('boots') || lowerName.includes('tea') || lowerName.includes('coffee'))) {
-        seasonalityScore = 20;
-      } else if ((currentMonth === 8 || currentMonth === 0) && (lowerName.includes('pen') || lowerName.includes('book') || lowerName.includes('bag') || lowerName.includes('stationery') || lowerCat.includes('stationery'))) {
-        seasonalityScore = 20;
-      }
-
-      // Supplier Lead Time (default 3 days, if stock runs out before then)
-      let leadTimeScore = 0;
-      const daysLeft = p.quantity / (avgDailySales || 0.01);
-      if (daysLeft <= 4) leadTimeScore = 15;
-
-      // Inventory Age / Overstock deductions
-      let ageDeduction = 0;
-      if (p.quantity > (p.maximumStock || 100)) {
-        ageDeduction = -50;
+      // 1. Stock urgency (up to 40%)
+      let stockScore = 0;
+      if (isOutOfStock) {
+        stockScore = 40;
       } else {
-        // No sales in 60 days
-        const lastSaleDate = pSales.length > 0 ? new Date(pSales[0].date).getTime() : 0;
-        if (lastSaleDate > 0 && Date.now() - lastSaleDate > 60 * 24 * 60 * 60 * 1000) {
-          ageDeduction = -30;
-        }
+        stockScore = Math.max(0, 40 * (1 - p.quantity / minStock));
       }
 
-      // Calculate Priority Score
-      const priorityScore = Math.max(0, stockUrgencyScore + velocityScore + profitScore + requestScore + seasonalityScore + leadTimeScore + ageDeduction);
+      // 2. Sales velocity (up to 30%)
+      let velocityScore = 5;
+      if (avgDailySales >= 5) velocityScore = 30;
+      else if (avgDailySales >= 2) velocityScore = 20;
+      else if (avgDailySales >= 0.5) velocityScore = 10;
+
+      // 3. Days since last sale (up to 10%)
+      const lastSaleDate = pSales.length > 0 ? new Date(pSales[0].date).getTime() : 0;
+      const daysSinceLastSale = lastSaleDate > 0 ? (Date.now() - lastSaleDate) / (24 * 60 * 60 * 1000) : 999;
+      let scoreLastSale = 0;
+      if (daysSinceLastSale <= 3) scoreLastSale = 10;
+      else if (daysSinceLastSale <= 10) scoreLastSale = 5;
+
+      // 4. Profit margin (up to 10%)
+      const marginPct = p.costPrice > 0 ? (p.sellingPrice - p.costPrice) / p.sellingPrice : 0;
+      let scoreMargin = 2;
+      if (marginPct >= 0.4) scoreMargin = 10;
+      else if (marginPct >= 0.2) scoreMargin = 5;
+
+      // 5. Customer Requests (up to 10%)
+      const reqCount = requests.filter(r => r.text.toLowerCase().includes(p.name.toLowerCase())).length;
+      let scoreRequests = 0;
+      if (reqCount >= 5) scoreRequests = 10;
+      else if (reqCount >= 1) scoreRequests = 5;
+
+      // Calculate priority score (0 - 100)
+      const priorityScore = Math.min(100, Math.round(stockScore + velocityScore + scoreLastSale + scoreMargin + scoreRequests));
+
+      // Priority labels
+      let priorityLabel: '🔴 High' | '🟡 Medium' | '🟢 Low' = '🟢 Low';
+      if (isOutOfStock || isBelowMin) {
+        priorityLabel = '🔴 High';
+      } else if (p.quantity <= minStock * 1.5) {
+        priorityLabel = '🟡 Medium';
+      }
 
       // Determine Suggested Qty
-      const coverageQty = Math.ceil((avgDailySales || 0.5) * coverageDays);
-      const idealQty = Math.max(0, (p.minimumStock || 10) * 2 - p.quantity);
-      let suggestedQty = Math.max(1, Math.max(coverageQty, idealQty));
+      const targetStock = buyOnlyToMin ? minStock : (p.maximumStock || minStock * 2);
 
-      // Calculate AI explanation reason
-      let reason = 'Urgent restock to prevent stockout.';
-      if (reqCount >= 5) reason = `Frequently requested by ${reqCount} customers this month.`;
-      else if (totalProfit >= 30000) reason = `High profit contributor, generating ₦${totalProfit.toLocaleString()} profit.`;
-      else if (avgDailySales >= 2) reason = `High sales velocity (${avgDailySales.toFixed(1)} sold daily).`;
-      else if (seasonalityScore > 0) reason = 'Seasonal demand increase.';
-
-      // Do not suggest if stock is already way over maximum
-      if (p.quantity >= (p.maximumStock || 100) || ageDeduction === -50) {
+      // Never suggest buying products already at or above target stock
+      if (p.quantity >= targetStock) {
         return;
       }
+
+      const suggestedQty = Math.max(1, targetStock - p.quantity);
+
+      // Explanation reason
+      let reason = 'Restock suggested to maintain minimum stock level.';
+      if (p.quantity <= 0) reason = 'Product is completely out of stock.';
+      else if (reqCount >= 5) reason = `Frequently requested by ${reqCount} customers this month.`;
+      else if (avgDailySales >= 2) reason = `High sales velocity (${avgDailySales.toFixed(1)} sold daily).`;
+      else if (isBelowMin) reason = 'Current quantity is below minimum stock threshold.';
 
       list.push({
         id: p.id,
@@ -145,20 +136,21 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
         category: p.category || 'General',
         currentStock: p.quantity,
         suggestedQty,
+        idealQty: suggestedQty,
         costPrice: p.costPrice || 100,
         sellingPrice: p.sellingPrice || 150,
         priorityScore,
+        priorityLabel,
         reason,
         supplier: suppliers[0]?.name || 'Default Supplier',
-        selected: priorityScore >= 20 // Auto-select high/critical items
+        selected: true
       });
     });
 
-    // 2. New Product Opportunities (Unmatched customer requests)
+    // 2. New Product Opportunities
     const productNames = store.products.map(p => p.name.toLowerCase());
     const unmatchedRequests = requests.filter(r => !productNames.some(name => r.text.toLowerCase().includes(name)));
 
-    // Group unmatched requests by keyword
     const requestGroups: Record<string, number> = {};
     unmatchedRequests.forEach(r => {
       const words = r.text.split(' ');
@@ -171,15 +163,18 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     Object.entries(requestGroups).forEach(([keyword, count]) => {
       if (count >= 2) {
         const potentialProfit = count * 2000;
+        const priorityScore = Math.min(100, count * 10 + 15);
         list.push({
           id: `new-${Math.random().toString(36).slice(2, 6)}`,
           name: keyword,
           category: 'New Request',
           currentStock: 0,
           suggestedQty: count * 10,
+          idealQty: count * 10,
           costPrice: 250,
           sellingPrice: 350,
-          priorityScore: count * 10 + 15,
+          priorityScore,
+          priorityLabel: '🟡 Medium',
           reason: `Requested by ${count} customers. Potential monthly profit: ₦${potentialProfit.toLocaleString()}`,
           supplier: suppliers[0]?.name || 'Default Supplier',
           isNewProduct: true,
@@ -189,9 +184,51 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       }
     });
 
-    // Sort by priority score descending
-    return list.sort((a, b) => b.priorityScore - a.priorityScore);
-  }, [store.products, sales, requests, suppliers, coverageDays]);
+    // Sort by Priority Score descending
+    const sorted = list.sort((a, b) => b.priorityScore - a.priorityScore);
+
+    // Spend Only Available Cash & Partial Purchases (Step 5 & 6)
+    let remainingCash = availableBudget;
+
+    const allocatedList = sorted.map(item => {
+      const requiredCost = item.suggestedQty * item.costPrice;
+
+      if (remainingCash <= 0) {
+        return {
+          ...item,
+          suggestedQty: 0,
+          selected: false,
+          reason: item.reason + ' (Pending until funds become available)'
+        };
+      }
+
+      if (remainingCash >= requiredCost) {
+        remainingCash -= requiredCost;
+        return { ...item, selected: true };
+      } else {
+        // Partial purchase!
+        const possibleQty = Math.floor(remainingCash / item.costPrice);
+        if (possibleQty >= 1) {
+          remainingCash -= possibleQty * item.costPrice;
+          return {
+            ...item,
+            suggestedQty: possibleQty,
+            selected: true,
+            reason: item.reason + ` (Reduced to ${possibleQty} units to fit budget)`
+          };
+        } else {
+          return {
+            ...item,
+            suggestedQty: 0,
+            selected: false,
+            reason: item.reason + ' (Pending until funds become available)'
+          };
+        }
+      }
+    });
+
+    return allocatedList;
+  }, [store.products, sales, requests, suppliers, buyOnlyToMin, availableBudget]);
 
   // Sync recommendation engine list on load or settings change
   useEffect(() => {
@@ -392,16 +429,16 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   // Live Suggestions pane
   const suggestions = useMemo(() => {
     const list: string[] = [];
-    const selected = itemsList.filter(it => it.selected);
-    
-    if (totals.remaining < 5000 && totals.remaining >= 0 && totals.totalCost > 0) {
-      list.push(`Only ₦${totals.remaining.toLocaleString()} remains in your budget.`);
-    }
-    if (totals.totalCost > availableBudget) {
-      list.push(`Selected items exceed budget by ₦${(totals.totalCost - availableBudget).toLocaleString()}. Click "Optimize Buy List" to fix.`);
-    }
-    if (totals.totalCost > 0) {
-      list.push(`This purchase is expected to increase monthly profit by approximately ₦${totals.estProfit.toLocaleString()}.`);
+
+    // Sum up ideal cost (cost of all items at idealQty before budget limits)
+    const idealTotalCost = itemsList.reduce((sum, it) => sum + (it.idealQty || it.suggestedQty) * it.costPrice, 0);
+    const additionalCash = Math.max(0, idealTotalCost - availableBudget);
+
+    if (additionalCash > 0) {
+      list.push(`With your current cash, I recommend buying your fastest-selling products first (prioritized above).`);
+      list.push(`You need an additional ₦${additionalCash.toLocaleString()} to fully restock to target levels.`);
+    } else if (totals.totalCost > 0) {
+      list.push(`All recommended restocks fully funded! Expected profit: ₦${totals.estProfit.toLocaleString()}.`);
     }
 
     const rice = itemsList.find(it => it.name.toLowerCase().includes('rice'));
@@ -429,6 +466,28 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
             <p className="text-xs text-muted-foreground">Intelligent, cash-budget constrained inventory purchasing advice.</p>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground">✕</button>
+        </div>
+
+        {/* Mode Toggle Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-border/40 text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="text-muted-foreground font-semibold">Buy Only to Minimum Stock</span>
+            <button
+              onClick={() => setBuyOnlyToMin(!buyOnlyToMin)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                buyOnlyToMin ? 'bg-primary' : 'bg-surface-3 border-border'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                  buyOnlyToMin ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="text-muted-foreground">
+            Current Target Stock: <span className="font-bold text-white">{buyOnlyToMin ? 'Minimum Stock Level' : 'Maximum Stock Level'}</span>
+          </div>
         </div>
 
         {/* Dashboard Metrics Grid */}
@@ -641,12 +700,13 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                   <td className="p-3 text-right font-mono font-bold text-foreground">
                     ₦{(it.suggestedQty * it.costPrice).toLocaleString()}
                   </td>
-                  <td className="p-3 text-center">
-                    <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                      it.priorityScore >= 75 ? 'bg-destructive/15 text-destructive' : it.priorityScore >= 45 ? 'bg-yellow-500/10 text-yellow-500' : 'bg-success/15 text-success'
+                  <td className="p-3 text-center min-w-[70px]">
+                    <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] block mb-1 whitespace-nowrap ${
+                      it.priorityLabel === '🔴 High' ? 'bg-destructive/15 text-destructive' : it.priorityLabel === '🟡 Medium' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-success/15 text-success'
                     }`}>
-                      {it.priorityScore}
+                      {it.priorityLabel}
                     </span>
+                    <span className="text-[10px] text-muted-foreground font-mono font-bold">{it.priorityScore} pts</span>
                   </td>
                   <td className="p-3 text-muted-foreground text-[11px] leading-snug">{it.reason}</td>
                 </tr>

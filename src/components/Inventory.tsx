@@ -79,6 +79,142 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [ocrError, setOcrError] = useState<string | null>(null);
   const ocrFileRef = useRef<HTMLInputElement>(null);
 
+  // Similar product deduplication states & logic
+  const [duplicatePair, setDuplicatePair] = useState<{ p1: Product; p2: Product } | null>(null);
+  const [localDismissedPairs, setLocalDismissedPairs] = useState<string[]>([]);
+
+  const getSimilarity = (s1: string, s2: string): number => {
+    // 1. Conflict Check: Extract volumes/weights to see if they differ (e.g. 50cl vs 35cl, 1kg vs 2kg)
+    const extractSizeConf = (s: string) => {
+      const match = s.match(/(\d+(?:\.\d+)?)\s*(?:cl|l|g|kg|ml|pcs|pack|sachet|s)/i);
+      return match ? match[0].toLowerCase().replace(/\s+/g, '') : null;
+    };
+    const sz1 = extractSizeConf(s1);
+    const sz2 = extractSizeConf(s2);
+    if (sz1 && sz2 && sz1 !== sz2) {
+      return 0; // Conflicting sizes -> must keep separate
+    }
+
+    // 2. Clean and tokenise strings, dropping small stop words and sizes
+    const clean = (s: string) => {
+      return s.toLowerCase()
+        .replace(/(\d+(?:\.\d+)?)\s*(?:cl|l|g|kg|ml|pcs|pack|sachet|s)/gi, '') // strip sizes
+        .replace(/[^a-z0-9\s]/g, '')
+        .split(/\s+/)
+        .filter(w => w.length > 1 && !['and', 'with', 'for', 'of', 'in', 'the'].includes(w));
+    };
+
+    const w1 = clean(s1);
+    const w2 = clean(s2);
+    if (w1.length === 0 || w2.length === 0) return 0;
+
+    // Word Overlap Jaccard Index
+    const intersect = w1.filter(w => w2.includes(w));
+    const union = Array.from(new Set([...w1, ...w2]));
+    const overlap = intersect.length / union.length;
+
+    // Levenshtein word similarity
+    const l1 = w1.join(' ');
+    const l2 = w2.join(' ');
+    const len = Math.max(l1.length, l2.length);
+    if (len === 0) return 1.0;
+
+    let track = Array(l2.length + 1).fill(null).map(() => Array(l1.length + 1).fill(null));
+    for (let i = 0; i <= l1.length; i += 1) track[0][i] = i;
+    for (let j = 0; j <= l2.length; j += 1) track[j][0] = j;
+    for (let j = 1; j <= l2.length; j += 1) {
+      for (let i = 1; i <= l1.length; i += 1) {
+        const indicator = l1[i - 1] === l2[j - 1] ? 0 : 1;
+        track[j][i] = Math.min(
+          track[j][i - 1] + 1,
+          track[j - 1][i] + 1,
+          track[j - 1][i - 1] + indicator
+        );
+      }
+    }
+    const dist = track[l2.length][l1.length];
+    const levSim = (len - dist) / len;
+
+    return Math.max(overlap, levSim);
+  };
+
+  useEffect(() => {
+    if (store.products.length < 2 || duplicatePair) return;
+
+    const dismissed = [
+      ...(store.dismissedSimilarPairs || []),
+      ...localDismissedPairs
+    ];
+
+    for (let i = 0; i < store.products.length; i++) {
+      const p1 = store.products[i];
+      if (p1.discontinued) continue;
+
+      for (let j = i + 1; j < store.products.length; j++) {
+        const p2 = store.products[j];
+        if (p2.discontinued) continue;
+
+        const key1 = `${p1.id}-${p2.id}`;
+        const key2 = `${p2.id}-${p1.id}`;
+        if (dismissed.includes(key1) || dismissed.includes(key2)) continue;
+
+        const score = getSimilarity(p1.name, p2.name);
+        if (score >= 0.78) {
+          setDuplicatePair({ p1, p2 });
+          return;
+        }
+      }
+    }
+  }, [store.products, store.dismissedSimilarPairs, localDismissedPairs, duplicatePair]);
+
+  const handleMergeDuplicates = (yes: boolean) => {
+    if (!duplicatePair) return;
+    const { p1, p2 } = duplicatePair;
+    const key = `${p1.id}-${p2.id}`;
+
+    let updatedStore = { ...store };
+
+    if (yes) {
+      const mergedQty = p1.quantity + p2.quantity;
+      const mergedPriceHistory = [
+        ...(p1.priceHistory || []),
+        ...(p2.priceHistory || [])
+      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      updatedStore = {
+        ...updatedStore,
+        products: updatedStore.products.map(p => {
+          if (p.id === p1.id) {
+            return {
+              ...p,
+              quantity: mergedQty,
+              priceHistory: mergedPriceHistory,
+              costPrice: Math.max(p1.costPrice, p2.costPrice),
+              sellingPrice: Math.max(p1.sellingPrice, p2.sellingPrice)
+            };
+          }
+          return p;
+        }).filter(p => p.id !== p2.id)
+      };
+
+      showToast(`✓ Merged ${p2.name} into ${p1.name}. Total stock: ${mergedQty}`, 'success');
+    } else {
+      // Avoid re-triggering instantly by pushing to localDismissedPairs state
+      setLocalDismissedPairs(prev => [...prev, key]);
+      
+      const dismissed = updatedStore.dismissedSimilarPairs || [];
+      updatedStore = {
+        ...updatedStore,
+        dismissedSimilarPairs: [...dismissed, key]
+      };
+      showToast('Dismissed similar product suggestion');
+    }
+
+    saveStore(updatedStore);
+    onUpdate(updatedStore);
+    setDuplicatePair(null);
+  };
+
   const existingCategories = useMemo(() => {
     const cats = new Set(['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others']);
     store.products.forEach(p => {
@@ -2342,6 +2478,45 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             </div>
           )}
         </Modal>
+      )}
+      {duplicatePair && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 shadow-2xl animate-slide-up space-y-4">
+            <div className="text-center space-y-2">
+              <div className="text-3xl">🔍</div>
+              <h3 className="font-display font-bold text-lg text-white">Similar Products Found</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                I found two very similar products: <strong className="text-white">"{duplicatePair.p1.name}"</strong> and <strong className="text-white">"{duplicatePair.p2.name}"</strong>. Are they the same product?
+              </p>
+            </div>
+
+            <div className="bg-surface-2/40 border border-border/80 rounded-xl p-3 divide-y divide-border/40 text-[11px]">
+              <div className="flex justify-between py-2">
+                <span className="text-muted-foreground">Product A Stock:</span>
+                <span className="font-bold text-white">{duplicatePair.p1.quantity} units</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-muted-foreground">Product B Stock:</span>
+                <span className="font-bold text-white">{duplicatePair.p2.quantity} units</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => handleMergeDuplicates(false)}
+                className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs hover:bg-surface-3 transition cursor-pointer"
+              >
+                ❌ Keep Separate
+              </button>
+              <button
+                onClick={() => handleMergeDuplicates(true)}
+                className="flex-1 py-2.5 bg-primary text-primary-foreground font-display font-bold text-xs rounded-xl hover:brightness-110 active:scale-95 transition cursor-pointer"
+              >
+                ✅ Yes, Merge
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
