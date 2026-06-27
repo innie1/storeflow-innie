@@ -3,13 +3,15 @@ import {
   StoreData, StoreProfile, ManagerSettings, DEFAULT_MANAGER_SETTINGS,
   SavingsGoal, PaymentInfo, SavingsFrequency, RentInfo, RentFrequency,
 } from '@/types/store';
-import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex } from '@/lib/store-data';
+import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex, getStoreIndex, STORE_PREFIX } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
+import Wishlist from '@/components/Wishlist';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import ToggleRow from '@/components/Toggle';
 import Mascot from '@/components/Mascot';
+import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
 import { compileBackupPayload, triggerBackupExport, restoreBackupPayload, BackupPayload, decryptBackup } from '@/lib/backup-system';
 import { LocalBackup, getLocalBackups, saveLocalBackup, deleteLocalBackup } from '@/lib/backup-db';
 import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
@@ -74,7 +76,8 @@ export function getActiveSession(): string | null {
 type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
   | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
-  | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount' | 'activity-log';
+  | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount' | 'activity-log'
+  | 'wishlist';
 
 interface SettingsProps {
   store: StoreData;
@@ -143,6 +146,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showSavingsModal, setShowSavingsModal] = useState(false);
   const [lowStock, setLowStock] = useState<string>(String(getLowStockThreshold()));
   const [helpOpen, setHelpOpen] = useState<string | null>(null);
+  const [newAccessCode, setNewAccessCode] = useState(store.accessCode);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   // Backup system state
   const [localBackups, setLocalBackups] = useState<LocalBackup[]>([]);
@@ -275,6 +281,112 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showContactPopup, setShowContactPopup] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [showSQLDetails, setShowSQLDetails] = useState(false);
+
+  const handlePrintQR = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast('Could not open print window. Please allow popups.', 'error');
+      return;
+    }
+    
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(profile.uniqueCode || '')}`;
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Print QR Code - ${store.storeName}</title>
+          <style>
+            body {
+              font-family: system-ui, -apple-system, sans-serif;
+              text-align: center;
+              padding: 40px;
+              color: #0f172a;
+            }
+            .card {
+              border: 3px dashed #cbd5e1;
+              border-radius: 24px;
+              padding: 40px;
+              max-width: 400px;
+              margin: 0 auto;
+              background: #ffffff;
+            }
+            h1 {
+              font-size: 28px;
+              margin-bottom: 8px;
+              font-weight: 800;
+            }
+            p {
+              font-size: 14px;
+              color: #64748b;
+              margin-bottom: 24px;
+              line-height: 1.5;
+            }
+            .qr-container {
+              margin: 0 auto 24px;
+              padding: 16px;
+              background: #f8fafc;
+              border-radius: 16px;
+              display: inline-block;
+            }
+            img {
+              width: 250px;
+              height: 250px;
+              display: block;
+            }
+            .code-box {
+              background: #f1f5f9;
+              padding: 12px;
+              border-radius: 12px;
+              font-family: monospace;
+              font-size: 18px;
+              font-weight: bold;
+              letter-spacing: 2px;
+              color: #0f172a;
+              display: inline-block;
+            }
+            .footer {
+              margin-top: 32px;
+              font-size: 12px;
+              color: #94a3b8;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+              .card {
+                border: none;
+                max-width: 100%;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>${store.storeName}</h1>
+            <p>Scan to see our items, products, and details!</p>
+            <div class="qr-container">
+              <img src="${qrUrl}" alt="QR Code" />
+            </div>
+            <div>
+              <div class="code-box">${profile.uniqueCode}</div>
+            </div>
+            <div class="footer">
+              Powered by StoreFlow
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
   const [delStoreNameInput, setDelStoreNameInput] = useState('');
   const [delCodeInput, setDelCodeInput] = useState('');
   const [delConfirmTextInput, setDelConfirmTextInput] = useState('');
@@ -321,6 +433,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const updateMgr = (patch: Partial<ManagerSettings>) => {
     const next = { ...mgr, ...patch };
     setMgr(next); persist({ managerSettings: next });
+  };
+
+  const handleWishlistUpdate = (updatedStore: StoreData) => {
+    saveStore(updatedStore);
+    onUpdate(updatedStore);
   };
 
   // Auto discount input local string states to allow empty inputs
@@ -407,6 +524,42 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   }, [view]);
 
   const handleLock = () => { clearSession(); onLock(); showToast('Store locked'); };
+
+  const handleUpdateAccessCode = () => {
+    if (!newAccessCode || newAccessCode.trim().length < 4) {
+      return showToast('Access code must be at least 4 characters', 'error');
+    }
+    const cleanCode = newAccessCode.trim().toUpperCase();
+    const index = getStoreIndex();
+    const duplicate = index.find(s => s.code === cleanCode && s.code !== store.accessCode);
+    if (duplicate) {
+      return showToast('Access code already in use by another store', 'error');
+    }
+
+    localStorage.removeItem(STORE_PREFIX + store.accessCode);
+    const updated = { ...store, accessCode: cleanCode };
+    localStorage.setItem(STORE_PREFIX + cleanCode, JSON.stringify(updated));
+    localStorage.setItem('storeflow_active_session', cleanCode);
+    
+    const updatedIndex = index.map(s => s.code === store.accessCode ? { ...s, code: cleanCode } : s);
+    localStorage.setItem('storeflow_store_index', JSON.stringify(updatedIndex));
+
+    onUpdate(updated);
+    showToast('✓ Access code changed successfully');
+  };
+
+  const handleUpdatePassword = () => {
+    if (!newPassword || newPassword.length < 4) {
+      return showToast('Password must be at least 4 characters', 'error');
+    }
+    if (newPassword !== confirmPassword) {
+      return showToast('Passwords do not match', 'error');
+    }
+    updateMgr({ ownerPassword: newPassword.trim() });
+    setNewPassword('');
+    setConfirmPassword('');
+    showToast('✓ Password reset successfully');
+  };
   const toggleSavings = (next: boolean) => {
     updateMgr({ savingsPlanner: next });
     if (next && !store.savingsGoal) setShowSavingsModal(true);
@@ -419,7 +572,13 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         <div className="flex items-center gap-4">
           <button onClick={() => photoInputRef.current?.click()}
             className="relative w-20 h-20 rounded-2xl overflow-hidden bg-primary/15 border border-primary/30 flex items-center justify-center text-3xl">
-            {profile.photo ? <img src={profile.photo} alt="" className="w-full h-full object-cover" /> : '🏪'}
+            {profile.photo ? (
+              <img src={profile.photo} alt="" className="w-full h-full object-cover" />
+            ) : profile.logoStyle ? (
+              <StoreLogo storeName={store.storeName} selectedStyle={profile.logoStyle} className="w-full h-full" />
+            ) : (
+              '🏪'
+            )}
             <span className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">📷</span>
           </button>
           <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoPick} />
@@ -429,6 +588,26 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <div className="text-[11px] text-muted-foreground font-mono">Store ID: {store.accessCode}</div>
           </div>
         </div>
+        <div className="space-y-1 text-left">
+          <label className="block text-xs text-muted-foreground mb-1">Unique Store Code</label>
+          <div className="flex items-center gap-2">
+            <input 
+              readOnly 
+              value={profile.uniqueCode || ''} 
+              className={`${inputClass} font-mono select-all bg-surface-2 cursor-pointer`}
+              onClick={() => setShowQRModal(true)}
+              title="Click to view QR code"
+            />
+            <button 
+              type="button" 
+              onClick={() => setShowQRModal(true)}
+              className="px-3.5 py-2.5 bg-primary/10 border border-primary/20 text-primary hover:bg-primary/15 transition rounded-xl font-display font-semibold text-xs whitespace-nowrap cursor-pointer"
+            >
+              QR Code
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Click to view QR code and scan details. This code cannot be edited.</p>
+        </div>
         <Field label="Owner Name" value={profile.ownerName || ''} onChange={v => setProfile({ ...profile, ownerName: v })} placeholder="Your full name" />
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Store Type</label>
@@ -436,6 +615,24 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <option value="">Select type…</option>
             {['Retail Shop','Supermarket','Provision Store','Mini Mart','Wholesale','Pharmacy','Restaurant','Other'].map(t => <option key={t} value={t}>{t}</option>)}
           </select>
+        </div>
+        <div className="space-y-1">
+          <label className="block text-xs text-muted-foreground mb-1">Store Logo Concept</label>
+          <div className="grid grid-cols-5 gap-1.5">
+            {LOGO_STYLES.map(style => (
+              <button
+                key={style.id}
+                type="button"
+                onClick={() => setProfile({ ...profile, logoStyle: style.id })}
+                className={`p-1 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                  profile.logoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-border-hover'
+                }`}
+              >
+                <StoreLogo storeName={store.storeName} selectedStyle={style.id} className="w-8 h-8" />
+                <span className="text-[7.5px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
         <Field label="Business Address" value={profile.location} onChange={v => setProfile({ ...profile, location: v })} placeholder="12 Market Road, Lagos" />
         <div className="grid grid-cols-2 gap-2">
@@ -499,6 +696,47 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
 
       <button onClick={() => { persistProfile(profile); setView('home'); showToast('Profile saved'); }}
         className="w-full p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold">Save Profile</button>
+
+      {showQRModal && (
+        <div className="fixed inset-0 z-[80] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowQRModal(false)}>
+          <div className="w-full max-w-sm bg-card border border-border/40 rounded-2xl p-5 animate-slide-up space-y-4 text-center" onClick={e => e.stopPropagation()}>
+            <div className="space-y-1.5">
+              <h3 className="font-display font-bold text-lg text-foreground">Unique Store QR Code</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Scan this code to see items, products, stunning account number and details.
+              </p>
+            </div>
+            
+            <div className="flex justify-center p-4 bg-white rounded-xl max-w-[220px] mx-auto">
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(profile.uniqueCode || '')}`} 
+                alt="Store QR Code" 
+                className="w-48 h-48 select-none"
+              />
+            </div>
+            
+            <div className="space-y-1 bg-surface-2 p-3 rounded-xl border border-border/20">
+              <span className="block text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Store ID (Unique Code)</span>
+              <span className="font-mono text-base font-semibold tracking-wider text-foreground select-all">{profile.uniqueCode}</span>
+            </div>
+
+            <div className="flex gap-2">
+              <button 
+                onClick={handlePrintQR}
+                className="flex-1 p-2.5 rounded-xl bg-surface-2 border border-border text-foreground font-display font-bold text-sm cursor-pointer hover:bg-surface-3 transition-colors"
+              >
+                🖨️ Print
+              </button>
+              <button 
+                onClick={() => setShowQRModal(false)}
+                className="flex-1 p-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </SubPage>
   );
 
@@ -730,6 +968,64 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         <ToggleRow label="Inventory Alerts" checked={mgr.inventoryAlerts} onChange={v => updateMgr({ inventoryAlerts: v })} />
         <ToggleRow label="Low Stock Notifications" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />
       </div>
+
+      <div className="px-1 mt-4">
+        <SectionLabel>Default Restock Settings</SectionLabel>
+      </div>
+      <div className={`${card} p-4 space-y-4`}>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">Default Purchase Quantity</label>
+            <input
+              type="number"
+              min="1"
+              value={mgr.defaultPurchaseQty !== undefined ? mgr.defaultPurchaseQty : 10}
+              onChange={e => updateMgr({ defaultPurchaseQty: Math.max(1, Number(e.target.value) || 1) })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">Default Restock Target</label>
+            <input
+              type="number"
+              min="1"
+              value={mgr.defaultRestockQty !== undefined ? mgr.defaultRestockQty : 50}
+              onChange={e => updateMgr({ defaultRestockQty: Math.max(1, Number(e.target.value) || 1) })}
+              className={inputClass}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">Minimum Stock Threshold</label>
+            <input
+              type="number"
+              min="0"
+              value={mgr.minStockThreshold !== undefined ? mgr.minStockThreshold : 5}
+              onChange={e => updateMgr({ minStockThreshold: Math.max(0, Number(e.target.value) || 0) })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">Restock Frequency</label>
+            <select
+              value={mgr.restockFrequency || 'weekly'}
+              onChange={e => updateMgr({ restockFrequency: e.target.value as 'daily' | 'weekly' | 'monthly' })}
+              className={inputClass}
+            >
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </SubPage>
+  );
+
+  if (view === 'wishlist') return (
+    <SubPage title="Wishlist" subtitle="Track products you want to add or stock" onBack={() => setView('home')}>
+      <Wishlist store={store} onUpdate={handleWishlistUpdate} />
     </SubPage>
   );
 
@@ -886,12 +1182,103 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
 
   if (view === 'security') return (
     <SubPage title="Security" onBack={() => setView('home')}>
+      {/* 1. Access Code Section */}
+      <div className="px-1">
+        <SectionLabel>Store Access Credentials</SectionLabel>
+      </div>
+      <div className={`${card} p-4 space-y-4`}>
+        <div className="space-y-1 text-left">
+          <label className="text-xs text-muted-foreground uppercase font-bold">Store Access Code (ID)</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newAccessCode}
+              onChange={e => setNewAccessCode(e.target.value)}
+              className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-mono focus:outline-none focus:border-primary text-foreground"
+            />
+            <button
+              onClick={handleUpdateAccessCode}
+              className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 cursor-pointer"
+            >
+              Update Code
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Unique identifier used to access this store. Minimum 4 characters.</p>
+        </div>
+
+        {/* Reset Owner Password */}
+        <div className="border-t border-border/40 pt-3 space-y-3 text-left">
+          <label className="text-xs text-muted-foreground uppercase font-bold">Reset Owner Password</label>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="password"
+              placeholder="New Password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              className={inputClass}
+            />
+            <input
+              type="password"
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <button
+            onClick={handleUpdatePassword}
+            className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 cursor-pointer"
+          >
+            ✓ Reset Owner Password
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Biometric and Timer Locking Section */}
+      <div className="px-1 mt-4">
+        <SectionLabel>App Locking Settings</SectionLabel>
+      </div>
       <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Biometric Lock" description="Use fingerprint / Face ID where supported." checked={mgr.biometricLock} onChange={v => updateMgr({ biometricLock: v })} />
         <ToggleRow label="PIN Lock" checked={mgr.pinLock} onChange={v => updateMgr({ pinLock: v })} />
       </div>
+
+      {/* 2.5. Multi-device Cloud Sync Section */}
+      <div className="px-1 mt-4">
+        <SectionLabel>Cloud Integration</SectionLabel>
+      </div>
+      <div className={`${card} px-4 divide-y divide-border`}>
+        <ToggleRow 
+          label="Multi-device Cloud Sync" 
+          description="Enable real-time cloud backup to sync and access this store on other devices." 
+          checked={mgr.multiDeviceSync || false} 
+          onChange={v => {
+            updateMgr({ multiDeviceSync: v });
+            if (v) {
+              const updatedStore = {
+                ...store,
+                managerSettings: {
+                  ...store.managerSettings,
+                  multiDeviceSync: true
+                }
+              };
+              saveStore(updatedStore);
+              showToast('Cloud Sync Enabled! Initializing backup...');
+            }
+          }} 
+        />
+      </div>
+      
+      {mgr.multiDeviceSync && (
+        <div className={`${card} p-4 text-left text-xs border border-primary/10 bg-surface-2/30`}>
+          <p className="text-muted-foreground leading-relaxed">
+            ✓ Multi-device access enabled. Use your <strong>Store Access Code ({store.accessCode})</strong> and your <strong>Owner Password</strong> to view this store in other devices.
+          </p>
+        </div>
+      )}
+
       <div className={`${card} p-4 space-y-2`}>
-        <h3 className="font-display font-bold text-sm">Auto Lock Timer</h3>
+        <h3 className="font-display font-bold text-sm text-left">Auto Lock Timer</h3>
         {[
           { v: '1h' as LockTimer, l: '1 Hour' },
           { v: '4h' as LockTimer, l: '4 Hours' },
@@ -900,7 +1287,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           { v: 'never' as LockTimer, l: 'Always Open' },
         ].map(opt => (
           <button key={opt.v} onClick={() => setTimer(opt.v)}
-            className={`w-full p-3 rounded-lg border text-left flex items-center justify-between ${timer===opt.v ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border'}`}>
+            className={`w-full p-3 rounded-lg border text-left flex items-center justify-between cursor-pointer ${timer===opt.v ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border text-foreground'}`}>
             <span className="font-display font-semibold text-sm">{opt.l}</span>
             <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${timer===opt.v ? 'border-primary bg-primary' : 'border-muted-foreground'}`}>
               {timer===opt.v && <span className="text-primary-foreground text-[10px]">✓</span>}
@@ -908,12 +1295,18 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           </button>
         ))}
       </div>
-      <button onClick={handleLock} className="w-full p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive font-display font-semibold">🔒 Lock Store Now</button>
+
+      {/* 3. Lock Action */}
+      <div className="pt-4">
+        <button onClick={handleLock} className="w-full p-3 rounded-xl bg-surface-2 border border-border text-foreground font-display font-semibold hover:bg-surface-3 cursor-pointer">
+          🔒 Lock Store Now
+        </button>
+      </div>
     </SubPage>
   );
 
   if (view === 'data') return (
-    <SubPage title="Data & Storage" subtitle="Manage your store data safely" onBack={() => setView('home')}>
+    <SubPage title="Data & Storage" onBack={() => setView('home')}>
       <div className="grid grid-cols-2 gap-3">
         <DataTile 
           icon={<RefreshCw className="w-4.5 h-4.5" />} 
@@ -948,6 +1341,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           onClick={() => setShowExport(true)} 
         />
       </div>
+
       {showTrash && (
         <RecentlyDeleted
           store={store}
@@ -966,10 +1360,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         <ExportSheet store={store} onClose={() => setShowExport(false)} />
       )}
 
-      <div className="pt-5 border-t border-border mt-5">
+      {/* Danger Actions */}
+      <div className="space-y-3 pt-4">
         <button
           onClick={() => setShowDeleteModal(true)}
-          className="w-full p-4.5 rounded-2xl bg-red-950/20 hover:bg-red-950/30 border border-red-500/25 text-left flex items-center justify-between transition-all duration-200 active:scale-[0.99] group"
+          className="w-full p-4.5 rounded-2xl bg-red-950/20 hover:bg-red-950/30 border border-red-500/25 text-left flex items-center justify-between transition-all duration-200 active:scale-[0.99] group cursor-pointer"
         >
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-red-500/15 text-red-400 flex items-center justify-center shrink-0">
@@ -1002,33 +1397,33 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             </div>
 
             <div className="space-y-3.5 pt-1">
-              <div className="space-y-1">
+              <div className="space-y-1 text-left">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">1. What is this store's name?</label>
                 <input
                   value={delStoreNameInput}
                   onChange={e => setDelStoreNameInput(e.target.value)}
                   placeholder="Type store name..."
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none"
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none text-foreground"
                 />
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1 text-left">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">2. What is this store's access code?</label>
                 <input
                   value={delCodeInput}
                   onChange={e => setDelCodeInput(e.target.value)}
                   placeholder="Type 6-character code..."
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-mono focus:outline-none"
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-mono focus:outline-none text-foreground"
                 />
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1 text-left">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">3. Confirm by typing "DELETE STORE"</label>
                 <input
                   value={delConfirmTextInput}
                   onChange={e => setDelConfirmTextInput(e.target.value)}
                   placeholder="Type DELETE STORE..."
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none"
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none text-foreground"
                 />
               </div>
             </div>
@@ -1046,7 +1441,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                   setDelConfirmTextInput('');
                   setDelError('');
                 }}
-                className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs"
+                className="flex-1 p-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs text-foreground cursor-pointer"
               >
                 Cancel
               </button>
@@ -1073,7 +1468,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                   onLock();
                   showToast('Store successfully deleted');
                 }}
-                className="flex-1 p-3 rounded-xl bg-destructive text-white font-display font-bold text-xs active:scale-[0.98] transition-transform"
+                className="flex-1 p-3 rounded-xl bg-destructive text-white font-display font-bold text-xs active:scale-[0.98] transition-transform cursor-pointer"
               >
                 Confirm Delete
               </button>
@@ -1086,7 +1481,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
 
   if (view === 'backups') {
     return (
-      <SubPage title="Backups & Restore" onBack={() => setView('data')}>
+      <SubPage title="Backups & Restore" onBack={() => setView('security')}>
         {/* Toggle for Auto-backups */}
         <div className={`${card} px-4 divide-y divide-border`}>
           <ToggleRow
@@ -1666,7 +2061,13 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <div className="flex items-start gap-3">
               <div className="relative">
                 <div className="w-20 h-20 rounded-2xl overflow-hidden bg-primary/15 border border-primary/30 flex items-center justify-center text-3xl">
-                  {store.profile?.photo ? <img src={store.profile.photo} alt="" className="w-full h-full object-cover" /> : '🏪'}
+                  {store.profile?.photo ? (
+                    <img src={store.profile.photo} alt="" className="w-full h-full object-cover" />
+                  ) : store.profile?.logoStyle ? (
+                    <StoreLogo storeName={store.storeName} selectedStyle={store.profile.logoStyle} className="w-full h-full" />
+                  ) : (
+                    '🏪'
+                  )}
                 </div>
                 <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">📷</span>
               </div>
@@ -1736,6 +2137,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             </>}
             onClick={() => setView('discount')} />
           <SettingTile icon="📦" color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />
+          <SettingTile icon="🌟" color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView('wishlist')} />
           <SettingTile icon="🐖" color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}
             right={<div className="text-right space-y-1">
               <p className="text-[10px] text-muted-foreground">Goal</p>
@@ -1759,9 +2161,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             right={<><p className="text-[10px] font-display font-semibold text-warning">{activeNotifTypes} Types Active</p>
               <div className="flex gap-1 mt-1">{['📊','⭐','⚠️','📘','💰'].map((e,i)=><span key={i} className="w-6 h-6 rounded bg-surface-2 border border-border flex items-center justify-center text-[10px]">{e}</span>)}</div></> } />
 
-          <SettingTile icon="🛡️" color="#2EBFB1" title="Security" desc="App lock and security settings." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
+          <SettingTile icon="🛡️" color="#2EBFB1" title="Security" desc="App lock, access code, reset password, and credentials." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='4h'?'4 Hours':timer==='8h'?'8 Hours':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
 
-          <SettingTile icon="🗄️" color="#3B82F6" title="Data & Storage" desc="Import, export and backup your data." onClick={() => setView('data')}
+          <SettingTile icon="🗄️" color="#3B82F6" title="Data & Storage" desc="Import, export, backups, and store deletion." onClick={() => setView('data')}
             right={<div className="flex gap-1">
               {[{e:'⬆️',l:'Export'},{e:'⬇️',l:'Import'},{e:'☁️',l:'Backup'},{e:'⋯',l:'More'}].map(o=>(
                 <div key={o.l} className="w-10 h-10 rounded-lg bg-surface-2 border border-border flex flex-col items-center justify-center">
@@ -1902,15 +2304,63 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
             <input type="number" value={g.amount || ''} onChange={e => setG({ ...g, amount: Number(e.target.value) || 0 })} placeholder="500000" className={inp} />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground">% of {g.source}</label>
+            <label className="text-xs text-muted-foreground">Dynamic Save %</label>
             <input type="number" value={g.percentage || ''} onChange={e => setG({ ...g, percentage: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} placeholder="10" className={inp} />
           </div>
         </div>
+
+        <div className="p-3 rounded-xl bg-surface-2 border border-border space-y-3">
+          <label className="flex items-center justify-between text-xs font-bold text-foreground cursor-pointer select-none">
+            <span>Automated Net Income Deduction</span>
+            <input 
+              type="checkbox" 
+              checked={!!g.autoSaveEnabled} 
+              onChange={e => setG({ ...g, autoSaveEnabled: e.target.checked })}
+              className="rounded accent-primary w-4 h-4 cursor-pointer"
+            />
+          </label>
+          {g.autoSaveEnabled && (
+            <div className="space-y-2.5 pt-1.5 border-t border-border/60">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Deduction Type</label>
+                <div className="flex gap-2 mt-1">
+                  <button 
+                    type="button" 
+                    onClick={() => setG({ ...g, autoSaveAmount: undefined })} 
+                    className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${!g.autoSaveAmount ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-3 border-border text-muted-foreground'}`}
+                  >
+                    Use Percentage
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setG({ ...g, autoSaveAmount: g.autoSaveAmount || 2000 })} 
+                    className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${g.autoSaveAmount ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-3 border-border text-muted-foreground'}`}
+                  >
+                    Use Fixed Cash
+                  </button>
+                </div>
+              </div>
+              {g.autoSaveAmount !== undefined && (
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Periodic Cash Deduction (₦)</label>
+                  <input 
+                    type="number" 
+                    value={g.autoSaveAmount || ''} 
+                    onChange={e => setG({ ...g, autoSaveAmount: Math.max(0, Number(e.target.value) || 0) })} 
+                    placeholder="e.g. 2000" 
+                    className={inp} 
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <div>
           <label className="text-xs text-muted-foreground">Save from</label>
           <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden">
             {(['profit','revenue'] as const).map(s => (
-              <button key={s} onClick={() => setG({ ...g, source: s })} className={`flex-1 px-3 py-2 text-xs font-display font-semibold capitalize ${g.source === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{s}</button>
+              <button key={s} type="button" onClick={() => setG({ ...g, source: s })} className={`flex-1 px-3 py-2 text-xs font-display font-semibold capitalize cursor-pointer ${g.source === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{s}</button>
             ))}
           </div>
         </div>
@@ -1918,7 +2368,7 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
           <label className="text-xs text-muted-foreground">Frequency</label>
           <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden">
             {freqs.map(f => (
-              <button key={f} onClick={() => setG({ ...g, frequency: f })} className={`flex-1 px-3 py-2 text-xs font-display font-semibold capitalize ${g.frequency === f ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{f}</button>
+              <button key={f} type="button" onClick={() => setG({ ...g, frequency: f })} className={`flex-1 px-3 py-2 text-xs font-display font-semibold capitalize cursor-pointer ${g.frequency === f ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{f}</button>
             ))}
           </div>
         </div>
@@ -1952,11 +2402,11 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
           />
         </div>
 
-        <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-xs text-warning">
-          ⚠️ This sets the target in StoreFlow. To actually move money, set up an automated save plan in your banking app.
+        <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 text-xs text-primary">
+          ✨ Auto-deductions occur on login/save. Capped to available Net Income to prevent negative balances.
         </div>
 
-        <button onClick={() => onSave(g)} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90">Save Plan</button>
+        <button onClick={() => onSave(g)} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 cursor-pointer">Save Plan</button>
       </div>
     </div>
   );

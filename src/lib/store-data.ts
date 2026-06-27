@@ -2,7 +2,8 @@ import {
   Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, 
   Investment, StoreCategory, GameService, GameSession,
   Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift, 
-  CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer
+  CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
+  DEFAULT_MANAGER_SETTINGS
 } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
@@ -11,7 +12,7 @@ const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Restock', 'Rent', 'Utilities', 'Salaries', 'Transport', 'Other'];
 
-const STORE_PREFIX = 'storeflow_';
+export const STORE_PREFIX = 'storeflow_';
 
 function generateCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -22,6 +23,13 @@ function generateCode(): string {
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function generateStoreUniqueCode(): string {
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 10; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
 }
 
 const RAW_DEFAULT_PRODUCTS = [
@@ -192,7 +200,7 @@ const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
   { name: 'VR Games', icon: '🥽', price: 2000, enabled: false, order: 6 },
 ];
 
-export function createStore(storeName: string, category: StoreCategory = 'retail', retailType?: string): StoreData {
+export function createStore(storeName: string, category: StoreCategory = 'retail', retailType?: string, logoStyle?: string): StoreData {
   const code = generateCode();
   const now = new Date().toISOString();
   const isRetail = category === 'retail';
@@ -227,28 +235,236 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
     games,
     gameSessions: category === 'games' ? [] : undefined,
     createdAt: now,
+    profile: {
+      storeType: '',
+      location: '',
+      phone: '',
+      email: '',
+      logoStyle: logoStyle || 'minimalist',
+      uniqueCode: generateStoreUniqueCode(),
+    }
   };
   localStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
   upsertStoreIndex(store);
   return store;
 }
 
+export function recalculateSavings(store: StoreData): StoreData {
+  if (!store.savingsGoal || store.savingsGoal.autoSaveEnabled) return store;
+  const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
+  const totalProfit = store.sales.reduce((sum, s) => sum + s.profit, 0);
+  const percentage = store.savingsGoal.percentage || 0;
+  const source = store.savingsGoal.source || 'profit';
+  const base = source === 'profit' ? totalProfit : totalRevenue;
+  store.savingsGoal.saved = Math.round((percentage / 100) * base * 100) / 100;
+  return store;
+}
+
+export function syncStoreData(store: StoreData): StoreData {
+  if (!store) return store;
+  const profile = store.profile || {
+    storeType: store.category || 'retail',
+    location: '',
+    phone: '',
+    email: '',
+  };
+  if (!profile.uniqueCode) {
+    profile.uniqueCode = generateStoreUniqueCode();
+  }
+  const settings = store.managerSettings || { ...DEFAULT_MANAGER_SETTINGS };
+
+  if (store.storeName) {
+    settings.receiptStoreName = store.storeName;
+  } else if (settings.receiptStoreName) {
+    store.storeName = settings.receiptStoreName;
+  }
+
+  if (profile.phone) {
+    settings.receiptPhone = profile.phone;
+  } else if (settings.receiptPhone) {
+    profile.phone = settings.receiptPhone;
+  }
+
+  if (profile.location) {
+    settings.receiptAddress = profile.location;
+  } else if (settings.receiptAddress) {
+    profile.location = settings.receiptAddress;
+  }
+
+  if (store.category) {
+    profile.storeType = store.category;
+  } else if (profile.storeType) {
+    store.category = profile.storeType as any;
+  }
+
+  if (store.cashBalance === undefined) {
+    const totalSalesCash = store.sales.filter(s => s.paymentMethod === 'cash' || !s.paymentMethod).reduce((sum, s) => sum + s.total, 0);
+    const totalSalesBank = store.sales.filter(s => s.paymentMethod && s.paymentMethod !== 'cash').reduce((sum, s) => sum + s.total, 0);
+    const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+    const totalInvest = (store.investments || []).reduce((sum, i) => sum + i.amount, 0);
+    const totalWithdrawn = (store.withdrawals || []).reduce((sum, w) => sum + w.amount, 0);
+
+    store.cashBalance = Math.max(0, totalInvest + totalSalesCash - totalExpenses - totalWithdrawn);
+    store.bankBalance = Math.max(0, totalSalesBank);
+    store.walletBalance = 0;
+    store.otherAssets = 0;
+    store.liabilities = 0;
+  } else {
+    if (store.bankBalance === undefined) store.bankBalance = 0;
+    if (store.walletBalance === undefined) store.walletBalance = 0;
+    if (store.otherAssets === undefined) store.otherAssets = 0;
+    if (store.liabilities === undefined) store.liabilities = 0;
+  }
+
+  store.profile = profile;
+  store.managerSettings = settings;
+
+  return recalculateSavings(store);
+}
+
+export function runScheduledSavingsDeduction(store: StoreData): StoreData {
+  if (!store.savingsGoal || !store.savingsGoal.autoSaveEnabled) return store;
+  const goal = store.savingsGoal;
+  const nowTime = new Date();
+  const lastTime = goal.lastDeductionTime ? new Date(goal.lastDeductionTime) : new Date(store.createdAt || nowTime.toISOString());
+  
+  if (lastTime.getTime() >= nowTime.getTime()) return store;
+
+  const occurrences: Date[] = [];
+  let current = new Date(lastTime.getTime());
+  const [hStr, mStr] = (goal.timeOfDay || "00:00").split(":");
+  const schedHours = parseInt(hStr, 10) || 0;
+  const schedMinutes = parseInt(mStr, 10) || 0;
+
+  current.setHours(schedHours, schedMinutes, 0, 0);
+  if (current.getTime() <= lastTime.getTime()) {
+    current.setDate(current.getDate() + 1);
+  }
+
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  while (current.getTime() <= nowTime.getTime()) {
+    let isDue = false;
+    if (goal.frequency === 'daily') {
+      isDue = true;
+    } else if (goal.frequency === 'weekly') {
+      const targetDay = goal.dayOfWeek || 'Monday';
+      if (DAYS[current.getDay()] === targetDay) {
+        isDue = true;
+      }
+    } else if (goal.frequency === 'monthly') {
+      const targetDayOfMonth = goal.dayOfMonth || 1;
+      const daysInMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
+      const adjustedTarget = Math.min(targetDayOfMonth, daysInMonth);
+      if (current.getDate() === adjustedTarget) {
+        isDue = true;
+      }
+    }
+
+    if (isDue) {
+      occurrences.push(new Date(current.getTime()));
+    }
+    current.setDate(current.getDate() + 1);
+    current.setHours(schedHours, schedMinutes, 0, 0);
+  }
+
+  if (occurrences.length === 0) return store;
+
+  let currentSaved = goal.saved || 0;
+  let flowNotifications = store.flowNotifications || [];
+  let memoryTimeline = store.memoryTimeline || [];
+
+  occurrences.forEach(occurrence => {
+    const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
+    const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+    const netIncomeBefore = totalRevenue - totalExpenses - currentSaved;
+
+    let deductionAmount = 0;
+    if (goal.autoSaveAmount && goal.autoSaveAmount > 0) {
+      deductionAmount = goal.autoSaveAmount;
+    } else if (goal.percentage && goal.percentage > 0) {
+      deductionAmount = (goal.percentage / 100) * netIncomeBefore;
+    }
+
+    deductionAmount = Math.round(Math.max(0, deductionAmount) * 100) / 100;
+    if (deductionAmount > 0) {
+      currentSaved += deductionAmount;
+      const deductionMsg = `Auto-saved ₦${deductionAmount.toLocaleString()} to ${goal.label || 'Savings'}`;
+      
+      flowNotifications = [{
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        text: deductionMsg,
+        icon: '🏦',
+        tone: 'success',
+        date: occurrence.toISOString(),
+        read: false,
+        title: 'Automated Savings',
+        description: deductionMsg,
+        actionLabel: 'View Savings',
+        actionTab: 'dashboard'
+      }, ...flowNotifications];
+
+      memoryTimeline = [{
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        type: 'milestone',
+        title: 'Automated Savings',
+        date: occurrence.toISOString(),
+        description: deductionMsg
+      }, ...memoryTimeline];
+    }
+  });
+
+  store.savingsGoal.saved = currentSaved;
+  store.savingsGoal.lastDeductionTime = occurrences[occurrences.length - 1].toISOString();
+  store.flowNotifications = flowNotifications;
+  store.memoryTimeline = memoryTimeline;
+
+  return store;
+}
+
 export function loadStore(code: string): StoreData | null {
   const data = localStorage.getItem(STORE_PREFIX + code.toUpperCase());
   if (!data) return null;
-  const store = JSON.parse(data);
+  let store = JSON.parse(data);
+  
+  store = runScheduledSavingsDeduction(store);
+  store = syncStoreData(store);
+  
   upsertStoreIndex(store);
   return store;
 }
 
 export function saveStore(store: StoreData): void {
-  // Auto-purge trash items older than 7 days on every save
+  const synced = syncStoreData(store);
+  const scheduled = runScheduledSavingsDeduction(synced);
+  Object.assign(store, scheduled);
+
   const cutoff = Date.now() - TRASH_RETENTION_MS;
   const trash = (store.trash || []).filter(t => new Date(t.deletedAt).getTime() > cutoff);
-  const cleaned = { ...store, trash };
-  localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(cleaned));
-  if (cleaned.managerSettings?.autoBackupsEnabled !== false) {
+  store.trash = trash;
+
+  localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
+  if (store.managerSettings?.autoBackupsEnabled !== false) {
     createAutoBackupSnapshot().catch(() => {});
+  }
+  
+  if (store.managerSettings?.multiDeviceSync) {
+    import('@/integrations/supabase/client').then(({ supabase }) => {
+      supabase
+        .from('stores')
+        .upsert({
+          id: store.accessCode,
+          access_code: store.accessCode,
+          owner_password: store.managerSettings?.ownerPassword || '',
+          data: store,
+          updated_at: new Date().toISOString()
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.error('Supabase multi-device sync error:', error);
+          }
+        });
+    }).catch(err => console.error('Failed to load supabase client for sync:', err));
   }
 }
 
@@ -388,39 +604,75 @@ export function deleteSale(store: StoreData, id: string): StoreData {
     nextTrash = [item, ...nextTrash];
   }
   
+  let cashDeduct = 0;
+  let bankDeduct = 0;
+  for (const sale of salesToDelete) {
+    const method = sale.paymentMethod || 'cash';
+    if (method === 'cash') {
+      cashDeduct += sale.total;
+    } else {
+      bankDeduct += sale.total;
+    }
+  }
+
   const updated = {
     ...store,
     sales: store.sales.filter(s => s.id !== id && (!s.transactionId || s.transactionId !== id)),
     trash: nextTrash,
+    cashBalance: Math.max(0, (store.cashBalance || 0) - cashDeduct),
+    bankBalance: Math.max(0, (store.bankBalance || 0) - bankDeduct),
   };
   saveStore(updated);
   return updated;
 }
 
-export function recordSale(store: StoreData, productId: string, quantity: number, actorName?: string, actorRole?: string, transactionId?: string): StoreData {
+export function recordSale(
+  store: StoreData,
+  productId: string,
+  quantity: number,
+  actorName?: string,
+  actorRole?: string,
+  transactionId?: string,
+  saleType?: 'carton' | 'single'
+): StoreData {
   const product = store.products.find(p => p.id === productId);
-  if (!product || product.quantity < quantity) return store;
+  if (!product) return store;
   if (quantity <= 0) return store;
+
+  let unitPrice = product.sellingPrice;
+  let costPrice = product.costPrice;
+  let qtyDeduction = quantity;
+  const isSingle = saleType === 'single' && product.isCartonSingleEnabled;
+
+  if (isSingle) {
+    const singles = product.singlesPerCarton || 1;
+    unitPrice = product.singleSellingPrice ?? (product.sellingPrice / singles);
+    costPrice = product.costPrice / singles;
+    qtyDeduction = quantity / singles;
+  }
+
+  if (product.quantity < qtyDeduction) return store;
   
   const sale: Sale = {
     id: generateId(),
     productId,
-    productName: product.name,
+    productName: product.name + (isSingle ? ' (Single)' : ''),
     quantity: Math.round(quantity * 100) / 100, // Round to 2 decimal places
-    unitPrice: product.sellingPrice,
-    total: Math.round(product.sellingPrice * quantity * 100) / 100,
-    profit: Math.round((product.sellingPrice - product.costPrice) * quantity * 100) / 100,
+    unitPrice: Math.round(unitPrice * 100) / 100,
+    total: Math.round(unitPrice * quantity * 100) / 100,
+    profit: Math.round((unitPrice - costPrice) * quantity * 100) / 100,
     date: new Date().toISOString(),
     transactionId,
   };
 
   let updated = {
     ...store,
-    products: store.products.map(p => p.id === productId ? { ...p, quantity: Math.round((p.quantity - quantity) * 100) / 100 } : p),
+    products: store.products.map(p => p.id === productId ? { ...p, quantity: Math.round((p.quantity - qtyDeduction) * 100) / 100 } : p),
     sales: [sale, ...store.sales],
   };
   if (actorName) {
-    updated = recordActivityLog(updated, actorName, actorRole, `Completed sale: ${product.name} × ${quantity} (Total: ₦${sale.total.toLocaleString()})`);
+    const displayQty = isSingle ? `${quantity} pcs` : `${quantity} ctn`;
+    updated = recordActivityLog(updated, actorName, actorRole, `Completed sale: ${product.name} × ${displayQty} (Total: ₦${sale.total.toLocaleString()})`);
   }
   saveStore(updated);
   return updated;
@@ -524,8 +776,53 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
   // Auto-create a single Restock expense for the entire batch (always — reduces net income / cash)
   const newExpenses: Expense[] = [];
   const newInvestments: Investment[] = [];
+  
+  let newCashBalance = store.cashBalance ?? 0;
+  let newBankBalance = store.bankBalance ?? 0;
+  let newWalletBalance = store.walletBalance ?? 0;
+
   if (restockTotal > 0) {
-    const fundingLabel = funding === 'new_money' ? ' (new money invested)' : ' (from balance)';
+    const availableCash = newCashBalance + newBankBalance + newWalletBalance;
+    let autoInvestedAmt = 0;
+    let cashDeduction = 0;
+
+    if (restockTotal <= availableCash) {
+      cashDeduction = restockTotal;
+    } else {
+      cashDeduction = availableCash;
+      autoInvestedAmt = restockTotal - availableCash;
+    }
+
+    // Deduct from cash balances
+    let remainingDeduct = cashDeduction;
+    if (newCashBalance >= remainingDeduct) {
+      newCashBalance -= remainingDeduct;
+      remainingDeduct = 0;
+    } else {
+      remainingDeduct -= newCashBalance;
+      newCashBalance = 0;
+    }
+
+    if (remainingDeduct > 0) {
+      if (newBankBalance >= remainingDeduct) {
+        newBankBalance -= remainingDeduct;
+        remainingDeduct = 0;
+      } else {
+        remainingDeduct -= newBankBalance;
+        newBankBalance = 0;
+      }
+    }
+
+    if (remainingDeduct > 0) {
+      if (newWalletBalance >= remainingDeduct) {
+        newWalletBalance -= remainingDeduct;
+        remainingDeduct = 0;
+      } else {
+        newWalletBalance = 0;
+      }
+    }
+
+    const fundingLabel = autoInvestedAmt > 0 ? ' (automatic investment)' : ' (from cash balance)';
     newExpenses.push({
       id: generateId(),
       amount: Math.round(restockTotal * 100) / 100,
@@ -535,12 +832,13 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
       source: 'restock',
       restockBatchId: batchId,
     });
-    // If new money was injected, also record an Investment so ROI base grows
-    if (funding === 'new_money') {
+
+    if (autoInvestedAmt > 0) {
       newInvestments.push({
         id: generateId(),
-        amount: Math.round(restockTotal * 100) / 100,
-        note: `Restock capital injection (${itemNames.length} item${itemNames.length === 1 ? '' : 's'})`,
+        amount: Math.round(autoInvestedAmt * 100) / 100,
+        note: `Inventory Capital Injection`,
+        source: 'Inventory Restock',
         date: now,
         type: 'additional',
       });
@@ -553,6 +851,9 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
     restocks: [...newRestocks, ...(store.restocks || [])],
     expenses: [...newExpenses, ...(store.expenses || [])],
     investments: [...newInvestments, ...(store.investments || [])],
+    cashBalance: Math.round(newCashBalance * 100) / 100,
+    bankBalance: Math.round(newBankBalance * 100) / 100,
+    walletBalance: Math.round(newWalletBalance * 100) / 100,
   };
   saveStore(updated);
   return updated;
@@ -568,9 +869,14 @@ export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'sour
     id: generateId(),
     source: 'manual',
   };
+  
+  let newCashBalance = store.cashBalance ?? 0;
+  newCashBalance = Math.max(0, newCashBalance - expense.amount);
+
   let updated: StoreData = {
     ...store,
     expenses: [newExpense, ...(store.expenses || [])],
+    cashBalance: Math.round(newCashBalance * 100) / 100,
   };
   if (actorName) {
     updated = recordActivityLog(updated, actorName, actorRole, `Recorded expense: ${expense.category} - ₦${expense.amount.toLocaleString()}`);
@@ -582,9 +888,14 @@ export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'sour
 export function deleteExpense(store: StoreData, id: string): StoreData {
   const expense = (store.expenses || []).find(e => e.id === id);
   if (!expense) return store;
+
+  let newCashBalance = store.cashBalance ?? 0;
+  newCashBalance = newCashBalance + expense.amount;
+
   const updated: StoreData = {
     ...store,
     expenses: (store.expenses || []).filter(e => e.id !== id),
+    cashBalance: Math.round(newCashBalance * 100) / 100,
     trash: pushTrash(store, 'expense', expense),
   };
   saveStore(updated);
@@ -661,7 +972,8 @@ export function getDashboardStats(store: StoreData) {
   const totalSales = store.sales.length;
   const inventoryValue = store.products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
   const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
-  const netIncome = totalRevenue - totalExpenses;
+  const savingsSaved = store.savingsGoal?.saved || 0;
+  const netIncome = totalRevenue - totalExpenses - savingsSaved;
   return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue, totalExpenses, netIncome };
 }
 
@@ -706,7 +1018,7 @@ function pid(): string { return Date.now().toString(36) + Math.random().toString
  */
 export function recordCheckout(
   store: StoreData,
-  items: { productId: string; quantity: number }[],
+  items: { productId: string; quantity: number; saleType?: 'carton' | 'single' }[],
   opts: {
     paid: number;
     method: PaymentMethod;
@@ -724,21 +1036,56 @@ export function recordCheckout(
 
   for (const it of items) {
     const p = updated.products.find(p => p.id === it.productId);
-    if (!p || p.quantity < it.quantity) continue;
-    updated = recordSale(updated, it.productId, it.quantity, undefined, undefined, transactionId);
+    if (!p) continue;
+
+    let qtyDeduction = it.quantity;
+    if (it.saleType === 'single' && p.isCartonSingleEnabled && p.singlesPerCarton) {
+      qtyDeduction = it.quantity / p.singlesPerCarton;
+    }
+    if (p.quantity < qtyDeduction) continue;
+
+    updated = recordSale(updated, it.productId, it.quantity, undefined, undefined, transactionId, it.saleType);
     const created = updated.sales[0];
     newSales.push(created);
     pendingItems.push({
       productId: p.id,
-      productName: p.name,
+      productName: created.productName,
       quantity: it.quantity,
       unitPrice: created.unitPrice,
     });
   }
-
-  const total = Math.max(0, newSales.reduce((s, x) => s + x.total, 0) - (opts.discount || 0));
+  const subtotal = newSales.reduce((s, x) => s + x.total, 0);
+  const total = Math.max(0, subtotal - (opts.discount || 0));
   const paid = Math.min(opts.paid, total);
   const balance = Math.max(0, total - paid);
+
+  // Distribute the discount proportionally across sales
+  if (opts.discount && opts.discount > 0 && subtotal > 0) {
+    const ratio = total / subtotal;
+    const saleIds = newSales.map(s => s.id);
+    updated = {
+      ...updated,
+      sales: updated.sales.map(s => {
+        if (saleIds.includes(s.id)) {
+          const newTotal = Math.round(s.total * ratio * 100) / 100;
+          const discountAmt = s.total - newTotal;
+          const newProfit = Math.round((s.profit - discountAmt) * 100) / 100;
+          return {
+            ...s,
+            total: newTotal,
+            profit: newProfit,
+          };
+        }
+        return s;
+      }),
+    };
+    newSales.forEach(s => {
+      const origTotal = s.total;
+      s.total = Math.round(s.total * ratio * 100) / 100;
+      const discountAmt = origTotal - s.total;
+      s.profit = Math.round((s.profit - discountAmt) * 100) / 100;
+    });
+  }
 
   let pending: PendingPayment | undefined;
   if (balance > 0 && opts.customerName) {
@@ -771,6 +1118,25 @@ export function recordCheckout(
       sales: updated.sales.map(s => newSales.some(x => x.id === s.id) ? { ...s, paymentMethod: opts.method } : s),
     };
   }
+
+  let cashAdd = 0;
+  let bankAdd = 0;
+  if (paid > 0) {
+    if (opts.method === 'cash') {
+      cashAdd = paid;
+    } else if (opts.method === 'pos' || opts.method === 'transfer') {
+      bankAdd = paid;
+    } else if (opts.method === 'mixed') {
+      cashAdd = paid / 2;
+      bankAdd = paid / 2;
+    }
+  }
+
+  updated = {
+    ...updated,
+    cashBalance: Math.round(((updated.cashBalance || 0) + cashAdd) * 100) / 100,
+    bankBalance: Math.round(((updated.bankBalance || 0) + bankAdd) * 100) / 100,
+  };
 
   // Update customer record
   if (opts.customerName) {
@@ -835,9 +1201,24 @@ export function addPaymentToPending(store: StoreData, id: string, amount: number
     });
   }
 
+  let cashAdd = 0;
+  let bankAdd = 0;
+  if (amount > 0) {
+    if (method === 'cash') {
+      cashAdd = amount;
+    } else if (method === 'pos' || method === 'transfer') {
+      bankAdd = amount;
+    } else if (method === 'mixed') {
+      cashAdd = amount / 2;
+      bankAdd = amount / 2;
+    }
+  }
+
   const updated: StoreData = {
     ...store,
     customers: updatedCustomers,
+    cashBalance: Math.round(((store.cashBalance || 0) + cashAdd) * 100) / 100,
+    bankBalance: Math.round(((store.bankBalance || 0) + bankAdd) * 100) / 100,
     pendingPayments: list.map(p => {
       if (p.id !== id) return p;
       const newPaid = Math.min(p.total, p.paid + Math.max(0, amount));
@@ -1301,6 +1682,151 @@ export function deleteVaultDocument(store: StoreData, id: string): StoreData {
     ...store,
     documents: (store.documents || []).filter(d => d.id !== id)
   };
+  saveStore(updated);
+  return updated;
+}
+
+// ─── Smart ROI System Helpers ──────────────────────────────────────────
+export function addManualInvestment(store: StoreData, amount: number, note: string, source: string, reason?: string): StoreData {
+  const newInv: Investment = {
+    id: generateId(),
+    amount,
+    note,
+    date: new Date().toISOString(),
+    type: 'additional',
+    source,
+    reason,
+  };
+  
+  const updated = {
+    ...store,
+    investments: [newInv, ...(store.investments || [])],
+    cashBalance: source === 'Cash Drawer' ? Math.round(((store.cashBalance || 0) + amount) * 100) / 100 : (store.cashBalance || 0),
+    bankBalance: source === 'Bank Account' ? Math.round(((store.bankBalance || 0) + amount) * 100) / 100 : (store.bankBalance || 0),
+    walletBalance: source === 'Business Wallet' ? Math.round(((store.walletBalance || 0) + amount) * 100) / 100 : (store.walletBalance || 0),
+  };
+  
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteManualInvestment(store: StoreData, id: string): StoreData {
+  const inv = (store.investments || []).find(i => i.id === id);
+  if (!inv) return store;
+  
+  const source = inv.source || 'Cash Drawer';
+  const updated = {
+    ...store,
+    investments: (store.investments || []).filter(i => i.id !== id),
+    cashBalance: source === 'Cash Drawer' ? Math.max(0, Math.round(((store.cashBalance || 0) - inv.amount) * 100) / 100) : (store.cashBalance || 0),
+    bankBalance: source === 'Bank Account' ? Math.max(0, Math.round(((store.bankBalance || 0) - inv.amount) * 100) / 100) : (store.bankBalance || 0),
+    walletBalance: source === 'Business Wallet' ? Math.max(0, Math.round(((store.walletBalance || 0) - inv.amount) * 100) / 100) : (store.walletBalance || 0),
+  };
+  
+  saveStore(updated);
+  return updated;
+}
+
+export function addLoan(store: StoreData, amount: number, source: string, note?: string): StoreData {
+  const newLoan: Loan = {
+    id: generateId(),
+    amount,
+    source,
+    date: new Date().toISOString(),
+    note,
+    status: 'active',
+  };
+  
+  const updated = {
+    ...store,
+    loans: [newLoan, ...(store.loans || [])],
+    liabilities: Math.round(((store.liabilities || 0) + amount) * 100) / 100,
+    cashBalance: source === 'Cash Drawer' ? Math.round(((store.cashBalance || 0) + amount) * 100) / 100 : (store.cashBalance || 0),
+    bankBalance: source === 'Bank Account' ? Math.round(((store.bankBalance || 0) + amount) * 100) / 100 : (store.bankBalance || 0),
+    walletBalance: source === 'Business Wallet' ? Math.round(((store.walletBalance || 0) + amount) * 100) / 100 : (store.walletBalance || 0),
+  };
+  
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteLoan(store: StoreData, id: string): StoreData {
+  const loan = (store.loans || []).find(l => l.id === id);
+  if (!loan) return store;
+  
+  const source = loan.source || 'Cash Drawer';
+  const updated = {
+    ...store,
+    loans: (store.loans || []).filter(l => l.id !== id),
+    liabilities: Math.max(0, Math.round(((store.liabilities || 0) - loan.amount) * 100) / 100),
+    cashBalance: source === 'Cash Drawer' ? Math.max(0, Math.round(((store.cashBalance || 0) - loan.amount) * 100) / 100) : (store.cashBalance || 0),
+    bankBalance: source === 'Bank Account' ? Math.max(0, Math.round(((store.bankBalance || 0) - loan.amount) * 100) / 100) : (store.bankBalance || 0),
+    walletBalance: source === 'Business Wallet' ? Math.max(0, Math.round(((store.walletBalance || 0) - loan.amount) * 100) / 100) : (store.walletBalance || 0),
+  };
+  
+  saveStore(updated);
+  return updated;
+}
+
+export function repayLoan(store: StoreData, id: string, amount: number): StoreData {
+  const loans = store.loans || [];
+  const loanIndex = loans.findIndex(l => l.id === id);
+  if (loanIndex === -1) return store;
+  
+  const loan = loans[loanIndex];
+  const source = loan.source || 'Cash Drawer';
+  
+  const updatedLoans = [...loans];
+  const updatedLoan = {
+    ...loan,
+    amount: Math.max(0, Math.round((loan.amount - amount) * 100) / 100),
+  };
+  if (updatedLoan.amount <= 0) {
+    updatedLoan.status = 'repaid';
+  }
+  updatedLoans[loanIndex] = updatedLoan as Loan;
+  
+  const updated = {
+    ...store,
+    loans: updatedLoans,
+    liabilities: Math.max(0, Math.round(((store.liabilities || 0) - amount) * 100) / 100),
+    cashBalance: source === 'Cash Drawer' ? Math.max(0, Math.round(((store.cashBalance || 0) - amount) * 100) / 100) : (store.cashBalance || 0),
+    bankBalance: source === 'Bank Account' ? Math.max(0, Math.round(((store.bankBalance || 0) - amount) * 100) / 100) : (store.bankBalance || 0),
+    walletBalance: source === 'Business Wallet' ? Math.max(0, Math.round(((store.walletBalance || 0) - amount) * 100) / 100) : (store.walletBalance || 0),
+  };
+  
+  saveStore(updated);
+  return updated;
+}
+
+export function addWithdrawal(store: StoreData, amount: number, note?: string): StoreData {
+  const newWithdrawal: Withdrawal = {
+    id: generateId(),
+    amount,
+    date: new Date().toISOString(),
+    note,
+  };
+  
+  const updated = {
+    ...store,
+    withdrawals: [newWithdrawal, ...(store.withdrawals || [])],
+    cashBalance: Math.max(0, Math.round(((store.cashBalance || 0) - amount) * 100) / 100),
+  };
+  
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteWithdrawal(store: StoreData, id: string): StoreData {
+  const w = (store.withdrawals || []).find(x => x.id === id);
+  if (!w) return store;
+  
+  const updated = {
+    ...store,
+    withdrawals: (store.withdrawals || []).filter(x => x.id !== id),
+    cashBalance: Math.round(((store.cashBalance || 0) + w.amount) * 100) / 100,
+  };
+  
   saveStore(updated);
   return updated;
 }

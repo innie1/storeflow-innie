@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
@@ -6,6 +6,7 @@ import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import SmartRestockEngine from '@/components/SmartRestockEngine';
 
 const CODE39_MAP: Record<string, string> = {
   '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000',
@@ -41,17 +42,42 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
-  const [editDraft, setEditDraft] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string } | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    name: string;
+    costPrice: string;
+    sellingPrice: string;
+    quantity: string;
+    category: string;
+    isCartonSingleEnabled: boolean;
+    singlesPerCarton: string;
+    singleSellingPrice: string;
+    sellAsSinglesByDefault: boolean;
+  } | null>(null);
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
   const [restockQty, setRestockQty] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [importPreview, setImportPreview] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] | null>(null);
-  const [newProduct, setNewProduct] = useState({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: '' });
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    costPrice: '',
+    sellingPrice: '',
+    quantity: '',
+    category: '',
+    isCartonSingleEnabled: false,
+    singlesPerCarton: '12',
+    singleSellingPrice: '',
+    sellAsSinglesByDefault: false
+  });
   const [customCategoryActive, setCustomCategoryActive] = useState(false);
   const [customCategoryVal, setCustomCategoryVal] = useState('');
   const [editCustomCategoryActive, setEditCustomCategoryActive] = useState(false);
   const [editCustomCategoryVal, setEditCustomCategoryVal] = useState('');
+  const [showAddConfirm, setShowAddConfirm] = useState(false);
+  const [importMode, setImportMode] = useState<'text' | 'image'>('text');
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const ocrFileRef = useRef<HTMLInputElement>(null);
 
   const existingCategories = useMemo(() => {
     const cats = new Set(['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others']);
@@ -70,6 +96,37 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     if (n.includes('milk') || n.includes('drink') || n.includes('water') || n.includes('beverage') || n.includes('soda') || n.includes('milo') || n.includes('coke') || n.includes('mineral') || n.includes('juice') || n.includes('fanta') || n.includes('sprite') || n.includes('pepsi') || n.includes('tea') || n.includes('coffee')) return 'Beverages';
     if (n.includes('rice') || n.includes('beans') || n.includes('garri') || n.includes('yam') || n.includes('food') || n.includes('grocery') || n.includes('spaghetti') || n.includes('indomie') || n.includes('bread') || n.includes('semovita') || n.includes('oil') || n.includes('sugar') || n.includes('salt') || n.includes('flour') || n.includes('semolina')) return 'Groceries';
     return 'Others';
+  };
+
+  const autoDetectCartonSingle = (name: string, sellingPrice: number) => {
+    const n = name.toLowerCase();
+    const cartonWords = ['carton', 'ctn', 'pack', 'box', 'case', 'crate', 'bundle', 'dozen'];
+    const matchesCarton = cartonWords.some(w => n.includes(w));
+    
+    if (matchesCarton) {
+      const rx = /(?:x|qty|size|of|pack|ctn|carton|\b)\s*(\d+)\b/i;
+      const matches = n.match(rx);
+      let singles = 12; // default
+      if (matches && matches[1]) {
+        const val = parseInt(matches[1]);
+        if (val > 1 && val <= 200) {
+          singles = val;
+        }
+      }
+      const singlePrice = singles > 0 ? Math.round(sellingPrice / singles) : 0;
+      return {
+        isCartonSingleEnabled: true,
+        singlesPerCarton: singles,
+        singleSellingPrice: singlePrice,
+        sellAsSinglesByDefault: true
+      };
+    }
+    return {
+      isCartonSingleEnabled: false,
+      singlesPerCarton: 12,
+      singleSellingPrice: 0,
+      sellAsSinglesByDefault: false
+    };
   };
 
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
@@ -95,42 +152,295 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [countMode, setCountMode] = useState(false);
   const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
   const [showAuditHistory, setShowAuditHistory] = useState(false);
+  const [showRestockConfirm, setShowRestockConfirm] = useState(false);
+  const [showPlannedRestocks, setShowPlannedRestocks] = useState(false);
   const [selectedBarcodeProduct, setSelectedBarcodeProduct] = useState<Product | null>(null);
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [selectedTransferProduct, setSelectedTransferProduct] = useState<Product | null>(null);
   const [transferQty, setTransferQty] = useState('');
   const [transferDestCode, setTransferDestCode] = useState('');
+  const [showDiscontinued, setShowDiscontinued] = useState(false);
 
   const lowThreshold = getLowStockThreshold();
   let products = store.products;
+  if (!showDiscontinued) {
+    products = products.filter(p => !p.discontinued);
+  }
   if (filterLowStock) products = products.filter(p => p.quantity <= lowThreshold);
   if (search) products = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  const smartSuggestions = useMemo(() => {
+    const threshold = store.managerSettings?.minStockThreshold ?? lowThreshold;
+    
+    // Calculate velocity
+    const salesCount: Record<string, number> = {};
+    store.sales.forEach(sale => {
+      salesCount[sale.productId] = (salesCount[sale.productId] || 0) + sale.quantity;
+    });
+
+    // Filter needy products (not discontinued, stock <= threshold, and not in shoppingList)
+    const needy = store.products
+      .filter(p => !p.discontinued && p.quantity <= threshold && !shoppingList.some(item => item.productId === p.id));
+
+    if (needy.length === 0) return [];
+
+    // Calculate Net Income budget to allocate
+    const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
+    const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+    const savingsSaved = store.savingsGoal?.saved || 0;
+    const netIncome = totalRevenue - totalExpenses - savingsSaved;
+    const availableBudget = Math.max(25000, netIncome); // Baseline minimum budget of 25k to suggest items
+
+    // Calculate priority scores
+    const needyWithScores = needy.map(p => {
+      const velocity = salesCount[p.id] || 0;
+      const scarcity = Math.max(0, threshold - p.quantity);
+      // Score combined based on performance (sales) and stock scarcity
+      const score = velocity * 1.5 + scarcity + 1; 
+      return { product: p, velocity, score };
+    });
+
+    // Sort needy items by priority score descending
+    needyWithScores.sort((a, b) => b.score - a.score);
+
+    // Pick top 8 needy items to distribute the budget
+    const topNeedy = needyWithScores.slice(0, 8);
+    const totalScore = topNeedy.reduce((sum, x) => sum + x.score, 0);
+
+    const suggestions: { product: Product; velocity: number; suggestedQty: number; totalCost: number }[] = [];
+
+    if (totalScore > 0) {
+      topNeedy.forEach(item => {
+        const share = item.score / totalScore;
+        const allocatedBudget = availableBudget * share;
+        
+        let suggestedQty = Math.floor(allocatedBudget / (item.product.costPrice || 1));
+        const defaultQty = store.managerSettings?.defaultRestockQty ?? 50;
+        
+        // Clamp quantity between 1 and defaultQty
+        suggestedQty = Math.min(defaultQty, Math.max(1, suggestedQty));
+        const totalCost = suggestedQty * item.product.costPrice;
+
+        suggestions.push({
+          product: item.product,
+          velocity: item.velocity,
+          suggestedQty,
+          totalCost
+        });
+      });
+    }
+
+    return suggestions;
+  }, [store.products, store.sales, store.expenses, store.savingsGoal, store.managerSettings, lowThreshold, shoppingList]);
 
   const handleAdd = () => {
     if (!newProduct.name || !newProduct.costPrice || !newProduct.sellingPrice || !newProduct.quantity) {
       return showToast('Fill all required fields', 'error');
     }
+    let singlesPerCartonVal: number | undefined;
+    let singlePriceVal: number | undefined;
+    if (newProduct.isCartonSingleEnabled) {
+      singlesPerCartonVal = Number(newProduct.singlesPerCarton);
+      if (isNaN(singlesPerCartonVal) || singlesPerCartonVal <= 0) {
+        return showToast('Please enter a valid quantity of singles per carton', 'error');
+      }
+      singlePriceVal = newProduct.singleSellingPrice ? Number(newProduct.singleSellingPrice) : undefined;
+      if (singlePriceVal !== undefined && (isNaN(singlePriceVal) || singlePriceVal <= 0)) {
+        return showToast('Please enter a valid single selling price', 'error');
+      }
+    }
+    setShowAddConfirm(true);
+  };
+
+  const handleActualAdd = () => {
+    let singlesPerCartonVal = newProduct.isCartonSingleEnabled ? Number(newProduct.singlesPerCarton) : undefined;
+    let singlePriceVal = (newProduct.isCartonSingleEnabled && newProduct.singleSellingPrice) ? Number(newProduct.singleSellingPrice) : undefined;
+    
     const updated = addProduct(store, {
       name: newProduct.name,
       costPrice: Number(newProduct.costPrice),
       sellingPrice: Number(newProduct.sellingPrice),
       quantity: Number(newProduct.quantity),
       category: newProduct.category || 'General',
+      isCartonSingleEnabled: newProduct.isCartonSingleEnabled,
+      singlesPerCarton: singlesPerCartonVal,
+      singleSellingPrice: singlePriceVal,
+      sellAsSinglesByDefault: newProduct.sellAsSinglesByDefault,
     });
     onUpdate(updated);
-    setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: '' });
+    setNewProduct({
+      name: '',
+      costPrice: '',
+      sellingPrice: '',
+      quantity: '',
+      category: '',
+      isCartonSingleEnabled: false,
+      singlesPerCarton: '12',
+      singleSellingPrice: '',
+      sellAsSinglesByDefault: false
+    });
+    setShowAddConfirm(false);
     setShowAddModal(false);
     showToast('Product added');
   };
 
+  const openImportModal = () => {
+    setImportText('');
+    setImportPreview(null);
+    setImportMode('text');
+    setOcrError(null);
+    setIsOcrLoading(false);
+    setShowImportModal(true);
+  };
+
+  const parseReceiptText = (rawText: string) => {
+    const lines = rawText.split('\n');
+    const itemsList: { name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] = [];
+    
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+      
+      const lower = line.toLowerCase();
+      if (lower.includes('total') || lower.includes('subtotal') || lower.includes('payment') || lower.includes('receipt') || lower.includes('date') || lower.includes('tel') || lower.includes('welcome') || lower.includes('customer') || lower.includes('cashier')) {
+        continue;
+      }
+      
+      const numberMatches = line.match(/\d+([.,]\d+)?/g);
+      if (!numberMatches || numberMatches.length === 0) continue;
+      
+      const wordsOnly = line.replace(/[\d.,x₦\-=*#]/g, ' ').trim().replace(/\s+/g, ' ');
+      if (wordsOnly.length < 3) continue;
+      
+      let qty = 1;
+      let price = 0;
+      
+      const parsedNumbers = numberMatches.map(n => Number(n.replace(',', '')));
+      
+      if (parsedNumbers.length === 1) {
+        price = parsedNumbers[0];
+      } else if (parsedNumbers.length >= 2) {
+        const sorted = [...parsedNumbers].sort((a,b) => a - b);
+        if (sorted[0] < 50) {
+          qty = sorted[0];
+          price = sorted[1];
+        } else {
+          price = sorted[1];
+        }
+      }
+      
+      if (price > 0) {
+        const costPrice = Math.round(price * 0.75);
+        itemsList.push({
+          name: wordsOnly,
+          costPrice: String(costPrice),
+          sellingPrice: String(price),
+          quantity: String(qty),
+          category: autoCategory(wordsOnly)
+        });
+      }
+    }
+    
+    return itemsList;
+  };
+
+  const handleOcrScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsOcrLoading(true);
+    setOcrError(null);
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const dataUrl = ev.target?.result as string;
+        try {
+          const text = await runOfflineOCR(dataUrl);
+          const parsed = parseReceiptText(text);
+          if (parsed.length === 0) {
+            setOcrError("No products could be parsed. Check receipt layout or try Text Import.");
+            showToast("No products found", "error");
+          } else {
+            setImportPreview(parsed);
+            showToast(`✓ Extracted ${parsed.length} items from receipt`);
+          }
+        } catch (err: any) {
+          console.error("OCR parse failed:", err);
+          setOcrError(`Offline OCR failed: ${err.message || 'Error processing image'}. Please try Text Import.`);
+          showToast("OCR Scan failed", "error");
+        } finally {
+          setIsOcrLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setOcrError("Failed to read image file.");
+      setIsOcrLoading(false);
+    }
+  };
+
+  const runOfflineOCR = (dataUrl: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const win = window as any;
+      if (win.Tesseract) {
+        doTesseractRecognize(dataUrl, resolve, reject);
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js';
+      script.onload = () => {
+        if (win.Tesseract) {
+          doTesseractRecognize(dataUrl, resolve, reject);
+        } else {
+          reject(new Error("OCR engine failed to initialize"));
+        }
+      };
+      script.onerror = () => {
+        reject(new Error("Failed to download OCR engine (offline)"));
+      };
+      document.body.appendChild(script);
+    });
+  };
+
+  const doTesseractRecognize = (dataUrl: string, resolve: any, reject: any) => {
+    const win = window as any;
+    win.Tesseract.recognize(
+      dataUrl,
+      'eng',
+      { logger: (m: any) => console.log("OCR Progress:", m) }
+    ).then(({ data: { text } }: any) => {
+      resolve(text);
+    }).catch((err: any) => {
+      reject(err);
+    });
+  };
+
   const handleEdit = () => {
     if (!editProduct || !editDraft) return;
+    let singlesPerCartonVal: number | undefined;
+    let singlePriceVal: number | undefined;
+    if (editDraft.isCartonSingleEnabled) {
+      singlesPerCartonVal = Number(editDraft.singlesPerCarton);
+      if (isNaN(singlesPerCartonVal) || singlesPerCartonVal <= 0) {
+        return showToast('Please enter a valid quantity of singles per carton', 'error');
+      }
+      singlePriceVal = editDraft.singleSellingPrice ? Number(editDraft.singleSellingPrice) : undefined;
+      if (singlePriceVal !== undefined && (isNaN(singlePriceVal) || singlePriceVal <= 0)) {
+        return showToast('Please enter a valid single selling price', 'error');
+      }
+    }
     const updates: Partial<Product> = {
       name: editDraft.name,
       costPrice: Number(editDraft.costPrice) || 0,
       sellingPrice: Number(editDraft.sellingPrice) || 0,
       quantity: Number(editDraft.quantity) || 0,
       category: editDraft.category,
+      isCartonSingleEnabled: editDraft.isCartonSingleEnabled,
+      singlesPerCarton: singlesPerCartonVal,
+      singleSellingPrice: singlePriceVal,
+      sellAsSinglesByDefault: editDraft.sellAsSinglesByDefault,
     };
     const updated = updateProduct(store, editProduct.id, updates);
     onUpdate(updated);
@@ -154,6 +464,13 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     if (!restockProduct || !restockQty) return;
     const qty = Number(restockQty);
     if (qty <= 0) return showToast('Enter a quantity', 'error');
+    setShowRestockConfirm(true);
+  };
+
+  const handleActualRestock = () => {
+    if (!restockProduct || !restockQty) return;
+    const qty = Number(restockQty);
+    if (qty <= 0) return showToast('Enter a quantity', 'error');
     const updated = receiveStock(
       store,
       [{ productId: restockProduct.id, quantity: qty, costPrice: restockProduct.costPrice }],
@@ -163,7 +480,36 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     setRestockProduct(null);
     setRestockQty('');
     setSingleRestockFunding('balance');
+    setShowRestockConfirm(false);
     showToast(singleRestockFunding === 'new_money' ? 'Stock added (new money)' : 'Stock added (from balance)');
+  };
+
+  const handleSavePlannedRestock = () => {
+    if (!restockProduct || !restockQty) return;
+    const qty = Number(restockQty);
+    if (qty <= 0) return showToast('Enter a quantity', 'error');
+    
+    const plannedItem = {
+      id: Math.random().toString(36).substring(2, 9),
+      productId: restockProduct.id,
+      productName: restockProduct.name,
+      quantity: qty,
+      costPrice: restockProduct.costPrice,
+      funding: singleRestockFunding,
+      date: new Date().toISOString()
+    };
+    
+    const updated = {
+      ...store,
+      plannedRestocks: [plannedItem, ...(store.plannedRestocks || [])]
+    };
+    
+    onUpdate(updated);
+    setRestockProduct(null);
+    setRestockQty('');
+    setSingleRestockFunding('balance');
+    setShowRestockConfirm(false);
+    showToast('Restock saved as Planned (not added to inventory yet)');
   };
 
   const handleImportParse = () => {
@@ -192,13 +538,22 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     if (!importPreview) return;
     const cleaned = importPreview
       .filter(p => p.name.trim())
-      .map(p => ({
-        name: p.name.trim(),
-        costPrice: Number(p.costPrice) || 0,
-        sellingPrice: Number(p.sellingPrice) || 0,
-        quantity: Number(p.quantity) || 0,
-        category: p.category.trim() || 'General',
-      }));
+      .map(p => {
+        const name = p.name.trim();
+        const sellingPrice = Number(p.sellingPrice) || 0;
+        const autoCtn = autoDetectCartonSingle(name, sellingPrice);
+        return {
+          name,
+          costPrice: Number(p.costPrice) || 0,
+          sellingPrice,
+          quantity: Number(p.quantity) || 0,
+          category: p.category.trim() || 'General',
+          isCartonSingleEnabled: autoCtn.isCartonSingleEnabled,
+          singlesPerCarton: autoCtn.isCartonSingleEnabled ? autoCtn.singlesPerCarton : undefined,
+          singleSellingPrice: autoCtn.isCartonSingleEnabled ? autoCtn.singleSellingPrice : undefined,
+          sellAsSinglesByDefault: autoCtn.isCartonSingleEnabled ? autoCtn.sellAsSinglesByDefault : undefined,
+        };
+      });
     if (cleaned.length === 0) return showToast('No items to import', 'error');
     onUpdate(importProducts(store, cleaned));
     setShowImportModal(false);
@@ -220,8 +575,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   };
 
   const updateListQty = (productId: string, qty: number) => {
-    if (qty <= 0) return removeFromList(productId);
-    setShoppingList(shoppingList.map(i => i.productId === productId ? { ...i, quantity: qty } : i));
+    const clamped = Math.max(0, qty);
+    setShoppingList(shoppingList.map(i => i.productId === productId ? { ...i, quantity: clamped } : i));
   };
 
   const removeFromList = (productId: string) => {
@@ -229,8 +584,6 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   };
 
   const clearList = () => {
-    if (shoppingList.length === 0) return;
-    if (!confirm('Clear shopping list?')) return;
     setShoppingList([]);
     showToast('List cleared');
   };
@@ -262,7 +615,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     const date = new Date().toLocaleDateString('en-GB');
     let text = `🛒 *SHOPPING LIST*\n${storeName}\n${date}\n\n`;
     shoppingList.forEach((item, idx) => {
-      text += `${idx + 1}. ${item.name} — *${item.quantity}* ${item.category ? `(${item.category})` : ''}\n`;
+      const product = store.products.find(p => p.id === item.productId);
+      const currentStock = product ? product.quantity : 0;
+      text += `${idx + 1}. ${item.name} — Restock: *${item.quantity}* (Current Stock: ${currentStock}) ${item.category ? `[${item.category}]` : ''}\n`;
     });
     text += `\n_Total items: ${shoppingList.length}_`;
     return text;
@@ -416,10 +771,21 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           placeholder="Search products..."
           className="flex-1 min-w-[200px] p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
         />
-        <button onClick={() => { setShowAddModal(true); setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries' }); setCustomCategoryActive(false); setCustomCategoryVal(''); }} className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-display font-semibold hover:opacity-90">
+        <button
+          type="button"
+          onClick={() => setShowDiscontinued(!showDiscontinued)}
+          className={`px-4 py-2.5 rounded-lg text-sm font-display font-semibold border transition-colors cursor-pointer ${
+            showDiscontinued 
+              ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20' 
+              : 'bg-secondary text-secondary-foreground hover:bg-surface-3 border border-border'
+          }`}
+        >
+          {showDiscontinued ? '👁️ Hide Discontinued' : '👁️ Show Discontinued'}
+        </button>
+        <button onClick={() => { setShowAddModal(true); setShowAddConfirm(false); setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries', isCartonSingleEnabled: false, singlesPerCarton: '12', singleSellingPrice: '', sellAsSinglesByDefault: false }); setCustomCategoryActive(false); setCustomCategoryVal(''); }} className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-display font-semibold hover:opacity-90">
           + Add
         </button>
-        <button onClick={() => setShowImportModal(true)} className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border">
+        <button onClick={openImportModal} className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border">
           Import
         </button>
         <button
@@ -441,6 +807,18 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           title="Auto-generate buy list from low/out-of-stock items"
         >
           📝 Buy List
+        </button>
+        <button
+          onClick={() => setShowPlannedRestocks(true)}
+          className="px-4 py-2.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-sm font-display font-semibold hover:bg-primary/20 relative"
+          title="View planned restocks that are not yet received"
+        >
+          📅 Planned Restocks
+          {(store.plannedRestocks || []).length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 animate-pulse">
+              {(store.plannedRestocks || []).length}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setCountMode(true)}
@@ -514,12 +892,19 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             <div
               key={p.id}
               onClick={() => { if (!countMode) setSelectedDetailProduct(p); }}
-              className={`p-3 rounded-lg bg-card border flex items-center gap-3 transition-colors cursor-pointer hover:bg-surface-2/30 ${p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'}`}
+              className={`p-3 rounded-lg bg-card border flex items-center gap-3 transition-colors cursor-pointer hover:bg-surface-2/30 ${
+                p.discontinued
+                  ? 'opacity-60 border-dashed border-destructive/40 bg-surface-1/40'
+                  : p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'
+              }`}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className="font-display font-semibold text-sm truncate">{p.name}</p>
-                  {p.addedAt && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
+                  <p className={`font-display font-semibold text-sm truncate ${p.discontinued ? 'text-muted-foreground line-through' : ''}`}>{p.name}</p>
+                  {p.discontinued && (
+                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-bold">Discontinued</span>
+                  )}
+                  {p.addedAt && !p.discontinued && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
                     <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
                   )}
                   {p.barcode && (
@@ -619,7 +1004,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       </button>
                     </div>
                     <div className="flex gap-1">
-                      <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center" title="Restock">↑</button>
+                      <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); setShowRestockConfirm(false); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center" title="Restock">↑</button>
                       <button onClick={() => { setSelectedTransferProduct(p); setTransferQty(''); setTransferDestCode(''); }} title="Transfer stock to sister store" className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-warning flex items-center justify-center">🚚</button>
                       <button onClick={() => { setEditProduct({ ...p }); setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category)); setEditCustomCategoryVal(p.category); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center" title="Edit">✎</button>
                       <button onClick={() => handleDelete(p)} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive flex items-center justify-center" title="Delete">✕</button>
@@ -643,98 +1028,235 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         const margins = [20, 30, 40, 50];
         const defaultMargin = settings?.defaultMargin ?? 30;
         return (
-        <Modal title="Add Product" onClose={() => setShowAddModal(false)}>
-          <div className="space-y-3">
-            <input
-              value={newProduct.name}
-              onChange={e => {
-                const name = e.target.value;
-                const guessed = autoCategory(name);
-                setNewProduct({ ...newProduct, name, category: guessed });
-                if (guessed === 'Others') {
-                  setCustomCategoryActive(true);
-                  setCustomCategoryVal('');
-                } else {
-                  setCustomCategoryActive(false);
-                }
-              }}
-              placeholder="Product name"
-              className={inputClass}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <input value={newProduct.costPrice} onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value })} placeholder="Cost price (₦)" type="number" className={inputClass} />
-              <input value={newProduct.sellingPrice} onChange={e => setNewProduct({ ...newProduct, sellingPrice: e.target.value })} placeholder="Selling price (₦)" type="number" className={inputClass} />
-            </div>
-            {showSmartPricing && cost > 0 && (
-              <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-display font-bold text-primary">✨ Smart Pricing <span className="text-muted-foreground font-normal">(Recommended)</span></p>
-                </div>
-                <p className="text-[10px] text-muted-foreground">Based on your {defaultMargin}% default profit margin</p>
-                <div className="space-y-1.5">
-                  {margins.map(m => {
-                    const price = Math.round((cost * (1 + m / 100)) / 5) * 5;
-                    const profit = price - cost;
-                    const isDefault = m === defaultMargin;
-                    const isSelected = Number(newProduct.sellingPrice) === price;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setNewProduct({ ...newProduct, sellingPrice: String(price) })}
-                        className={`w-full flex items-center justify-between p-2 rounded-lg border text-xs font-display font-semibold transition-colors ${
-                          isSelected || (isDefault && !newProduct.sellingPrice)
-                            ? 'bg-primary/20 border-primary text-primary'
-                            : 'bg-surface-2 border-border text-foreground hover:border-primary/30'
-                        }`}
-                      >
-                        <span>{m}% Margin</span>
-                        <span>₦{price.toLocaleString()}</span>
-                        <span className="text-success">Profit: ₦{profit.toLocaleString()}{isSelected ? ' ✓' : ''}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+        <Modal title={showAddConfirm ? "Confirm Product Addition" : "Add Product"} onClose={() => { setShowAddModal(false); setShowAddConfirm(false); }}>
+          {showAddConfirm ? (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm text-center font-display font-bold">
+                ⚠️ Confirm Action
               </div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <input value={newProduct.quantity} onChange={e => setNewProduct({ ...newProduct, quantity: e.target.value })} placeholder="Quantity" type="number" className={inputClass} />
-              <div className="space-y-2 text-left">
-                <select
-                  value={['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(newProduct.category) ? newProduct.category : 'Others'}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (val === 'Others') {
-                      setCustomCategoryActive(true);
-                      setNewProduct({ ...newProduct, category: customCategoryVal || 'Others' });
-                    } else {
-                      setCustomCategoryActive(false);
-                      setNewProduct({ ...newProduct, category: val });
-                    }
-                  }}
-                  className={inputClass}
-                >
-                  <option value="Groceries">Groceries</option>
-                  <option value="Beverages">Beverages</option>
-                  <option value="Detergents">Detergents</option>
-                  <option value="Soap">Soap</option>
-                  <option value="Others">Others / Custom</option>
-                </select>
-                {customCategoryActive && (
-                  <input
-                    value={customCategoryVal}
-                    onChange={e => {
-                      setCustomCategoryVal(e.target.value);
-                      setNewProduct({ ...newProduct, category: e.target.value });
-                    }}
-                    placeholder="Enter custom category..."
-                    className={inputClass}
-                  />
+              <p className="text-sm text-foreground leading-snug text-center">
+                Are you sure you want to add this product to your inventory?
+              </p>
+              <div className="p-3.5 rounded-lg bg-surface-2 border border-border space-y-1.5 text-xs text-left">
+                <p><span className="text-muted-foreground">Product Name:</span> <strong className="text-foreground">{newProduct.name}</strong></p>
+                <p><span className="text-muted-foreground">Cost Price:</span> <strong className="text-foreground">₦{Number(newProduct.costPrice).toLocaleString()}</strong></p>
+                <p><span className="text-muted-foreground">Selling Price:</span> <strong className="text-foreground">₦{Number(newProduct.sellingPrice).toLocaleString()}</strong></p>
+                <p><span className="text-muted-foreground">Quantity:</span> <strong className="text-foreground">{newProduct.quantity} units</strong></p>
+                <p><span className="text-muted-foreground">Category:</span> <strong className="text-foreground">{newProduct.category}</strong></p>
+                {newProduct.isCartonSingleEnabled && (
+                  <>
+                    <p><span className="text-muted-foreground">Carton & Single:</span> <strong className="text-foreground">Enabled</strong></p>
+                    <p><span className="text-muted-foreground">Singles per Carton:</span> <strong className="text-foreground">{newProduct.singlesPerCarton}</strong></p>
+                    <p><span className="text-muted-foreground">Single Price:</span> <strong className="text-foreground">₦{Number(newProduct.singleSellingPrice || 0).toLocaleString()}</strong></p>
+                  </>
                 )}
               </div>
+              
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleActualAdd}
+                  className="w-full p-3 rounded-lg bg-success text-white font-display font-bold text-sm hover:opacity-90 transition-opacity cursor-pointer"
+                >
+                  Yes, add product
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddConfirm(false)}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  No / Cancel
+                </button>
+              </div>
             </div>
-            <button onClick={handleAdd} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Item</button>
-          </div>
+          ) : (
+            <div className="space-y-3">
+              <input
+                value={newProduct.name}
+                onChange={e => {
+                  const name = e.target.value;
+                  const guessed = autoCategory(name);
+                  const autoCtn = autoDetectCartonSingle(name, Number(newProduct.sellingPrice) || 0);
+                  setNewProduct(prev => ({
+                    ...prev,
+                    name,
+                    category: guessed,
+                    isCartonSingleEnabled: autoCtn.isCartonSingleEnabled || prev.isCartonSingleEnabled,
+                    singlesPerCarton: autoCtn.isCartonSingleEnabled ? String(autoCtn.singlesPerCarton) : prev.singlesPerCarton,
+                    singleSellingPrice: autoCtn.isCartonSingleEnabled ? String(autoCtn.singleSellingPrice) : prev.singleSellingPrice,
+                    sellAsSinglesByDefault: autoCtn.isCartonSingleEnabled ? autoCtn.sellAsSinglesByDefault : prev.sellAsSinglesByDefault
+                  }));
+                  if (guessed === 'Others') {
+                    setCustomCategoryActive(true);
+                    setCustomCategoryVal('');
+                  } else {
+                    setCustomCategoryActive(false);
+                  }
+                }}
+                placeholder="Product name"
+                className={inputClass}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <input value={newProduct.costPrice} onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value })} placeholder="Cost price (₦)" type="number" className={inputClass} />
+                <input
+                  value={newProduct.sellingPrice}
+                  onChange={e => {
+                    const val = e.target.value;
+                    const numCarton = Number(val) || 0;
+                    const autoCtn = autoDetectCartonSingle(newProduct.name, numCarton);
+                    const numSingles = autoCtn.isCartonSingleEnabled ? autoCtn.singlesPerCarton : (Number(newProduct.singlesPerCarton) || 12);
+                    const calculatedSingle = numSingles > 0 ? String(Math.round(numCarton / numSingles)) : '';
+                    setNewProduct(prev => ({
+                      ...prev,
+                      sellingPrice: val,
+                      isCartonSingleEnabled: autoCtn.isCartonSingleEnabled || prev.isCartonSingleEnabled,
+                      singlesPerCarton: autoCtn.isCartonSingleEnabled ? String(autoCtn.singlesPerCarton) : prev.singlesPerCarton,
+                      singleSellingPrice: prev.isCartonSingleEnabled || autoCtn.isCartonSingleEnabled ? calculatedSingle : prev.singleSellingPrice,
+                      sellAsSinglesByDefault: autoCtn.isCartonSingleEnabled ? autoCtn.sellAsSinglesByDefault : prev.sellAsSinglesByDefault
+                    }));
+                  }}
+                  placeholder="Selling price (₦)"
+                  type="number"
+                  className={inputClass}
+                />
+              </div>
+              {showSmartPricing && cost > 0 && (
+                <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-display font-bold text-primary">✨ Smart Pricing <span className="text-muted-foreground font-normal">(Recommended)</span></p>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Based on your {defaultMargin}% default profit margin</p>
+                  <div className="space-y-1.5">
+                    {margins.map(m => {
+                      const price = Math.round((cost * (1 + m / 100)) / 5) * 5;
+                      const profit = price - cost;
+                      const isDefault = m === defaultMargin;
+                      const isSelected = Number(newProduct.sellingPrice) === price;
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => {
+                            const priceStr = String(price);
+                            const numCarton = price;
+                            const numSingles = Number(newProduct.singlesPerCarton) || 12;
+                            const calculatedSingle = numSingles > 0 ? String(Math.round(numCarton / numSingles)) : '';
+                            setNewProduct(prev => ({
+                              ...prev,
+                              sellingPrice: priceStr,
+                              singleSellingPrice: prev.isCartonSingleEnabled ? calculatedSingle : prev.singleSellingPrice
+                            }));
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-lg border text-xs font-display font-semibold transition-colors ${
+                            isSelected || (isDefault && !newProduct.sellingPrice)
+                              ? 'bg-primary/20 border-primary text-primary'
+                              : 'bg-surface-2 border-border text-foreground hover:border-primary/30'
+                          }`}
+                        >
+                          <span>{m}% Margin</span>
+                          <span>₦{price.toLocaleString()}</span>
+                          <span className="text-success">Profit: ₦{profit.toLocaleString()}{isSelected ? ' ✓' : ''}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Carton & Single Sales Configuration */}
+              <div className="p-3 rounded-xl bg-surface-2 border border-border/40 space-y-2 text-left">
+                <label className="flex items-center gap-2 text-xs font-display font-semibold text-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={newProduct.isCartonSingleEnabled}
+                    onChange={e => setNewProduct(prev => ({ ...prev, isCartonSingleEnabled: e.target.checked }))}
+                    className="rounded border-border text-primary focus:ring-primary w-4 h-4"
+                  />
+                  📦 Enable Carton & Single sales
+                </label>
+
+                {newProduct.isCartonSingleEnabled && (
+                  <div className="space-y-3 pt-2 border-t border-border/20">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-semibold text-muted-foreground">Singles per Carton</label>
+                        <input
+                          type="number"
+                          value={newProduct.singlesPerCarton}
+                          onChange={e => {
+                            const val = e.target.value;
+                            const numCarton = Number(newProduct.sellingPrice) || 0;
+                            const numSingles = Number(val) || 12;
+                            const calculatedSingle = numSingles > 0 ? String(Math.round(numCarton / numSingles)) : '';
+                            setNewProduct(prev => ({ ...prev, singlesPerCarton: val, singleSellingPrice: calculatedSingle }));
+                          }}
+                          placeholder="e.g. 12"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-semibold text-muted-foreground">Single Selling Price (₦)</label>
+                        <input
+                          type="number"
+                          value={newProduct.singleSellingPrice}
+                          onChange={e => setNewProduct(prev => ({ ...prev, singleSellingPrice: e.target.value }))}
+                          placeholder="Auto-calculated"
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={newProduct.sellAsSinglesByDefault}
+                        onChange={e => setNewProduct(prev => ({ ...prev, sellAsSinglesByDefault: e.target.checked }))}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                      />
+                      Sell as singles by default at checkout
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <input value={newProduct.quantity} onChange={e => setNewProduct({ ...newProduct, quantity: e.target.value })} placeholder="Quantity" type="number" className={inputClass} />
+                <div className="space-y-2 text-left">
+                  <select
+                    value={['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(newProduct.category) ? newProduct.category : 'Others'}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === 'Others') {
+                        setCustomCategoryActive(true);
+                        setNewProduct({ ...newProduct, category: customCategoryVal || 'Others' });
+                      } else {
+                        setCustomCategoryActive(false);
+                        setNewProduct({ ...newProduct, category: val });
+                      }
+                    }}
+                    className={inputClass}
+                  >
+                    <option value="Groceries">Groceries</option>
+                    <option value="Beverages">Beverages</option>
+                    <option value="Detergents">Detergents</option>
+                    <option value="Soap">Soap</option>
+                    <option value="Others">Others / Custom</option>
+                  </select>
+                  {customCategoryActive && (
+                    <input
+                      value={customCategoryVal}
+                      onChange={e => {
+                        setCustomCategoryVal(e.target.value);
+                        setNewProduct({ ...newProduct, category: e.target.value });
+                      }}
+                      placeholder="Enter custom category..."
+                      className={inputClass}
+                    />
+                  )}
+                </div>
+              </div>
+              <button onClick={handleAdd} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Item</button>
+            </div>
+          )}
         </Modal>
         );
       })()}
@@ -751,10 +1273,45 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         return (
         <Modal title="Edit Product" onClose={() => { setEditProduct(null); setEditDraft(null); }}>
           <div className="space-y-3">
-            <input value={editDraft.name} onChange={e => setEditDraft({ ...editDraft, name: e.target.value })} className={inputClass} />
+            <input 
+              value={editDraft.name} 
+              onChange={e => {
+                const name = e.target.value;
+                const autoCtn = autoDetectCartonSingle(name, Number(editDraft.sellingPrice) || 0);
+                setEditDraft(prev => prev ? ({
+                  ...prev,
+                  name,
+                  isCartonSingleEnabled: autoCtn.isCartonSingleEnabled || prev.isCartonSingleEnabled,
+                  singlesPerCarton: autoCtn.isCartonSingleEnabled ? String(autoCtn.singlesPerCarton) : prev.singlesPerCarton,
+                  singleSellingPrice: autoCtn.isCartonSingleEnabled ? String(autoCtn.singleSellingPrice) : prev.singleSellingPrice,
+                  sellAsSinglesByDefault: autoCtn.isCartonSingleEnabled ? autoCtn.sellAsSinglesByDefault : prev.sellAsSinglesByDefault
+                }) : null);
+              }} 
+              className={inputClass} 
+            />
             <div className="grid grid-cols-2 gap-3">
               <input value={editDraft.costPrice} onChange={e => setEditDraft({ ...editDraft, costPrice: e.target.value })} type="number" placeholder="Cost (₦)" className={inputClass} />
-              <input value={editDraft.sellingPrice} onChange={e => setEditDraft({ ...editDraft, sellingPrice: e.target.value })} type="number" placeholder="Selling (₦)" className={inputClass} />
+              <input
+                value={editDraft.sellingPrice}
+                onChange={e => {
+                  const val = e.target.value;
+                  const numCarton = Number(val) || 0;
+                  const autoCtn = autoDetectCartonSingle(editDraft.name, numCarton);
+                  const numSingles = autoCtn.isCartonSingleEnabled ? autoCtn.singlesPerCarton : (Number(editDraft.singlesPerCarton) || 12);
+                  const calculatedSingle = numSingles > 0 ? String(Math.round(numCarton / numSingles)) : '';
+                  setEditDraft(prev => prev ? ({
+                    ...prev,
+                    sellingPrice: val,
+                    isCartonSingleEnabled: autoCtn.isCartonSingleEnabled || prev.isCartonSingleEnabled,
+                    singlesPerCarton: autoCtn.isCartonSingleEnabled ? String(autoCtn.singlesPerCarton) : prev.singlesPerCarton,
+                    singleSellingPrice: prev.isCartonSingleEnabled || autoCtn.isCartonSingleEnabled ? calculatedSingle : prev.singleSellingPrice,
+                    sellAsSinglesByDefault: autoCtn.isCartonSingleEnabled ? autoCtn.sellAsSinglesByDefault : prev.sellAsSinglesByDefault
+                  }) : null);
+                }}
+                type="number"
+                placeholder="Selling (₦)"
+                className={inputClass}
+              />
             </div>
             {showSmart && cost > 0 && (
               <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
@@ -764,8 +1321,26 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     const price = Math.round((cost * (1 + m / 100)) / 5) * 5;
                     const selected = Number(editDraft.sellingPrice) === price;
                     return (
-                      <button key={m} type="button" onClick={() => setEditDraft({ ...editDraft, sellingPrice: String(price) })}
-                        className={`p-2 rounded-lg border text-xs font-display font-semibold ${selected || m === defaultMargin && !editDraft.sellingPrice ? 'bg-primary/20 border-primary text-primary' : 'bg-surface-2 border-border'}`}>
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          const priceStr = String(price);
+                          const numCarton = price;
+                          const numSingles = Number(editDraft.singlesPerCarton) || 12;
+                          const calculatedSingle = numSingles > 0 ? String(Math.round(numCarton / numSingles)) : '';
+                          setEditDraft(prev => prev ? ({
+                            ...prev,
+                            sellingPrice: priceStr,
+                            singleSellingPrice: prev.isCartonSingleEnabled ? calculatedSingle : prev.singleSellingPrice
+                          }) : null);
+                        }}
+                        className={`p-2 rounded-lg border text-xs font-display font-semibold ${
+                          selected || m === defaultMargin && !editDraft.sellingPrice
+                            ? 'bg-primary/20 border-primary text-primary'
+                            : 'bg-surface-2 border-border text-foreground hover:border-primary/30'
+                        }`}
+                      >
                         {m}% → ₦{price.toLocaleString()}
                       </button>
                     );
@@ -773,6 +1348,62 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 </div>
               </div>
             )}
+
+            {/* Carton & Single Sales Configuration */}
+            <div className="p-3 rounded-xl bg-surface-2 border border-border/40 space-y-2 text-left">
+              <label className="flex items-center gap-2 text-xs font-display font-semibold text-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={editDraft.isCartonSingleEnabled}
+                  onChange={e => setEditDraft(prev => prev ? ({ ...prev, isCartonSingleEnabled: e.target.checked }) : null)}
+                  className="rounded border-border text-primary focus:ring-primary w-4 h-4"
+                />
+                📦 Enable Carton & Single sales
+              </label>
+
+              {editDraft.isCartonSingleEnabled && (
+                <div className="space-y-3 pt-2 border-t border-border/20">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-semibold text-muted-foreground">Singles per Carton</label>
+                      <input
+                        type="number"
+                        value={editDraft.singlesPerCarton}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const numCarton = Number(editDraft.sellingPrice) || 0;
+                          const numSingles = Number(val) || 12;
+                          const calculatedSingle = numSingles > 0 ? String(Math.round(numCarton / numSingles)) : '';
+                          setEditDraft(prev => prev ? ({ ...prev, singlesPerCarton: val, singleSellingPrice: calculatedSingle }) : null);
+                        }}
+                        placeholder="e.g. 12"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-semibold text-muted-foreground">Single Selling Price (₦)</label>
+                      <input
+                        type="number"
+                        value={editDraft.singleSellingPrice}
+                        onChange={e => setEditDraft(prev => prev ? ({ ...prev, singleSellingPrice: e.target.value }) : null)}
+                        placeholder="Auto-calculated"
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editDraft.sellAsSinglesByDefault}
+                      onChange={e => setEditDraft(prev => prev ? ({ ...prev, sellAsSinglesByDefault: e.target.checked }) : null)}
+                      className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                    />
+                    Sell as singles by default at checkout
+                  </label>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <input value={editDraft.quantity} onChange={e => setEditDraft({ ...editDraft, quantity: e.target.value })} type="number" placeholder="Quantity" className={inputClass} />
               <div className="space-y-2 text-left">
@@ -878,37 +1509,148 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
       {/* Restock Modal */}
       {restockProduct && (
-        <Modal title={`Restock: ${restockProduct.name}`} onClose={() => setRestockProduct(null)}>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Current stock: <span className="text-foreground">{restockProduct.quantity}</span></p>
-            <input value={restockQty} onChange={e => setRestockQty(e.target.value)} placeholder="Quantity to add" type="number" className={inputClass} />
-            <div>
-              <label className="text-[10px] text-muted-foreground uppercase">Funding</label>
-              <div className="grid grid-cols-2 gap-2 mt-1">
+        <Modal title={showRestockConfirm ? "Confirm Restock" : `Restock: ${restockProduct.name}`} onClose={() => { setRestockProduct(null); setShowRestockConfirm(false); }}>
+          {showRestockConfirm ? (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm text-center font-display font-bold">
+                ⚠️ Confirm Action
+              </div>
+              <p className="text-sm text-foreground leading-snug">
+                Are you sure you have this inventory to restock now for this item to restock now before?
+              </p>
+              <div className="p-3.5 rounded-lg bg-surface-2 border border-border space-y-1.5 text-xs text-left">
+                <p><span className="text-muted-foreground">Product:</span> <strong className="text-foreground">{restockProduct.name}</strong></p>
+                <p><span className="text-muted-foreground">Restock Qty:</span> <strong className="text-foreground">{restockQty} units</strong></p>
+                <p><span className="text-muted-foreground">Funding:</span> <strong className="text-foreground">{singleRestockFunding === 'new_money' ? '💵 New Money' : '🏦 From Balance'}</strong></p>
+              </div>
+              
+              <div className="space-y-2">
                 <button
-                  onClick={() => setSingleRestockFunding('balance')}
-                  className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
-                    singleRestockFunding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
-                  }`}
+                  type="button"
+                  onClick={handleActualRestock}
+                  className="w-full p-3 rounded-lg bg-success text-white font-display font-bold text-sm hover:opacity-90 transition-opacity cursor-pointer"
                 >
-                  💰 From Balance
+                  Yes, restock now
                 </button>
                 <button
-                  onClick={() => setSingleRestockFunding('new_money')}
-                  className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
-                    singleRestockFunding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
-                  }`}
+                  type="button"
+                  onClick={handleSavePlannedRestock}
+                  className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90 transition-opacity cursor-pointer border border-primary/20"
                 >
-                  💵 New Money
+                  Not yet (Save as Planned)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRestockConfirm(false)}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  No / Cancel
                 </button>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                {singleRestockFunding === 'new_money'
-                  ? 'Recorded as expense + new investment (ROI base grows, cash neutral).'
-                  : 'Recorded as expense only — net income / available cash drops.'}
-              </p>
             </div>
-            <button onClick={handleRestock} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Restock</button>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">Current stock: <span className="text-foreground">{restockProduct.quantity}</span></p>
+              <input value={restockQty} onChange={e => setRestockQty(e.target.value)} placeholder="Quantity to add" type="number" className={inputClass} />
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase">Funding</label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <button
+                    onClick={() => setSingleRestockFunding('balance')}
+                    className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                      singleRestockFunding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
+                    }`}
+                  >
+                    💰 From Balance
+                  </button>
+                  <button
+                    onClick={() => setSingleRestockFunding('new_money')}
+                    className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                      singleRestockFunding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
+                    }`}
+                  >
+                    💵 New Money
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {singleRestockFunding === 'new_money'
+                    ? 'Recorded as expense + new investment (ROI base grows, cash neutral).'
+                    : 'Recorded as expense only — net income / available cash drops.'}
+                </p>
+              </div>
+              <button onClick={handleRestock} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Restock</button>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* Planned Restocks Modal */}
+      {showPlannedRestocks && (
+        <Modal title={`Planned Restocks (${(store.plannedRestocks || []).length})`} onClose={() => setShowPlannedRestocks(false)}>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              These are planned inventory restocks. Once you have received the items, click "Receive Now" to add them to your active inventory.
+            </p>
+            
+            {(!store.plannedRestocks || store.plannedRestocks.length === 0) ? (
+              <p className="text-center py-6 text-xs text-muted-foreground">No planned restocks saved yet.</p>
+            ) : (
+              <div className="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
+                {store.plannedRestocks.map(pr => (
+                  <div key={pr.id} className="p-3 rounded-xl bg-surface-2 border border-border space-y-2 text-left">
+                    <div className="flex justify-between items-baseline gap-2">
+                      <h4 className="font-display font-bold text-sm text-foreground">{pr.productName}</h4>
+                      <span className="text-[10px] text-muted-foreground">{new Date(pr.date).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Qty: <strong>{pr.quantity}</strong></span>
+                      <span>Unit Cost: ₦{pr.costPrice.toLocaleString()}</span>
+                      <span>Total: ₦{(pr.quantity * pr.costPrice).toLocaleString()}</span>
+                    </div>
+                    <div className="flex gap-2 pt-1 border-t border-border/30">
+                      <button
+                        onClick={() => {
+                          const updated = receiveStock(
+                            store,
+                            [{ productId: pr.productId, quantity: pr.quantity, costPrice: pr.costPrice }],
+                            pr.funding
+                          );
+                          const final = {
+                            ...updated,
+                            plannedRestocks: (updated.plannedRestocks || []).filter(x => x.id !== pr.id)
+                          };
+                          onUpdate(final);
+                          showToast(`✓ Planned stock received: ${pr.productName}`);
+                        }}
+                        className="flex-1 py-1.5 rounded-lg bg-success text-white font-display font-bold text-xs hover:opacity-90 cursor-pointer"
+                      >
+                        📥 Receive Now
+                      </button>
+                      <button
+                        onClick={() => {
+                          const final = {
+                            ...store,
+                            plannedRestocks: (store.plannedRestocks || []).filter(x => x.id !== pr.id)
+                          };
+                          onUpdate(final);
+                          showToast('Planned restock deleted');
+                        }}
+                        className="px-2 py-1.5 rounded-lg bg-surface-3 border border-border text-xs text-destructive hover:bg-destructive/10 cursor-pointer"
+                      >
+                        ✕ Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <button
+              onClick={() => setShowPlannedRestocks(false)}
+              className="w-full p-2.5 rounded-lg bg-surface-2 border border-border font-display font-semibold text-xs text-foreground"
+            >
+              Close
+            </button>
           </div>
         </Modal>
       )}
@@ -917,12 +1659,76 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       {showImportModal && (
         <Modal title={importPreview ? `Review (${importPreview.length})` : 'Bulk Import'} onClose={() => { setShowImportModal(false); setImportPreview(null); }}>
           {!importPreview ? (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">Format: Name, Cost, Selling Price, Quantity, Category (one per line)</p>
-              <textarea value={importText} onChange={e => setImportText(e.target.value)}
-                placeholder={"Rice 5kg, 3000, 4500, 20, Groceries\nSugar 1kg, 500, 700, 30, Groceries"}
-                rows={6} className={`${inputClass} resize-none`} />
-              <button onClick={handleImportParse} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Preview Items →</button>
+            <div className="space-y-4">
+              {/* Tab Switcher */}
+              <div className="flex gap-2 p-1 bg-surface-2 border border-border rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setImportMode('text')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-display font-bold transition-all ${
+                    importMode === 'text' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  📝 Text Import (CSV)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportMode('image')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-display font-bold transition-all ${
+                    importMode === 'image' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  📷 Receipt Scan (OCR)
+                </button>
+              </div>
+
+              {importMode === 'text' ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">Format: Name, Cost, Selling Price, Quantity, Category (one per line)</p>
+                  <textarea value={importText} onChange={e => setImportText(e.target.value)}
+                    placeholder={"Rice 5kg, 3000, 4500, 20, Groceries\nSugar 1kg, 500, 700, 30, Groceries"}
+                    rows={6} className={`${inputClass} resize-none`} />
+                  <button onClick={handleImportParse} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Preview Items →</button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground text-center">
+                    Upload or snap a receipt image. Our offline scanner will extract products, prices, and quantities automatically.
+                  </p>
+                  
+                  {isOcrLoading ? (
+                    <div className="p-8 text-center bg-surface-2 border border-border rounded-xl space-y-3">
+                      <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin mx-auto" />
+                      <p className="text-sm font-display font-semibold text-primary">Scanning receipt offline...</p>
+                      <p className="text-[10px] text-muted-foreground">Processing receipt text details inside browser</p>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => ocrFileRef.current?.click()}
+                      className="border-2 border-dashed border-border hover:border-primary/40 rounded-xl p-8 text-center cursor-pointer transition-colors space-y-2 bg-surface-2"
+                    >
+                      <span className="text-4xl block">📷</span>
+                      <p className="text-sm font-display font-bold">Upload or Take Photo</p>
+                      <p className="text-xs text-muted-foreground">Supports JPG, PNG, HEIC</p>
+                    </div>
+                  )}
+                  
+                  <input
+                    ref={ocrFileRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleOcrScan}
+                    className="hidden"
+                  />
+                  
+                  {ocrError && (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs text-center leading-normal">
+                      {ocrError}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -955,157 +1761,11 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
       {/* Shopping List Modal */}
       {showShoppingList && (
-        <Modal
-          title={receiveMode ? '📥 Receive Stock' : `🛒 Shopping List (${shoppingList.length})`}
-          onClose={() => { setShowShoppingList(false); setReceiveMode(false); }}
-        >
-          <div className="space-y-3">
-            {shoppingList.length === 0 ? (
-              <p className="text-center text-muted-foreground py-6 text-sm">
-                Your list is empty.<br />
-                Tap 🛒 on any product to add it.
-              </p>
-            ) : receiveMode ? (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  Confirm the actual quantity received and unit cost from your supplier. Stock will be added and cost prices updated.
-                </p>
-                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-                  {shoppingList.map(item => {
-                    const product = store.products.find(p => p.id === item.productId);
-                    const data = receiveData[item.productId] || { qty: String(item.quantity), cost: String(product?.costPrice ?? '') };
-                    const lineTotal = (Number(data.qty) || 0) * (Number(data.cost) || 0);
-                    return (
-                      <div key={item.productId} className="p-2.5 rounded-lg bg-surface-2 border border-border space-y-2">
-                        <div className="flex justify-between items-baseline gap-2">
-                          <p className="font-display font-semibold text-sm truncate">{item.name}</p>
-                          <p className="text-xs text-muted-foreground shrink-0">In stock: {product?.quantity ?? 0}</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Qty received</label>
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              value={data.qty}
-                              onChange={e => setReceiveData({ ...receiveData, [item.productId]: { ...data, qty: e.target.value } })}
-                              className="w-full text-sm bg-surface-3 border border-border rounded p-1.5"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Unit cost (₦)</label>
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              value={data.cost}
-                              onChange={e => setReceiveData({ ...receiveData, [item.productId]: { ...data, cost: e.target.value } })}
-                              className="w-full text-sm bg-surface-3 border border-border rounded p-1.5"
-                            />
-                          </div>
-                        </div>
-                        <p className="text-right text-xs text-muted-foreground">
-                          Line total: <span className="text-primary font-semibold">₦{lineTotal.toLocaleString()}</span>
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex justify-between items-center px-1 pt-1 border-t border-border">
-                  <span className="text-sm text-muted-foreground">Grand total</span>
-                  <span className="font-display font-bold text-primary">
-                    ₦{shoppingList.reduce((sum, item) => {
-                      const product = store.products.find(p => p.id === item.productId);
-                      const data = receiveData[item.productId] || { qty: String(item.quantity), cost: String(product?.costPrice ?? 0) };
-                      return sum + (Number(data.qty) || 0) * (Number(data.cost) || 0);
-                    }, 0).toLocaleString()}
-                  </span>
-                </div>
-                <div className="p-2.5 rounded-lg bg-surface-2 border border-border space-y-1.5">
-                  <p className="text-[10px] uppercase text-muted-foreground font-display font-bold">How is this restock funded?</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setFunding('balance')}
-                      className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
-                        funding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border'
-                      }`}
-                    >
-                      💰 From Balance
-                    </button>
-                    <button
-                      onClick={() => setFunding('new_money')}
-                      className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
-                        funding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border'
-                      }`}
-                    >
-                      💵 New Money
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    {funding === 'new_money'
-                      ? 'New investment recorded → ROI base grows, available cash unchanged.'
-                      : 'Subtracted from net income / available cash.'}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button onClick={() => setReceiveMode(false)} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">
-                    ← Back
-                  </button>
-                  <button onClick={handleConfirmReceive} className="p-2.5 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90">
-                    ✓ Confirm & Restock
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-                  {shoppingList.map(item => (
-                    <div key={item.productId} className="flex items-center gap-2 p-2 rounded-lg bg-surface-2 border border-border">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-display font-semibold text-sm truncate">{item.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{item.category}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => updateListQty(item.productId, item.quantity - 1)} className="w-7 h-7 rounded bg-surface-3 hover:bg-surface-2 text-sm">−</button>
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={e => updateListQty(item.productId, Number(e.target.value))}
-                          className="w-12 text-center bg-surface-3 border border-border rounded p-1 text-sm"
-                        />
-                        <button onClick={() => updateListQty(item.productId, item.quantity + 1)} className="w-7 h-7 rounded bg-surface-3 hover:bg-surface-2 text-sm">+</button>
-                        <button onClick={() => removeFromList(item.productId)} className="w-7 h-7 rounded bg-surface-3 hover:bg-surface-2 text-destructive text-sm ml-1">✕</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={handleStartReceive}
-                  className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-sm hover:opacity-90"
-                >
-                  📥 Receive Stock from Supplier
-                </button>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={handleShareWhatsApp} className="p-2.5 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90">
-                    💬 WhatsApp
-                  </button>
-                  <button onClick={handleShareSystem} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">
-                    📤 Share
-                  </button>
-                  <button onClick={handleCopyList} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border">
-                    📋 Copy
-                  </button>
-                  <button onClick={clearList} className="p-2.5 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-sm hover:bg-surface-3 border border-border text-destructive">
-                    🗑 Clear
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </Modal>
+        <SmartRestockEngine
+          store={store}
+          onUpdate={onUpdate}
+          onClose={() => setShowShoppingList(false)}
+        />
       )}
 
       {showAuditHistory && (
@@ -1364,6 +2024,12 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 <p className="text-[10px] text-muted-foreground uppercase font-semibold">Selling Price</p>
                 <p className="font-bold text-primary mt-0.5">₦{selectedDetailProduct.sellingPrice.toLocaleString()}</p>
               </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Status</p>
+                <p className={`font-bold mt-0.5 ${selectedDetailProduct.discontinued ? 'text-destructive' : 'text-success'}`}>
+                  {selectedDetailProduct.discontinued ? '🚫 Discontinued' : '✅ Active'}
+                </p>
+              </div>
             </div>
 
             {/* Price History Section */}
@@ -1438,30 +2104,33 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             })()}
 
             {/* Actions buttons inside popup */}
-            <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border">
+            <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-border">
               <button
+                type="button"
                 onClick={() => {
                   setRestockProduct(selectedDetailProduct);
                   setRestockQty('');
                   setSingleRestockFunding('balance');
                   setSelectedDetailProduct(null);
                 }}
-                className="p-2 rounded-lg bg-success text-white font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90"
+                className="p-2 rounded-lg bg-success text-white font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer"
               >
                 ↑ Restock
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setSelectedTransferProduct(selectedDetailProduct);
                   setTransferQty('');
                   setTransferDestCode('');
                   setSelectedDetailProduct(null);
                 }}
-                className="p-2 rounded-lg bg-warning text-slate-950 font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90"
+                className="p-2 rounded-lg bg-warning text-slate-950 font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer"
               >
                 🚚 Transfer
               </button>
               <button
+                type="button"
                 onClick={() => {
                   const p = selectedDetailProduct;
                   setEditProduct({ ...p });
@@ -1470,9 +2139,26 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   setEditCustomCategoryVal(p.category);
                   setSelectedDetailProduct(null);
                 }}
-                className="p-2 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90"
+                className="p-2 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer"
               >
                 ✎ Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const isDiscontinued = !!selectedDetailProduct.discontinued;
+                  const updated = updateProduct(store, selectedDetailProduct.id, { discontinued: !isDiscontinued });
+                  onUpdate(updated);
+                  setSelectedDetailProduct({ ...selectedDetailProduct, discontinued: !isDiscontinued });
+                  showToast(isDiscontinued ? 'Product reactivated' : 'Product discontinued');
+                }}
+                className={`p-2 rounded-lg font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer ${
+                  selectedDetailProduct.discontinued 
+                    ? 'bg-success/20 text-success border border-success/30' 
+                    : 'bg-destructive/20 text-destructive border border-destructive/30'
+                }`}
+              >
+                {selectedDetailProduct.discontinued ? '🟢 Reactivate' : '🔴 Discontinue'}
               </button>
             </div>
           </div>
@@ -1664,12 +2350,12 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md bg-card border border-border rounded-xl p-5 animate-slide-up" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
+      <div className="w-full max-w-md bg-card border border-border rounded-xl p-5 animate-slide-up max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4 sticky top-0 bg-card z-10 pb-2 border-b border-border/40">
           <h3 className="font-display font-bold text-lg">{title}</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xl">×</button>
         </div>
-        {children}
+        <div className="pt-2">{children}</div>
       </div>
     </div>
   );

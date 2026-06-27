@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StoreData, Sale } from '@/types/store';
 import { printSystem } from '@/lib/print-engine';
 import { showToast } from '@/components/Toast';
+import StoreLogo from '@/components/StoreLogo';
 
 interface SaleReceiptProps {
   store: StoreData;
@@ -18,6 +19,10 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   const [isEditing, setIsEditing] = useState(false);
   const settings = store.managerSettings || {};
 
+  const subtotalBeforeDiscount = salesList.reduce((sum, s) => sum + s.quantity * s.unitPrice, 0);
+  const totalAfterDiscount = salesList.reduce((sum, s) => sum + s.total, 0);
+  const totalDiscount = Math.max(0, subtotalBeforeDiscount - totalAfterDiscount);
+
   const generateReceiptText = () => {
     let receipt = `==============================\n`;
     receipt += `       ${settings.receiptStoreName || store.storeName}\n`;
@@ -32,14 +37,16 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
     const receiptNum = salesList[0]?.transactionId || salesList[0]?.id || '';
     receipt += `Receipt #: ${receiptNum.toUpperCase()}\n`;
     receipt += `------------------------------\n`;
-    let totalSum = 0;
     salesList.forEach(s => {
       receipt += `${s.productName}\n`;
       receipt += `  ${s.quantity} × ₦${s.unitPrice.toLocaleString()} = ₦${s.total.toLocaleString()}\n`;
-      totalSum += s.total;
     });
     receipt += `------------------------------\n`;
-    receipt += `TOTAL: ₦${totalSum.toLocaleString()}\n`;
+    if (totalDiscount > 0) {
+      receipt += `Subtotal: ₦${subtotalBeforeDiscount.toLocaleString()}\n`;
+      receipt += `Discount: -₦${totalDiscount.toLocaleString()}\n`;
+    }
+    receipt += `TOTAL: ₦${totalAfterDiscount.toLocaleString()}\n`;
     receipt += `==============================\n`;
     receipt += `  ${settings.receiptFooterMessage || 'Thank you for your patronage! 🙏'}\n`;
     return receipt;
@@ -66,13 +73,14 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   };
 
   const handlePrint = () => {
-    const totalSum = salesList.reduce((sum, s) => sum + s.total, 0);
     const receiptData = {
       storeName: settings.receiptStoreName || store.storeName,
       storeType: profile?.storeType,
       storeAddress: settings.receiptAddress || profile?.location,
       storePhone: settings.receiptPhone || profile?.phone,
       email: profile?.email,
+      logoStyle: profile?.logoStyle || 'minimalist',
+      storePhoto: settings.receiptLogoEnabled && profile?.photo ? profile.photo : undefined,
       receiptNumber: salesList[0]?.transactionId || salesList[0]?.id || '',
       date: salesList[0]?.date || new Date().toISOString(),
       items: salesList.map(s => ({
@@ -82,10 +90,10 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
         unitPrice: s.unitPrice,
         total: s.total
       })),
-      subtotal: totalSum,
-      discount: 0,
-      total: totalSum,
-      paid: totalSum,
+      subtotal: subtotalBeforeDiscount,
+      discount: totalDiscount,
+      total: totalAfterDiscount,
+      paid: totalAfterDiscount,
       balance: 0,
       paymentMethod: salesList[0]?.paymentMethod || 'transfer',
       footerMessage: settings.receiptFooterMessage || 'Thank you for your patronage! 🙏',
@@ -149,16 +157,21 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
           </div>
 
           <div className="bg-background border border-border rounded-lg p-4 font-mono text-xs space-y-2 text-left max-h-[50vh] overflow-y-auto">
-            {settings.receiptLogoEnabled && profile?.photo && (
+            {settings.receiptLogoEnabled && profile?.photo ? (
               <div className="flex justify-center mb-2">
                 <img src={profile.photo} alt="Logo" className="w-12 h-12 object-contain rounded-full border border-border" />
+              </div>
+            ) : (
+              <div className="flex justify-center mb-2">
+                <StoreLogo
+                  storeName={settings.receiptStoreName || store.storeName}
+                  selectedStyle={profile?.logoStyle || 'minimalist'}
+                  className="w-48 h-auto"
+                />
               </div>
             )}
 
             <div className="text-center space-y-0.5">
-              <p className="font-display font-bold text-base text-primary">
-                {settings.receiptStoreName || store.storeName}
-              </p>
               {profile?.storeType && <p className="text-muted-foreground">{profile.storeType}</p>}
               {(settings.receiptAddress || profile?.location) && (
                 <p className="text-muted-foreground">{settings.receiptAddress || profile?.location}</p>
@@ -199,10 +212,27 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
 
             <div className="border-t border-dashed border-border my-2" />
 
-            <div className="flex justify-between font-bold text-foreground text-sm">
-              <span>TOTAL</span>
-              <span className="text-primary">₦{salesList.reduce((sum, s) => sum + s.total, 0).toLocaleString()}</span>
-            </div>
+            {totalDiscount > 0 ? (
+              <div className="space-y-1">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span>₦{subtotalBeforeDiscount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-destructive">
+                  <span>Discount</span>
+                  <span>-₦{totalDiscount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between font-bold text-foreground text-sm border-t border-dashed border-border/40 pt-1 mt-1">
+                  <span>TOTAL</span>
+                  <span className="text-primary">₦{totalAfterDiscount.toLocaleString()}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-between font-bold text-foreground text-sm">
+                <span>TOTAL</span>
+                <span className="text-primary">₦{totalAfterDiscount.toLocaleString()}</span>
+              </div>
+            )}
 
             <div className="border-t border-dashed border-border my-2" />
 

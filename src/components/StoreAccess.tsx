@@ -3,6 +3,7 @@ import { createStore, loadStore, saveStore } from '@/lib/store-data';
 import { StoreData, StoreCategory, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotMood } from '@/components/Mascot';
+import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
 import { Eye, EyeOff, Key, Shield, HelpCircle, Lock, Mail, Phone, Users } from 'lucide-react';
 
 interface StoreAccessProps {
@@ -30,6 +31,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [storeName, setStoreName] = useState('');
   const [category, setCategory] = useState<StoreCategory>('retail');
   const [retailType, setRetailType] = useState('provision_retail');
+  const [selectedLogoStyle, setSelectedLogoStyle] = useState('minimalist');
   const [accessCode, setAccessCode] = useState('');
   const [newCode, setNewCode] = useState('');
   const [accessMood, setAccessMood] = useState<MascotMood>('idle');
@@ -37,6 +39,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
   // Security Setup states
   const [ownerPassword, setOwnerPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryPhone, setRecoveryPhone] = useState('');
@@ -48,6 +51,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [selectedUser, setSelectedUser] = useState<{ id: string; name: string; role: string; isOwner: boolean } | null>(null);
   const [inputPassword, setInputPassword] = useState('');
   const [pinBuffer, setPinBuffer] = useState('');
+  const [isPasswordWrong, setIsPasswordWrong] = useState(false);
 
   // Recovery states
   const [recoveryMode, setRecoveryMode] = useState<'options' | 'question' | 'key' | 'code' | 'reset-pass'>('options');
@@ -56,6 +60,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [simulatedCode, setSimulatedCode] = useState('');
   const [inputCode, setInputCode] = useState('');
   const [newPassVal, setNewPassVal] = useState('');
+  const [confirmNewPassVal, setConfirmNewPassVal] = useState('');
   const [recoveryMethodSelected, setRecoveryMethodSelected] = useState<'email' | 'sms'>('email');
 
   // Change mood on mode switches
@@ -91,7 +96,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       setAccessMood('worried');
       return showToast('Enter a store name', 'error');
     }
-    const store = createStore(storeName.trim(), category, category === 'retail' ? retailType : undefined);
+    const store = createStore(storeName.trim(), category, category === 'retail' ? retailType : undefined, selectedLogoStyle);
     setNewCode(store.accessCode);
     setLoadedStore(store);
     
@@ -109,6 +114,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     e.preventDefault();
     if (!ownerPassword.trim() || ownerPassword.length < 4) {
       return showToast('Password must be at least 4 characters', 'error');
+    }
+    if (ownerPassword !== confirmPassword) {
+      return showToast('Passwords do not match', 'error');
     }
     if (!recoveryEmail.trim() || !recoveryPhone.trim() || !recoveryAnswer.trim()) {
       return showToast('Please fill all recovery details', 'error');
@@ -180,13 +188,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     onStoreLoaded(updatedStore);
   };
 
-  const handleAccess = () => {
-    const store = loadStore(accessCode.trim());
-    if (!store) {
-      setAccessMood('angry');
-      return showToast('Invalid access code', 'error');
-    }
-    
+  const proceedWithStore = (store: StoreData) => {
     setLoadedStore(store);
 
     // Check if security exists
@@ -203,8 +205,43 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     }
   };
 
+  const handleAccess = () => {
+    const code = accessCode.trim();
+    const store = loadStore(code);
+    if (store) {
+      proceedWithStore(store);
+    } else {
+      // Attempt to load from Supabase cloud sync
+      setAccessMood('thinking' as any);
+      import('@/integrations/supabase/client').then(({ supabase }) => {
+        supabase
+          .from('stores')
+          .select('*')
+          .eq('access_code', code)
+          .maybeSingle()
+          .then(({ data, error }) => {
+            if (data && data.data) {
+              const remoteStore = data.data as StoreData;
+              // Persist locally
+              localStorage.setItem(`storeflow_store_${remoteStore.accessCode}`, JSON.stringify(remoteStore));
+              setAccessMood('happy' as any);
+              showToast('Cloud backup loaded successfully!', 'success');
+              proceedWithStore(remoteStore);
+            } else {
+              setAccessMood('angry');
+              showToast('Store not found locally or in cloud backup', 'error');
+            }
+          });
+      }).catch(err => {
+        setAccessMood('angry');
+        showToast('Store not found', 'error');
+      });
+    }
+  };
+
   const handleSelectLoginProfile = (user: { id: string; name: string; role: string; isOwner: boolean }) => {
     setSelectedUser(user);
+    setIsPasswordWrong(false);
     if (user.isOwner) {
       setInputPassword('');
       setMode('login-password');
@@ -231,6 +268,10 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         onStoreLoaded(loadedStore);
       } else {
         setAccessMood('angry');
+        setIsPasswordWrong(true);
+        if (navigator.vibrate) {
+          navigator.vibrate([100, 50, 100]);
+        }
         showToast('Incorrect owner password', 'error');
       }
     } else {
@@ -249,6 +290,10 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         onStoreLoaded(loadedStore);
       } else {
         setAccessMood('angry');
+        setIsPasswordWrong(true);
+        if (navigator.vibrate) {
+          navigator.vibrate([100, 50, 100]);
+        }
         showToast('Incorrect password', 'error');
       }
     }
@@ -275,6 +320,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         onStoreLoaded(loadedStore);
       } else if (staff && nextPin.length >= 4) {
         // Clear pin after full length incorrect try
+        if (navigator.vibrate) {
+          navigator.vibrate([100, 50, 100]);
+        }
         setTimeout(() => {
           setPinBuffer('');
           showToast('Incorrect PIN', 'error');
@@ -328,6 +376,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     if (!loadedStore) return;
     if (newPassVal.trim().length < 4) {
       return showToast('Password must be at least 4 characters', 'error');
+    }
+    if (newPassVal !== confirmNewPassVal) {
+      return showToast('Passwords do not match', 'error');
     }
     const updatedStore = {
       ...loadedStore,
@@ -435,6 +486,24 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 </p>
               </div>
             )}
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Select Store Logo Concept</label>
+              <div className="grid grid-cols-5 gap-2">
+                {LOGO_STYLES.map(style => (
+                  <button
+                    key={style.id}
+                    type="button"
+                    onClick={() => setSelectedLogoStyle(style.id)}
+                    className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                      selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-2 border-border hover:border-primary/30'
+                    }`}
+                  >
+                    <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} className="w-8 h-8" />
+                    <span className="text-[7.5px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <button onClick={handleCreate} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Create Store
             </button>
@@ -478,6 +547,26 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                   value={ownerPassword}
                   onChange={e => setOwnerPassword(e.target.value)}
                   placeholder="Create secure password"
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">Confirm Owner Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm secure password"
                   className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary pr-10"
                 />
                 <button
@@ -620,6 +709,18 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
         {mode === 'login-password' && selectedUser && (
           <form onSubmit={handleVerifyPassword} className="space-y-4 text-left">
+            {isPasswordWrong && (
+              <style>{`
+                @keyframes shake {
+                  0%, 100% { transform: translateX(0); }
+                  20%, 60% { transform: translateX(-6px); }
+                  40%, 80% { transform: translateX(6px); }
+                }
+                .input-shake {
+                  animation: shake 0.25s ease-in-out;
+                }
+              `}</style>
+            )}
             <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2">
               <Lock className="w-4 h-4 text-yellow-500" />
               <span>Password Required: {selectedUser.name}</span>
@@ -630,10 +731,17 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={inputPassword}
-                  onChange={e => setInputPassword(e.target.value)}
+                  onChange={e => {
+                    setInputPassword(e.target.value);
+                    setIsPasswordWrong(false);
+                  }}
                   placeholder="Enter Password"
                   autoFocus
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary pr-10"
+                  className={`w-full p-2.5 rounded-lg text-sm focus:outline-none pr-10 transition-all ${
+                    isPasswordWrong
+                      ? 'border-destructive text-destructive bg-destructive/10 placeholder:text-destructive/60 focus:border-destructive focus:ring-destructive input-shake border-2'
+                      : 'bg-surface-2 border border-border text-foreground focus:border-primary'
+                  }`}
                 />
                 <button
                   type="button"
@@ -870,6 +978,16 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                     value={newPassVal}
                     onChange={e => setNewPassVal(e.target.value)}
                     placeholder="Enter new password"
+                    className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs text-muted-foreground uppercase font-bold">Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={confirmNewPassVal}
+                    onChange={e => setConfirmNewPassVal(e.target.value)}
+                    placeholder="Confirm new password"
                     className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
                   />
                 </div>

@@ -113,7 +113,7 @@
     --quick-sell-hover: 205 92% 52%;
     --quick-sell-foreground: 220 28% 7%;
 
-    --chart-revenue: 45 92% 58%;
+    --chart-revenue: 205 92% 62%;
     --chart-profit: 145 68% 46%;
     --chart-grid: 220 20% 18%;
     --chart-axis: 215 12% 54%;
@@ -136,7 +136,7 @@
     --popover: 160 12% 11%;
     --popover-foreground: 120 15% 92%;
 
-    --primary: 142 52% 58%;             /* Mint emerald green: #58d68d */
+    --primary: 270 65% 58%;             /* Premium Royal Purple: #9b51e0 */
     --primary-foreground: 160 10% 6%;
 
     --secondary: 160 10% 15%;
@@ -145,7 +145,7 @@
     --muted: 160 10% 15%;
     --muted-foreground: 150 8% 60%;     /* Sage grey: #8fa093 */
 
-    --accent: 142 52% 58%;
+    --accent: 270 65% 58%;
     --accent-foreground: 160 10% 6%;
 
     --destructive: 0 82% 60%;
@@ -153,23 +153,23 @@
 
     --border: 160 10% 16%;              /* Subtle dark forest border: #242926 */
     --input: 160 10% 16%;
-    --ring: 142 52% 58%;
+    --ring: 270 65% 58%;
 
-    --gold: 142 52% 58%;
-    --gold-dim: 142 40% 36%;
-    --gold-glow: 142 52% 70%;
+    --gold: 270 65% 58%;
+    --gold-dim: 270 45% 36%;
+    --gold-glow: 270 65% 70%;
     --surface-1: 160 12% 10%;
     --surface-2: 160 10% 13%;
     --surface-3: 160 8% 16%;
     --success: 142 52% 58%;
     --success-foreground: 0 0% 100%;
     --warning: 45 88% 60%;
-    --quick-sell-bg: 160 84% 37%;
-    --quick-sell-hover: 160 84% 28%;
+    --quick-sell-bg: 270 65% 58%;
+    --quick-sell-hover: 270 65% 48%;
     --quick-sell-foreground: 0 0% 100%;
 
-    --chart-revenue: 45 92% 58%;
-    --chart-profit: 145 70% 50%;
+    --chart-revenue: 270 65% 58%;
+    --chart-profit: 142 52% 58%;
     --chart-grid: 160 10% 16%;
     --chart-axis: 150 8% 54%;
     --chart-tooltip-bg: 160 12% 11%;

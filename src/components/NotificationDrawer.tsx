@@ -6,9 +6,10 @@ interface NotificationDrawerProps {
   store: StoreData;
   onClose: () => void;
   onUpdate: (s: StoreData) => void;
+  onNavigate?: (tab: string) => void;
 }
 
-export default function NotificationDrawer({ store, onClose, onUpdate }: NotificationDrawerProps) {
+export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate }: NotificationDrawerProps) {
   const notes = store.flowNotifications || [];
   const markAllRead = () => {
     const updated = { ...store, flowNotifications: notes.map(n => ({ ...n, read: true })) };
@@ -53,11 +54,27 @@ export default function NotificationDrawer({ store, onClose, onUpdate }: Notific
             </div>
           ) : (
             notes.map(n => (
-              <div key={n.id} className={`p-3 rounded-xl border flex gap-3 text-left ${toneStyle[n.type] || 'bg-surface-2'}`}>
+              <div key={n.id} className={`p-3 rounded-xl border flex gap-3 text-left ${toneStyle[n.tone] || 'bg-surface-2 border-border/40'}`}>
                 <span className="text-lg shrink-0 mt-0.5">{n.icon || '🔔'}</span>
-                <div className="space-y-1">
-                  <p className="text-xs font-display font-semibold text-foreground leading-normal">{n.message}</p>
-                  <p className="text-[10px] text-muted-foreground">{new Date(n.date).toLocaleString()}</p>
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'System Alert'}</p>
+                  <p className="text-[11px] text-muted-foreground leading-normal">{n.description || n.text}</p>
+                  <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-border/10">
+                    <p className="text-[9px] text-muted-foreground/80 font-mono">
+                      {new Date(n.date).toLocaleDateString()} · {new Date(n.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    {n.actionTab && onNavigate && (
+                      <button
+                        onClick={() => {
+                          onNavigate(n.actionTab!);
+                          if (onClose) onClose();
+                        }}
+                        className="px-2.5 py-1 rounded bg-primary text-primary-foreground text-[9px] font-display font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                      >
+                        {n.actionLabel || 'Take Action →'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))

@@ -373,182 +373,7 @@ function SupplierPanel() {
   );
 }
 
-// ─── Coins Card ───────────────────────────────────────────────────────────────
-// ─── Flow Wallet Card ─────────────────────────────────────────────────────────
-function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: StoreData) => void }) {
-  const [mem, setMem] = useState(() => getFlowMemory());
-  const [refCode, setRefCode] = useState('');
-  const [claiming, setClaiming] = useState(false);
-  const [showTx, setShowTx] = useState(false);
 
-  const todaySales = store.sales.filter(s => s.date.startsWith(new Date().toISOString().split('T')[0])).length;
-  const { streak, flowBalance, lifetimeFlowEarned, flowEarnedToday, flowTransactions = [], claimedReferralCode } = mem;
-
-  const handleClaimReferral = () => {
-    const code = refCode.trim();
-    if (!code) return;
-    setClaiming(true);
-    setTimeout(() => {
-      const res = claimReferral(code);
-      if (res.success) {
-        showToast(res.message, 'success');
-        const updatedMem = getFlowMemory();
-        setMem(updatedMem);
-        // Force update store coins for compatibility
-        const updatedStore = {
-          ...store,
-          coins: updatedMem.coins,
-        };
-        saveStore(updatedStore);
-        onUpdate(updatedStore);
-        setRefCode('');
-      } else {
-        showToast(res.message, 'error');
-      }
-      setClaiming(false);
-    }, 800);
-  };
-
-  const getTxColor = (type: string) => {
-    switch (type) {
-      case 'referral': return 'text-purple-400';
-      case 'streak': return 'text-amber-400';
-      case 'daily': return 'text-emerald-400';
-      case 'game': return 'text-sky-400';
-      default: return 'text-gold';
-    }
-  };
-
-  return (
-    <div className="p-5 rounded-2xl bg-gradient-to-br from-gold/15 via-gold-dim/5 to-surface-1 border border-gold/25 shadow-card space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FlowIcon className="w-6 h-6 animate-pulse" />
-          <h3 className="font-display font-bold text-base text-white tracking-wide">FLOW Wallet</h3>
-        </div>
-        <span className="text-[10px] bg-gold/10 border border-gold/30 text-gold px-2 py-0.5 rounded-full font-display font-semibold uppercase tracking-wider">
-          1 FLOW = ₦20
-        </span>
-      </div>
-
-      {/* Main Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Balance Card */}
-        <div className="p-3.5 rounded-xl bg-gold/5 border border-gold/15 relative overflow-hidden flex flex-col justify-between min-h-[90px]">
-          <div className="absolute -right-3 -top-3 opacity-10">
-            <FlowIcon className="w-16 h-16" />
-          </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Available FLOW</p>
-            <p className="font-display font-extrabold text-2xl text-gold mt-1">
-              {flowBalance.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-            </p>
-          </div>
-          <p className="font-display font-bold text-xs text-emerald-400 mt-1">
-            ≈ ₦{(flowBalance * 20).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-        </div>
-
-        {/* Earnings Card */}
-        <div className="p-3.5 rounded-xl bg-surface-2 border border-border flex flex-col justify-between min-h-[90px]">
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Today's Earned</p>
-            <p className="font-display font-bold text-base text-white mt-1">
-              +{flowEarnedToday.toLocaleString(undefined, { minimumFractionDigits: 1 })} FLOW
-            </p>
-          </div>
-          <div className="text-[10px] text-muted-foreground pt-1 border-t border-border mt-2 flex justify-between">
-            <span>Lifetime:</span>
-            <span className="font-bold text-white">{lifetimeFlowEarned.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Streak & Activity Progress */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="p-2.5 rounded-xl bg-surface-2 border border-border/60 text-center flex items-center justify-between px-3">
-          <div className="text-left">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-medium">🔥 Streak</p>
-            <p className="font-display font-bold text-xs text-white mt-0.5">{streak} day{streak !== 1 ? 's' : ''}</p>
-          </div>
-          <div className="text-lg">🔥</div>
-        </div>
-        <div className="p-2.5 rounded-xl bg-surface-2 border border-border/60 text-center flex items-center justify-between px-3">
-          <div className="text-left">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-medium">Today's Sales</p>
-            <p className="font-display font-bold text-xs text-white mt-0.5">{todaySales} sale{todaySales !== 1 ? 's' : ''}</p>
-          </div>
-          <div className="text-lg">📈</div>
-        </div>
-      </div>
-
-      {/* Referral Welcomer Code Section */}
-      <div className="p-3.5 rounded-xl bg-surface-2/40 border border-border/60 space-y-2">
-        <h4 className="font-display font-bold text-xs text-white flex items-center gap-1.5">
-          🎁 Welcome Bonus
-        </h4>
-        {claimedReferralCode ? (
-          <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400">
-            <span>Claimed: <strong>{claimedReferralCode}</strong></span>
-            <span className="font-bold">+5 FLOW Bonus</span>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-[10px] text-muted-foreground">Enter a referral code to instantly claim 5 FLOW welcome bonus (₦100).</p>
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="e.g. FLOW-WELCOME" 
-                value={refCode}
-                onChange={e => setRefCode(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded-lg bg-surface-3 border border-border text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-gold"
-              />
-              <button 
-                onClick={handleClaimReferral}
-                disabled={claiming || !refCode.trim()}
-                className="px-3 py-1.5 bg-gold text-surface-1 font-display font-bold text-xs rounded-lg hover:brightness-110 active:scale-95 transition disabled:opacity-50"
-              >
-                {claiming ? 'Claiming...' : 'Claim'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Collapsible Recent Transactions */}
-      {flowTransactions.length > 0 && (
-        <div className="space-y-1.5">
-          <button 
-            onClick={() => setShowTx(!showTx)} 
-            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-surface-2 border border-border text-xs text-muted-foreground font-display font-semibold hover:text-white transition"
-          >
-            <span>📜 Recent Transactions ({flowTransactions.length})</span>
-            <span>{showTx ? '▲' : '▼'}</span>
-          </button>
-          
-          {showTx && (
-            <div className="p-2 rounded-xl bg-surface-2 border border-border/50 max-h-[150px] overflow-y-auto space-y-1.5 scrollbar-thin">
-              {flowTransactions.map((tx: any) => (
-                <div key={tx.id} className="flex justify-between items-start p-2 rounded-lg bg-surface-3 text-[11px] border border-border/30">
-                  <div className="space-y-0.5 max-w-[70%]">
-                    <p className="text-white font-medium truncate">{tx.description}</p>
-                    <p className="text-[9px] text-muted-foreground">
-                      {new Date(tx.date).toLocaleDateString()} · <span className={`capitalize font-semibold ${getTxColor(tx.type)}`}>{tx.type}</span>
-                    </p>
-                  </div>
-                  <span className="font-display font-bold text-gold flex-shrink-0">
-                    +{tx.amount.toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Notification Drawer removed inline ──────────────────────────────────────
 
@@ -741,62 +566,7 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
 
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
 
-  const weeklyChallenges = useMemo(() => {
-    const last7Days = store.sales.filter(s => (Date.now() - new Date(s.date).getTime()) < 7 * 86400000);
-    const last7Expenses = (store.expenses || []).filter(e => (Date.now() - new Date(e.date).getTime()) < 7 * 86400000);
-    
-    let debtRecovered = 0;
-    (store.pendingPayments || []).forEach(p => {
-      p.events.forEach(ev => {
-        if ((Date.now() - new Date(ev.date).getTime()) < 7 * 86400000 && ev.method) {
-          debtRecovered += ev.amount;
-        }
-      });
-    });
 
-    const revenue = last7Days.reduce((s, x) => s + x.total, 0);
-    const profit = last7Days.reduce((s, x) => s + x.profit, 0);
-    const expenses = last7Expenses.reduce((s, x) => s + x.amount, 0);
-    
-    return [
-      {
-        id: 'c-sales',
-        title: 'Sales Booster',
-        description: 'Record at least 10 sales in the last 7 days.',
-        target: 10,
-        current: last7Days.length,
-        rewardCoins: 5,
-        completed: last7Days.length >= 10
-      },
-      {
-        id: 'c-profit',
-        title: 'Profit Maximizer',
-        description: 'Earn ₦15,000 in net profit in the last 7 days.',
-        target: 15000,
-        current: profit,
-        rewardCoins: 10,
-        completed: profit >= 15000
-      },
-      {
-        id: 'c-expense',
-        title: 'Overhead Saver',
-        description: 'Keep weekly operating expenses below ₦10,000.',
-        target: 10000,
-        current: expenses,
-        rewardCoins: 5,
-        completed: expenses < 10000 && last7Days.length > 0
-      },
-      {
-        id: 'c-debt',
-        title: 'Debt Recovery Specialist',
-        description: 'Recover ₦5,000 in outstanding customer debt in the last 7 days.',
-        target: 5000,
-        current: debtRecovered,
-        rewardCoins: 8,
-        completed: debtRecovered >= 5000
-      }
-    ];
-  }, [store]);
 
   // Record streak + FLOW on mount
   useEffect(() => {
@@ -1118,99 +888,117 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
 
           {/* Smart Restocking Buy List */}
           {(() => {
-            const threshold = getLowStockThreshold();
-            const lowStockItems = store.products.filter(p => p.quantity <= threshold);
-            if (lowStockItems.length === 0) return null;
+            const threshold = store.managerSettings?.minStockThreshold ?? getLowStockThreshold();
+            const autoSuggest = !!store.managerSettings?.autoSuggestRestock;
             
-            const totalRestockCost = lowStockItems.reduce((sum, p) => {
-              const target = Math.max(threshold * 4, 10);
-              const suggested = Math.max(1, target - p.quantity);
-              return sum + (p.costPrice * suggested);
-            }, 0);
-            
+            // Calculate velocity
+            const salesCount: Record<string, number> = {};
+            store.sales.forEach(sale => {
+              salesCount[sale.productId] = (salesCount[sale.productId] || 0) + sale.quantity;
+            });
+
+            // Filter needy products (not discontinued, stock <= threshold)
+            const needy = store.products
+              .filter(p => !p.discontinued && p.quantity <= threshold)
+              .map(p => {
+                const velocity = salesCount[p.id] || 0;
+                const targetQty = store.managerSettings?.defaultRestockQty ?? 50;
+                const suggestedQty = Math.max(1, targetQty - p.quantity);
+                const totalCost = suggestedQty * p.costPrice;
+                return { product: p, velocity, suggestedQty, totalCost };
+              });
+
+            // Sort by velocity descending
+            needy.sort((a, b) => b.velocity - a.velocity);
+
+            // Calculate Net Income budget
+            const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
+            const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+            const savingsSaved = store.savingsGoal?.saved || 0;
+            const netIncome = totalRevenue - totalExpenses - savingsSaved;
+
+            const suggestions: typeof needy = [];
+            let accumulatedCost = 0;
+
+            for (const item of needy) {
+              if (accumulatedCost + item.totalCost <= Math.max(0, netIncome)) {
+                suggestions.push(item);
+                accumulatedCost += item.totalCost;
+              } else if (suggestions.length === 0) {
+                suggestions.push(item);
+                break;
+              } else {
+                break;
+              }
+            }
+
+            const activeItems = autoSuggest ? suggestions : needy;
+            const totalRestockCost = activeItems.reduce((sum, s) => sum + s.totalCost, 0);
+
+            if (needy.length === 0) return null;
+
             return (
               <div className="p-4 rounded-2xl bg-card border border-warning/20 shadow-card space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-base">📋</span>
-                    <div>
-                      <h3 className="font-display font-bold text-sm">Smart Restocking List</h3>
-                      <p className="text-[10px] text-slate-400">Estimated capital required to replenish low stock</p>
+                <div className="flex justify-between items-start gap-4">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <span className="text-base shrink-0">📋</span>
+                    <div className="text-left min-w-0">
+                      <h3 className="font-display font-bold text-sm truncate">Smart Restocking List</h3>
+                      <p className="text-[10px] text-slate-400 leading-normal">
+                        {autoSuggest ? 'Capped to Net Income & prioritized by velocity' : 'Estimated capital required to replenish low stock'}
+                      </p>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 cursor-pointer select-none">
+                      <span>Smart Restock</span>
+                      <input 
+                        type="checkbox"
+                        checked={autoSuggest}
+                        onChange={e => {
+                          const nextSettings = { 
+                            ...(store.managerSettings || {}), 
+                            autoSuggestRestock: e.target.checked 
+                          };
+                          onUpdate({
+                            ...store,
+                            managerSettings: nextSettings
+                          });
+                        }}
+                        className="rounded accent-primary w-3.5 h-3.5 cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center px-2 py-1.5 bg-surface-2/30 rounded border border-border/40 text-left">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold">Total replenishment cost</span>
                   <span className="text-xs font-display font-bold text-warning">
                     ₦{totalRestockCost.toLocaleString()}
                   </span>
                 </div>
                 
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                  {lowStockItems.map(p => {
-                    const target = Math.max(threshold * 4, 10);
-                    const suggested = Math.max(1, target - p.quantity);
-                    const cost = p.costPrice * suggested;
-                    return (
-                      <div key={p.id} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-xs border border-border text-left">
-                        <div>
-                          <p className="font-semibold text-foreground">{p.name}</p>
-                          <p className="text-[9px] text-muted-foreground font-semibold">Stock: {p.quantity} left · Suggest: +{suggested}</p>
+                  {activeItems.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4 text-xs">No items suggested (budget limit exceeded).</p>
+                  ) : (
+                    activeItems.map(item => (
+                      <div key={item.product.id} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-xs border border-border text-left">
+                        <div className="text-left">
+                          <p className="font-semibold text-foreground">{item.product.name}</p>
+                          <p className="text-[9px] text-muted-foreground font-semibold">
+                            Stock: {item.product.quantity} left · Suggest: +{item.suggestedQty} {autoSuggest && `· Sold: ${item.velocity}`}
+                          </p>
                         </div>
-                        <span className="font-mono text-primary font-bold">₦{cost.toLocaleString()}</span>
+                        <span className="font-mono text-primary font-bold shrink-0">₦{item.totalCost.toLocaleString()}</span>
                       </div>
-                    );
-                  })}
+                    ))
+                  )}
                 </div>
               </div>
             );
           })()}
 
-          {/* Weekly Challenges */}
-          <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-base">🏆</span>
-                <div>
-                  <h3 className="font-display font-bold text-sm">Weekly Challenges</h3>
-                  <p className="text-[10px] text-slate-400">Complete goals to accumulate FLOW reward coins</p>
-                </div>
-              </div>
-              <span className="text-[10px] font-bold text-primary">
-                {weeklyChallenges.filter(c => c.completed).length} / {weeklyChallenges.length} Done
-              </span>
-            </div>
-            <div className="space-y-2">
-              {weeklyChallenges.map(c => (
-                <div key={c.id} className={`p-3 rounded-xl border flex justify-between items-center ${c.completed ? 'bg-success/5 border-success/20' : 'bg-surface-2 border-border'}`}>
-                  <div className="flex-1 min-w-0 pr-3">
-                    <p className={`font-display font-bold text-xs ${c.completed ? 'text-success line-through opacity-75' : 'text-foreground'}`}>
-                      {c.title}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">{c.description}</p>
-                    
-                    {/* Progress bar */}
-                    <div className="mt-2 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 rounded-full bg-surface-3 overflow-hidden">
-                        <div 
-                          className={`h-full transition-all ${c.completed ? 'bg-success' : 'bg-primary'}`} 
-                          style={{ width: `${Math.min(100, (c.current / c.target) * 100)}%` }} 
-                        />
-                      </div>
-                      <span className="text-[9px] font-mono text-slate-400 shrink-0 font-bold">
-                        {c.current.toLocaleString()} / {c.target.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-[10px] bg-gold/10 text-gold border border-gold/30 px-1.5 py-0.5 rounded font-bold">
-                      +{c.rewardCoins} FLOW
-                    </span>
-                    {c.completed && (
-                      <p className="text-[10px] text-success font-bold mt-1">✓ Claimed</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
           {/* Quick Actions / Shortcuts */}
           <div className="grid grid-cols-2 gap-3">
@@ -1333,7 +1121,7 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
             </div>
           )}
 
-          <FlowWalletCard store={store} onUpdate={onUpdate} />
+          
         </div>
       )}
 
@@ -1622,7 +1410,12 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
         document.body
       )}
       {showNotifications && createPortal(
-        <NotificationDrawer store={store} onClose={() => setShowNotifications(false)} onUpdate={onUpdate} />,
+        <NotificationDrawer
+          store={store}
+          onClose={() => setShowNotifications(false)}
+          onUpdate={onUpdate}
+          onNavigate={onNavigate}
+        />,
         document.body
       )}
     </div>

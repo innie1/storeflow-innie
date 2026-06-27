@@ -1,38 +1,46 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore } from '@/lib/store-data';
 import StoreAccess from '@/components/StoreAccess';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import NotificationDrawer from '@/components/NotificationDrawer';
 import Dashboard from '@/components/Dashboard';
-import Inventory from '@/components/Inventory';
-import Sales from '@/components/Sales';
-import SalesHistory from '@/components/SalesHistory';
-import ReceiptScanner from '@/components/ReceiptScanner';
-import BarcodeScanner from '@/components/BarcodeScanner';
-import Settings, { saveSession, clearSession, getActiveSession } from '@/components/Settings';
-import Expenses from '@/components/Expenses';
-import ROITracker from '@/components/ROITracker';
-import Manager from '@/components/Manager';
-import PendingPayments from '@/components/PendingPayments';
-import GamesDashboard from '@/components/games/GamesDashboard';
-import GamesSettings from '@/components/games/GamesSettings';
-import GamesHistory from '@/components/games/GamesHistory';
-import GamesAnalytics from '@/components/games/GamesAnalytics';
+import StoreLogo from '@/components/StoreLogo';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
-import Marketplace from '@/components/Marketplace';
-import Customers from '@/components/Customers';
-import Suppliers from '@/components/Suppliers';
-import Goals from '@/components/Goals';
-import Diary from '@/components/Diary';
-import Documents from '@/components/Documents';
-import Academy from '@/components/Academy';
-import Achievements from '@/components/Achievements';
-import Wishlist from '@/components/Wishlist';
-import StaffManagement from '@/components/StaffManagement';
-import CashDrawer from '@/components/CashDrawer';
-import CommunicationCenter from '@/components/CommunicationCenter';
+
+// Eager helper imports from settings
+import { saveSession, clearSession, getActiveSession } from '@/components/Settings';
+
+// Lazy load secondary/heavy components to optimize bundle size and FCP
+const Inventory = lazy(() => import('@/components/Inventory'));
+const Sales = lazy(() => import('@/components/Sales'));
+const SalesHistory = lazy(() => import('@/components/SalesHistory'));
+const ReceiptScanner = lazy(() => import('@/components/ReceiptScanner'));
+const BarcodeScanner = lazy(() => import('@/components/BarcodeScanner'));
+const Settings = lazy(() => import('@/components/Settings'));
+const Expenses = lazy(() => import('@/components/Expenses'));
+const ROITracker = lazy(() => import('@/components/ROITracker'));
+const Manager = lazy(() => import('@/components/Manager'));
+const PendingPayments = lazy(() => import('@/components/PendingPayments'));
+const Marketplace = lazy(() => import('@/components/Marketplace'));
+const Customers = lazy(() => import('@/components/Customers'));
+const Suppliers = lazy(() => import('@/components/Suppliers'));
+const Goals = lazy(() => import('@/components/Goals'));
+const Diary = lazy(() => import('@/components/Diary'));
+const Documents = lazy(() => import('@/components/Documents'));
+const Academy = lazy(() => import('@/components/Academy'));
+const Achievements = lazy(() => import('@/components/Achievements'));
+const Wishlist = lazy(() => import('@/components/Wishlist'));
+const StaffManagement = lazy(() => import('@/components/StaffManagement'));
+const CashDrawer = lazy(() => import('@/components/CashDrawer'));
+const CommunicationCenter = lazy(() => import('@/components/CommunicationCenter'));
+
+// Games tabs lazy load
+const GamesDashboard = lazy(() => import('@/components/games/GamesDashboard'));
+const GamesSettings = lazy(() => import('@/components/games/GamesSettings'));
+const GamesHistory = lazy(() => import('@/components/games/GamesHistory'));
+const GamesAnalytics = lazy(() => import('@/components/games/GamesAnalytics'));
 import {
   Home,
   Package,
@@ -110,40 +118,19 @@ const MORE_CATEGORIES: MoreCategory[] = [
     id: 'marketplace',
     label: 'Marketplace',
     icon: '🛒',
-    subItems: [
-      { label: 'Product Discovery', tabId: 'marketplace', icon: '🔍' },
-      { label: 'Supplier Discovery', tabId: 'marketplace', icon: '🏭' },
-      { label: 'Nearby Suppliers', tabId: 'marketplace', icon: '📍' },
-      { label: 'Price Comparison', tabId: 'marketplace', icon: '⚖️' },
-      { label: 'Sell Excess Inventory', tabId: 'marketplace', icon: '📦' },
-      { label: 'Trending Products', tabId: 'marketplace', icon: '📈' },
-      { label: 'Marketplace Deals', tabId: 'marketplace', icon: '🏷️' },
-      { label: 'Supplier Registration', tabId: 'marketplace', icon: '📝' },
-    ]
+    subItems: []
   },
   {
     id: 'communication',
     label: 'Communication Center',
     icon: '💬',
-    subItems: [
-      { label: 'Customer Messages', tabId: 'communication-center', icon: '👥' },
-      { label: 'Supplier Messages', tabId: 'communication-center', icon: '🏬' },
-      { label: 'Employee Messages', tabId: 'communication-center', icon: '💼' },
-      { label: 'WhatsApp Templates', tabId: 'communication-center', icon: '📱' },
-      { label: 'Message History', tabId: 'communication-center', icon: '📜' },
-    ]
+    subItems: []
   },
   {
     id: 'goals',
     label: 'Goals',
     icon: '🎯',
-    subItems: [
-      { label: 'Revenue Goals', tabId: 'goals', icon: '💰' },
-      { label: 'Profit Goals', tabId: 'goals', icon: '📈' },
-      { label: 'Savings Goals', tabId: 'goals', icon: '🏦' },
-      { label: 'Inventory Goals', tabId: 'goals', icon: '📦' },
-      { label: 'Progress Tracking', tabId: 'goals', icon: '📊' },
-    ]
+    subItems: []
   },
   {
     id: 'finance',
@@ -153,7 +140,6 @@ const MORE_CATEGORIES: MoreCategory[] = [
       { label: 'Expenses', tabId: 'expenses', icon: '🧾' },
       { label: 'Pending Payments', tabId: 'pending', icon: '💳' },
       { label: 'Cash Drawer', tabId: 'cash-drawer', icon: '💵' },
-      { label: 'Margin Calculator', tabId: 'roi', icon: '🧮' },
       { label: 'ROI Tracker', tabId: 'roi', icon: '📈' },
     ]
   },
@@ -168,50 +154,12 @@ const MORE_CATEGORIES: MoreCategory[] = [
       { label: 'Achievements', tabId: 'achievements', icon: '🏆' },
     ]
   },
-  {
-    id: 'growth',
-    label: 'Growth Center',
-    icon: '🚀',
-    subItems: [
-      { label: 'Wishlist', tabId: 'wishlist', icon: '🌟' },
-      { label: 'Sales Forecast', tabId: 'manager', icon: '🔮' },
-      { label: 'Store Health', tabId: 'manager', icon: '❤️' },
-      { label: 'Marketing Center', tabId: 'communication-center', icon: '📢' },
-      { label: 'Customer Feedback', tabId: 'manager', icon: '💬' },
-    ]
-  },
+
   {
     id: 'staff_accounts',
     label: 'Staff Accounts',
     icon: '👥',
-    subItems: [
-      { label: 'Staff List', tabId: 'staff', icon: '💼' },
-      { label: 'Shift Tallies', tabId: 'cash-drawer', icon: '📋' },
-      { label: 'Performance Tracker', tabId: 'staff', icon: '📊' },
-    ]
-  },
-  {
-    id: 'reports',
-    label: 'Reports',
-    icon: '📊',
-    subItems: [
-      { label: 'Sales History', tabId: 'history', icon: '📋' },
-      { label: 'Expense History', tabId: 'history', icon: '🧾' },
-      { label: 'Restock History', tabId: 'history', icon: '📦' },
-      { label: 'Audit Logs', tabId: 'settings', icon: '🔐' },
-    ]
-  },
-  {
-    id: 'settings_section',
-    label: 'Settings',
-    icon: '⚙️',
-    subItems: [
-      { label: 'General Settings', tabId: 'settings', icon: '🔧' },
-      { label: 'Receipt Setup', tabId: 'settings', icon: '🖨️' },
-      { label: 'Access Code', tabId: 'settings', icon: '🔑' },
-      { label: 'Backup & Restore', tabId: 'settings', icon: '💾' },
-      { label: 'Danger Zone', tabId: 'settings', icon: '⚠️' },
-    ]
+    subItems: []
   }
 ];
 
@@ -319,7 +267,48 @@ const isTabAllowed = (tabId: TabId, user: any) => {
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [tab, setTab] = useState<TabId>('dashboard');
+  const [tab, setTabState] = useState<TabId>('dashboard');
+
+  // Synchronize browser back/forward buttons with active tab
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '') as TabId;
+    if (hash && hash !== 'dashboard') {
+      setTabState(hash);
+      window.history.replaceState({ tab: hash, index: 1 }, '', '#' + hash);
+    } else {
+      window.history.replaceState({ tab: 'dashboard', index: 0 }, '', '#dashboard');
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state && e.state.tab) {
+        setTabState(e.state.tab);
+      } else {
+        setTabState('dashboard');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const setTab = useCallback((targetTab: TabId) => {
+    setTabState(targetTab);
+
+    const currentState = window.history.state;
+    const currentIndex = currentState?.index || 0;
+
+    if (targetTab === 'dashboard') {
+      if (currentIndex > 0) {
+        window.history.go(-currentIndex);
+      } else {
+        window.history.replaceState({ tab: 'dashboard', index: 0 }, '', '#dashboard');
+      }
+    } else {
+      if (currentState?.tab !== targetTab) {
+        window.history.pushState({ tab: targetTab, index: currentIndex + 1 }, '', '#' + targetTab);
+      }
+    }
+  }, []);
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
@@ -381,7 +370,11 @@ export default function Index() {
         ...cat,
         subItems: allowedSubs
       };
-    }).filter(cat => cat.subItems.length > 0);
+      if (cat.id === 'marketplace') return isTabAllowed('marketplace', currentUser);
+      if (cat.id === 'communication') return isTabAllowed('communication-center', currentUser);
+      if (cat.id === 'goals') return isTabAllowed('goals', currentUser);
+      return cat.subItems.length > 0;
+    });
   }, [currentUser, isGames]);
 
   useEffect(() => {
@@ -532,7 +525,13 @@ export default function Index() {
           </h1>
           <div className="flex items-center gap-2 mt-1.5 p-2 rounded-xl bg-surface-2 border border-border">
             <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary/15 flex items-center justify-center text-lg shrink-0">
-              {store.profile?.photo ? <img src={store.profile.photo} alt="" className="w-full h-full object-cover" /> : '🏪'}
+              {store.profile?.photo ? (
+                <img src={store.profile.photo} alt="" className="w-full h-full object-cover" />
+              ) : store.profile?.logoStyle ? (
+                <StoreLogo storeName={store.storeName} selectedStyle={store.profile.logoStyle} className="w-full h-full" />
+              ) : (
+                '🏪'
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-display font-bold text-xs truncate leading-tight">{store.storeName}</p>
@@ -565,12 +564,26 @@ export default function Index() {
           <div className="pt-4 mt-4 border-t border-border space-y-2">
             <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">More Features</p>
             {allowedCategories.map(cat => {
+              const isMarketplace = cat.id === 'marketplace';
+              const isCommunication = cat.id === 'communication';
+              const isGoals = cat.id === 'goals';
+              const isStaff = cat.id === 'staff_accounts';
+              const isFlat = isMarketplace || isCommunication || isGoals || isStaff;
               const isExpanded = !!expandedCategories[cat.id];
-              const hasActiveSub = cat.subItems.some(sub => tab === sub.tabId);
+              
+              const targetTab: TabId = isMarketplace ? 'marketplace' : isCommunication ? 'communication-center' : isGoals ? 'goals' : isStaff ? 'staff' : 'dashboard';
+              const hasActiveSub = isFlat ? tab === targetTab : cat.subItems.some(sub => tab === sub.tabId);
+              
               return (
                 <div key={cat.id} className="space-y-1">
                   <button
-                    onClick={() => toggleCategory(cat.id)}
+                    onClick={() => {
+                      if (isFlat) {
+                        setTab(targetTab);
+                      } else {
+                        toggleCategory(cat.id);
+                      }
+                    }}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors ${
                       hasActiveSub ? 'text-primary' : 'text-foreground hover:bg-surface-2'
                     }`}
@@ -579,10 +592,12 @@ export default function Index() {
                       <span className="text-base">{cat.icon}</span>
                       <span>{cat.label}</span>
                     </div>
-                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-primary' : 'text-muted-foreground'}`} />
+                    {!isFlat && (
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-primary' : 'text-muted-foreground'}`} />
+                    )}
                   </button>
                   
-                  {isExpanded && (
+                  {!isFlat && isExpanded && (
                     <div className="pl-4 space-y-1 border-l border-border ml-5 animate-slide-down">
                       {cat.subItems.map(sub => {
                         const isSubActive = tab === sub.tabId;
@@ -604,6 +619,30 @@ export default function Index() {
                 </div>
               );
             })}
+
+            {isTabAllowed('history', currentUser) && (
+              <button
+                onClick={() => setTab('history')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors ${
+                  tab === 'history' ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
+                }`}
+              >
+                <span className="text-base">📊</span>
+                <span>Reports</span>
+              </button>
+            )}
+
+            {isTabAllowed('settings', currentUser) && (
+              <button
+                onClick={() => setTab('settings')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors ${
+                  tab === 'settings' ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
+                }`}
+              >
+                <span className="text-base">⚙️</span>
+                <span>Settings</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -923,90 +962,97 @@ export default function Index() {
         )}
 
         <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 w-full max-w-5xl lg:max-w-6xl mx-auto space-y-6">
-          <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
-            <Dashboard store={store} onNavigate={handleNavigate} currentUser={currentUser} />
-          </div>
-          <div className={tab === 'inventory' ? 'block' : 'hidden'}>
-            <Inventory
-              store={store}
-              onUpdate={setStore}
-              filterLowStock={filterLowStock}
-              onClearFilter={() => setFilterLowStock(false)}
-            />
-          </div>
-          <div className={tab === 'sales' ? 'block' : 'hidden'}>
-            <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} isActive={tab === 'sales'} />
-          </div>
-          <div className={tab === 'expenses' ? 'block' : 'hidden'}>
-            <Expenses store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'manager' ? 'block' : 'hidden'}>
-            <Manager store={store} onUpdate={setStore} onNavigate={handleNavigate} />
-          </div>
-          <div className={tab === 'pending' ? 'block' : 'hidden'}>
-            <PendingPayments store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'history' ? 'block' : 'hidden'}>
-            <SalesHistory store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'roi' ? 'block' : 'hidden'}>
-            <ROITracker store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'settings' ? 'block' : 'hidden'}>
-            <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} />
-          </div>
-          <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
-            <Marketplace store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'customers' ? 'block' : 'hidden'}>
-            <Customers store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'suppliers' ? 'block' : 'hidden'}>
-            <Suppliers store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'goals' ? 'block' : 'hidden'}>
-            <Goals store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'diary' ? 'block' : 'hidden'}>
-            <Diary store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'documents' ? 'block' : 'hidden'}>
-            <Documents store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'academy' ? 'block' : 'hidden'}>
-            <Academy store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'achievements' ? 'block' : 'hidden'}>
-            <Achievements store={store} />
-          </div>
-          <div className={tab === 'wishlist' ? 'block' : 'hidden'}>
-            <Wishlist store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'staff' ? 'block' : 'hidden'}>
-            <StaffManagement store={store} onUpdate={setStore} currentUser={currentUser} />
-          </div>
-          <div className={tab === 'cash-drawer' ? 'block' : 'hidden'}>
-            <CashDrawer store={store} onUpdate={setStore} />
-          </div>
-          <div className={tab === 'communication-center' ? 'block' : 'hidden'}>
-            <CommunicationCenter store={store} onUpdate={setStore} currentUser={currentUser} />
-          </div>
-          {isGames && (
-            <>
-              <div className={tab === 'games-dashboard' ? 'block' : 'hidden'}>
-                <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} />
-              </div>
-              <div className={tab === 'games-history' ? 'block' : 'hidden'}>
-                <GamesHistory store={store} onUpdate={setStore} />
-              </div>
-              <div className={tab === 'games-analytics' ? 'block' : 'hidden'}>
-                <GamesAnalytics store={store} />
-              </div>
-              <div className={tab === 'games-settings' ? 'block' : 'hidden'}>
-                <GamesSettings store={store} onUpdate={setStore} />
-              </div>
-            </>
-          )}
+          <Suspense fallback={
+            <div className="flex flex-col items-center justify-center py-24 space-y-3">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              <p className="text-xs text-muted-foreground font-display font-medium">Loading module...</p>
+            </div>
+          }>
+            <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
+              <Dashboard store={store} onNavigate={handleNavigate} currentUser={currentUser} />
+            </div>
+            <div className={tab === 'inventory' ? 'block' : 'hidden'}>
+              <Inventory
+                store={store}
+                onUpdate={setStore}
+                filterLowStock={filterLowStock}
+                onClearFilter={() => setFilterLowStock(false)}
+              />
+            </div>
+            <div className={tab === 'sales' ? 'block' : 'hidden'}>
+              <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} isActive={tab === 'sales'} currentUser={currentUser} />
+            </div>
+            <div className={tab === 'expenses' ? 'block' : 'hidden'}>
+              <Expenses store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'manager' ? 'block' : 'hidden'}>
+              <Manager store={store} onUpdate={setStore} onNavigate={handleNavigate} />
+            </div>
+            <div className={tab === 'pending' ? 'block' : 'hidden'}>
+              <PendingPayments store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'history' ? 'block' : 'hidden'}>
+              <SalesHistory store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'roi' ? 'block' : 'hidden'}>
+              <ROITracker store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'settings' ? 'block' : 'hidden'}>
+              <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} />
+            </div>
+            <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
+              <Marketplace store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'customers' ? 'block' : 'hidden'}>
+              <Customers store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'suppliers' ? 'block' : 'hidden'}>
+              <Suppliers store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'goals' ? 'block' : 'hidden'}>
+              <Goals store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'diary' ? 'block' : 'hidden'}>
+              <Diary store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'documents' ? 'block' : 'hidden'}>
+              <Documents store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'academy' ? 'block' : 'hidden'}>
+              <Academy store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'achievements' ? 'block' : 'hidden'}>
+              <Achievements store={store} />
+            </div>
+            <div className={tab === 'wishlist' ? 'block' : 'hidden'}>
+              <Wishlist store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'staff' ? 'block' : 'hidden'}>
+              <StaffManagement store={store} onUpdate={setStore} currentUser={currentUser} />
+            </div>
+            <div className={tab === 'cash-drawer' ? 'block' : 'hidden'}>
+              <CashDrawer store={store} onUpdate={setStore} />
+            </div>
+            <div className={tab === 'communication-center' ? 'block' : 'hidden'}>
+              <CommunicationCenter store={store} onUpdate={setStore} currentUser={currentUser} />
+            </div>
+            {isGames && (
+              <>
+                <div className={tab === 'games-dashboard' ? 'block' : 'hidden'}>
+                  <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} />
+                </div>
+                <div className={tab === 'games-history' ? 'block' : 'hidden'}>
+                  <GamesHistory store={store} onUpdate={setStore} />
+                </div>
+                <div className={tab === 'games-analytics' ? 'block' : 'hidden'}>
+                  <GamesAnalytics store={store} />
+                </div>
+                <div className={tab === 'games-settings' ? 'block' : 'hidden'}>
+                  <GamesSettings store={store} onUpdate={setStore} />
+                </div>
+              </>
+            )}
+          </Suspense>
         </main>
 
         {/* Bottom Nav */}
@@ -1037,7 +1083,7 @@ export default function Index() {
               <button
                 onClick={() => setShowMoreMenu(!showMoreMenu)}
                 className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all cursor-pointer ${
-                  allowedCategories.some(cat => cat.subItems.some(sub => sub.tabId === tab)) ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
+                  allowedCategories.some(cat => cat.subItems.some(sub => sub.tabId === tab)) || ['settings', 'history', 'marketplace', 'communication-center', 'goals', 'staff'].includes(tab) ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <span className="mb-1 flex items-center justify-center h-5 w-5">
@@ -1164,12 +1210,27 @@ export default function Index() {
             
             <div className="space-y-2">
               {allowedCategories.map(cat => {
+                const isMarketplace = cat.id === 'marketplace';
+                const isCommunication = cat.id === 'communication';
+                const isGoals = cat.id === 'goals';
+                const isStaff = cat.id === 'staff_accounts';
+                const isFlat = isMarketplace || isCommunication || isGoals || isStaff;
                 const isExpanded = !!expandedCategories[cat.id];
-                const hasActiveSub = cat.subItems.some(sub => tab === sub.tabId);
+                
+                const targetTab: TabId = isMarketplace ? 'marketplace' : isCommunication ? 'communication-center' : isGoals ? 'goals' : isStaff ? 'staff' : 'dashboard';
+                const hasActiveSub = isFlat ? tab === targetTab : cat.subItems.some(sub => tab === sub.tabId);
+                
                 return (
                   <div key={cat.id} className="border border-border/80 rounded-xl overflow-hidden bg-surface-2/40">
                     <button
-                      onClick={() => toggleCategory(cat.id)}
+                      onClick={() => {
+                        if (isFlat) {
+                          setTab(targetTab);
+                          setShowMoreMenu(false);
+                        } else {
+                          toggleCategory(cat.id);
+                        }
+                      }}
                       className={`w-full flex items-center justify-between p-3.5 text-xs font-display font-semibold transition-colors ${
                         hasActiveSub ? 'bg-primary/5 text-primary' : 'text-foreground'
                       }`}
@@ -1178,10 +1239,12 @@ export default function Index() {
                         <span className="text-base">{cat.icon}</span>
                         <span>{cat.label}</span>
                       </div>
-                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-primary' : 'text-muted-foreground'}`} />
+                      {!isFlat && (
+                        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-primary' : 'text-muted-foreground'}`} />
+                      )}
                     </button>
                     
-                    {isExpanded && (
+                    {!isFlat && isExpanded && (
                       <div className="px-3.5 pb-3 pt-1 grid grid-cols-2 gap-2 bg-background/40 border-t border-border/50 animate-slide-down">
                         {cat.subItems.map(sub => {
                           const isSubActive = tab === sub.tabId;
@@ -1208,6 +1271,40 @@ export default function Index() {
                   </div>
                 );
               })}
+
+              {isTabAllowed('history', currentUser) && (
+                <button
+                  onClick={() => {
+                    setTab('history');
+                    setShowMoreMenu(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-3.5 text-xs font-display font-semibold transition-colors border rounded-xl bg-surface-2/40 ${
+                    tab === 'history' ? 'bg-primary/5 text-primary border-primary/20' : 'text-foreground border-border hover:bg-surface-2'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-base">📊</span>
+                    <span>Reports</span>
+                  </div>
+                </button>
+              )}
+
+              {isTabAllowed('settings', currentUser) && (
+                <button
+                  onClick={() => {
+                    setTab('settings');
+                    setShowMoreMenu(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-3.5 text-xs font-display font-semibold transition-colors border rounded-xl bg-surface-2/40 ${
+                    tab === 'settings' ? 'bg-primary/5 text-primary border-primary/20' : 'text-foreground border-border hover:bg-surface-2'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-base">⚙️</span>
+                    <span>Settings</span>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1218,6 +1315,10 @@ export default function Index() {
           store={store}
           onClose={() => setShowNotifications(false)}
           onUpdate={setStore}
+          onNavigate={(targetTab) => {
+            setTab(targetTab as TabId);
+            setShowNotifications(false);
+          }}
         />
       )}
       <ToastContainer />

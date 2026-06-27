@@ -9,6 +9,14 @@ function daysBetween(a: Date, b: Date) {
   return Math.max(1, Math.round((startOfDay(a).getTime() - startOfDay(b).getTime()) / 86400000) + 1);
 }
 
+export function isStoreOnboarding(store: StoreData): boolean {
+  if (!store.createdAt) return false;
+  const createdTime = new Date(store.createdAt).getTime();
+  if (isNaN(createdTime)) return false;
+  const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+  return (Date.now() - createdTime) < threeDaysInMs;
+}
+
 // ─── Daily series ─────────────────────────────────────────────────────────────
 export interface DailyPoint {
   ts: number; label: string;
@@ -411,21 +419,23 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
   const rev7 = series7.reduce((s, d) => s + d.revenue, 0);
 
   // Critical: running out of fast sellers or completely out of stock
-  stock.filter(f => f.urgency === 'critical').slice(0, 3).forEach(f => {
-    const isOut = f.product.quantity === 0;
-    advice.push({ 
-      id: `cr-${f.product.id}`, 
-      icon: '🚨', 
-      title: isOut ? `Restock ${f.product.name} (Sold Out)` : `Restock ${f.product.name} NOW`, 
-      detail: isOut
-        ? `Out of Stock: ${f.product.name} is completely sold out. Restock at least ${f.restockQty} units immediately to recover lost revenue.`
-        : `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`, 
-      priority: 'critical' 
+  if (!isStoreOnboarding(store)) {
+    stock.filter(f => f.urgency === 'critical').slice(0, 3).forEach(f => {
+      const isOut = f.product.quantity === 0;
+      advice.push({ 
+        id: `cr-${f.product.id}`, 
+        icon: '🚨', 
+        title: isOut ? `Restock ${f.product.name} (Sold Out)` : `Restock ${f.product.name} NOW`, 
+        detail: isOut
+          ? `Out of Stock: ${f.product.name} is completely sold out. Restock at least ${f.restockQty} units immediately to recover lost revenue.`
+          : `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`, 
+        priority: 'critical' 
+      });
     });
-  });
+  }
 
   // Critical: no sales this week
-  if (rev7 === 0 && store.products.length > 0) {
+  if (!isStoreOnboarding(store) && rev7 === 0 && store.products.length > 0) {
     advice.push({ id: 'no-sales', icon: '⚠️', title: 'No sales recorded this week', detail: 'Record sales to unlock predictions and keep your store health score accurate.', priority: 'critical' });
   }
 
@@ -447,9 +457,11 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
   });
 
   // Medium: restock soon
-  stock.filter(f => f.urgency === 'soon').slice(0, 2).forEach(f => {
-    advice.push({ id: `soon-${f.product.id}`, icon: '📦', title: `Order ${f.product.name} this week`, detail: `About ${f.daysLeft} days of stock left. Restock ${f.restockQty} units to avoid a gap.`, priority: 'medium' });
-  });
+  if (!isStoreOnboarding(store)) {
+    stock.filter(f => f.urgency === 'soon').slice(0, 2).forEach(f => {
+      advice.push({ id: `soon-${f.product.id}`, icon: '📦', title: `Order ${f.product.name} this week`, detail: `About ${f.daysLeft} days of stock left. Restock ${f.restockQty} units to avoid a gap.`, priority: 'medium' });
+    });
+  }
 
   // Medium: co-purchase opportunity
   if (analysis.coPurchases.length > 0) {
@@ -514,6 +526,9 @@ export function flowGreeting(store: StoreData): string {
 
 // ─── Notifications Generator ───────────────────────────────────────────────────
 export function generateNotifications(store: StoreData): FlowNotification[] {
+  if (isStoreOnboarding(store)) {
+    return [];
+  }
   const notes: FlowNotification[] = [];
   const now = new Date().toISOString();
   const stock = inventoryIntelligence(store);
@@ -523,24 +538,101 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
   const pending = getPendingSummary(store);
 
   stock.filter(f => f.urgency === 'critical').forEach(f => {
-    notes.push({ id: `low-${f.product.id}`, icon: '🚨', text: `${f.product.name} runs out in ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'}.`, tone: 'danger', date: now, read: false });
+    notes.push({
+      id: `low-${f.product.id}`,
+      icon: '🚨',
+      text: `${f.product.name} runs out in ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'}.`,
+      tone: 'danger',
+      date: now,
+      read: false,
+      title: 'Restock Alert (Critical)',
+      description: `${f.product.name} runs out in ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'}.`,
+      actionLabel: 'Go to Inventory',
+      actionTab: 'inventory'
+    });
   });
   stock.filter(f => f.urgency === 'soon').slice(0, 3).forEach(f => {
-    notes.push({ id: `soon-${f.product.id}`, icon: '📦', text: `${f.product.name} will need restocking in ${f.daysLeft} days.`, tone: 'warning', date: now, read: false });
+    notes.push({
+      id: `soon-${f.product.id}`,
+      icon: '📦',
+      text: `${f.product.name} will need restocking in ${f.daysLeft} days.`,
+      tone: 'warning',
+      date: now,
+      read: false,
+      title: 'Restock Suggestion',
+      description: `${f.product.name} will need restocking in ${f.daysLeft} days.`,
+      actionLabel: 'Go to Inventory',
+      actionTab: 'inventory'
+    });
   });
   if (ea.trendPct > 25) {
-    notes.push({ id: 'exp-spike', icon: '🧾', text: `Expenses up ${ea.trendPct.toFixed(0)}% this month. Review your ${ea.largestCategory.toLowerCase()} spending.`, tone: 'warning', date: now, read: false });
+    notes.push({
+      id: 'exp-spike',
+      icon: '🧾',
+      text: `Expenses up ${ea.trendPct.toFixed(0)}% this month. Review your ${ea.largestCategory.toLowerCase()} spending.`,
+      tone: 'warning',
+      date: now,
+      read: false,
+      title: 'Expense Alert',
+      description: `Expenses up ${ea.trendPct.toFixed(0)}% this month. Review your ${ea.largestCategory.toLowerCase()} spending.`,
+      actionLabel: 'View Expenses',
+      actionTab: 'expenses'
+    });
   }
   if (h.overall >= 80) {
-    notes.push({ id: 'health-great', icon: '🌟', text: `Store health is ${h.overall}/100 — great job keeping things on track!`, tone: 'success', date: now, read: false });
+    notes.push({
+      id: 'health-great',
+      icon: '🌟',
+      text: `Store health is ${h.overall}/100 — great job keeping things on track!`,
+      tone: 'success',
+      date: now,
+      read: false,
+      title: 'Store Thriving!',
+      description: `Store health is ${h.overall}/100 — great job keeping things on track!`,
+      actionLabel: 'View Report',
+      actionTab: 'dashboard'
+    });
   } else if (h.overall < 40) {
-    notes.push({ id: 'health-low', icon: '⚠️', text: `Store health dropped to ${h.overall}/100. Check the advice tab.`, tone: 'danger', date: now, read: false });
+    notes.push({
+      id: 'health-low',
+      icon: '⚠️',
+      text: `Store health dropped to ${h.overall}/100. Check the advice tab.`,
+      tone: 'danger',
+      date: now,
+      read: false,
+      title: 'Health Warning',
+      description: `Store health dropped to ${h.overall}/100. Check the advice tab.`,
+      actionLabel: 'View Advice',
+      actionTab: 'dashboard'
+    });
   }
   if (pending.overdue.length > 0) {
-    notes.push({ id: 'overdue', icon: '💳', text: `${pending.overdue.length} customer${pending.overdue.length > 1 ? 's are' : ' is'} overdue on payments.`, tone: 'warning', date: now, read: false });
+    notes.push({
+      id: 'overdue',
+      icon: '💳',
+      text: `${pending.overdue.length} customer${pending.overdue.length > 1 ? 's are' : ' is'} overdue on payments.`,
+      tone: 'warning',
+      date: now,
+      read: false,
+      title: 'Overdue Debts',
+      description: `${pending.overdue.length} customer${pending.overdue.length > 1 ? 's are' : ' is'} overdue on payments.`,
+      actionLabel: 'Chase Payments',
+      actionTab: 'pending'
+    });
   }
   if (analysis.neverSold.length >= 5) {
-    notes.push({ id: 'dead-stock', icon: '😴', text: `${analysis.neverSold.length} products have never been sold. Consider moving them out.`, tone: 'info', date: now, read: false });
+    notes.push({
+      id: 'dead-stock',
+      icon: '😴',
+      text: `${analysis.neverSold.length} products have never been sold. Consider moving them out.`,
+      tone: 'info',
+      date: now,
+      read: false,
+      title: 'Dead Stock Notice',
+      description: `${analysis.neverSold.length} products have never been sold. Consider moving them out.`,
+      actionLabel: 'Clean Inventory',
+      actionTab: 'inventory'
+    });
   }
   return notes;
 }
@@ -570,7 +662,7 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
   }
   const threshold = getLowStockThreshold();
   const low = store.products.filter(p => p.quantity > 0 && p.quantity <= threshold);
-  if (low.length > 0) {
+  if (!isStoreOnboarding(store) && low.length > 0) {
     out.push({ id: 'low', icon: '⚠', text: `${low.length} product${low.length === 1 ? '' : 's'} need restocking`, tone: 'warning' });
   }
   const tally = new Map<string, number>();
@@ -610,6 +702,7 @@ export function forecastDaysRemaining(store: StoreData, p: Product): number {
 
 export function generateRecommendations(store: StoreData): Recommendation[] {
   const recs: Recommendation[] = [];
+  if (isStoreOnboarding(store)) return [];
   store.products.forEach(p => {
     const days = forecastDaysRemaining(store, p);
     if (Number.isFinite(days) && days <= 5 && p.quantity > 0) {
@@ -708,6 +801,9 @@ export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d',
 }
 
 export function generateFlowReport(store: StoreData): string {
+  if (isStoreOnboarding(store)) {
+    return "Get your store ready for business. We are helping you set everything up before monitoring performance.";
+  }
   const h = healthScore(store);
   const stock = inventoryIntelligence(store);
   const pending = getPendingSummary(store);

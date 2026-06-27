@@ -1,10 +1,13 @@
 // StoreFlow Receipt Printing Engine
+import { getLogoSvgMarkup } from '@/components/StoreLogo';
 
 export interface PrintReceiptData {
   storeName: string;
   storeAddress?: string;
   storePhone?: string;
   storeType?: string;
+  logoStyle?: string;
+  storePhoto?: string;
   receiptNumber: string;
   date: string;
   cashierName?: string;
@@ -430,7 +433,19 @@ export function printSystem(data: PrintReceiptData, paperWidth: '58mm' | '80mm' 
           </head>
           <body>
             <div style="text-align: center; margin-bottom: 8px;">
-              <h2 style="margin: 0; font-size: ${isThermal ? '16px' : '22px'}; font-weight: bold;">${data.storeName}</h2>
+              ${data.storePhoto ? `
+                <div style="display: flex; justify-content: center; margin-bottom: 8px;">
+                  <img src="${data.storePhoto}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: contain;" />
+                </div>
+              ` : data.logoStyle ? `
+                <div style="display: flex; justify-content: center; margin-bottom: 8px;">
+                  <div style="width: 180px; height: auto; margin: 0 auto;">
+                    ${getLogoSvgMarkup(data.storeName, data.logoStyle)}
+                  </div>
+                </div>
+              ` : `
+                <h2 style="margin: 0; font-size: ${isThermal ? '16px' : '22px'}; font-weight: bold;">${data.storeName}</h2>
+              `}
               ${data.storeType ? `<div style="font-size: ${isThermal ? '10px' : '13px'};">${data.storeType}</div>` : ''}
               ${data.storeAddress ? `<div style="font-size: ${isThermal ? '10px' : '13px'};">${data.storeAddress}</div>` : ''}
               ${data.storePhone ? `<div style="font-size: ${isThermal ? '10px' : '13px'};">Tel: ${data.storePhone}</div>` : ''}

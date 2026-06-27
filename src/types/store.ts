@@ -15,6 +15,11 @@ export interface Product {
   addedAt?: string;
   barcode?: string;
   priceHistory?: PriceHistoryEntry[];
+  discontinued?: boolean;
+  isCartonSingleEnabled?: boolean;
+  singlesPerCarton?: number;
+  singleSellingPrice?: number;
+  sellAsSinglesByDefault?: boolean;
 }
 
 export interface Restock {
@@ -93,6 +98,7 @@ export interface StoreProfile {
   phone: string;
   email: string;
   photo?: string;        // base64 data URL of store logo / profile photo
+  logoStyle?: string;    // selected pre-designed logo style
   payment?: PaymentInfo; // how customers can pay this store
   website?: string;
   openingTime?: string;  // "07:00"
@@ -101,6 +107,7 @@ export interface StoreProfile {
   employees?: number;
   ownerName?: string;
   rent?: RentInfo;
+  uniqueCode?: string;
 }
 
 export type RentFrequency = 'monthly' | 'quarterly' | 'yearly';
@@ -139,6 +146,24 @@ export interface Investment {
   note: string;
   date: string; // ISO
   type: 'initial' | 'additional'; // initial = first investment, additional = new money in
+  source?: string;
+  reason?: string;
+}
+
+export interface Loan {
+  id: string;
+  amount: number;
+  source: string;
+  date: string;
+  note?: string;
+  status: 'active' | 'repaid';
+}
+
+export interface Withdrawal {
+  id: string;
+  amount: number;
+  date: string;
+  note?: string;
 }
 
 export type StoreCategory = 'retail' | 'restaurant' | 'games' | 'other';
@@ -177,6 +202,10 @@ export interface FlowNotification {
   tone: 'success' | 'warning' | 'info' | 'danger';
   date: string;
   read: boolean;
+  title?: string;
+  description?: string;
+  actionLabel?: string;
+  actionTab?: string;
 }
 
 export interface MemoryEntry {
@@ -199,6 +228,9 @@ export interface SavingsGoal {
   dayOfWeek?: string;
   dayOfMonth?: number;
   timeOfDay?: string;
+  lastDeductionTime?: string;
+  autoSaveEnabled?: boolean;
+  autoSaveAmount?: number;
 }
 
 export interface Customer {
@@ -405,6 +437,13 @@ export interface ManagerSettings {
   // Weather
   weatherImpactEnabled?: boolean;
   voiceGender?: 'male' | 'female' | 'young-male';
+  // Default Restock Configs
+  defaultPurchaseQty?: number;
+  defaultRestockQty?: number;
+  restockFrequency?: 'daily' | 'weekly' | 'monthly';
+  minStockThreshold?: number;
+  autoSuggestRestock?: boolean;
+  multiDeviceSync?: boolean;
 }
 
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
@@ -464,6 +503,11 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   receiptQrCode: '',
   receiptWhatsApp: '',
   weatherImpactEnabled: true,
+  defaultPurchaseQty: 10,
+  defaultRestockQty: 50,
+  restockFrequency: 'weekly',
+  minStockThreshold: 5,
+  autoSuggestRestock: true,
 };
 
 export interface PrintedReceipt {
@@ -478,6 +522,16 @@ export interface PrintedReceipt {
   printerUsed?: string;
 }
 
+export interface PlannedRestock {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  costPrice: number;
+  funding: 'balance' | 'new_money';
+  date: string;
+}
+
 export interface StoreData {
   storeName: string;
   accessCode: string;
@@ -486,6 +540,7 @@ export interface StoreData {
   products: Product[];
   sales: Sale[];
   restocks?: Restock[];
+  plannedRestocks?: PlannedRestock[];
   expenses?: Expense[];
   trash?: TrashItem[];
   investments?: Investment[];
@@ -522,6 +577,13 @@ export interface StoreData {
   transfers?: InventoryTransfer[];
   activityLogs?: ActivityLog[];
   communicationHistory?: CommunicationMessage[];
+  loans?: Loan[];
+  withdrawals?: Withdrawal[];
+  cashBalance?: number;
+  bankBalance?: number;
+  walletBalance?: number;
+  otherAssets?: number;
+  liabilities?: number;
 }
 
 export interface CommunicationMessage {
@@ -540,4 +602,4 @@ export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending' | 'marketplace'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings'
   | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer' | 'activity-log' | 'communication-center'
-  | 'more';
+  | 'finance' | 'reports' | 'profile' | 'more';

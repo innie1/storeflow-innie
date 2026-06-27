@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { StoreData, Sale, PaymentMethod, ManagerSettings } from '@/types/store';
+import { StoreData, Sale, PaymentMethod, ManagerSettings, Product } from '@/types/store';
 import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
@@ -26,6 +26,7 @@ interface CartItem {
   quantity: number;
   unitPrice: number;
   costPrice: number;
+  saleType: 'carton' | 'single';
 }
 
 interface SalesProps {
@@ -33,9 +34,11 @@ interface SalesProps {
   onUpdate: (store: StoreData) => void;
   managerSettings?: ManagerSettings;
   isActive?: boolean;
+  currentUser?: any;
 }
 
-export default function Sales({ store, onUpdate, managerSettings, isActive = true }: SalesProps) {
+export default function Sales({ store, onUpdate, managerSettings, isActive = true, currentUser }: SalesProps) {
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
@@ -43,6 +46,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [lastSales, setLastSales] = useState<Sale[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [selectedSaleTypes, setSelectedSaleTypes] = useState<Record<string, 'carton' | 'single'>>({});
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customQtyFor, setCustomQtyFor] = useState<string | null>(null);
   const [customQty, setCustomQty] = useState('1');
@@ -110,8 +114,30 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const getAvailableQty = (productId: string) => {
     const product = store.products.find(p => p.id === productId);
     if (!product) return 0;
-    const inCart = cart.filter(c => c.productId === productId).reduce((s, c) => s + c.quantity, 0);
+    const inCart = cart.filter(c => c.productId === productId).reduce((s, c) => {
+      if (c.saleType === 'single' && product.isCartonSingleEnabled && product.singlesPerCarton) {
+        return s + (c.quantity / product.singlesPerCarton);
+      }
+      return s + c.quantity;
+    }, 0);
     return product.quantity - inCart;
+  };
+
+  const getStockDisplay = (p: Product) => {
+    const avail = getAvailableQty(p.id);
+    if (p.isCartonSingleEnabled && p.singlesPerCarton) {
+      const cartons = Math.floor(avail);
+      const singles = Math.round((avail - cartons) * p.singlesPerCarton);
+      const totalSingles = Math.round(avail * p.singlesPerCarton);
+      if (cartons > 0 && singles > 0) {
+        return `${cartons} ctn & ${singles} pcs left (${totalSingles} total pcs)`;
+      } else if (cartons > 0) {
+        return `${cartons} ctn left (${totalSingles} pcs)`;
+      } else {
+        return `${singles} pcs left`;
+      }
+    }
+    return `${avail} left`;
   };
 
   const visibleProducts = useMemo(() => {
@@ -131,45 +157,104 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     });
   }, [store.products, topSellerIds, category, search, filterLowStock]);
 
-  const addToCart = (productId: string, qty: number) => {
+  const addToCart = (productId: string, qty: number, explicitSaleType?: 'carton' | 'single') => {
     const product = store.products.find(p => p.id === productId);
     if (!product) return false;
-    if (qty > getAvailableQty(productId)) { showToast('Not enough stock', 'error'); return false; }
-    const idx = cart.findIndex(c => c.productId === productId);
+
+    let saleType: 'carton' | 'single' = 'carton';
+    if (product.isCartonSingleEnabled) {
+      if (explicitSaleType) {
+        saleType = explicitSaleType;
+      } else {
+        saleType = selectedSaleTypes[productId] || (product.sellAsSinglesByDefault ? 'single' : 'carton');
+      }
+    }
+
+    let cartonEquivalent = qty;
+    if (saleType === 'single' && product.isCartonSingleEnabled && product.singlesPerCarton) {
+      cartonEquivalent = qty / product.singlesPerCarton;
+    }
+
+    if (cartonEquivalent > getAvailableQty(productId)) {
+      showToast('Not enough stock', 'error');
+      return false;
+    }
+
+    const idx = cart.findIndex(c => c.productId === productId && c.saleType === saleType);
     if (idx >= 0) {
       const updated = [...cart];
       updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + qty };
       setCart(updated);
     } else {
+      let unitPrice = product.sellingPrice;
+      let costPrice = product.costPrice;
+      if (saleType === 'single') {
+        const singles = product.singlesPerCarton || 1;
+        unitPrice = product.singleSellingPrice ?? (product.sellingPrice / singles);
+        costPrice = product.costPrice / singles;
+      }
+
       setCart(prev => [...prev, {
-        productId, productName: product.name, quantity: qty,
-        unitPrice: product.sellingPrice, costPrice: product.costPrice,
+        productId,
+        productName: product.name,
+        quantity: qty,
+        unitPrice,
+        costPrice,
+        saleType,
       }]);
     }
     return true;
   };
 
   const handleQuickAdd = (productId: string) => {
-    if (getAvailableQty(productId) < 1) return showToast('Out of stock', 'error');
-    addToCart(productId, 1);
+    const product = store.products.find(p => p.id === productId);
+    if (!product) return;
+    const saleType = (product.isCartonSingleEnabled && (selectedSaleTypes[productId] || (product.sellAsSinglesByDefault ? 'single' : 'carton'))) || 'carton';
+    let minDeduction = 1;
+    if (saleType === 'single' && product.singlesPerCarton) {
+      minDeduction = 1 / product.singlesPerCarton;
+    }
+    if (getAvailableQty(productId) < minDeduction) return showToast('Out of stock', 'error');
+    addToCart(productId, 1, saleType as 'carton' | 'single');
   };
 
   // ⚡ Instant Sell — bypass cart, jump straight to checkout with 1 unit
   const handleInstantSell = (productId: string) => {
     const product = store.products.find(p => p.id === productId);
-    if (!product || product.quantity < 1) return showToast('Out of stock', 'error');
+    if (!product) return;
+    const saleType = (product.isCartonSingleEnabled && (selectedSaleTypes[productId] || (product.sellAsSinglesByDefault ? 'single' : 'carton'))) || 'carton';
+    let minDeduction = 1;
+    if (saleType === 'single' && product.singlesPerCarton) {
+      minDeduction = 1 / product.singlesPerCarton;
+    }
+    if (product.quantity < minDeduction) return showToast('Out of stock', 'error');
+
+    let unitPrice = product.sellingPrice;
+    let costPrice = product.costPrice;
+    if (saleType === 'single') {
+      const singles = product.singlesPerCarton || 1;
+      unitPrice = product.singleSellingPrice ?? (product.sellingPrice / singles);
+      costPrice = product.costPrice / singles;
+    }
+
     setCart([{
-      productId, productName: product.name, quantity: 1,
-      unitPrice: product.sellingPrice, costPrice: product.costPrice,
+      productId,
+      productName: product.name,
+      quantity: 1,
+      unitPrice,
+      costPrice,
+      saleType: saleType as 'carton' | 'single',
     }]);
-    openCheckout(product.sellingPrice);
+    openCheckout(unitPrice);
   };
 
   const handleCustomAdd = () => {
     if (!customQtyFor) return;
     const qty = Number(customQty);
     if (isNaN(qty) || qty <= 0) return showToast('Invalid quantity', 'error');
-    addToCart(customQtyFor, qty);
+    const product = store.products.find(p => p.id === customQtyFor);
+    const saleType = (product && product.isCartonSingleEnabled && (selectedSaleTypes[customQtyFor] || (product.sellAsSinglesByDefault ? 'single' : 'carton'))) || 'carton';
+    addToCart(customQtyFor, qty, saleType as 'carton' | 'single');
     setCustomQtyFor(null); setCustomQty('1');
   };
 
@@ -179,8 +264,23 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     if (next <= 0) return setCart(cart.filter((_, idx) => idx !== i));
     const product = store.products.find(p => p.id === item.productId);
     if (product) {
-      const otherInCart = cart.filter((c, idx) => c.productId === item.productId && idx !== i).reduce((s, c) => s + c.quantity, 0);
-      if (next + otherInCart > product.quantity) return showToast('Not enough stock', 'error');
+      const otherInCartCartonEquiv = cart
+        .filter((c, idx) => c.productId === item.productId && idx !== i)
+        .reduce((s, c) => {
+          if (c.saleType === 'single' && product.isCartonSingleEnabled && product.singlesPerCarton) {
+            return s + (c.quantity / product.singlesPerCarton);
+          }
+          return s + c.quantity;
+        }, 0);
+
+      let nextCartonEquiv = next;
+      if (item.saleType === 'single' && product.isCartonSingleEnabled && product.singlesPerCarton) {
+        nextCartonEquiv = next / product.singlesPerCarton;
+      }
+
+      if (nextCartonEquiv + otherInCartCartonEquiv > product.quantity) {
+        return showToast('Not enough stock', 'error');
+      }
     }
     const updated = [...cart]; updated[i] = { ...item, quantity: next }; setCart(updated);
   };
@@ -252,6 +352,13 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     }
   }, [cartSubtotal, checkoutOpen, discountManuallyEdited, paidAmountManuallyEdited, managerSettings]);
 
+  // Sync paidAmount with total price when total changes, if paidAmount was not manually edited
+  useEffect(() => {
+    if (checkoutOpen && !paidAmountManuallyEdited) {
+      setPaidAmount(String(total));
+    }
+  }, [total, checkoutOpen, paidAmountManuallyEdited]);
+
   const openCheckout = (preset?: number) => {
     if (cart.length === 0 && !preset) return showToast('Cart is empty', 'error');
     setDiscountManuallyEdited(false);
@@ -277,7 +384,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       return showToast('Balance remains — switch to Pending Payment or top up the amount', 'error');
     }
     const result = recordCheckout(store,
-      cart.map(c => ({ productId: c.productId, quantity: c.quantity })),
+      cart.map(c => ({ productId: c.productId, quantity: c.quantity, saleType: c.saleType })),
       {
         paid: paidNum,
         method,
@@ -522,17 +629,28 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             const isTop = topSellerIds.has(p.id);
             const isFast = fastSellingIds.has(p.id);
             const isLow = p.quantity <= 3;
-            const inCart = cart.find(c => c.productId === p.id)?.quantity ?? 0;
+            const inCart = cart.filter(c => c.productId === p.id).reduce((s, c) => s + c.quantity, 0);
+            
+            const currentSaleType = selectedSaleTypes[p.id] || (p.sellAsSinglesByDefault ? 'single' : 'carton');
+            const cartonPrice = p.sellingPrice;
+            const singlePrice = p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : 0);
+            const activePrice = currentSaleType === 'single' ? singlePrice : cartonPrice;
+            const isSingleStockAvailable = p.singlesPerCarton ? (avail * p.singlesPerCarton >= 1) : (avail >= 1);
+            const canSell = currentSaleType === 'single' ? isSingleStockAvailable : (avail >= 1);
+
             return (
-              <div key={p.id} className="relative rounded-2xl bg-card border border-border/40 p-3.5 flex flex-col justify-between min-h-[185px]">
+              <div key={p.id} className="relative rounded-2xl bg-card border border-border/40 p-3.5 flex flex-col justify-between min-h-[195px]">
                 {isTop && (
                   <span className="absolute top-3 right-3 text-[9px] px-1.5 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary font-display font-bold">
                     ★ TOP
                   </span>
                 )}
-                <div>
+                <div 
+                  className="cursor-pointer text-left flex-1 select-none hover:opacity-90 transition-opacity" 
+                  onClick={() => setSelectedDetailProduct(p)}
+                >
                   <p className="text-sm font-display font-bold text-foreground line-clamp-1 pr-12">{p.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{avail} left</p>
+                  <p className="text-xs text-muted-foreground mt-1">{getStockDisplay(p)}</p>
                   <div className="flex gap-1.5 mt-1 flex-wrap">
                     {isFast && <span className="text-[9px] text-primary bg-primary/5 px-1.5 py-0.5 rounded-md border border-primary/20">🔥 Fast</span>}
                     {isLow && (
@@ -543,15 +661,41 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                   </div>
                 </div>
                 <div className="mt-2 space-y-2">
-                  <span className="text-primary font-display font-black text-sm block">
-                    ₦{p.sellingPrice.toLocaleString()}
-                  </span>
+                  {p.isCartonSingleEnabled && (
+                    <div className="grid grid-cols-2 gap-1 bg-surface-2 p-0.5 rounded-lg text-[10px] font-display font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSaleTypes(prev => ({ ...prev, [p.id]: 'carton' }))}
+                        className={`py-1 rounded-md transition-colors text-center ${currentSaleType === 'carton' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        📦 Carton
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSaleTypes(prev => ({ ...prev, [p.id]: 'single' }))}
+                        className={`py-1 rounded-md transition-colors text-center ${currentSaleType === 'single' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        🥛 Single
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary font-display font-black text-sm block">
+                      ₦{activePrice.toLocaleString()}
+                    </span>
+                    {p.isCartonSingleEnabled && (
+                      <span className="text-[10px] text-muted-foreground font-semibold">
+                        {currentSaleType === 'single' ? '/ pc' : '/ ctn'}
+                      </span>
+                    )}
+                  </div>
                   
                   {/* Buttons Row */}
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => handleInstantSell(p.id)}
-                      disabled={p.quantity < 1}
+                      disabled={!canSell}
                       className="flex-1 h-9 rounded-xl bg-[hsl(var(--quick-sell-bg))] text-[hsl(var(--quick-sell-foreground))] text-xs font-display font-black hover:bg-[hsl(var(--quick-sell-hover))] disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center gap-1 shadow-sm transition-colors duration-200"
                       aria-label="Instant sell"
                     >
@@ -559,7 +703,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                     </button>
                     <button
                       onClick={() => handleQuickAdd(p.id)}
-                      disabled={avail < 1}
+                      disabled={!canSell}
                       className="w-9 h-9 rounded-full bg-yellow-500 text-slate-950 font-black text-lg hover:bg-yellow-400 disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center shadow-sm relative shrink-0"
                       aria-label="Add to cart"
                     >
@@ -625,21 +769,48 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
               {/* Order summary */}
               <div className="rounded-lg bg-surface-2/60 p-2.5 space-y-1.5">
                 <p className="text-[10px] font-display font-bold text-muted-foreground uppercase">Order Summary</p>
-                {cart.map((item, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium">{item.productName}</p>
-                      <p className="text-[9px] text-muted-foreground">₦{item.unitPrice.toLocaleString()} each</p>
+                {cart.map((item, i) => {
+                  const p = store.products.find(x => x.id === item.productId);
+                  const isCartonSingle = p?.isCartonSingleEnabled;
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate font-medium flex items-center gap-1.5 flex-wrap">
+                          <span>{item.productName}</span>
+                          {isCartonSingle ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextType = item.saleType === 'carton' ? 'single' : 'carton';
+                                const unit = nextType === 'carton' ? p.sellingPrice : (p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : 0));
+                                const cost = nextType === 'carton' ? p.costPrice : (p.costPrice / (p.singlesPerCarton || 1));
+                                const updated = [...cart];
+                                updated[i] = { ...item, saleType: nextType, unitPrice: unit, costPrice: cost };
+                                setCart(updated);
+                              }}
+                              className="text-[8px] bg-primary/10 hover:bg-primary/20 text-primary px-1 py-0.5 rounded font-bold cursor-pointer transition-colors"
+                              title="Click to toggle Carton/Single"
+                            >
+                              {item.saleType === 'carton' ? '📦 Carton' : '🥛 Single'}
+                            </button>
+                          ) : (
+                            <span className="text-[8px] bg-muted/20 text-muted-foreground px-1 py-0.5 rounded font-bold select-none">
+                              📦 Carton
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground">₦{item.unitPrice.toLocaleString()} each</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => changeCartQty(i, -1)} className="w-5 h-5 rounded bg-card border border-border flex items-center justify-center text-xs font-bold">−</button>
+                        <span className="w-5 text-center text-xs font-bold">{item.quantity}</span>
+                        <button onClick={() => changeCartQty(i, 1)} className="w-5 h-5 rounded bg-card border border-border flex items-center justify-center text-xs font-bold">+</button>
+                        <button onClick={() => changeCartQty(i, -item.quantity)} className="w-5 h-5 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center justify-center font-bold text-xs ml-0.5 active:scale-90 transition-transform" title="Remove item">×</button>
+                      </div>
+                      <span className="w-16 text-right text-primary font-display font-bold text-xs">₦{(item.unitPrice * item.quantity).toLocaleString()}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => changeCartQty(i, -1)} className="w-5 h-5 rounded bg-card border border-border flex items-center justify-center text-xs font-bold">−</button>
-                      <span className="w-5 text-center text-xs font-bold">{item.quantity}</span>
-                      <button onClick={() => changeCartQty(i, 1)} className="w-5 h-5 rounded bg-card border border-border flex items-center justify-center text-xs font-bold">+</button>
-                      <button onClick={() => changeCartQty(i, -item.quantity)} className="w-5 h-5 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center justify-center font-bold text-xs ml-0.5 active:scale-90 transition-transform" title="Remove item">×</button>
-                    </div>
-                    <span className="w-16 text-right text-primary font-display font-bold text-xs">₦{(item.unitPrice * item.quantity).toLocaleString()}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="space-y-1 text-xs">
@@ -830,6 +1001,111 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       )}
 
       {lastSales && <SaleReceipt store={store} sale={lastSales} onClose={() => setLastSales(null)} onUpdateStore={onUpdate} />}
+
+      {/* Product Details Modal */}
+      {selectedDetailProduct && (() => {
+        const p = selectedDetailProduct;
+        const isOwnerOrManager = currentUser?.role === 'owner' || currentUser?.role === 'manager';
+        
+        // Stock math
+        const avail = p.quantity;
+        let stockText = `${avail} units left`;
+        if (p.isCartonSingleEnabled && p.singlesPerCarton) {
+          const cartons = Math.floor(avail);
+          const singles = Math.round((avail - cartons) * p.singlesPerCarton);
+          stockText = `${cartons} ctn & ${singles} pcs (${avail * p.singlesPerCarton} total pcs)`;
+        }
+
+        const margin = p.sellingPrice > 0 ? Math.round(((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100) : 0;
+        const profit = p.sellingPrice - p.costPrice;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setSelectedDetailProduct(null)}>
+            <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-4 animate-slide-up text-left" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-2xl animate-pulse">
+                    📦
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-base text-foreground leading-tight">{p.name}</h3>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 capitalize bg-surface-2 border border-border/80 px-2 py-0.5 rounded-full inline-block">
+                      {p.category}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedDetailProduct(null)} className="w-7 h-7 rounded-full bg-surface-2 hover:bg-surface-3 flex items-center justify-center text-sm border border-border">✕</button>
+              </div>
+
+              <div className="space-y-2.5 pt-2">
+                {/* Stock Level */}
+                <div className="flex justify-between items-center py-2 px-3 bg-surface-2 border border-border rounded-xl">
+                  <span className="text-xs text-muted-foreground font-semibold">Available Stock</span>
+                  <span className="text-xs font-display font-bold text-foreground">{stockText}</span>
+                </div>
+
+                {/* Barcode */}
+                <div className="flex justify-between items-center py-2 px-3 bg-surface-2 border border-border rounded-xl">
+                  <span className="text-xs text-muted-foreground font-semibold">Barcode</span>
+                  <span className="text-xs font-mono font-bold text-foreground">{p.barcode || 'Not Linked'}</span>
+                </div>
+
+                {/* Carton / Single breakdown */}
+                {p.isCartonSingleEnabled && (
+                  <div className="p-3 bg-surface-2 border border-border rounded-xl space-y-1.5">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Carton / Single Breakdown</p>
+                    <div className="flex justify-between text-xs">
+                      <span>Singles per Carton</span>
+                      <strong className="text-foreground">{p.singlesPerCarton} pcs</strong>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span>Single Selling Price</span>
+                      <strong className="text-foreground">₦{(p.singleSellingPrice ?? Math.round(p.sellingPrice / (p.singlesPerCarton || 1))).toLocaleString()}</strong>
+                    </div>
+                  </div>
+                )}
+
+                {/* Prices & Profitability (Visible to Owner/Manager only) */}
+                <div className="p-3 bg-surface-2 border border-border rounded-xl space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground font-semibold">Selling Price</span>
+                    <strong className="text-sm font-display font-bold text-primary">₦{p.sellingPrice.toLocaleString()}</strong>
+                  </div>
+                  
+                  {isOwnerOrManager && (
+                    <div className="border-t border-border/40 pt-2 mt-2 space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-muted-foreground">Cost Price</span>
+                        <strong className="text-foreground font-semibold">₦{p.costPrice.toLocaleString()}</strong>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-muted-foreground">Markup Margin</span>
+                        <strong className="text-emerald-400 font-bold">{margin}%</strong>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-muted-foreground">Net Profit / Carton</span>
+                        <strong className="text-emerald-400 font-bold">₦{profit.toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    handleQuickAdd(p.id);
+                    setSelectedDetailProduct(null);
+                  }}
+                  className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm shadow-md active:scale-95 transition-transform"
+                >
+                  ✓ Add to Cart
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -35,6 +35,62 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   const [showTrash, setShowTrash] = useState(false);
   const [viewBatch, setViewBatch] = useState<Restock[] | null>(null);
 
+  const restockStats = useMemo(() => {
+    if (!viewBatch) return {};
+    const stats: Record<string, { day: number; dayCost: number; week: number; weekCost: number; month: number; monthCost: number }> = {};
+    
+    viewBatch.forEach(item => {
+      const pId = item.productId;
+      const rDate = new Date(item.date);
+      
+      const dayStart = new Date(rDate); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(rDate); dayEnd.setHours(23, 59, 59, 999);
+      
+      const dayOfWeek = rDate.getDay();
+      const weekStart = new Date(rDate); weekStart.setDate(rDate.getDate() - dayOfWeek); weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6); weekEnd.setHours(23, 59, 59, 999);
+      
+      const monthStart = new Date(rDate.getFullYear(), rDate.getMonth(), 1, 0, 0, 0, 0);
+      const monthEnd = new Date(rDate.getFullYear(), rDate.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      const allRestocks = (store.restocks || []).filter(x => x.productId === pId);
+      
+      let daySum = 0; let dayCost = 0;
+      let weekSum = 0; let weekCost = 0;
+      let monthSum = 0; let monthCost = 0;
+      
+      allRestocks.forEach(x => {
+        const xDate = new Date(x.date);
+        const qty = x.quantity;
+        const cost = x.total;
+        
+        if (xDate >= dayStart && xDate <= dayEnd) {
+          daySum += qty;
+          dayCost += cost;
+        }
+        if (xDate >= weekStart && xDate <= weekEnd) {
+          weekSum += qty;
+          weekCost += cost;
+        }
+        if (xDate >= monthStart && xDate <= monthEnd) {
+          monthSum += qty;
+          monthCost += cost;
+        }
+      });
+      
+      stats[pId] = {
+        day: daySum,
+        dayCost,
+        week: weekSum,
+        weekCost,
+        month: monthSum,
+        monthCost
+      };
+    });
+    
+    return stats;
+  }, [viewBatch, store.restocks]);
+
   const trashCount = getTrash(store).length;
 
   const entries = useMemo<HistoryEntry[]>(() => {
@@ -153,7 +209,11 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   }, [store, filter]);
 
   const filtered = search
-    ? entries.filter(e => e.title.toLowerCase().includes(search.toLowerCase()) || e.subtitle.toLowerCase().includes(search.toLowerCase()))
+    ? entries.filter(e => 
+        e.title.toLowerCase().includes(search.toLowerCase()) || 
+        e.subtitle.toLowerCase().includes(search.toLowerCase()) ||
+        e.id.toLowerCase().includes(search.toLowerCase())
+      )
     : entries;
 
   const handleClear = () => {
@@ -192,8 +252,8 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search history..."
-          className="flex-1 min-w-[160px] p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+          placeholder="Search by product, category or receipt ID..."
+          className="flex-1 min-w-[200px] p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
         />
         <button
           onClick={() => setShowTrash(true)}
@@ -269,7 +329,14 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
               }}
             >
               <p className="font-display font-semibold text-sm text-foreground truncate">{entry.title}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{entry.subtitle}</p>
+              <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                <span className="text-[11px] text-muted-foreground truncate">{entry.subtitle}</span>
+                {entry.type === 'sale' && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded font-semibold">
+                    #{entry.id.substring(0, 8).toUpperCase()}
+                  </span>
+                )}
+              </div>
               <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(entry.date).toLocaleString()}</p>
             </div>
             <div className="text-right shrink-0">
@@ -360,16 +427,35 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
                 </span>
               </div>
               {viewBatch.map(r => (
-                <div key={r.id} className="p-3 rounded-lg bg-surface-2 border border-border">
+                <div key={r.id} className="p-3 rounded-lg bg-surface-2 border border-border space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="font-display font-semibold text-sm text-foreground">{r.productName}</p>
                     <p className="font-display font-bold text-sm text-warning">
                       −₦{r.total.toLocaleString()}
                     </p>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <p className="text-[11px] text-muted-foreground">
                     {r.quantity} units × ₦{r.costPrice.toLocaleString()}
                   </p>
+                  {restockStats[r.productId] && (
+                    <div className="pt-2 border-t border-border/40 mt-1.5 grid grid-cols-3 gap-1.5 text-[10px] text-muted-foreground text-left">
+                      <div className="p-1.5 rounded bg-black/10 border border-border/20">
+                        <p className="font-semibold text-foreground">Same Day</p>
+                        <p className="text-yellow-500 font-bold mt-0.5">{restockStats[r.productId].day} units</p>
+                        <p className="text-[8px] mt-0.5">Total: ₦{restockStats[r.productId].dayCost.toLocaleString()}</p>
+                      </div>
+                      <div className="p-1.5 rounded bg-black/10 border border-border/20">
+                        <p className="font-semibold text-foreground">Same Week</p>
+                        <p className="text-yellow-500 font-bold mt-0.5">{restockStats[r.productId].week} units</p>
+                        <p className="text-[8px] mt-0.5">Total: ₦{restockStats[r.productId].weekCost.toLocaleString()}</p>
+                      </div>
+                      <div className="p-1.5 rounded bg-black/10 border border-border/20">
+                        <p className="font-semibold text-foreground">Same Month</p>
+                        <p className="text-yellow-500 font-bold mt-0.5">{restockStats[r.productId].month} units</p>
+                        <p className="text-[8px] mt-0.5">Total: ₦{restockStats[r.productId].monthCost.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               <div className="flex items-center justify-between pt-2 border-t border-border">

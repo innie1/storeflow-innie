@@ -604,6 +604,8 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
 
         {/* Right Column */}
         <div className="md:col-span-7 space-y-4">
+
+
           {activeBreakdown === 'revenue' && (
             <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card space-y-2 animate-fade-in text-left">
               <h3 className="font-display font-bold text-sm text-yellow-500">Revenue Breakdown</h3>
@@ -850,6 +852,36 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
                     <Line type="monotone" dataKey="profit" name="Profit" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 2 }} />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {activeBreakdown === null && topSellers.length > 0 && (
+            <div className="p-5 rounded-2xl bg-card border border-border/40 shadow-card text-left space-y-4 animate-fade-in">
+              <h3 className="font-display font-bold text-base text-foreground">Top Sellers</h3>
+              <div className="space-y-3">
+                {(() => {
+                  const maxSold = Math.max(...topSellers.map(item => item.totalSold), 1);
+                  return topSellers.map((item, idx) => {
+                    const percentage = (item.totalSold / maxSold) * 100;
+                    return (
+                      <div key={idx} className="flex items-center justify-between text-sm gap-3 py-1">
+                        <span className="w-28 shrink-0 truncate text-foreground/90 font-medium" title={item.name}>
+                          {item.name}
+                        </span>
+                        <div className="flex-1 bg-background rounded-full h-3.5 overflow-hidden">
+                          <div
+                            className="bg-primary h-full rounded-full"
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                        <span className="w-8 shrink-0 text-right text-muted-foreground font-medium">
+                          {item.totalSold}
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           )}

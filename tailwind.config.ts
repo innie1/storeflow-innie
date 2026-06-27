@@ -56,6 +56,11 @@ export default {
           dim: "hsl(var(--gold-dim))",
           glow: "hsl(var(--gold-glow))",
         },
+        yellow: {
+          500: "hsl(var(--gold))",
+          600: "hsl(var(--gold-dim))",
+          400: "hsl(var(--gold-glow))",
+        },
         surface: {
           1: "hsl(var(--surface-1))",
           2: "hsl(var(--surface-2))",
