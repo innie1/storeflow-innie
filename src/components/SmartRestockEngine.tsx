@@ -32,11 +32,12 @@ interface BuyListItem {
 }
 
 export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRestockEngineProps) {
-  // Available budget = cash available
-  const cashBalance = store.cashBalance || 0;
-  const bankBalance = store.bankBalance || 0;
-  const walletBalance = store.walletBalance || 0;
-  const availableBudget = cashBalance + bankBalance + walletBalance;
+  // Available budget = Net Income (exact dashboard stats)
+  const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
+  const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+  const savingsSaved = store.savingsGoal?.saved || 0;
+  const netIncome = totalRevenue - totalExpenses - savingsSaved;
+  const availableBudget = Math.max(0, netIncome);
 
   // Buy List settings
   const [coverageDays, setCoverageDays] = useState(14);
@@ -185,36 +186,174 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     });
 
     // Sort by Priority Score descending
-    const sorted = list.sort((a, b) => b.priorityScore - a.priorityScore);
+    return list.sort((a, b) => b.priorityScore - a.priorityScore);
+  }, [store.products, sales, requests, suppliers, buyOnlyToMin]);
 
-    // Spend Only Available Cash & Partial Purchases (Step 5 & 6)
-    let remainingCash = availableBudget;
+  // Intelligent Proportionate Budget Distribution (AI Optimizer - Step 5 & 6)
+  const allocateBudgetProportionally = (list: BuyListItem[], budget: number): BuyListItem[] => {
+    if (budget <= 0 || list.length === 0) {
+      return list.map(item => ({ ...item, suggestedQty: 0, selected: false }));
+    }
 
-    const allocatedList = sorted.map(item => {
-      const requiredCost = item.suggestedQty * item.costPrice;
+    const updated = list.map(item => ({
+      ...item,
+      suggestedQty: 0,
+      selected: false
+    }));
 
-      if (remainingCash <= 0) {
+    // Split items into High and Medium/Low lists
+    const highItems = updated.filter(item => item.priorityLabel === '🔴 High');
+    const mediumLowItems = updated.filter(item => item.priorityLabel === '🟡 Medium' || item.priorityLabel === '🟢 Low');
+
+    // If we only have one category, allocate 100% budget to it proportionately
+    if (highItems.length === 0 || mediumLowItems.length === 0) {
+      return runProportionateAllocation(updated, budget);
+    }
+
+    // Two-Pool Budget Splitter: 60% High, 40% Medium/Low
+    let highPool = budget * 0.60;
+    let mediumPool = budget * 0.40;
+
+    // 1. Allocate High Priority Pool (60%)
+    let highRemaining = highPool;
+    
+    // Assign baseline of 1 unit to each high item first
+    highItems.forEach(item => {
+      const costForOne = Math.min(item.idealQty || 1, 1) * item.costPrice;
+      if (highRemaining >= costForOne) {
+        item.suggestedQty = Math.min(item.idealQty || 1, 1);
+        item.selected = true;
+        highRemaining -= costForOne;
+      }
+    });
+
+    // Distribute remaining high pool proportionately to scores
+    const growableHigh = highItems.filter(item => item.selected && (item.idealQty || 1) > item.suggestedQty);
+    const sumHighScores = growableHigh.reduce((sum, item) => sum + item.priorityScore, 0);
+
+    if (sumHighScores > 0 && highRemaining > 0) {
+      growableHigh.forEach(item => {
+        const share = highRemaining * (item.priorityScore / sumHighScores);
+        const maxAdditional = (item.idealQty || 1) - item.suggestedQty;
+        let additionalQty = Math.floor(share / item.costPrice);
+        additionalQty = Math.max(0, Math.min(maxAdditional, additionalQty));
+        
+        item.suggestedQty += additionalQty;
+        highRemaining -= additionalQty * item.costPrice;
+      });
+    }
+
+    // Add any leftover high pool cash to the medium pool
+    mediumPool += highRemaining;
+
+    // 2. Allocate Medium/Low Priority Pool (40% + leftover)
+    let mediumRemaining = mediumPool;
+
+    // Assign baseline of 1 unit to each medium/low item first
+    mediumLowItems.forEach(item => {
+      const costForOne = Math.min(item.idealQty || 1, 1) * item.costPrice;
+      if (mediumRemaining >= costForOne) {
+        item.suggestedQty = Math.min(item.idealQty || 1, 1);
+        item.selected = true;
+        mediumRemaining -= costForOne;
+      }
+    });
+
+    // Distribute remaining medium pool equally
+    const growableMedium = mediumLowItems.filter(item => item.selected && (item.idealQty || 1) > item.suggestedQty);
+
+    if (growableMedium.length > 0 && mediumRemaining > 0) {
+      let activeGrowable = [...growableMedium];
+      let cashToDistribute = mediumRemaining;
+      
+      // Loop to distribute equally, capping at idealQty
+      let progress = true;
+      while (cashToDistribute > 0 && activeGrowable.length > 0 && progress) {
+        progress = false;
+        const equalShare = cashToDistribute / activeGrowable.length;
+        const nextGrowable: typeof activeGrowable = [];
+
+        for (const item of activeGrowable) {
+          const maxAdditional = (item.idealQty || 1) - item.suggestedQty;
+          if (maxAdditional <= 0) continue;
+
+          let additionalQty = Math.floor(equalShare / item.costPrice);
+          additionalQty = Math.max(0, Math.min(maxAdditional, additionalQty));
+
+          if (additionalQty > 0) {
+            item.suggestedQty += additionalQty;
+            cashToDistribute -= additionalQty * item.costPrice;
+            progress = true;
+          }
+
+          if (item.suggestedQty < (item.idealQty || 1)) {
+            nextGrowable.push(item);
+          }
+        }
+        activeGrowable = nextGrowable;
+      }
+      mediumRemaining = cashToDistribute;
+    }
+
+    // 3. Final Leftover Pass (Greedy round-robin to fully optimize remaining budget)
+    let totalRemaining = mediumRemaining;
+    if (totalRemaining > 0) {
+      const allGrowable = updated
+        .filter(item => item.selected && item.suggestedQty < (item.idealQty || 1))
+        .sort((a, b) => b.priorityScore - a.priorityScore);
+
+      let progress = true;
+      while (totalRemaining > 0 && progress) {
+        progress = false;
+        for (const item of allGrowable) {
+          if (totalRemaining >= item.costPrice && item.suggestedQty < (item.idealQty || 1)) {
+            item.suggestedQty += 1;
+            totalRemaining -= item.costPrice;
+            progress = true;
+          }
+        }
+      }
+    }
+
+    // Map labels and clean up
+    return updated.map(item => {
+      if (item.suggestedQty <= 0) {
         return {
           ...item,
-          suggestedQty: 0,
           selected: false,
           reason: item.reason + ' (Pending until funds become available)'
         };
       }
+      
+      const scaledDiff = (item.idealQty || 1) - item.suggestedQty;
+      if (scaledDiff > 0) {
+        return {
+          ...item,
+          reason: item.reason + ` (Scaled to fit budget split: 60% High / 40% Med)`
+        };
+      }
+      
+      return item;
+    });
+  };
 
-      if (remainingCash >= requiredCost) {
-        remainingCash -= requiredCost;
-        return { ...item, selected: true };
-      } else {
-        // Partial purchase!
-        const possibleQty = Math.floor(remainingCash / item.costPrice);
-        if (possibleQty >= 1) {
-          remainingCash -= possibleQty * item.costPrice;
+  // Helper for single category fallback
+  const runProportionateAllocation = (list: BuyListItem[], budget: number): BuyListItem[] => {
+    const updated = list.map(it => ({ ...it, suggestedQty: 0, selected: false }));
+    const baselineCost = updated.reduce((sum, item) => sum + Math.min(item.idealQty || 1, 1) * item.costPrice, 0);
+
+    if (baselineCost > budget) {
+      let remainingCash = budget;
+      const sorted = [...updated].sort((a, b) => b.priorityScore - a.priorityScore);
+      const allocated = sorted.map(item => {
+        const costForOne = Math.min(item.idealQty || 1, 1) * item.costPrice;
+        if (remainingCash >= costForOne && costForOne > 0) {
+          remainingCash -= costForOne;
           return {
             ...item,
-            suggestedQty: possibleQty,
+            suggestedQty: Math.min(item.idealQty || 1, 1),
             selected: true,
-            reason: item.reason + ` (Reduced to ${possibleQty} units to fit budget)`
+            reason: item.reason + ' (Restocked with 1 unit due to critical budget constraints)'
           };
         } else {
           return {
@@ -224,16 +363,40 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
             reason: item.reason + ' (Pending until funds become available)'
           };
         }
-      }
+      });
+      return allocated.sort((a, b) => b.priorityScore - a.priorityScore);
+    }
+
+    updated.forEach(item => {
+      item.suggestedQty = Math.min(item.idealQty || 1, 1);
+      item.selected = true;
     });
 
-    return allocatedList;
-  }, [store.products, sales, requests, suppliers, buyOnlyToMin, availableBudget]);
+    let remainingCash = budget - baselineCost;
+    const growable = updated.filter(item => (item.idealQty || 1) > 1);
+    const sumScores = growable.reduce((sum, item) => sum + item.priorityScore, 0);
+
+    if (sumScores > 0 && remainingCash > 0) {
+      growable.forEach(item => {
+        const share = remainingCash * (item.priorityScore / sumScores);
+        const maxAdditional = (item.idealQty || 1) - 1;
+        let additionalQty = Math.floor(share / item.costPrice);
+        additionalQty = Math.max(0, Math.min(maxAdditional, additionalQty));
+        item.suggestedQty += additionalQty;
+        remainingCash -= additionalQty * item.costPrice;
+      });
+    }
+
+    return updated.map(item => {
+      if (item.suggestedQty <= 0) return { ...item, selected: false };
+      return item;
+    });
+  };
 
   // Sync recommendation engine list on load or settings change
   useEffect(() => {
-    setItemsList(generatedRecommendations);
-  }, [generatedRecommendations]);
+    setItemsList(allocateBudgetProportionally(generatedRecommendations, availableBudget));
+  }, [generatedRecommendations, availableBudget]);
 
   // Calculations on selected Buy List items
   const totals = useMemo(() => {
@@ -262,55 +425,9 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       return;
     }
 
-    const updated = itemsList.map(item => ({ ...item }));
-    const selected = updated.filter(it => it.selected);
-    if (selected.length === 0) return;
-
-    let currentTotal = selected.reduce((sum, it) => sum + it.suggestedQty * it.costPrice, 0);
-    if (currentTotal <= availableBudget) {
-      showToast('Buy List already fits within available budget!', 'success');
-      return;
-    }
-
-    // AI Budget Optimizer logic:
-    // Scale down quantities proportionately to Priority Score, keeping high priority items active.
-    let iterations = 0;
-    while (currentTotal > availableBudget && iterations < 30) {
-      iterations++;
-      let reducedAny = false;
-
-      // Sort selected by priority ascending to reduce lower priority items first
-      const sortedSelected = [...selected].sort((a, b) => a.priorityScore - b.priorityScore);
-
-      for (const item of sortedSelected) {
-        const matchingItem = updated.find(it => it.id === item.id);
-        if (matchingItem && matchingItem.suggestedQty > 1) {
-          // Reduce quantity
-          const reductionStep = Math.max(1, Math.floor(matchingItem.suggestedQty * 0.15));
-          matchingItem.suggestedQty -= reductionStep;
-          reducedAny = true;
-          
-          // Re-calculate total
-          currentTotal = updated.filter(it => it.selected).reduce((sum, it) => sum + it.suggestedQty * it.costPrice, 0);
-          if (currentTotal <= availableBudget) break;
-        }
-      }
-
-      // If we couldn't reduce any quantities further (all at 1 qty), deselect the lowest priority item
-      if (!reducedAny) {
-        const lowestPriority = sortedSelected.find(it => it.selected);
-        if (lowestPriority) {
-          const matchingItem = updated.find(it => it.id === lowestPriority.id);
-          if (matchingItem) {
-            matchingItem.selected = false;
-          }
-          currentTotal = updated.filter(it => it.selected).reduce((sum, it) => sum + it.suggestedQty * it.costPrice, 0);
-        }
-      }
-    }
-
-    setItemsList(updated);
-    showToast('Buy List optimized automatically to fit your cash budget!', 'success');
+    const optimized = allocateBudgetProportionally(itemsList, availableBudget);
+    setItemsList(optimized);
+    showToast('Buy List optimized proportionately to fit your budget!', 'success');
   };
 
   // Add manually created item
@@ -321,15 +438,18 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       return;
     }
 
+    const qty = parseFloat(newProductQty);
     const newItem: BuyListItem = {
       id: `manual-${Math.random().toString(36).slice(2, 6)}`,
       name: newProductName.trim(),
       category: newProductCategory,
       currentStock: 0,
-      suggestedQty: parseFloat(newProductQty),
+      suggestedQty: qty,
+      idealQty: qty,
       costPrice: parseFloat(newProductCost),
       sellingPrice: parseFloat(newProductPrice),
       priorityScore: 30, // medium priority for manual add
+      priorityLabel: '🟡 Medium',
       reason: 'Manually added to Buy List.',
       supplier: newProductSupplier,
       selected: true
@@ -485,8 +605,16 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
               />
             </button>
           </div>
-          <div className="text-muted-foreground">
-            Current Target Stock: <span className="font-bold text-white">{buyOnlyToMin ? 'Minimum Stock Level' : 'Maximum Stock Level'}</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleOptimizeBudget}
+              className="px-3.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary font-display font-bold text-xs rounded-xl transition border border-primary/20 cursor-pointer"
+            >
+              🪄 Optimize Buy List
+            </button>
+            <div className="text-muted-foreground">
+              Current Target Stock: <span className="font-bold text-white">{buyOnlyToMin ? 'Minimum Stock Level' : 'Maximum Stock Level'}</span>
+            </div>
           </div>
         </div>
 
