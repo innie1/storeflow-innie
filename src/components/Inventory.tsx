@@ -2004,27 +2004,187 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">Review and edit each item before saving.</p>
-              <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
-                {importPreview.map((it, i) => (
-                  <div key={i} className="p-2 rounded-lg bg-surface-2 border border-border space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <input value={it.name} onChange={e => { const next=[...importPreview]; next[i]={...it,name:e.target.value}; setImportPreview(next); }} placeholder="Name" className="flex-1 text-sm bg-surface-3 border border-border rounded p-1.5" />
-                      <button onClick={() => setImportPreview(importPreview.filter((_,k)=>k!==i))} className="w-7 h-7 rounded text-destructive bg-destructive/10 text-sm">✕</button>
-                    </div>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      <input value={it.costPrice} onChange={e => { const n=[...importPreview]; n[i]={...it,costPrice:e.target.value}; setImportPreview(n); }} type="number" placeholder="Cost" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
-                      <input value={it.sellingPrice} onChange={e => { const n=[...importPreview]; n[i]={...it,sellingPrice:e.target.value}; setImportPreview(n); }} type="number" placeholder="Sell" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
-                      <input value={it.quantity} onChange={e => { const n=[...importPreview]; n[i]={...it,quantity:e.target.value}; setImportPreview(n); }} type="number" placeholder="Qty" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
-                      <input value={it.category} onChange={e => { const n=[...importPreview]; n[i]={...it,category:e.target.value}; setImportPreview(n); }} placeholder="Cat" className="text-xs bg-surface-3 border border-border rounded p-1.5" />
-                    </div>
-                  </div>
-                ))}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-2 justify-between items-start sm:items-center bg-surface-2 p-2.5 rounded-xl border border-border/50">
+                <p className="text-xs text-muted-foreground">
+                  Review and edit each item before saving.
+                </p>
+                {/* AA Button (Apply margin to all matching items) */}
+                {(() => {
+                  const defaultMargin = store.managerSettings?.defaultMargin ?? 20;
+                  const hasSamePrice = importPreview.some(it => {
+                    const cp = Number(it.costPrice) || 0;
+                    const sp = Number(it.sellingPrice) || 0;
+                    return cp > 0 && cp === sp;
+                  });
+                  if (!hasSamePrice) return null;
+                  return (
+                    <button
+                      onClick={() => {
+                        const next = importPreview.map(it => {
+                          const cp = Number(it.costPrice) || 0;
+                          const sp = Number(it.sellingPrice) || 0;
+                          if (cp > 0 && cp === sp) {
+                            const suggested = Math.round(cp * (1 + defaultMargin / 100));
+                            return { ...it, sellingPrice: String(suggested) };
+                          }
+                          return it;
+                        });
+                        setImportPreview(next);
+                        showToast(`✓ Applied ${defaultMargin}% margin to all same-price items!`, 'success');
+                      }}
+                      className="px-2.5 py-1 bg-yellow-500 hover:brightness-110 text-black text-[10px] font-display font-bold rounded-lg transition-all cursor-pointer shrink-0"
+                    >
+                      ⚡ AA (Apply Margin to All)
+                    </button>
+                  );
+                })()}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setImportPreview(null)} className="p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-display font-semibold">← Back</button>
-                <button onClick={handleImportApprove} className="p-2.5 rounded-lg bg-success text-white text-sm font-display font-bold">✓ Approve & Save</button>
+
+              {/* Items List */}
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                {importPreview.map((it, i) => {
+                  const cp = Number(it.costPrice) || 0;
+                  const sp = Number(it.sellingPrice) || 0;
+                  const isPriceSame = cp > 0 && cp === sp;
+                  const defaultMargin = store.managerSettings?.defaultMargin ?? 20;
+                  const markupSuggested = cp * (1 + defaultMargin / 100);
+
+                  // Carton detection
+                  const n = it.name.toLowerCase();
+                  const cartonWords = ['carton', 'ctn', 'pack', 'box', 'case', 'crate', 'bundle', 'dozen'];
+                  const matchesCarton = cartonWords.some(w => n.includes(w));
+                  let singlesCount = 12;
+                  if (matchesCarton) {
+                    const rx = /(?:x|qty|size|of|pack|ctn|carton|\b)\s*(\d+)\b/i;
+                    const matches = n.match(rx);
+                    if (matches && matches[1]) {
+                      const val = parseInt(matches[1]);
+                      if (val > 1 && val <= 200) singlesCount = val;
+                    }
+                  }
+
+                  return (
+                    <div key={i} className="p-3.5 rounded-xl bg-surface-2 border border-border/85 space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={it.name}
+                          onChange={e => {
+                            const next = [...importPreview];
+                            next[i] = { ...it, name: e.target.value };
+                            setImportPreview(next);
+                          }}
+                          placeholder="Product Name"
+                          className="flex-1 text-xs font-display font-semibold bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white placeholder:text-muted-foreground"
+                        />
+                        <button
+                          onClick={() => setImportPreview(importPreview.filter((_, k) => k !== i))}
+                          className="w-8 h-8 rounded-lg text-destructive bg-destructive/10 hover:bg-destructive/20 text-xs flex items-center justify-center cursor-pointer transition-colors"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-0.5">Cost (₦)</label>
+                          <input
+                            value={it.costPrice}
+                            onChange={e => {
+                              const n = [...importPreview];
+                              n[i] = { ...it, costPrice: e.target.value };
+                              setImportPreview(n);
+                            }}
+                            type="number"
+                            placeholder="Cost"
+                            className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-0.5">Selling (₦)</label>
+                          <input
+                            value={it.sellingPrice}
+                            onChange={e => {
+                              const n = [...importPreview];
+                              n[i] = { ...it, sellingPrice: e.target.value };
+                              setImportPreview(n);
+                            }}
+                            type="number"
+                            placeholder="Sell"
+                            className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-0.5">Quantity</label>
+                          <input
+                            value={it.quantity}
+                            onChange={e => {
+                              const n = [...importPreview];
+                              n[i] = { ...it, quantity: e.target.value };
+                              setImportPreview(n);
+                            }}
+                            type="number"
+                            placeholder="Qty"
+                            className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-0.5">Category</label>
+                          <input
+                            value={it.category}
+                            onChange={e => {
+                              const n = [...importPreview];
+                              n[i] = { ...it, category: e.target.value };
+                              setImportPreview(n);
+                            }}
+                            placeholder="Cat"
+                            className="w-full text-xs bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Same Price alert message */}
+                      {isPriceSame && (
+                        <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-[11px] text-yellow-500 leading-snug">
+                          <span>Apply suggestions (₦{Math.round(markupSuggested)})?</span>
+                          <button
+                            onClick={() => {
+                              const next = [...importPreview];
+                              next[i] = { ...it, sellingPrice: String(Math.round(markupSuggested)) };
+                              setImportPreview(next);
+                              showToast(`Suggested selling price applied!`, 'success');
+                            }}
+                            className="px-2.5 py-1 bg-yellow-500 text-black text-[10px] font-display font-bold rounded-lg hover:brightness-110 active:scale-95 transition-all cursor-pointer shrink-0"
+                          >
+                            OK
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Carton details feedback */}
+                      {matchesCarton && (
+                        <div className="p-2 rounded-xl bg-primary/10 border border-primary/25 text-[10px] text-primary flex items-center justify-between font-display font-semibold">
+                          <span>📦 Carton Product detected: will auto-split into {singlesCount} units.</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => setImportPreview(null)}
+                  className="p-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-semibold hover:bg-surface-3 transition"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={handleImportApprove}
+                  className="p-3 rounded-xl bg-success text-white text-xs font-display font-bold hover:opacity-95 shadow-md"
+                >
+                  ✓ Approve & Save
+                </button>
               </div>
             </div>
           )}
