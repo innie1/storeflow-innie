@@ -136,7 +136,7 @@
     --popover: 160 12% 11%;
     --popover-foreground: 120 15% 92%;
 
-    --primary: 270 65% 58%;             /* Premium Royal Purple: #9b51e0 */
+    --primary: 0 0% 100%;               /* Premium White: #ffffff */
     --primary-foreground: 160 10% 6%;
 
     --secondary: 160 10% 15%;
@@ -145,7 +145,7 @@
     --muted: 160 10% 15%;
     --muted-foreground: 150 8% 60%;     /* Sage grey: #8fa093 */
 
-    --accent: 270 65% 58%;
+    --accent: 0 0% 100%;
     --accent-foreground: 160 10% 6%;
 
     --destructive: 0 82% 60%;
@@ -153,22 +153,22 @@
 
     --border: 160 10% 16%;              /* Subtle dark forest border: #242926 */
     --input: 160 10% 16%;
-    --ring: 270 65% 58%;
+    --ring: 0 0% 100%;
 
-    --gold: 270 65% 58%;
-    --gold-dim: 270 45% 36%;
-    --gold-glow: 270 65% 70%;
+    --gold: 0 0% 100%;
+    --gold-dim: 0 0% 70%;
+    --gold-glow: 0 0% 100%;
     --surface-1: 160 12% 10%;
     --surface-2: 160 10% 13%;
     --surface-3: 160 8% 16%;
     --success: 142 52% 58%;
     --success-foreground: 0 0% 100%;
     --warning: 45 88% 60%;
-    --quick-sell-bg: 270 65% 58%;
-    --quick-sell-hover: 270 65% 48%;
-    --quick-sell-foreground: 0 0% 100%;
+    --quick-sell-bg: 0 0% 100%;
+    --quick-sell-hover: 0 0% 90%;
+    --quick-sell-foreground: 160 10% 6%;
 
-    --chart-revenue: 270 65% 58%;
+    --chart-revenue: 0 0% 100%;
     --chart-profit: 142 52% 58%;
     --chart-grid: 160 10% 16%;
     --chart-axis: 150 8% 54%;
