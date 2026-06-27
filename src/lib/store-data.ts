@@ -579,7 +579,7 @@ export function deleteProduct(store: StoreData, id: string, actorName?: string, 
 }
 
 export function clearInventory(store: StoreData): StoreData {
-  // Total clean wipe: resets all products, sales history, balances, and learned data
+  // Total clean wipe: resets all products, sales history, balances, learned data, and investments
   const updated = {
     ...store,
     products: [],
@@ -595,7 +595,12 @@ export function clearInventory(store: StoreData): StoreData {
     trash: [],
     similarProductReviews: [],
     dismissedSimilarPairs: [],
-    learnedProducts: []
+    learnedProducts: [],
+    investments: [],
+    loans: [],
+    withdrawals: [],
+    otherAssets: 0,
+    liabilities: 0
   };
   saveStore(updated);
   return updated;
@@ -713,22 +718,31 @@ export function importProducts(store: StoreData, products: Omit<Product, 'id'>[]
   const newInvestments = [...(store.investments || [])];
   const newExpenses = [...(store.expenses || [])];
 
+  // Initial mass import check: no sales yet and no existing restock expenses
+  const isInitialImport = (store.sales || []).length === 0 && 
+    (store.expenses || []).filter(e => e.source === 'restock').length === 0;
+
   if (importTotal > 0) {
     newInvestments.push({
       id: generateId(),
       amount: importTotal,
-      note: `Bulk Imported Inventory (${products.length} products)`,
+      note: isInitialImport 
+        ? `Initial Inventory Import (${products.length} products)` 
+        : `Bulk Imported Inventory (${products.length} products)`,
       date: now,
-      type: 'additional',
+      type: isInitialImport ? 'initial' : 'additional',
     });
-    newExpenses.push({
-      id: generateId(),
-      amount: importTotal,
-      category: 'Restock',
-      date: now,
-      note: `Bulk Imported Inventory (${products.length} products)`,
-      source: 'restock',
-    });
+
+    if (!isInitialImport) {
+      newExpenses.push({
+        id: generateId(),
+        amount: importTotal,
+        category: 'Restock',
+        date: now,
+        note: `Bulk Imported Inventory (${products.length} products)`,
+        source: 'restock',
+      });
+    }
   }
 
   const updated = {
@@ -794,66 +808,81 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
   let newWalletBalance = store.walletBalance ?? 0;
 
   if (restockTotal > 0) {
-    const availableCash = newCashBalance + newBankBalance + newWalletBalance;
-    let autoInvestedAmt = 0;
-    let cashDeduction = 0;
+    // Initial import check: no sales yet and no existing restock expenses
+    const isInitialImport = (store.sales || []).length === 0 && 
+      (store.expenses || []).filter(e => e.source === 'restock').length === 0;
 
-    if (restockTotal <= availableCash) {
-      cashDeduction = restockTotal;
-    } else {
-      cashDeduction = availableCash;
-      autoInvestedAmt = restockTotal - availableCash;
-    }
-
-    // Deduct from cash balances
-    let remainingDeduct = cashDeduction;
-    if (newCashBalance >= remainingDeduct) {
-      newCashBalance -= remainingDeduct;
-      remainingDeduct = 0;
-    } else {
-      remainingDeduct -= newCashBalance;
-      newCashBalance = 0;
-    }
-
-    if (remainingDeduct > 0) {
-      if (newBankBalance >= remainingDeduct) {
-        newBankBalance -= remainingDeduct;
-        remainingDeduct = 0;
-      } else {
-        remainingDeduct -= newBankBalance;
-        newBankBalance = 0;
-      }
-    }
-
-    if (remainingDeduct > 0) {
-      if (newWalletBalance >= remainingDeduct) {
-        newWalletBalance -= remainingDeduct;
-        remainingDeduct = 0;
-      } else {
-        newWalletBalance = 0;
-      }
-    }
-
-    const fundingLabel = autoInvestedAmt > 0 ? ' (automatic investment)' : ' (from cash balance)';
-    newExpenses.push({
-      id: generateId(),
-      amount: Math.round(restockTotal * 100) / 100,
-      category: 'Restock',
-      date: now,
-      note: `Stock from supplier${fundingLabel}: ${itemNames.slice(0, 4).join(', ')}${itemNames.length > 4 ? `, +${itemNames.length - 4} more` : ''}`,
-      source: 'restock',
-      restockBatchId: batchId,
-    });
-
-    if (autoInvestedAmt > 0) {
+    if (isInitialImport) {
       newInvestments.push({
         id: generateId(),
-        amount: Math.round(autoInvestedAmt * 100) / 100,
-        note: `Inventory Capital Injection`,
+        amount: Math.round(restockTotal * 100) / 100,
+        note: `Initial Inventory Setup via Invoice Import`,
         source: 'Inventory Restock',
         date: now,
-        type: 'additional',
+        type: 'initial',
       });
+    } else {
+      const availableCash = newCashBalance + newBankBalance + newWalletBalance;
+      let autoInvestedAmt = 0;
+      let cashDeduction = 0;
+
+      if (restockTotal <= availableCash) {
+        cashDeduction = restockTotal;
+      } else {
+        cashDeduction = availableCash;
+        autoInvestedAmt = restockTotal - availableCash;
+      }
+
+      // Deduct from cash balances
+      let remainingDeduct = cashDeduction;
+      if (newCashBalance >= remainingDeduct) {
+        newCashBalance -= remainingDeduct;
+        remainingDeduct = 0;
+      } else {
+        remainingDeduct -= newCashBalance;
+        newCashBalance = 0;
+      }
+
+      if (remainingDeduct > 0) {
+        if (newBankBalance >= remainingDeduct) {
+          newBankBalance -= remainingDeduct;
+          remainingDeduct = 0;
+        } else {
+          remainingDeduct -= newBankBalance;
+          newBankBalance = 0;
+        }
+      }
+
+      if (remainingDeduct > 0) {
+        if (newWalletBalance >= remainingDeduct) {
+          newWalletBalance -= remainingDeduct;
+          remainingDeduct = 0;
+        } else {
+          newWalletBalance = 0;
+        }
+      }
+
+      const fundingLabel = autoInvestedAmt > 0 ? ' (automatic investment)' : ' (from cash balance)';
+      newExpenses.push({
+        id: generateId(),
+        amount: Math.round(restockTotal * 100) / 100,
+        category: 'Restock',
+        date: now,
+        note: `Stock from supplier${fundingLabel}: ${itemNames.slice(0, 4).join(', ')}${itemNames.length > 4 ? `, +${itemNames.length - 4} more` : ''}`,
+        source: 'restock',
+        restockBatchId: batchId,
+      });
+
+      if (autoInvestedAmt > 0) {
+        newInvestments.push({
+          id: generateId(),
+          amount: Math.round(autoInvestedAmt * 100) / 100,
+          note: `Inventory Capital Injection`,
+          source: 'Inventory Restock',
+          date: now,
+          type: 'additional',
+        });
+      }
     }
   }
 
