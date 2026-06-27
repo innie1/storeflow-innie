@@ -892,16 +892,16 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
 
                     {/* Cost price equals Selling price warning / quick apply */}
                     {isPriceSame && (
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-warning/10 border border-warning/20 text-[10px] text-warning-foreground">
-                        <span>⚠️ Price equals cost.</span>
+                      <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-[11px] text-yellow-500 leading-snug">
+                        <span>Selling price and cost price are exactly the same. Apply {store.managerSettings?.defaultMargin ?? 20}% profit margin (₦{Math.round(markupSuggested)})?</span>
                         <button
                           onClick={() => {
                             updateItem(i, 'sellingPrice', Math.round(markupSuggested));
                             showToast(`Suggested selling price of ₦${Math.round(markupSuggested)} applied!`, 'success');
                           }}
-                          className="px-2 py-0.5 bg-warning text-black rounded font-display font-bold hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                          className="px-3 py-1 bg-yellow-500 text-black rounded-lg font-display font-bold hover:brightness-110 active:scale-95 transition-all cursor-pointer shrink-0"
                         >
-                          Apply ₦{Math.round(markupSuggested)}
+                          OK
                         </button>
                       </div>
                     )}
