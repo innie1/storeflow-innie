@@ -481,68 +481,67 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     setItemsList(prev => prev.map(it => it.id === id ? { ...it, selected: !it.selected } : it));
   };
 
-  // Confirm/receive restock
-  const handleReceiveBuyList = () => {
+  // Format and share buy list via system share sheet or clipboard
+  const handleShareBuyList = async () => {
     const selectedItems = itemsList.filter(it => it.selected);
     if (selectedItems.length === 0) return;
 
     if (totals.totalCost > availableBudget) {
-      showToast('Cannot purchase: total cost exceeds available budget!', 'error');
+      showToast('Cannot share: total cost exceeds available budget!', 'error');
       return;
     }
 
-    // Split items into existing products and new products
-    let nextStore = store;
-
-    // 1. Add new products first to catalog
-    const newItems = selectedItems.filter(it => it.isNewProduct);
-    const existingItems = selectedItems.filter(it => !it.isNewProduct);
-
-    newItems.forEach(it => {
-      // Add product
-      const newP: Product = {
-        id: Math.random().toString(36).slice(2, 9),
-        name: it.name,
-        category: it.category === 'New Request' ? 'Groceries' : it.category,
-        costPrice: it.costPrice,
-        sellingPrice: it.sellingPrice,
-        quantity: 0,
-        addedAt: new Date().toISOString()
-      };
-      nextStore = {
-        ...nextStore,
-        products: [newP, ...nextStore.products]
-      };
-      // Map this item to reference the newly added product ID
-      it.id = newP.id;
+    // Format list details
+    let text = `📋 StoreFlow Restock Buy List — ${store.storeName}\n`;
+    text += `Date: ${new Date().toLocaleDateString()}\n`;
+    text += `==========================\n\n`;
+    
+    selectedItems.forEach((it, idx) => {
+      text += `${idx + 1}. ${it.name}\n`;
+      text += `   • Qty to Buy: ${it.suggestedQty}\n`;
+      text += `   • Unit Cost: ₦${it.costPrice.toLocaleString()}\n`;
+      text += `   • Total Cost: ₦${(it.suggestedQty * it.costPrice).toLocaleString()}\n`;
+      text += `   • Supplier: ${it.supplier}\n\n`;
     });
 
-    // 2. Receive stock using our receiveStock core function
-    const entries = selectedItems.map(it => ({
-      productId: it.id,
-      quantity: it.suggestedQty,
-      costPrice: it.costPrice
-    }));
+    text += `==========================\n`;
+    text += `💰 Available Budget: ₦${availableBudget.toLocaleString()}\n`;
+    text += `📉 Estimated Cost: ₦${totals.totalCost.toLocaleString()}\n`;
+    text += `📈 Expected Revenue: ₦${totals.estRevenue.toLocaleString()}\n`;
+    text += `💎 Expected Profit: ₦${totals.estProfit.toLocaleString()}\n`;
 
-    // Perform restock
-    const updatedStore = receiveStock(nextStore, entries, 'balance');
-    
-    // 3. Learning System logs (Save accepted buy list metadata to activity log)
-    const logs = updatedStore.activityLogs || [];
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Buy List - ${store.storeName}`,
+          text: text
+        });
+        showToast('✓ Buy List shared successfully!', 'success');
+      } catch (err) {
+        // user aborted or sharing failed
+        navigator.clipboard.writeText(text);
+        showToast('✓ Copied to clipboard!', 'success');
+      }
+    } else {
+      navigator.clipboard.writeText(text);
+      showToast('✓ Copied to clipboard! Share via WhatsApp or Messenger.', 'success');
+    }
+
+    // Log the approval and share action in the activity logs
+    const logs = store.activityLogs || [];
     const newLog = {
       id: Math.random().toString(36).slice(2, 9),
       store_id: store.accessCode,
-      action: 'Accepted Buy List',
-      description: `Accepted AI Buy List with ${selectedItems.length} items (Total: ₦${totals.totalCost.toLocaleString()})`,
+      action: 'Approved & Shared Buy List',
+      description: `Approved & Shared Buy List with ${selectedItems.length} items (Total: ₦${totals.totalCost.toLocaleString()})`,
       created_at: new Date().toISOString()
     };
 
     onUpdate({
-      ...updatedStore,
+      ...store,
       activityLogs: [newLog as any, ...logs]
     });
 
-    showToast('✓ Buy List items received & added to inventory!', 'success');
     onClose();
   };
 
@@ -868,11 +867,11 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
               Cancel
             </button>
             <button 
-              onClick={handleReceiveBuyList}
+              onClick={handleShareBuyList}
               disabled={totals.count === 0 || totals.totalCost > availableBudget}
               className="flex-1 sm:flex-none px-5 py-2.5 bg-primary text-primary-foreground disabled:opacity-40 font-display font-bold text-xs rounded-xl shadow-md cursor-pointer hover:opacity-95"
             >
-              📥 Approve & Receive Stock
+              📤 Approve & Share List
             </button>
           </div>
         </div>
