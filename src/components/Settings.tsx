@@ -445,6 +445,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [discMinStr, setDiscMinStr] = useState('');
   const [discMaxStr, setDiscMaxStr] = useState('');
 
+  // Local state string variables for restock settings
+  const [defaultPurchaseQtyStr, setDefaultPurchaseQtyStr] = useState('');
+  const [defaultRestockQtyStr, setDefaultRestockQtyStr] = useState('');
+  const [minStockThresholdStr, setMinStockThresholdStr] = useState('');
+
   const handleDiscValChange = (val: string) => {
     setDiscValStr(val);
     const n = Number(val);
@@ -463,6 +468,24 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     updateMgr({ autoDiscountMaxSubtotal: isNaN(n) ? 0 : n });
   };
 
+  const handleSaveRestockSettings = () => {
+    const defaultPurchaseQty = Math.max(1, Number(defaultPurchaseQtyStr) || 1);
+    const defaultRestockQty = Math.max(1, Number(defaultRestockQtyStr) || 1);
+    const minStockThreshold = Math.max(0, Number(minStockThresholdStr) || 0);
+
+    updateMgr({
+      defaultPurchaseQty,
+      defaultRestockQty,
+      minStockThreshold
+    });
+
+    setDefaultPurchaseQtyStr(String(defaultPurchaseQty));
+    setDefaultRestockQtyStr(String(defaultRestockQty));
+    setMinStockThresholdStr(String(minStockThreshold));
+
+    showToast('✓ Restock settings saved successfully!', 'success');
+  };
+
   useEffect(() => {
     if (view === 'discount') {
       setDiscValStr(mgr.autoDiscountValue ? String(mgr.autoDiscountValue) : '');
@@ -470,6 +493,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       setDiscMaxStr(mgr.autoDiscountMaxSubtotal ? String(mgr.autoDiscountMaxSubtotal) : '');
     }
   }, [view, mgr.autoDiscountValue, mgr.autoDiscountMinSubtotal, mgr.autoDiscountMaxSubtotal]);
+
+  useEffect(() => {
+    if (view === 'inventory') {
+      setDefaultPurchaseQtyStr(mgr.defaultPurchaseQty !== undefined ? String(mgr.defaultPurchaseQty) : '10');
+      setDefaultRestockQtyStr(mgr.defaultRestockQty !== undefined ? String(mgr.defaultRestockQty) : '50');
+      setMinStockThresholdStr(mgr.minStockThreshold !== undefined ? String(mgr.minStockThreshold) : '5');
+    }
+  }, [view, mgr.defaultPurchaseQty, mgr.defaultRestockQty, mgr.minStockThreshold]);
 
   const updateSavings = (patch: Partial<SavingsGoal>) => {
     const next = { ...savings, ...patch };
@@ -979,8 +1010,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <input
               type="number"
               min="1"
-              value={mgr.defaultPurchaseQty !== undefined ? mgr.defaultPurchaseQty : 10}
-              onChange={e => updateMgr({ defaultPurchaseQty: Math.max(1, Number(e.target.value) || 1) })}
+              value={defaultPurchaseQtyStr}
+              onChange={e => setDefaultPurchaseQtyStr(e.target.value)}
               className={inputClass}
             />
           </div>
@@ -989,8 +1020,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <input
               type="number"
               min="1"
-              value={mgr.defaultRestockQty !== undefined ? mgr.defaultRestockQty : 50}
-              onChange={e => updateMgr({ defaultRestockQty: Math.max(1, Number(e.target.value) || 1) })}
+              value={defaultRestockQtyStr}
+              onChange={e => setDefaultRestockQtyStr(e.target.value)}
               className={inputClass}
             />
           </div>
@@ -1001,8 +1032,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <input
               type="number"
               min="0"
-              value={mgr.minStockThreshold !== undefined ? mgr.minStockThreshold : 5}
-              onChange={e => updateMgr({ minStockThreshold: Math.max(0, Number(e.target.value) || 0) })}
+              value={minStockThresholdStr}
+              onChange={e => setMinStockThresholdStr(e.target.value)}
               className={inputClass}
             />
           </div>
@@ -1018,6 +1049,16 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
               <option value="monthly">Monthly</option>
             </select>
           </div>
+        </div>
+
+        {/* Save Settings Button */}
+        <div className="pt-2 flex justify-end">
+          <button
+            onClick={handleSaveRestockSettings}
+            className="px-4 py-2 bg-primary text-primary-foreground font-display font-bold text-xs rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer"
+          >
+            Save Settings
+          </button>
         </div>
       </div>
     </SubPage>
