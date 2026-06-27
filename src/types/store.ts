@@ -545,9 +545,19 @@ export interface LearnedProduct {
   dateLearned: string;         // ISO timestamp
 }
 
+export interface SimilarProductReview {
+  id1: string;
+  id2: string;
+  name1: string;
+  name2: string;
+  decision: 'merged' | 'separate' | 'renamed';
+  reviewedAt: string;
+}
+
 export interface StoreData {
   learnedProducts?: LearnedProduct[];
   dismissedSimilarPairs?: string[];
+  similarProductReviews?: SimilarProductReview[];
   storeName: string;
   accessCode: string;
   category?: StoreCategory;

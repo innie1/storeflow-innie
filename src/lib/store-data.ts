@@ -560,30 +560,42 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
 export function deleteProduct(store: StoreData, id: string, actorName?: string, actorRole?: string): StoreData {
   const product = store.products.find(p => p.id === id);
   if (!product) return store;
+  
+  // Wipe all associated sales, planned restocks, learned mappings, and product entry
   let updated = {
     ...store,
     products: store.products.filter(p => p.id !== id),
+    sales: (store.sales || []).filter(s => s.productId !== id),
+    plannedRestocks: (store.plannedRestocks || []).filter(r => r.productId !== id),
+    learnedProducts: (store.learnedProducts || []).filter(lp => lp.id !== id),
     trash: pushTrash(store, 'product', product),
   };
+  
   if (actorName) {
-    updated = recordActivityLog(updated, actorName, actorRole, `Deleted product: ${product.name}`);
+    updated = recordActivityLog(updated, actorName, actorRole, `Deleted product: ${product.name} (wiped financial and sales history)`);
   }
   saveStore(updated);
   return updated;
 }
 
 export function clearInventory(store: StoreData): StoreData {
-  const now = new Date().toISOString();
-  const trashItems = store.products.map(p => ({
-    id: generateId(),
-    kind: 'product' as TrashKind,
-    deletedAt: now,
-    payload: p,
-  }));
+  // Total clean wipe: resets all products, sales history, balances, and learned data
   const updated = {
     ...store,
     products: [],
-    trash: [...trashItems, ...(store.trash || [])],
+    sales: [],
+    expenses: [],
+    debtors: [],
+    suppliers: [],
+    cashBalance: 0,
+    bankBalance: 0,
+    walletBalance: 0,
+    plannedRestocks: [],
+    activityLogs: [],
+    trash: [],
+    similarProductReviews: [],
+    dismissedSimilarPairs: [],
+    learnedProducts: []
   };
   saveStore(updated);
   return updated;

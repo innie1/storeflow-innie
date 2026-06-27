@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { StoreData, Product } from '@/types/store';
+import { StoreData, Product, SimilarProductReview } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
@@ -79,9 +79,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [ocrError, setOcrError] = useState<string | null>(null);
   const ocrFileRef = useRef<HTMLInputElement>(null);
 
-  // Similar product deduplication states & logic
-  const [duplicatePair, setDuplicatePair] = useState<{ p1: Product; p2: Product } | null>(null);
-  const [localDismissedPairs, setLocalDismissedPairs] = useState<string[]>([]);
+  // Similar product deduplication states & logic (V3)
+  const [highConfidencePair, setHighConfidencePair] = useState<{ p1: Product; p2: Product; score: number } | null>(null);
+  const [mediumConfidencePairs, setMediumConfidencePairs] = useState<{ p1: Product; p2: Product; score: number }[]>([]);
+  const [showMediumReviews, setShowMediumReviews] = useState(false);
+  const [localReviewedPairs, setLocalReviewedPairs] = useState<string[]>([]);
+  const [renameTarget, setRenameTarget] = useState<Product | null>(null);
+  const [renameVal, setRenameVal] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
 
   const getSimilarity = (s1: string, s2: string): number => {
     // 1. Conflict Check: Extract volumes/weights to see if they differ (e.g. 50cl vs 35cl, 1kg vs 2kg)
@@ -138,13 +143,72 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     return Math.max(overlap, levSim);
   };
 
-  useEffect(() => {
-    if (store.products.length < 2 || duplicatePair) return;
+  const calculateSimilarityScore = (p1: Product, p2: Product): number => {
+    // 1. Barcode support
+    if (p1.barcode && p2.barcode) {
+      return p1.barcode === p2.barcode ? 100 : 0;
+    }
 
-    const dismissed = [
+    let score = 0;
+
+    // 2. Name similarity (+40 pts)
+    const nameSim = getSimilarity(p1.name, p2.name);
+    score += Math.round(nameSim * 40);
+
+    // 3. Same Purchase Unit (+20 pts)
+    const isCarton1 = p1.isCartonSingleEnabled ?? false;
+    const isCarton2 = p2.isCartonSingleEnabled ?? false;
+    if (isCarton1 === isCarton2) {
+      score += 20;
+    } else {
+      score += 10; // Rule 5: reduce confidence instead of assuming they are different
+    }
+
+    // 4. Same Qty per Purchase Unit (+20 pts)
+    if (p1.singlesPerCarton !== undefined && p2.singlesPerCarton !== undefined) {
+      if (p1.singlesPerCarton === p2.singlesPerCarton) {
+        score += 20;
+      }
+    } else {
+      score += 10; // Rule 5
+    }
+
+    // 5. Similar Purchase Cost (+10 pts)
+    if (p1.costPrice !== undefined && p2.costPrice !== undefined && p1.costPrice > 0 && p2.costPrice > 0) {
+      const diff = Math.abs(p1.costPrice - p2.costPrice) / Math.max(p1.costPrice, p2.costPrice);
+      if (diff <= 0.15) {
+        score += 10;
+      }
+    } else {
+      score += 5; // Rule 5
+    }
+
+    // 6. Similar Selling Price (+10 pts)
+    if (p1.sellingPrice !== undefined && p2.sellingPrice !== undefined && p1.sellingPrice > 0 && p2.sellingPrice > 0) {
+      const diff = Math.abs(p1.sellingPrice - p2.sellingPrice) / Math.max(p1.sellingPrice, p2.sellingPrice);
+      if (diff <= 0.15) {
+        score += 10;
+      }
+    } else {
+      score += 5; // Rule 5
+    }
+
+    return Math.min(100, score);
+  };
+
+  useEffect(() => {
+    if (store.products.length < 2) {
+      setMediumConfidencePairs([]);
+      return;
+    }
+
+    const reviewedKeys = [
       ...(store.dismissedSimilarPairs || []),
-      ...localDismissedPairs
+      ...localReviewedPairs
     ];
+
+    const foundMedium: { p1: Product; p2: Product; score: number }[] = [];
+    let activeHigh: { p1: Product; p2: Product; score: number } | null = null;
 
     for (let i = 0; i < store.products.length; i++) {
       const p1 = store.products[i];
@@ -156,25 +220,34 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
         const key1 = `${p1.id}-${p2.id}`;
         const key2 = `${p2.id}-${p1.id}`;
-        if (dismissed.includes(key1) || dismissed.includes(key2)) continue;
+        if (reviewedKeys.includes(key1) || reviewedKeys.includes(key2)) continue;
 
-        const score = getSimilarity(p1.name, p2.name);
-        if (score >= 0.78) {
-          setDuplicatePair({ p1, p2 });
-          return;
+        const score = calculateSimilarityScore(p1, p2);
+
+        if (score >= 90) {
+          if (!activeHigh) {
+            activeHigh = { p1, p2, score };
+          }
+        } else if (score >= 70) {
+          foundMedium.push({ p1, p2, score });
         }
       }
     }
-  }, [store.products, store.dismissedSimilarPairs, localDismissedPairs, duplicatePair]);
 
-  const handleMergeDuplicates = (yes: boolean) => {
-    if (!duplicatePair) return;
-    const { p1, p2 } = duplicatePair;
+    setHighConfidencePair(activeHigh);
+    setMediumConfidencePairs(foundMedium);
+  }, [store.products, store.dismissedSimilarPairs, localReviewedPairs]);
+
+  const handleResolveSimilarPair = (
+    p1: Product,
+    p2: Product,
+    action: 'merge' | 'separate' | 'rename',
+    customName?: string
+  ) => {
     const key = `${p1.id}-${p2.id}`;
-
     let updatedStore = { ...store };
 
-    if (yes) {
+    if (action === 'merge') {
       const mergedQty = p1.quantity + p2.quantity;
       const mergedPriceHistory = [
         ...(p1.priceHistory || []),
@@ -197,10 +270,35 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         }).filter(p => p.id !== p2.id)
       };
 
-      showToast(`✓ Merged ${p2.name} into ${p1.name}. Total stock: ${mergedQty}`, 'success');
-    } else {
-      // Avoid re-triggering instantly by pushing to localDismissedPairs state
-      setLocalDismissedPairs(prev => [...prev, key]);
+      // Record memory review
+      const reviews = updatedStore.similarProductReviews || [];
+      const newReview: SimilarProductReview = {
+        id1: p1.id,
+        id2: p2.id,
+        name1: p1.name,
+        name2: p2.name,
+        decision: 'merged',
+        reviewedAt: new Date().toISOString()
+      };
+      updatedStore.similarProductReviews = [...reviews, newReview];
+
+      setLocalReviewedPairs(prev => [...prev, key]);
+      showToast(`Merged ${p2.name} into ${p1.name}. Total stock: ${mergedQty}`, 'success');
+
+    } else if (action === 'separate') {
+      // Record memory review
+      const reviews = updatedStore.similarProductReviews || [];
+      const newReview: SimilarProductReview = {
+        id1: p1.id,
+        id2: p2.id,
+        name1: p1.name,
+        name2: p2.name,
+        decision: 'separate',
+        reviewedAt: new Date().toISOString()
+      };
+      updatedStore.similarProductReviews = [...reviews, newReview];
+
+      setLocalReviewedPairs(prev => [...prev, key]);
       
       const dismissed = updatedStore.dismissedSimilarPairs || [];
       updatedStore = {
@@ -208,11 +306,36 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         dismissedSimilarPairs: [...dismissed, key]
       };
       showToast('Dismissed similar product suggestion');
+
+    } else if (action === 'rename' && customName) {
+      updatedStore = {
+        ...updatedStore,
+        products: updatedStore.products.map(p => {
+          if (p.id === p2.id) {
+            return { ...p, name: customName };
+          }
+          return p;
+        })
+      };
+
+      // Record memory review
+      const reviews = updatedStore.similarProductReviews || [];
+      const newReview: SimilarProductReview = {
+        id1: p1.id,
+        id2: p2.id,
+        name1: p1.name,
+        name2: customName,
+        decision: 'renamed',
+        reviewedAt: new Date().toISOString()
+      };
+      updatedStore.similarProductReviews = [...reviews, newReview];
+
+      showToast(`Renamed product to: ${customName}`, 'success');
+      setRenameTarget(null);
     }
 
     saveStore(updatedStore);
     onUpdate(updatedStore);
-    setDuplicatePair(null);
   };
 
   const existingCategories = useMemo(() => {
@@ -900,6 +1023,20 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   return (
     <div className="animate-fade-in">
+      {mediumConfidencePairs.length > 0 && (
+        <div className="flex items-center justify-between p-3.5 bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs rounded-xl shadow-sm mb-4">
+          <span className="font-semibold flex items-center gap-1.5">
+            <span>🔍</span> {mediumConfidencePairs.length} similar products found for review.
+          </span>
+          <button
+            onClick={() => setShowMediumReviews(true)}
+            className="px-3 py-1 bg-yellow-500 text-black font-display font-bold text-[10px] rounded-lg hover:brightness-110 transition cursor-pointer"
+          >
+            Review Now
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2 mb-4">
         <input
           value={search}
@@ -2305,7 +2442,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         <ConfirmAccessCode
           expectedCode={store.accessCode}
           title={`Delete "${confirmDelete.name}"?`}
-          message="This will permanently remove the product from your inventory. Enter your store access code to confirm."
+          message="Are you sure you want to delete this product? If you delete this product, it will permanently wipe all financial data relating to it (sales, revenue, profit, ROI) so that it is no longer calculated in the app's overall finances. Enter your store access code to confirm."
           confirmLabel="Delete Product"
           onConfirm={doDelete}
           onCancel={() => setConfirmDelete(null)}
@@ -2479,44 +2616,199 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           )}
         </Modal>
       )}
-      {duplicatePair && (
+      {highConfidencePair && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 shadow-2xl animate-slide-up space-y-4">
+          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 shadow-2xl animate-scale-in space-y-4 text-left">
             <div className="text-center space-y-2">
-              <div className="text-3xl">🔍</div>
-              <h3 className="font-display font-bold text-lg text-white">Similar Products Found</h3>
+              <div className="text-3xl">🔀</div>
+              <h3 className="font-display font-bold text-lg text-white">Possible Duplicate Found</h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                I found two very similar products: <strong className="text-white">"{duplicatePair.p1.name}"</strong> and <strong className="text-white">"{duplicatePair.p2.name}"</strong>. Are they the same product?
+                These products look very similar. What would you like to do?
               </p>
             </div>
 
-            <div className="bg-surface-2/40 border border-border/80 rounded-xl p-3 divide-y divide-border/40 text-[11px]">
-              <div className="flex justify-between py-2">
-                <span className="text-muted-foreground">Product A Stock:</span>
-                <span className="font-bold text-white">{duplicatePair.p1.quantity} units</span>
+            <div className="bg-surface-2/40 border border-border/80 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground font-semibold">Existing Product:</span>
+                <span className="font-bold text-white text-right max-w-[150px] truncate">{highConfidencePair.p1.name}</span>
               </div>
-              <div className="flex justify-between py-2">
-                <span className="text-muted-foreground">Product B Stock:</span>
-                <span className="font-bold text-white">{duplicatePair.p2.quantity} units</span>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground font-semibold">New Product:</span>
+                <span className="font-bold text-white text-right max-w-[150px] truncate">{highConfidencePair.p2.name}</span>
+              </div>
+              <div className="flex justify-between border-t border-border/40 pt-2 font-mono">
+                <span className="text-muted-foreground font-semibold">Similarity:</span>
+                <span className="font-extrabold text-primary">{highConfidencePair.score}%</span>
               </div>
             </div>
 
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => handleMergeDuplicates(false)}
-                className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs hover:bg-surface-3 transition cursor-pointer"
-              >
-                ❌ Keep Separate
-              </button>
-              <button
-                onClick={() => handleMergeDuplicates(true)}
-                className="flex-1 py-2.5 bg-primary text-primary-foreground font-display font-bold text-xs rounded-xl hover:brightness-110 active:scale-95 transition cursor-pointer"
-              >
-                ✅ Yes, Merge
-              </button>
-            </div>
+            {isRenaming ? (
+              <div className="space-y-2 pt-1.5 animate-fade-in">
+                <input
+                  type="text"
+                  value={renameVal}
+                  onChange={e => setRenameVal(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-surface-2 border border-border text-xs text-white placeholder:text-muted-foreground"
+                  placeholder="Enter new product name..."
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setIsRenaming(false);
+                      setRenameVal('');
+                    }}
+                    className="flex-1 py-2 rounded-lg bg-surface-3 border border-border text-[11px] font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!renameVal.trim()) return showToast('Please enter a valid name', 'error');
+                      handleResolveSimilarPair(highConfidencePair.p1, highConfidencePair.p2, 'rename', renameVal.trim());
+                      setIsRenaming(false);
+                      setRenameVal('');
+                    }}
+                    className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-[11px] font-bold"
+                  >
+                    Confirm Rename
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  onClick={() => handleResolveSimilarPair(highConfidencePair.p1, highConfidencePair.p2, 'merge')}
+                  className="w-full py-2.5 bg-primary text-primary-foreground font-display font-bold text-xs rounded-xl hover:brightness-110 active:scale-98 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  🔀 Merge Products
+                </button>
+                <button
+                  onClick={() => {
+                    setIsRenaming(true);
+                    setRenameVal(highConfidencePair.p2.name);
+                  }}
+                  className="w-full py-2.5 bg-surface-3 border border-border text-foreground font-display font-semibold text-xs rounded-xl hover:bg-surface-2 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  ✏️ Rename New Product
+                </button>
+                <button
+                  onClick={() => handleResolveSimilarPair(highConfidencePair.p1, highConfidencePair.p2, 'separate')}
+                  className="w-full py-2.5 bg-surface-2 border border-border text-muted-foreground font-display font-semibold text-xs rounded-xl hover:bg-surface-3 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  📦 Keep Separate
+                </button>
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {showMediumReviews && (
+        <Modal
+          title="Review Similar Products"
+          onClose={() => {
+            setShowMediumReviews(false);
+            setRenameTarget(null);
+            setRenameVal('');
+          }}
+        >
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1 no-scrollbar text-xs text-left">
+            <p className="text-muted-foreground leading-snug">
+              StoreFlow flagged the following products as possible duplicates based on similarities in name, units, costs, and selling prices. Review them to keep inventory data clean.
+            </p>
+
+            <div className="space-y-3.5">
+              {mediumConfidencePairs.map(({ p1, p2, score }) => {
+                const key = `${p1.id}-${p2.id}`;
+                const isItemRenaming = renameTarget?.id === p2.id;
+
+                return (
+                  <div key={key} className="p-3 bg-surface-2/30 border border-border/60 rounded-xl space-y-3 text-left">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-muted-foreground">Possible Match ({score}%)</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-500 font-bold uppercase">Medium Confidence</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Product 1:</span>
+                        <span className="font-bold text-white truncate max-w-[180px]">{p1.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Product 2:</span>
+                        <span className="font-bold text-white truncate max-w-[180px]">{p2.name}</span>
+                      </div>
+                    </div>
+
+                    {isItemRenaming ? (
+                      <div className="space-y-2 pt-1 border-t border-border/40">
+                        <input
+                          type="text"
+                          value={renameVal}
+                          onChange={e => setRenameVal(e.target.value)}
+                          className="w-full p-2 rounded bg-surface-2 border border-border text-xs text-white"
+                          placeholder="Enter new product name..."
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setRenameTarget(null);
+                              setRenameVal('');
+                            }}
+                            className="flex-1 py-1.5 rounded bg-surface-3 border border-border text-[10px] font-semibold"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (!renameVal.trim()) return showToast('Please enter a valid name', 'error');
+                              handleResolveSimilarPair(p1, p2, 'rename', renameVal.trim());
+                              setRenameTarget(null);
+                              setRenameVal('');
+                            }}
+                            className="flex-1 py-1.5 rounded bg-primary text-primary-foreground text-[10px] font-bold"
+                          >
+                            Save Name
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-1.5 pt-1 border-t border-border/40">
+                        <button
+                          onClick={() => handleResolveSimilarPair(p1, p2, 'merge')}
+                          className="flex-1 py-2 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-[10px] rounded-lg transition cursor-pointer"
+                        >
+                          🔀 Merge
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRenameTarget(p2);
+                            setRenameVal(p2.name);
+                          }}
+                          className="flex-1 py-2 bg-surface-3 hover:bg-surface-2 text-foreground font-semibold text-[10px] rounded-lg transition border border-border cursor-pointer"
+                        >
+                          ✏️ Rename
+                        </button>
+                        <button
+                          onClick={() => handleResolveSimilarPair(p1, p2, 'separate')}
+                          className="flex-1 py-2 bg-surface-2 hover:bg-surface-3 text-muted-foreground font-semibold text-[10px] rounded-lg transition border border-border cursor-pointer"
+                        >
+                          📦 Keep Sep.
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {mediumConfidencePairs.length === 0 && (
+                <div className="text-center py-6 text-muted-foreground text-xs">
+                  ✨ No pending medium confidence matches to review!
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
