@@ -1245,11 +1245,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <div className="flex gap-2 flex-shrink-0">
               <button
                 onClick={() => setRevealCode(!revealCode)}
-                className="flex-1 sm:flex-initial px-3 py-2.5 rounded-lg bg-surface-3 border border-border text-foreground hover:bg-surface-2 text-xs font-display font-bold transition active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
-                title="Review access code"
+                className="px-3.5 py-2.5 rounded-lg bg-surface-3 border border-border text-foreground hover:bg-surface-2 transition active:scale-95 flex items-center justify-center cursor-pointer"
+                title={revealCode ? "Hide access code" : "Review access code"}
               >
-                {revealCode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span>Review Code</span>
+                {revealCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
               <button
                 onClick={() => {
