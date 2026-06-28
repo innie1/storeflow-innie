@@ -543,6 +543,10 @@ export interface LearnedProduct {
   lastPurchasePrice: number;
   averagePurchasePrice: number;
   dateLearned: string;         // ISO timestamp
+  aliasUsed?: string;          // e.g. 'Big Coke'
+  supplier?: string;           // e.g. 'Alhaji & Sons'
+  officialName?: string;       // e.g. 'Coca-Cola PET 50cl'
+  parsedFraction?: 'half_carton' | 'half_pack' | 'half_roll';
 }
 
 export interface SimilarProductReview {

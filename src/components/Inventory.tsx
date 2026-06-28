@@ -3,6 +3,7 @@ import { StoreData, Product, SimilarProductReview } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
+import { interpretProductName } from '@/lib/import-intel';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -774,16 +775,21 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const handleImportParse = () => {
     try {
       const lines = importText.trim().split('\n').filter(Boolean);
-      const parsed: { name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] = [];
+      const parsed: { name: string; costPrice: string; sellingPrice: string; quantity: string; category: string; singlesPerCarton?: string }[] = [];
       for (const line of lines) {
         const parts = line.split(',').map(s => s.trim());
         if (parts.length < 4) continue;
+        
+        const interpreted = interpretProductName(parts[0]);
+        const qtyVal = Number(parts[3]) || 0;
+        const finalQty = String(qtyVal * interpreted.qtyMultiplier);
+        
         parsed.push({
-          name: parts[0],
+          name: interpreted.officialName,
           costPrice: parts[1] || '0',
           sellingPrice: parts[2] || '0',
-          quantity: parts[3] || '0',
-          category: parts[4] || 'General',
+          quantity: finalQty,
+          category: parts[4] || autoCategory(interpreted.officialName),
         });
       }
       if (parsed.length === 0) return showToast('No valid products found', 'error');

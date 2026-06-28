@@ -3,6 +3,7 @@ import { StoreData, Product, LearnedProduct } from '@/types/store';
 import { recordSale, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
+import { interpretProductName, lookupStoreMemory } from '@/lib/import-intel';
 
 interface ScannedItem {
   name: string;
@@ -10,6 +11,9 @@ interface ScannedItem {
   sellingPrice: number;  // Selling price (initially matches cost or calculated)
   quantity: number;      // Quantity purchased (e.g. 4 cartons)
   category: string;
+  parsedFraction?: 'half_carton' | 'half_pack' | 'half_roll';
+  qtyMultiplier?: number;
+  aliasUsed?: string;
 }
 
 interface ReceiptScannerProps {
@@ -65,9 +69,13 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
     const defaultMargin = store.managerSettings?.defaultMargin ?? 20;
 
     for (const item of scannedItems) {
-      // 1. Check existing inventory products
+      // Step A: Translate name using Nigerian Product Dictionary and detect fractions
+      const interpreted = interpretProductName(item.name);
+      const officialName = interpreted.officialName;
+      
+      // Step B: Check existing inventory products
       const existing = productsList.find(
-        p => p.name.toLowerCase() === item.name.toLowerCase() && !p.discontinued
+        p => (p.name.toLowerCase() === officialName.toLowerCase() || p.name.toLowerCase() === item.name.toLowerCase()) && !p.discontinued
       );
 
       if (existing) {
@@ -75,38 +83,53 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
         if (existing.isCartonSingleEnabled && existing.singlesPerCarton) {
           unitsPerPurchase = existing.singlesPerCarton;
         }
-        const unitCost = item.costPrice / (item.quantity * unitsPerPurchase);
+        const finalQty = item.quantity * interpreted.qtyMultiplier;
+        const unitCost = finalQty > 0 ? (item.costPrice / (finalQty * unitsPerPurchase)) : 0;
         const sellingPrice = existing.sellingPrice || (unitCost * (1 + defaultMargin / 100));
 
         processedItems.push({
           ...item,
+          name: existing.name, // Use official name from database
           costPrice: unitCost,
           sellingPrice: sellingPrice,
-          category: existing.category || item.category || 'Groceries'
+          quantity: finalQty,
+          category: existing.category || item.category || 'Groceries',
+          parsedFraction: interpreted.parsedFraction,
+          qtyMultiplier: interpreted.qtyMultiplier
         });
         continue;
       }
 
-      // 2. Check learned products library
-      const learned = learnedList.find(
-        lp => lp.name.toLowerCase() === item.name.toLowerCase()
-      );
+      // Step C: Check learned products memory library
+      const learned = lookupStoreMemory(store, item.name);
 
       if (learned) {
-        const unitCost = item.costPrice / (item.quantity * learned.unitsPerPurchase);
-        const sellingPrice = learned.suggestedSellingPrice || (unitCost * (1 + learned.markup / 100));
+        const finalQty = item.quantity * interpreted.qtyMultiplier;
+        const unitsPerPurchase = learned.unitsPerPurchase;
+        const unitCost = finalQty > 0 ? (item.costPrice / (finalQty * unitsPerPurchase)) : 0;
+        const sellingPrice = learned.suggestedSellingPrice || (unitCost * (1 + (learned.markup || defaultMargin) / 100));
 
         processedItems.push({
           ...item,
+          name: learned.name, // Use official learned name
           costPrice: unitCost,
           sellingPrice: sellingPrice,
-          category: item.category || 'Groceries'
+          quantity: finalQty,
+          category: item.category || 'Groceries',
+          parsedFraction: interpreted.parsedFraction,
+          qtyMultiplier: interpreted.qtyMultiplier
         });
         continue;
       }
 
-      // 3. New product to learn
-      newItemsToLearn.push(item);
+      // Step D: New product to learn
+      newItemsToLearn.push({
+        ...item,
+        name: officialName, // Use resolved official name
+        aliasUsed: item.name, // Remember what raw name the supplier/invoice used
+        parsedFraction: interpreted.parsedFraction,
+        qtyMultiplier: interpreted.qtyMultiplier
+      });
     }
 
     if (newItemsToLearn.length === 0) {
@@ -200,7 +223,9 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
 
     const processed = targetItems.map(item => {
       // Cost price in invoice is total purchase price, so we divide by (invoiceQty * unitsPerPurchase)
-      const unitCost = item.costPrice / (item.quantity * unitsPerPurchase);
+      const multiplier = item.qtyMultiplier || 1.0;
+      const finalQty = item.quantity * multiplier;
+      const unitCost = finalQty > 0 ? (item.costPrice / (finalQty * unitsPerPurchase)) : 0;
       
       // If cost price and selling price are equal (or margin causes them to match), use default margin
       let sellingPrice = item.sellingPrice;
@@ -212,6 +237,7 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
         ...item,
         costPrice: unitCost,
         sellingPrice: sellingPrice,
+        quantity: finalQty, // Save final piece/unit quantity
         category: autoCategory(item.name)
       };
     });
@@ -311,7 +337,10 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
           markup: store.managerSettings?.defaultMargin ?? 20,
           lastPurchasePrice: item.costPrice * unitsPerPurchase,
           averagePurchasePrice: item.costPrice * unitsPerPurchase,
-          dateLearned: new Date().toISOString()
+          dateLearned: new Date().toISOString(),
+          aliasUsed: wasLearned.aliasUsed,
+          officialName: item.name,
+          parsedFraction: wasLearned.parsedFraction
         };
 
         if (learnIndex >= 0) {
@@ -908,9 +937,31 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
 
                     {/* Stats metrics */}
                     {!isPriceSame && (
-                      <div className="flex justify-between items-center text-[10px] text-muted-foreground bg-black/20 p-2 rounded-lg">
-                        <span>Expected Profit: <strong className="text-success">₦{Math.round(item.sellingPrice - item.costPrice)}</strong> / item</span>
-                        <span>Revenue: <strong className="text-white">₦{Math.round(item.sellingPrice * item.quantity)}</strong></span>
+                      <div className="grid grid-cols-2 gap-2 bg-black/20 p-2.5 rounded-xl border border-border/40 text-[10px] text-muted-foreground">
+                        <div className="flex flex-col">
+                          <span>Purchase Cost</span>
+                          <strong className="text-white text-[11px]">₦{Math.round(item.costPrice * item.quantity).toLocaleString()}</strong>
+                        </div>
+                        <div className="flex flex-col">
+                          <span>Cost Per Unit</span>
+                          <strong className="text-white text-[11px]">₦{Math.round(item.costPrice).toLocaleString()}</strong>
+                        </div>
+                        <div className="flex flex-col">
+                          <span>Expected Profit</span>
+                          <strong className="text-success text-[11px]">₦{Math.round((item.sellingPrice - item.costPrice) * item.quantity).toLocaleString()}</strong>
+                        </div>
+                        <div className="flex flex-col">
+                          <span>Added to Inventory</span>
+                          <strong className="text-primary text-[11px]">{item.quantity} units</strong>
+                        </div>
+                        {item.parsedFraction && (
+                          <div className="flex flex-col col-span-2 border-t border-border/20 pt-1.5 mt-0.5">
+                            <span>Purchased packaged as:</span>
+                            <strong className="text-yellow-500 text-[11px]">
+                              {item.parsedFraction === 'half_carton' ? '½ Carton' : item.parsedFraction === 'half_pack' ? '½ Pack' : '½ Roll'}
+                            </strong>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
