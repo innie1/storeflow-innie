@@ -51,8 +51,9 @@ export interface MassEditItem {
   unitCostPrice: number;
   sellingPrice: number;
   purchaseSellingPrice: number;
-  pricingMode: 'auto_purchase' | 'auto_sell' | 'manual';
+  pricingMode: 'auto' | 'manual';
   selected?: boolean;
+  showMore?: boolean;
 }
 
 export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter }: InventoryProps) {
@@ -1160,8 +1161,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 unitCostPrice,
                 sellingPrice,
                 purchaseSellingPrice,
-                pricingMode: 'auto_purchase',
-                selected: false
+                pricingMode: 'auto',
+                selected: false,
+                showMore: false
               };
             });
             setMassEditItems(nextItems);
@@ -2351,7 +2353,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         <Modal title={`Mass Edit Inventory (${massEditItems.length})`} onClose={() => setMassEditItems(null)}>
           <div className="space-y-4 text-left">
             <p className="text-xs text-muted-foreground">
-              Configure purchase/selling structures, set auto-update rules, quick margins, and batch structure updates.
+              Configure your products simply. Fill the 6 main fields, or expand "More Options" for custom prices, margins, and deletion.
             </p>
 
             {/* Batch Editing Panel */}
@@ -2383,10 +2385,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                           const cp = nextContains > 1 ? (it.purchasePrice / nextContains) : it.purchasePrice;
                           let sp = it.sellingPrice;
                           let psp = it.purchaseSellingPrice;
-                          if (it.pricingMode === 'auto_sell') {
+                          if (it.pricingMode === 'auto') {
                             psp = sp * nextContains;
-                          } else if (it.pricingMode === 'auto_purchase') {
-                            sp = Math.round(psp / nextContains);
                           }
                           return {
                             ...it,
@@ -2418,7 +2418,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     className="w-full text-xs bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
                   >
                     <option value="">-- No Change --</option>
-                    {['Carton', 'Pack', 'Roll', 'Bag', 'Crate', 'Dozen', 'Piece', 'Other'].map(u => (
+                    {['Carton', 'Pack', 'Roll', 'Piece', 'Other'].map(u => (
                       <option key={u} value={u}>{u}</option>
                     ))}
                   </select>
@@ -2431,7 +2431,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     className="w-full text-xs bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
                   >
                     <option value="">-- No Change --</option>
-                    {['Bottle', 'Sachet', 'Piece', 'Pack', 'Roll', 'Carton', 'Other'].map(u => (
+                    {['Bottle', 'Piece', 'Sachet', 'Pack', 'Other'].map(u => (
                       <option key={u} value={u}>{u}</option>
                     ))}
                   </select>
@@ -2452,62 +2452,19 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             {/* List of Products */}
             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
               {massEditItems.map((it, i) => {
-                const needsSetup = !it.unitsPerPurchase || it.unitsPerPurchase <= 0 || !it.purchasePrice || it.purchasePrice <= 0 || !it.sellingPrice || it.sellingPrice <= 0;
+                const isAuto = it.pricingMode === 'auto';
+                
+                // Profit margin calculations
                 const profitAmount = it.purchaseSellingPrice - it.purchasePrice;
                 const marginPercent = it.purchasePrice > 0 ? (profitAmount / it.purchasePrice) * 100 : 0;
                 
-                const applyPreset = (presetName: string) => {
-                  let pUnit = 'Carton';
-                  let sUnit = 'Piece';
-                  let containsVal = 12;
-                  let catVal = 'Groceries';
-                  
-                  if (presetName === '🥤 Soft Drink') {
-                    pUnit = 'Carton'; sUnit = 'Bottle'; containsVal = 12; catVal = 'Beverages';
-                  } else if (presetName === '🍺 Beer') {
-                    pUnit = 'Crate'; sUnit = 'Bottle'; containsVal = 12; catVal = 'Beverages';
-                  } else if (presetName === '🥛 Sachet Milk') {
-                    pUnit = 'Carton'; sUnit = 'Sachet'; containsVal = 40; catVal = 'Beverages';
-                  } else if (presetName === '🍜 Noodles') {
-                    pUnit = 'Carton'; sUnit = 'Pack'; containsVal = 40; catVal = 'Groceries';
-                  } else if (presetName === '🍪 Biscuit') {
-                    pUnit = 'Carton'; sUnit = 'Pack'; containsVal = 24; catVal = 'Groceries';
-                  } else if (presetName === '🧼 Soap') {
-                    pUnit = 'Carton'; sUnit = 'Piece'; containsVal = 12; catVal = 'Soap';
-                  } else if (presetName === '🍷 Wine') {
-                    pUnit = 'Carton'; sUnit = 'Bottle'; containsVal = 6; catVal = 'Beverages';
-                  }
-                  
-                  const next = [...massEditItems];
-                  const cp = containsVal > 1 ? (it.purchasePrice / containsVal) : it.purchasePrice;
-                  let sp = it.sellingPrice;
-                  let psp = it.purchaseSellingPrice;
-                  if (it.pricingMode === 'auto_sell') {
-                    psp = sp * containsVal;
-                  } else if (it.pricingMode === 'auto_purchase') {
-                    sp = Math.round(psp / containsVal);
-                  }
-                  
-                  next[i] = {
-                    ...it,
-                    purchaseUnit: pUnit,
-                    sellingUnit: sUnit,
-                    unitsPerPurchase: containsVal,
-                    category: catVal,
-                    unitCostPrice: cp,
-                    sellingPrice: sp,
-                    purchaseSellingPrice: psp
-                  };
-                  setMassEditItems(next);
-                  showToast(`✓ Applied preset: ${presetName}`, 'success');
-                };
-
+                // Quick Profit Handler
                 const applyProfit = (percent: number) => {
                   const next = [...massEditItems];
                   let sp = it.sellingPrice;
                   let psp = it.purchaseSellingPrice;
                   
-                  if (it.pricingMode === 'auto_purchase') {
+                  if (isAuto) {
                     psp = Math.round(it.purchasePrice * (1 + percent / 100));
                     sp = it.unitsPerPurchase > 0 ? Math.round(psp / it.unitsPerPurchase) : psp;
                   } else {
@@ -2525,8 +2482,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 };
 
                 return (
-                  <div key={it.id} className="p-4 rounded-xl bg-surface-2 border border-border/85 space-y-3.5 relative">
-                    {/* Header */}
+                  <div key={it.id} className="p-3.5 rounded-xl bg-surface-2 border border-border/85 space-y-2.5 relative">
+                    {/* Header: Name checkbox & toggle */}
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -2548,37 +2505,22 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                         placeholder="Product Name"
                         className="flex-1 text-xs font-display font-bold bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
                       />
-                      {needsSetup && (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-destructive/10 border border-destructive/20 text-destructive animate-pulse shrink-0">
-                          ⚠️ Needs Setup
-                        </span>
-                      )}
+                      
                       <button
-                        onClick={() => setMassEditItems(massEditItems.filter(item => item.id !== it.id))}
-                        className="w-8 h-8 rounded-lg text-destructive bg-destructive/10 hover:bg-destructive/20 text-xs flex items-center justify-center cursor-pointer transition-colors shrink-0"
-                        title="Delete Product"
+                        type="button"
+                        onClick={() => {
+                          const next = [...massEditItems];
+                          next[i] = { ...it, showMore: !it.showMore };
+                          setMassEditItems(next);
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-display font-semibold rounded bg-surface-3 hover:bg-surface-4 border border-border text-muted-foreground transition cursor-pointer shrink-0"
                       >
-                        ✕
+                        {it.showMore ? '收 Less' : '⚙️ More Options'}
                       </button>
                     </div>
 
-                    {/* Presets Row */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] text-muted-foreground font-display font-semibold">Presets:</span>
-                      {['🥤 Soft Drink', '🍺 Beer', '🥛 Sachet Milk', '🍜 Noodles', '🍪 Biscuit', '🧼 Soap', '🍷 Wine'].map(preset => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => applyPreset(preset)}
-                          className="px-2 py-0.5 rounded bg-surface-3 hover:bg-surface-4 border border-border/70 text-[9px] font-display font-bold transition cursor-pointer text-foreground"
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Structure block */}
-                    <div className="grid grid-cols-3 gap-2">
+                    {/* Six Main Fields Grid */}
+                    <div className="grid grid-cols-5 gap-2">
                       <div>
                         <label className="text-[10px] text-muted-foreground block mb-0.5">Buy As</label>
                         <select
@@ -2588,9 +2530,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                             next[i] = { ...it, purchaseUnit: e.target.value };
                             setMassEditItems(next);
                           }}
-                          className="w-full text-xs bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          className="w-full text-xs bg-surface-3 border border-border rounded-lg p-1.5 focus:outline-none focus:border-primary text-white"
                         >
-                          {['Carton', 'Pack', 'Roll', 'Bag', 'Crate', 'Dozen', 'Piece', 'Other'].map(u => (
+                          {['Carton', 'Pack', 'Roll', 'Piece', 'Other'].map(u => (
                             <option key={u} value={u}>{u}</option>
                           ))}
                         </select>
@@ -2604,48 +2546,41 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                             next[i] = { ...it, sellingUnit: e.target.value };
                             setMassEditItems(next);
                           }}
-                          className="w-full text-xs bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          className="w-full text-xs bg-surface-3 border border-border rounded-lg p-1.5 focus:outline-none focus:border-primary text-white"
                         >
-                          {['Bottle', 'Sachet', 'Piece', 'Pack', 'Roll', 'Carton', 'Other'].map(u => (
+                          {['Bottle', 'Piece', 'Sachet', 'Pack', 'Other'].map(u => (
                             <option key={u} value={u}>{u}</option>
                           ))}
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] text-muted-foreground block mb-0.5">Contains Qty</label>
+                        <label className="text-[10px] text-muted-foreground block mb-0.5">Contains</label>
                         <input
                           value={it.unitsPerPurchase}
                           onChange={e => {
                             const next = [...massEditItems];
                             const val = Math.max(1, Number(e.target.value) || 1);
                             const cp = it.purchasePrice / val;
-                            let sp = it.sellingPrice;
                             let psp = it.purchaseSellingPrice;
-                            if (it.pricingMode === 'auto_sell') {
+                            let sp = it.sellingPrice;
+                            if (isAuto) {
                               psp = sp * val;
-                            } else if (it.pricingMode === 'auto_purchase') {
-                              sp = Math.round(psp / val);
                             }
                             next[i] = {
                               ...it,
                               unitsPerPurchase: val,
                               unitCostPrice: cp,
-                              sellingPrice: sp,
                               purchaseSellingPrice: psp
                             };
                             setMassEditItems(next);
                           }}
                           type="number"
-                          placeholder="Contains"
-                          className="w-full text-xs bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          placeholder="Qty"
+                          className="w-full text-xs bg-surface-3 border border-border rounded-lg p-1.5 focus:outline-none focus:border-primary text-white"
                         />
                       </div>
-                    </div>
-
-                    {/* Pricing Block */}
-                    <div className="grid grid-cols-4 gap-2">
                       <div>
-                        <label className="text-[10px] text-muted-foreground block mb-0.5">Purchase (₦)</label>
+                        <label className="text-[10px] text-muted-foreground block mb-0.5">Buy Price (₦)</label>
                         <input
                           value={it.purchasePrice}
                           onChange={e => {
@@ -2660,29 +2595,19 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                             setMassEditItems(next);
                           }}
                           type="number"
-                          placeholder="Purchase"
-                          className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          placeholder="Buy Price"
+                          className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-1.5 focus:outline-none focus:border-primary text-white"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-muted-foreground block mb-0.5">Cost/Piece (₦)</label>
-                        <input
-                          value={Number(it.unitCostPrice.toFixed(2))}
-                          readOnly
-                          type="number"
-                          placeholder="Cost/Piece"
-                          className="w-full text-xs font-mono bg-surface-1 border border-border/60 rounded-lg p-2 focus:outline-none text-muted-foreground cursor-not-allowed"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-0.5">Sell/Piece (₦)</label>
+                        <label className="text-[10px] text-muted-foreground block mb-0.5">Sell Price (₦)</label>
                         <input
                           value={it.sellingPrice}
                           onChange={e => {
                             const next = [...massEditItems];
                             const val = Number(e.target.value) || 0;
                             let psp = it.purchaseSellingPrice;
-                            if (it.pricingMode === 'auto_sell') {
+                            if (isAuto) {
                               psp = val * it.unitsPerPurchase;
                             }
                             next[i] = {
@@ -2693,134 +2618,118 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                             setMassEditItems(next);
                           }}
                           type="number"
-                          placeholder="Sell/Piece"
-                          className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-0.5">Sell/Purchase (₦)</label>
-                        <input
-                          value={it.purchaseSellingPrice}
-                          onChange={e => {
-                            const next = [...massEditItems];
-                            const val = Number(e.target.value) || 0;
-                            let sp = it.sellingPrice;
-                            if (it.pricingMode === 'auto_purchase') {
-                              sp = it.unitsPerPurchase > 0 ? Math.round(val / it.unitsPerPurchase) : val;
-                            }
-                            next[i] = {
-                              ...it,
-                              purchaseSellingPrice: val,
-                              sellingPrice: sp
-                            };
-                            setMassEditItems(next);
-                          }}
-                          type="number"
-                          placeholder="Sell/Purchase"
-                          className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                          placeholder="Sell Price"
+                          className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-1.5 focus:outline-none focus:border-primary text-white"
                         />
                       </div>
                     </div>
 
-                    {/* Auto Update Controls */}
-                    <div className="bg-surface-3/50 p-2 rounded-lg border border-border/65 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[10px] text-muted-foreground font-display font-semibold uppercase">Auto-sync Rule:</span>
-                      <div className="flex gap-3 text-[10px] font-display font-bold">
-                        <label className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors text-white">
-                          <input
-                            type="radio"
-                            name={`pricingMode-${it.id}`}
-                            checked={it.pricingMode === 'auto_purchase'}
-                            onChange={() => {
-                              const next = [...massEditItems];
-                              next[i] = { ...it, pricingMode: 'auto_purchase' };
-                              setMassEditItems(next);
-                            }}
-                            className="text-primary focus:ring-primary w-3 h-3 cursor-pointer"
-                          />
-                          Unit ➔ Piece
-                        </label>
-                        <label className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors text-white">
-                          <input
-                            type="radio"
-                            name={`pricingMode-${it.id}`}
-                            checked={it.pricingMode === 'auto_sell'}
-                            onChange={() => {
-                              const next = [...massEditItems];
-                              next[i] = { ...it, pricingMode: 'auto_sell' };
-                              setMassEditItems(next);
-                            }}
-                            className="text-primary focus:ring-primary w-3 h-3 cursor-pointer"
-                          />
-                          Piece ➔ Unit
-                        </label>
-                        <label className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors text-white">
-                          <input
-                            type="radio"
-                            name={`pricingMode-${it.id}`}
-                            checked={it.pricingMode === 'manual'}
-                            onChange={() => {
-                              const next = [...massEditItems];
-                              next[i] = { ...it, pricingMode: 'manual' };
-                              setMassEditItems(next);
-                            }}
-                            className="text-primary focus:ring-primary w-3 h-3 cursor-pointer"
-                          />
-                          Manual Pricing
-                        </label>
-                      </div>
-                    </div>
+                    {/* More Options drawer */}
+                    {it.showMore && (
+                      <div className="p-3.5 rounded-lg bg-surface-3 border border-border/80 space-y-3 animate-slide-in">
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Sell Price per Carton/Pack */}
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-0.5">Sell Price Per Carton/Pack (₦)</label>
+                            <input
+                              value={it.purchaseSellingPrice}
+                              onChange={e => {
+                                const next = [...massEditItems];
+                                const val = Number(e.target.value) || 0;
+                                let sp = it.sellingPrice;
+                                if (isAuto) {
+                                  sp = it.unitsPerPurchase > 0 ? Math.round(val / it.unitsPerPurchase) : val;
+                                }
+                                next[i] = {
+                                  ...it,
+                                  purchaseSellingPrice: val,
+                                  sellingPrice: sp
+                                };
+                                setMassEditItems(next);
+                              }}
+                              type="number"
+                              placeholder="Carton Sell"
+                              className="w-full text-xs font-mono bg-surface-2 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                            />
+                          </div>
 
-                    {/* Margin Setup & Quick Profit */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center pt-1">
-                      <div className="flex items-center gap-1 flex-wrap">
-                        <span className="text-[10px] text-muted-foreground font-display font-semibold mr-1">Markup:</span>
-                        {[10, 15, 20, 25, 30].map(m => (
+                          {/* Category select dropdown */}
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-0.5">Category</label>
+                            <select
+                              value={it.category}
+                              onChange={e => {
+                                const next = [...massEditItems];
+                                next[i] = { ...it, category: e.target.value };
+                                setMassEditItems(next);
+                              }}
+                              className="w-full text-xs bg-surface-2 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                            >
+                              {['Groceries', 'Beverages', 'Detergents', 'Soap', 'Bread', 'Milk', 'Noodles', 'Biscuit', 'Beer', 'Wine', 'Others'].map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Auto Calculate toggle */}
+                        <div className="flex items-center justify-between border-t border-border/40 pt-2 text-[11px]">
+                          <span className="text-muted-foreground font-display font-semibold">Smart Pricing Rules:</span>
+                          <label className="flex items-center gap-1.5 cursor-pointer font-display font-bold text-white">
+                            <input
+                              type="checkbox"
+                              checked={isAuto}
+                              onChange={e => {
+                                const next = [...massEditItems];
+                                next[i] = { ...it, pricingMode: e.target.checked ? 'auto' : 'manual' };
+                                setMassEditItems(next);
+                                showToast(e.target.checked ? 'Auto-sync active' : 'Independent manual pricing active', 'info');
+                              }}
+                              className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5 cursor-pointer"
+                            />
+                            Auto-Calculate Carton & Piece Price
+                          </label>
+                        </div>
+
+                        {/* Profit percentage & expected profit display */}
+                        <div className="bg-surface-2 p-2 rounded-lg border border-border flex items-center justify-between text-[10px] leading-snug">
+                          <div className="space-y-0.5">
+                            <p className="text-muted-foreground">Expected Profit: <strong className="text-success">₦{profitAmount.toLocaleString()}</strong></p>
+                            <p className="text-muted-foreground">Profit Margin: <strong className="text-primary">{marginPercent.toFixed(1)}%</strong></p>
+                          </div>
+                          
+                          {/* Markup helper tags */}
+                          <div className="flex gap-1">
+                            {[10, 15, 20, 25, 30].map(pct => (
+                              <button
+                                key={pct}
+                                type="button"
+                                onClick={() => applyProfit(pct)}
+                                className="px-1.5 py-0.5 bg-surface-3 hover:bg-surface-4 border border-border text-[9px] font-display font-bold rounded text-white"
+                              >
+                                {pct}%
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Delete Product */}
+                        <div className="flex justify-end pt-1">
                           <button
-                            key={m}
                             type="button"
-                            onClick={() => applyProfit(m)}
-                            className="px-2 py-0.5 rounded bg-surface-3 hover:bg-surface-4 border border-border/70 text-[9px] font-display font-bold transition cursor-pointer text-foreground"
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to delete ${it.name}?`)) {
+                                setMassEditItems(massEditItems.filter(item => item.id !== it.id));
+                                showToast(`Removed ${it.name}`, 'info');
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-destructive/10 hover:bg-destructive/20 border border-destructive/25 text-destructive rounded-lg text-xs font-display font-bold cursor-pointer transition-colors"
                           >
-                            {m}%
+                            🗑️ Delete Product
                           </button>
-                        ))}
-                      </div>
-
-                      {/* Live Calculation Preview */}
-                      <div className="bg-surface-3/50 px-2.5 py-1.5 rounded-lg border border-border/60 text-[10px] flex items-center justify-between leading-snug">
-                        <div>
-                          <span className="text-muted-foreground">Expected Profit: </span>
-                          <strong className="text-success">₦{profitAmount.toLocaleString()}</strong>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Margin: </span>
-                          <strong className={marginPercent >= 15 ? 'text-success' : marginPercent > 0 ? 'text-yellow-500' : 'text-destructive'}>
-                            {marginPercent.toFixed(1)}%
-                          </strong>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Category Dropdown */}
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-0.5">Category</label>
-                        <select
-                          value={it.category}
-                          onChange={e => {
-                            const next = [...massEditItems];
-                            next[i] = { ...it, category: e.target.value };
-                            setMassEditItems(next);
-                          }}
-                          className="w-full text-xs bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
-                        >
-                          {['Groceries', 'Beverages', 'Detergents', 'Soap', 'Bread', 'Milk', 'Noodles', 'Biscuit', 'Beer', 'Wine', 'Others'].map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}
