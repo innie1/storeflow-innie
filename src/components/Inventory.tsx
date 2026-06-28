@@ -57,7 +57,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [restockQty, setRestockQty] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
-  const [importPreview, setImportPreview] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] | null>(null);
+  const [importPreview, setImportPreview] = useState<{ name: string; costPrice: string; sellingPrice: string; quantity: string; category: string; singlesPerCarton?: string }[] | null>(null);
   const [newProduct, setNewProduct] = useState({
     name: '',
     costPrice: '',
@@ -801,16 +801,18 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         const name = p.name.trim();
         const sellingPrice = Number(p.sellingPrice) || 0;
         const autoCtn = autoDetectCartonSingle(name, sellingPrice);
+        const isCtn = p.singlesPerCarton ? true : autoCtn.isCartonSingleEnabled;
+        const singlesVal = p.singlesPerCarton ? (Number(p.singlesPerCarton) || 12) : autoCtn.singlesPerCarton;
         return {
           name,
           costPrice: Number(p.costPrice) || 0,
           sellingPrice,
           quantity: Number(p.quantity) || 0,
           category: p.category.trim() || 'General',
-          isCartonSingleEnabled: autoCtn.isCartonSingleEnabled,
-          singlesPerCarton: autoCtn.isCartonSingleEnabled ? autoCtn.singlesPerCarton : undefined,
-          singleSellingPrice: autoCtn.isCartonSingleEnabled ? autoCtn.singleSellingPrice : undefined,
-          sellAsSinglesByDefault: autoCtn.isCartonSingleEnabled ? autoCtn.sellAsSinglesByDefault : undefined,
+          isCartonSingleEnabled: isCtn,
+          singlesPerCarton: isCtn ? singlesVal : undefined,
+          singleSellingPrice: isCtn ? (singlesVal > 0 ? Math.round(sellingPrice / singlesVal) : 0) : undefined,
+          sellAsSinglesByDefault: isCtn ? true : undefined,
         };
       });
     if (cleaned.length === 0) return showToast('No items to import', 'error');
@@ -2055,7 +2057,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   const cartonWords = ['carton', 'ctn', 'pack', 'box', 'case', 'crate', 'bundle', 'dozen'];
                   const matchesCarton = cartonWords.some(w => n.includes(w));
                   let singlesCount = 12;
-                  if (matchesCarton) {
+                  if (it.singlesPerCarton) {
+                    singlesCount = parseInt(it.singlesPerCarton) || 12;
+                  } else if (matchesCarton) {
                     const rx = /(?:x|qty|size|of|pack|ctn|carton|\b)\s*(\d+)\b/i;
                     const matches = n.match(rx);
                     if (matches && matches[1]) {
@@ -2163,8 +2167,46 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
                       {/* Carton details feedback */}
                       {matchesCarton && (
-                        <div className="p-2 rounded-xl bg-primary/10 border border-primary/25 text-[10px] text-primary flex items-center justify-between font-display font-semibold">
-                          <span>📦 Carton Product detected: will auto-split into {singlesCount} units.</span>
+                        <div className="p-3 rounded-xl bg-primary/10 border border-primary/25 text-xs text-primary space-y-2.5 font-display font-semibold text-left">
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            <span>📦 Carton Product detected: will auto-split into <strong>{singlesCount}</strong> units.</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mr-1">Split count:</span>
+                            {[12, 24, 40].map(val => (
+                              <button
+                                key={val}
+                                onClick={() => {
+                                  const next = [...importPreview];
+                                  next[i] = { ...it, singlesPerCarton: String(val) };
+                                  setImportPreview(next);
+                                  showToast(`Auto-split set to ${val} units`, 'success');
+                                }}
+                                className={`px-2 py-1 rounded text-[10px] border transition cursor-pointer font-bold ${
+                                  singlesCount === val
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'bg-surface-3 text-foreground hover:bg-surface-2 border-border'
+                                }`}
+                              >
+                                {val}
+                              </button>
+                            ))}
+                            
+                            <div className="flex items-center gap-1 bg-surface-3 rounded border border-border px-1.5 py-0.5">
+                              <span className="text-[9px] text-muted-foreground uppercase font-bold">Edit:</span>
+                              <input
+                                type="number"
+                                value={it.singlesPerCarton || String(singlesCount)}
+                                onChange={e => {
+                                  const next = [...importPreview];
+                                  next[i] = { ...it, singlesPerCarton: e.target.value };
+                                  setImportPreview(next);
+                                }}
+                                className="w-10 bg-transparent text-foreground text-[10px] font-mono font-bold focus:outline-none text-center"
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
