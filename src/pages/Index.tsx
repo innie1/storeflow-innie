@@ -691,10 +691,15 @@ export default function Index() {
 
             <button
               onClick={() => setShowSwitchUser(true)}
-              className="h-9 px-3.5 rounded-full bg-black/40 border border-border/80 hover:border-yellow-500/40 text-xs text-foreground font-display font-semibold transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95 cursor-pointer"
+              className="h-9 px-2.5 sm:px-3.5 rounded-full bg-black/40 border border-border/80 hover:border-yellow-500/40 text-xs text-foreground font-display font-semibold transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-sm active:scale-95 cursor-pointer whitespace-nowrap"
             >
-              <span>👤 {currentUser?.name}</span>
-              <span className="px-1.5 py-0.5 rounded bg-surface-2 border border-border/80 text-[9px] uppercase font-bold text-yellow-500">{currentUser?.role}</span>
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <span>👤</span>
+                <span className="truncate max-w-[50px] sm:max-w-none">{currentUser?.name}</span>
+              </span>
+              <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded bg-surface-2 border border-border/80 text-[9px] uppercase font-bold text-yellow-500 shrink-0">
+                {currentUser?.role}
+              </span>
             </button>
             <button
               onClick={() => setShowLockConfirm(true)}
