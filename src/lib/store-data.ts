@@ -1011,12 +1011,7 @@ export function getDashboardStats(store: StoreData) {
   const threshold = getLowStockThreshold();
   const lowStockProducts = store.products.filter(p => p.quantity <= threshold);
   const totalSales = store.sales.length;
-  const fullExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
-  
-  // Exclude Restock / inventory-addition expenses from dashboard calculations
-  const restockExpenses = (store.expenses || []).filter(e => e.category === 'Restock' || e.source === 'restock').reduce((sum, e) => sum + e.amount, 0);
-  const totalExpenses = fullExpenses - restockExpenses;
-  
+  const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
   const savingsSaved = store.savingsGoal?.saved || 0;
   const netIncome = totalRevenue - totalExpenses - savingsSaved;
   return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue: store.products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0), totalExpenses, netIncome };
