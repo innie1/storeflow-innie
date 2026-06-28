@@ -34,7 +34,9 @@ import {
   BarChart3,
   Trash2,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
@@ -147,6 +149,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [lowStock, setLowStock] = useState<string>(String(getLowStockThreshold()));
   const [helpOpen, setHelpOpen] = useState<string | null>(null);
   const [newAccessCode, setNewAccessCode] = useState(store.accessCode);
+  const [revealCode, setRevealCode] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -1230,45 +1235,78 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       <div className={`${card} p-4 space-y-4`}>
         <div className="space-y-1 text-left">
           <label className="text-xs text-muted-foreground uppercase font-bold">Store Access Code (ID)</label>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
-              type="text"
-              value={newAccessCode}
-              onChange={e => setNewAccessCode(e.target.value)}
-              className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-sm font-mono focus:outline-none focus:border-primary text-foreground"
+              type={revealCode ? "text" : "password"}
+              value={store.accessCode}
+              readOnly
+              className="flex-1 p-2.5 rounded-lg bg-surface-2/60 border border-border text-sm font-mono focus:outline-none text-muted-foreground select-all cursor-not-allowed"
             />
-            <button
-              onClick={handleUpdateAccessCode}
-              className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 cursor-pointer"
-            >
-              Update Code
-            </button>
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => setRevealCode(!revealCode)}
+                className="flex-1 sm:flex-initial px-3 py-2.5 rounded-lg bg-surface-3 border border-border text-foreground hover:bg-surface-2 text-xs font-display font-bold transition active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
+                title="Review access code"
+              >
+                {revealCode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>Review Code</span>
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(store.accessCode);
+                  showToast('📋 Access code copied to clipboard!', 'success');
+                }}
+                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 active:scale-95 transition cursor-pointer"
+              >
+                Copy Code
+              </button>
+            </div>
           </div>
-          <p className="text-[10px] text-muted-foreground">Unique identifier used to access this store. Minimum 4 characters.</p>
+          <p className="text-[10px] text-muted-foreground">Unique identifier used to access this store. This code cannot be changed.</p>
         </div>
 
         {/* Reset Owner Password */}
         <div className="border-t border-border/40 pt-3 space-y-3 text-left">
           <label className="text-xs text-muted-foreground uppercase font-bold">Reset Owner Password</label>
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              type="password"
-              placeholder="New Password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              className={inputClass}
-            />
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              className={inputClass}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="relative flex items-center">
+              <input
+                type={showPass ? "text" : "password"}
+                placeholder="New Password"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                className={`${inputClass} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(!showPass)}
+                className="absolute right-3 p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground transition cursor-pointer"
+                title={showPass ? "Hide Password" : "Show Password"}
+              >
+                {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <div className="relative flex items-center">
+              <input
+                type={showConfirmPass ? "text" : "password"}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                className={`${inputClass} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPass(!showConfirmPass)}
+                className="absolute right-3 p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground transition cursor-pointer"
+                title={showConfirmPass ? "Hide Password" : "Show Password"}
+              >
+                {showConfirmPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
           <button
             onClick={handleUpdatePassword}
-            className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 cursor-pointer"
+            className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 active:scale-95 transition cursor-pointer"
           >
             ✓ Reset Owner Password
           </button>
