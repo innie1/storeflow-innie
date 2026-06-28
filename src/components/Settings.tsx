@@ -400,6 +400,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [profile, setProfile] = useState<StoreProfile>(
     store.profile || { storeType: '', location: '', phone: '', email: '' }
   );
+  const [profilePassword, setProfilePassword] = useState(store.managerSettings?.ownerPassword || '');
+  const [revealProfilePass, setRevealProfilePass] = useState(false);
   const [payment, setPayment] = useState<PaymentInfo>(store.profile?.payment || {});
   const [rent, setRent] = useState<RentInfo>(store.profile?.rent || { isRented: false });
   const [mgr, setMgr] = useState<ManagerSettings>({ ...DEFAULT_MANAGER_SETTINGS, ...(store.managerSettings || {}) });
@@ -559,6 +561,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     window.scrollTo(0, 0);
   }, [view]);
 
+  useEffect(() => {
+    setProfile(store.profile || { storeType: '', location: '', phone: '', email: '' });
+    setPayment(store.profile?.payment || {});
+    setRent(store.profile?.rent || { isRented: false });
+    setMgr({ ...DEFAULT_MANAGER_SETTINGS, ...(store.managerSettings || {}) });
+    setProfilePassword(store.managerSettings?.ownerPassword || '');
+  }, [store]);
+
   const handleLock = () => { clearSession(); onLock(); showToast('Store locked'); };
 
   const handleUpdateAccessCode = () => {
@@ -676,6 +686,26 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           <Field label="Email" value={profile.email} onChange={v => setProfile({ ...profile, email: v })} placeholder="store@email.com" type="email" />
         </div>
         <Field label="Website" value={profile.website || ''} onChange={v => setProfile({ ...profile, website: v })} placeholder="www.mystore.com" />
+        <div className="space-y-1 text-left">
+          <label className="block text-xs text-muted-foreground mb-1">Owner Password</label>
+          <div className="relative">
+            <input
+              type={revealProfilePass ? "text" : "password"}
+              value={profilePassword}
+              onChange={e => setProfilePassword(e.target.value)}
+              placeholder="Enter password"
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => setRevealProfilePass(!revealProfilePass)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer text-xs"
+              title={revealProfilePass ? "Hide Password" : "Show Password"}
+            >
+              👁️
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Opening Time" value={profile.openingTime || ''} onChange={v => setProfile({ ...profile, openingTime: v })} type="time" />
           <Field label="Closing Time" value={profile.closingTime || ''} onChange={v => setProfile({ ...profile, closingTime: v })} type="time" />
@@ -730,7 +760,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         )}
       </div>
 
-      <button onClick={() => { persistProfile(profile); setView('home'); showToast('Profile saved'); }}
+      <button onClick={() => {
+        persistProfile(profile);
+        if (profilePassword.trim() && profilePassword.trim() !== store.managerSettings?.ownerPassword) {
+          updateMgr({ ownerPassword: profilePassword.trim() });
+        }
+        setView('home');
+        showToast('Profile saved');
+      }}
         className="w-full p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold">Save Profile</button>
 
       {showQRModal && (

@@ -126,6 +126,12 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     // Update settings
     const updatedStore: StoreData = {
       ...loadedStore,
+      profile: {
+        ...(loadedStore.profile || {}),
+        email: recoveryEmail.trim(),
+        phone: recoveryPhone.trim(),
+        logoStyle: loadedStore.profile?.logoStyle || selectedLogoStyle || 'minimalist'
+      },
       managerSettings: {
         ...(loadedStore.managerSettings || {}),
         enabled: loadedStore.managerSettings?.enabled ?? true,
