@@ -46,6 +46,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [lastSales, setLastSales] = useState<Sale[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [globalSaleMode, setGlobalSaleMode] = useState<'wholesale' | 'retail'>('wholesale');
   const [selectedSaleTypes, setSelectedSaleTypes] = useState<Record<string, 'carton' | 'single'>>({});
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customQtyFor, setCustomQtyFor] = useState<string | null>(null);
@@ -166,7 +167,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       if (explicitSaleType) {
         saleType = explicitSaleType;
       } else {
-        saleType = selectedSaleTypes[productId] || (product.sellAsSinglesByDefault ? 'single' : 'carton');
+        saleType = selectedSaleTypes[productId] || (globalSaleMode === 'retail' ? 'single' : 'carton');
       }
     }
 
@@ -209,7 +210,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const handleQuickAdd = (productId: string) => {
     const product = store.products.find(p => p.id === productId);
     if (!product) return;
-    const saleType = (product.isCartonSingleEnabled && (selectedSaleTypes[productId] || (product.sellAsSinglesByDefault ? 'single' : 'carton'))) || 'carton';
+    const saleType = (product.isCartonSingleEnabled && (selectedSaleTypes[productId] || (globalSaleMode === 'retail' ? 'single' : 'carton'))) || 'carton';
     let minDeduction = 1;
     if (saleType === 'single' && product.singlesPerCarton) {
       minDeduction = 1 / product.singlesPerCarton;
@@ -222,7 +223,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const handleInstantSell = (productId: string) => {
     const product = store.products.find(p => p.id === productId);
     if (!product) return;
-    const saleType = (product.isCartonSingleEnabled && (selectedSaleTypes[productId] || (product.sellAsSinglesByDefault ? 'single' : 'carton'))) || 'carton';
+    const saleType = (product.isCartonSingleEnabled && (selectedSaleTypes[productId] || (globalSaleMode === 'retail' ? 'single' : 'carton'))) || 'carton';
     let minDeduction = 1;
     if (saleType === 'single' && product.singlesPerCarton) {
       minDeduction = 1 / product.singlesPerCarton;
@@ -253,7 +254,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     const qty = Number(customQty);
     if (isNaN(qty) || qty <= 0) return showToast('Invalid quantity', 'error');
     const product = store.products.find(p => p.id === customQtyFor);
-    const saleType = (product && product.isCartonSingleEnabled && (selectedSaleTypes[customQtyFor] || (product.sellAsSinglesByDefault ? 'single' : 'carton'))) || 'carton';
+    const saleType = (product && product.isCartonSingleEnabled && (selectedSaleTypes[customQtyFor] || (globalSaleMode === 'retail' ? 'single' : 'carton'))) || 'carton';
     addToCart(customQtyFor, qty, saleType as 'carton' | 'single');
     setCustomQtyFor(null); setCustomQty('1');
   };
@@ -501,6 +502,38 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         />
       )}
 
+      {/* Wholesale / Retail Global Toggle */}
+      <div className="grid grid-cols-2 gap-1 bg-surface-2 p-1 rounded-xl border border-border/80 shadow-xs">
+        <button
+          onClick={() => {
+            setGlobalSaleMode('wholesale');
+            setSelectedSaleTypes({});
+            showToast('📦 Switched to Wholesale Mode (selling in cartons)', 'info');
+          }}
+          className={`py-2 rounded-lg font-display font-bold text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 ${
+            globalSaleMode === 'wholesale'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <span>📦</span> Wholesale Mode (Carton)
+        </button>
+        <button
+          onClick={() => {
+            setGlobalSaleMode('retail');
+            setSelectedSaleTypes({});
+            showToast('🧩 Switched to Retail Mode (selling in pieces)', 'info');
+          }}
+          className={`py-2 rounded-lg font-display font-bold text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 ${
+            globalSaleMode === 'retail'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <span>🧩</span> Retail Mode (Piece)
+        </button>
+      </div>
+
       {/* Search and Filters */}
       <div className="relative flex gap-2">
         <div className="relative flex-1">
@@ -631,7 +664,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             const isLow = p.quantity <= 3;
             const inCart = cart.filter(c => c.productId === p.id).reduce((s, c) => s + c.quantity, 0);
             
-            const currentSaleType = selectedSaleTypes[p.id] || (p.sellAsSinglesByDefault ? 'single' : 'carton');
+            const currentSaleType = selectedSaleTypes[p.id] || (globalSaleMode === 'retail' ? 'single' : 'carton');
             const cartonPrice = p.sellingPrice;
             const singlePrice = p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : 0);
             const activePrice = currentSaleType === 'single' ? singlePrice : cartonPrice;
