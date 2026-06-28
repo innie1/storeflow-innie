@@ -359,13 +359,13 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   const autoDetectCartonSingle = (name: string, sellingPrice: number) => {
     const n = name.toLowerCase();
-    const cartonWords = ['carton', 'ctn', 'pack', 'box', 'case', 'crate', 'bundle', 'dozen'];
+    const cartonWords = ['carton', 'ctn', 'pack', 'box', 'case', 'crate', 'bundle', 'dozen', 'roll', 'rolls'];
     const matchesCarton = cartonWords.some(w => n.includes(w));
     
     if (matchesCarton) {
-      const rx = /(?:x|qty|size|of|pack|ctn|carton|\b)\s*(\d+)\b/i;
+      const rx = /(?:x|qty|size|of|pack|ctn|carton|roll|\b)\s*(\d+)\b/i;
       const matches = n.match(rx);
-      let singles = 12; // default
+      let singles = n.includes('roll') ? 10 : 12; // default 10 for roll, 12 for carton
       if (matches && matches[1]) {
         const val = parseInt(matches[1]);
         if (val > 1 && val <= 200) {
@@ -2052,15 +2052,15 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   const defaultMargin = store.managerSettings?.defaultMargin ?? 20;
                   const markupSuggested = cp * (1 + defaultMargin / 100);
 
-                  // Carton detection
+                   // Carton detection
                   const n = it.name.toLowerCase();
-                  const cartonWords = ['carton', 'ctn', 'pack', 'box', 'case', 'crate', 'bundle', 'dozen'];
+                  const cartonWords = ['carton', 'ctn', 'pack', 'box', 'case', 'crate', 'bundle', 'dozen', 'roll', 'rolls'];
                   const matchesCarton = cartonWords.some(w => n.includes(w));
-                  let singlesCount = 12;
+                  let singlesCount = n.includes('roll') ? 10 : 12;
                   if (it.singlesPerCarton) {
-                    singlesCount = parseInt(it.singlesPerCarton) || 12;
+                    singlesCount = parseInt(it.singlesPerCarton) || (n.includes('roll') ? 10 : 12);
                   } else if (matchesCarton) {
-                    const rx = /(?:x|qty|size|of|pack|ctn|carton|\b)\s*(\d+)\b/i;
+                    const rx = /(?:x|qty|size|of|pack|ctn|carton|roll|\b)\s*(\d+)\b/i;
                     const matches = n.match(rx);
                     if (matches && matches[1]) {
                       const val = parseInt(matches[1]);
@@ -2167,47 +2167,53 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
                       {/* Carton details feedback */}
                       {matchesCarton && (
-                        <div className="p-3 rounded-xl bg-primary/10 border border-primary/25 text-xs text-primary space-y-2.5 font-display font-semibold text-left">
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <span>📦 Carton Product detected: will auto-split into <strong>{singlesCount}</strong> units.</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mr-1">Split count:</span>
-                            {[12, 24, 40].map(val => (
-                              <button
-                                key={val}
-                                onClick={() => {
-                                  const next = [...importPreview];
-                                  next[i] = { ...it, singlesPerCarton: String(val) };
-                                  setImportPreview(next);
-                                  showToast(`Auto-split set to ${val} units`, 'success');
-                                }}
-                                className={`px-2 py-1 rounded text-[10px] border transition cursor-pointer font-bold ${
-                                  singlesCount === val
-                                    ? 'bg-primary text-primary-foreground border-primary'
-                                    : 'bg-surface-3 text-foreground hover:bg-surface-2 border-border'
-                                }`}
-                              >
-                                {val}
-                              </button>
-                            ))}
-                            
-                            <div className="flex items-center gap-1 bg-surface-3 rounded border border-border px-1.5 py-0.5">
-                              <span className="text-[9px] text-muted-foreground uppercase font-bold">Edit:</span>
-                              <input
-                                type="number"
-                                value={it.singlesPerCarton || String(singlesCount)}
-                                onChange={e => {
-                                  const next = [...importPreview];
-                                  next[i] = { ...it, singlesPerCarton: e.target.value };
-                                  setImportPreview(next);
-                                }}
-                                className="w-10 bg-transparent text-foreground text-[10px] font-mono font-bold focus:outline-none text-center"
-                              />
+                        (() => {
+                          const isRoll = it.name.toLowerCase().includes('roll');
+                          const splitOptions = isRoll ? [10, 8, 12] : [12, 24, 40];
+                          return (
+                            <div className="p-3 rounded-xl bg-primary/10 border border-primary/25 text-xs text-primary space-y-2.5 font-display font-semibold text-left">
+                              <div className="flex items-center gap-1.5 text-[11px]">
+                                <span>{isRoll ? '🌀 Roll' : '📦 Carton'} Product detected: will auto-split into <strong>{singlesCount}</strong> units.</span>
+                              </div>
+                              
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mr-1">Split count:</span>
+                                {splitOptions.map(val => (
+                                  <button
+                                    key={val}
+                                    onClick={() => {
+                                      const next = [...importPreview];
+                                      next[i] = { ...it, singlesPerCarton: String(val) };
+                                      setImportPreview(next);
+                                      showToast(`Auto-split set to ${val} units`, 'success');
+                                    }}
+                                    className={`px-2 py-1 rounded text-[10px] border transition cursor-pointer font-bold ${
+                                      singlesCount === val
+                                        ? 'bg-primary text-primary-foreground border-primary'
+                                        : 'bg-surface-3 text-foreground hover:bg-surface-2 border-border'
+                                    }`}
+                                  >
+                                    {val}
+                                  </button>
+                                ))}
+                                
+                                <div className="flex items-center gap-1 bg-surface-3 rounded border border-border px-1.5 py-0.5">
+                                  <span className="text-[9px] text-muted-foreground uppercase font-bold">Edit:</span>
+                                  <input
+                                    type="number"
+                                    value={it.singlesPerCarton || String(singlesCount)}
+                                    onChange={e => {
+                                      const next = [...importPreview];
+                                      next[i] = { ...it, singlesPerCarton: e.target.value };
+                                      setImportPreview(next);
+                                    }}
+                                    className="w-10 bg-transparent text-foreground text-[10px] font-mono font-bold focus:outline-none text-center"
+                                  />
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
+                          );
+                        })()
                       )}
                     </div>
                   );
