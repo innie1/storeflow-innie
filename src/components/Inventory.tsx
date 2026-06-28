@@ -397,10 +397,13 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [transferQty, setTransferQty] = useState('');
   const [transferDestCode, setTransferDestCode] = useState('');
   const [showDiscontinued, setShowDiscontinued] = useState(false);
+  const [massEditItems, setMassEditItems] = useState<{ id: string; name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] | null>(null);
 
   const lowThreshold = getLowStockThreshold();
   let products = store.products;
-  if (!showDiscontinued) {
+  if (showDiscontinued) {
+    products = products.filter(p => p.discontinued);
+  } else {
     products = products.filter(p => !p.discontinued);
   }
   if (filterLowStock) products = products.filter(p => p.quantity <= lowThreshold);
@@ -807,6 +810,41 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   };
 
 
+  const handleSaveMassEdit = () => {
+    if (!massEditItems) return;
+    
+    const updatedProducts: Product[] = store.products.map(p => {
+      const edit = massEditItems.find(item => item.id === p.id);
+      if (edit) {
+        return {
+          ...p,
+          name: edit.name.trim(),
+          costPrice: Number(edit.costPrice) || 0,
+          sellingPrice: Number(edit.sellingPrice) || 0,
+          quantity: Number(edit.quantity) || 0,
+          category: edit.category.trim() || 'General',
+        };
+      }
+      return p;
+    });
+
+    const deletedIds = store.products
+      .filter(p => !massEditItems.some(edit => edit.id === p.id))
+      .map(p => p.id);
+      
+    const finalProducts = updatedProducts.filter(p => !deletedIds.includes(p.id));
+
+    const updatedStore = {
+      ...store,
+      products: finalProducts
+    };
+
+    onUpdate(updatedStore);
+    saveStore(updatedStore);
+    setMassEditItems(null);
+    showToast('Inventory mass edited successfully!', 'success');
+  };
+
   const addToShoppingList = (p: Product) => {
     const existing = shoppingList.find(i => i.productId === p.id);
     if (existing) {
@@ -1034,17 +1072,32 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           onClick={() => setShowDiscontinued(!showDiscontinued)}
           className={`px-4 py-2.5 rounded-lg text-sm font-display font-semibold border transition-colors cursor-pointer ${
             showDiscontinued 
-              ? 'bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20' 
+              ? 'bg-destructive/15 border-destructive/40 text-destructive hover:bg-destructive/20 shadow-sm' 
               : 'bg-secondary text-secondary-foreground hover:bg-surface-3 border border-border'
           }`}
         >
-          {showDiscontinued ? '👁️ Hide Discontinued' : '👁️ Show Discontinued'}
+          Discontinued
         </button>
         <button onClick={() => { setShowAddModal(true); setShowAddConfirm(false); setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries', isCartonSingleEnabled: false, singlesPerCarton: '12', singleSellingPrice: '', sellAsSinglesByDefault: false }); setCustomCategoryActive(false); setCustomCategoryVal(''); }} className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-display font-semibold hover:opacity-90">
           + Add
         </button>
         <button onClick={openImportModal} className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border">
           Import
+        </button>
+        <button
+          onClick={() => {
+            setMassEditItems(store.products.map(p => ({
+              id: p.id,
+              name: p.name,
+              costPrice: String(p.costPrice),
+              sellingPrice: String(p.sellingPrice),
+              quantity: String(p.quantity),
+              category: p.category || 'General'
+            })));
+          }}
+          className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border flex items-center gap-1 cursor-pointer"
+        >
+          ✏️ Mass Edit
         </button>
         <button
           onClick={() => {
@@ -2219,6 +2272,118 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               </div>
             </div>
           )}
+        </Modal>
+      )}
+
+      {/* Mass Edit Modal */}
+      {massEditItems && (
+        <Modal title={`Mass Edit Inventory (${massEditItems.length})`} onClose={() => setMassEditItems(null)}>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground text-left">
+              Update name, costs, selling prices, quantities, and categories across all products instantly.
+            </p>
+
+            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+              {massEditItems.map((it, i) => {
+                return (
+                  <div key={it.id} className="p-3.5 rounded-xl bg-surface-2 border border-border/85 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={it.name}
+                        onChange={e => {
+                          const next = [...massEditItems];
+                          next[i] = { ...it, name: e.target.value };
+                          setMassEditItems(next);
+                        }}
+                        placeholder="Product Name"
+                        className="flex-1 text-xs font-display font-semibold bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                      />
+                      <button
+                        onClick={() => setMassEditItems(massEditItems.filter(item => item.id !== it.id))}
+                        className="w-8 h-8 rounded-lg text-destructive bg-destructive/10 hover:bg-destructive/20 text-xs flex items-center justify-center cursor-pointer transition-colors"
+                        title="Delete Product"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-0.5">Cost (₦)</label>
+                        <input
+                          value={it.costPrice}
+                          onChange={e => {
+                            const next = [...massEditItems];
+                            next[i] = { ...it, costPrice: e.target.value };
+                            setMassEditItems(next);
+                          }}
+                          type="number"
+                          placeholder="Cost"
+                          className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-0.5">Selling (₦)</label>
+                        <input
+                          value={it.sellingPrice}
+                          onChange={e => {
+                            const next = [...massEditItems];
+                            next[i] = { ...it, sellingPrice: e.target.value };
+                            setMassEditItems(next);
+                          }}
+                          type="number"
+                          placeholder="Sell"
+                          className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-0.5">Qty</label>
+                        <input
+                          value={it.quantity}
+                          onChange={e => {
+                            const next = [...massEditItems];
+                            next[i] = { ...it, quantity: e.target.value };
+                            setMassEditItems(next);
+                          }}
+                          type="number"
+                          placeholder="Qty"
+                          className="w-full text-xs font-mono bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-0.5">Category</label>
+                        <input
+                          value={it.category}
+                          onChange={e => {
+                            const next = [...massEditItems];
+                            next[i] = { ...it, category: e.target.value };
+                            setMassEditItems(next);
+                          }}
+                          placeholder="Category"
+                          className="w-full text-xs bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setMassEditItems(null)}
+                className="p-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-semibold hover:bg-surface-3 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveMassEdit}
+                className="p-3 rounded-xl bg-success text-white text-xs font-display font-bold hover:opacity-95 shadow-md cursor-pointer"
+              >
+                ✓ Save Changes
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
 
