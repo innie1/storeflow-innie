@@ -46,7 +46,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [lastSales, setLastSales] = useState<Sale[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [globalSaleMode, setGlobalSaleMode] = useState<'wholesale' | 'retail'>('wholesale');
+  const [globalSaleMode, setGlobalSaleMode] = useState<'wholesale' | 'retail'>(() => (localStorage.getItem('storeflow_sale_mode') as 'wholesale' | 'retail') || 'retail');
   const [selectedSaleTypes, setSelectedSaleTypes] = useState<Record<string, 'carton' | 'single'>>({});
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customQtyFor, setCustomQtyFor] = useState<string | null>(null);
@@ -508,6 +508,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           onClick={() => {
             setGlobalSaleMode('wholesale');
             setSelectedSaleTypes({});
+            localStorage.setItem('storeflow_sale_mode', 'wholesale');
             showToast('📦 Switched to Wholesale Mode (selling in cartons)', 'info');
           }}
           className={`py-2 rounded-lg font-display font-bold text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 ${
@@ -522,6 +523,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           onClick={() => {
             setGlobalSaleMode('retail');
             setSelectedSaleTypes({});
+            localStorage.setItem('storeflow_sale_mode', 'retail');
             showToast('🧩 Switched to Retail Mode (selling in pieces)', 'info');
           }}
           className={`py-2 rounded-lg font-display font-bold text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 ${
