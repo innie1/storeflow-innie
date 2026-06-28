@@ -4,6 +4,7 @@ import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock,
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
 import { interpretProductName } from '@/lib/import-intel';
+import { getSimilarity, extractCoreProduct } from '@/lib/similarity';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -89,112 +90,88 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [renameVal, setRenameVal] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
 
-  const getSimilarity = (s1: string, s2: string): number => {
-    // 1. Conflict Check: Extract volumes/weights to see if they differ (e.g. 50cl vs 35cl, 1kg vs 2kg)
-    const extractSizeConf = (s: string) => {
-      const match = s.match(/(\d+(?:\.\d+)?)\s*(?:cl|l|g|kg|ml|pcs|pack|sachet|s)/i);
-      return match ? match[0].toLowerCase().replace(/\s+/g, '') : null;
-    };
-    const sz1 = extractSizeConf(s1);
-    const sz2 = extractSizeConf(s2);
-    if (sz1 && sz2 && sz1 !== sz2) {
-      return 0; // Conflicting sizes -> must keep separate
-    }
-
-    // 2. Clean and tokenise strings, dropping small stop words and sizes
-    const clean = (s: string) => {
-      return s.toLowerCase()
-        .replace(/(\d+(?:\.\d+)?)\s*(?:cl|l|g|kg|ml|pcs|pack|sachet|s)/gi, '') // strip sizes
-        .replace(/[^a-z0-9\s]/g, '')
-        .split(/\s+/)
-        .filter(w => w.length > 1 && !['and', 'with', 'for', 'of', 'in', 'the'].includes(w));
-    };
-
-    const w1 = clean(s1);
-    const w2 = clean(s2);
-    if (w1.length === 0 || w2.length === 0) return 0;
-
-    // Word Overlap Jaccard Index
-    const intersect = w1.filter(w => w2.includes(w));
-    const union = Array.from(new Set([...w1, ...w2]));
-    const overlap = intersect.length / union.length;
-
-    // Levenshtein word similarity
-    const l1 = w1.join(' ');
-    const l2 = w2.join(' ');
-    const len = Math.max(l1.length, l2.length);
-    if (len === 0) return 1.0;
-
-    let track = Array(l2.length + 1).fill(null).map(() => Array(l1.length + 1).fill(null));
-    for (let i = 0; i <= l1.length; i += 1) track[0][i] = i;
-    for (let j = 0; j <= l2.length; j += 1) track[j][0] = j;
-    for (let j = 1; j <= l2.length; j += 1) {
-      for (let i = 1; i <= l1.length; i += 1) {
-        const indicator = l1[i - 1] === l2[j - 1] ? 0 : 1;
-        track[j][i] = Math.min(
-          track[j][i - 1] + 1,
-          track[j - 1][i] + 1,
-          track[j - 1][i - 1] + indicator
-        );
-      }
-    }
-    const dist = track[l2.length][l1.length];
-    const levSim = (len - dist) / len;
-
-    return Math.max(overlap, levSim);
-  };
-
   const calculateSimilarityScore = (p1: Product, p2: Product): number => {
     // 1. Barcode support
     if (p1.barcode && p2.barcode) {
       return p1.barcode === p2.barcode ? 100 : 0;
     }
 
-    let score = 0;
+    const { core: c1, attributes: a1 } = extractCoreProduct(p1.name);
+    const { core: c2, attributes: a2 } = extractCoreProduct(p2.name);
 
-    // 2. Name similarity (+40 pts)
-    const nameSim = getSimilarity(p1.name, p2.name);
-    score += Math.round(nameSim * 40);
+    const c1Lower = c1.toLowerCase();
+    const c2Lower = c2.toLowerCase();
 
-    // 3. Same Purchase Unit (+20 pts)
-    const isCarton1 = p1.isCartonSingleEnabled ?? false;
-    const isCarton2 = p2.isCartonSingleEnabled ?? false;
-    if (isCarton1 === isCarton2) {
-      score += 20;
-    } else {
-      score += 10; // Rule 5: reduce confidence instead of assuming they are different
+    // STEP 2: Compare Core Product
+    const nameSim = getSimilarity(c1Lower, c2Lower);
+    const isFamilyMatch = nameSim >= 0.75 || c1Lower.includes(c2Lower) || c2Lower.includes(c1Lower);
+
+    if (!isFamilyMatch) {
+      return 0; // STOP immediately - Different Core Products
     }
 
-    // 4. Same Qty per Purchase Unit (+20 pts)
+    // STEP 3: Compare Attributes
+    // Start with a high base confidence since we confirmed they have the same core product
+    let confidence = 75; // baseline confidence for same core product family
+
+    // 1. Name match weight
+    confidence += Math.round(nameSim * 15); // max +15 pts
+
+    // 2. Compare Sizes
+    if (a1.size && a2.size) {
+      if (a1.size === a2.size) confidence += 5;
+      else confidence -= 15; // penalty for different size attributes
+    } else if (a1.size || a2.size) {
+      confidence -= 5; // one has size attribute, the other doesn't
+    }
+
+    // 3. Compare Containers
+    if (a1.container && a2.container) {
+      if (a1.container === a2.container) confidence += 5;
+      else confidence -= 10; // penalty for different container attributes
+    } else if (a1.container || a2.container) {
+      confidence -= 5; // one has container attribute, the other doesn't
+    }
+
+    // 4. Compare Packages
+    if (a1.package && a2.package) {
+      if (a1.package === a2.package) confidence += 5;
+      else confidence -= 10;
+    } else if (a1.package || a2.package) {
+      confidence -= 5; // one has package attribute, the other doesn't
+    }
+
+    // 5. Same Qty per Purchase Unit (singlesPerCarton)
     if (p1.singlesPerCarton !== undefined && p2.singlesPerCarton !== undefined) {
       if (p1.singlesPerCarton === p2.singlesPerCarton) {
-        score += 20;
+        confidence += 5;
+      } else {
+        confidence -= 10;
       }
-    } else {
-      score += 10; // Rule 5
     }
 
-    // 5. Similar Purchase Cost (+10 pts)
-    if (p1.costPrice !== undefined && p2.costPrice !== undefined && p1.costPrice > 0 && p2.costPrice > 0) {
+    // 6. Similar Purchase Cost
+    if (p1.costPrice > 0 && p2.costPrice > 0) {
       const diff = Math.abs(p1.costPrice - p2.costPrice) / Math.max(p1.costPrice, p2.costPrice);
       if (diff <= 0.15) {
-        score += 10;
+        confidence += 5;
+      } else {
+        confidence -= 10;
       }
-    } else {
-      score += 5; // Rule 5
     }
 
-    // 6. Similar Selling Price (+10 pts)
-    if (p1.sellingPrice !== undefined && p2.sellingPrice !== undefined && p1.sellingPrice > 0 && p2.sellingPrice > 0) {
+    // 7. Similar Selling Price
+    if (p1.sellingPrice > 0 && p2.sellingPrice > 0) {
       const diff = Math.abs(p1.sellingPrice - p2.sellingPrice) / Math.max(p1.sellingPrice, p2.sellingPrice);
       if (diff <= 0.15) {
-        score += 10;
+        confidence += 5;
+      } else {
+        confidence -= 10;
       }
-    } else {
-      score += 5; // Rule 5
     }
 
-    return Math.min(100, score);
+    // Clamp between 0 and 100
+    return Math.max(0, Math.min(100, confidence));
   };
 
   useEffect(() => {
@@ -225,11 +202,11 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
         const score = calculateSimilarityScore(p1, p2);
 
-        if (score >= 90) {
+        if (score >= 95) {
           if (!activeHigh) {
             activeHigh = { p1, p2, score };
           }
-        } else if (score >= 70) {
+        } else if (score >= 80) {
           foundMedium.push({ p1, p2, score });
         }
       }
