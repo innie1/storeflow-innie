@@ -1489,3 +1489,140 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
     </div>
   );
 }
+
+// ─── Repayment Predictions Card ──────────────────────────────────────────────
+function fmtRelDate(iso?: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const diff = Math.round((d.getTime() - Date.now()) / 86400000);
+  const label = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (diff === 0) return `Today · ${label}`;
+  if (diff === 1) return `Tomorrow · ${label}`;
+  if (diff > 0 && diff < 14) return `In ${diff}d · ${label}`;
+  if (diff < 0 && diff > -14) return `${Math.abs(diff)}d ago · ${label}`;
+  return label;
+}
+
+function RepaymentPredictionsCard({ store }: { store: StoreData }) {
+  const insights = useMemo(() => getRepaymentInsights(store), [store]);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  if (insights.customers.length === 0) {
+    return (
+      <div className="p-4 rounded-2xl bg-card shadow-card">
+        <h3 className="font-display font-bold text-base mb-1">Repayment Predictions</h3>
+        <p className="text-xs text-muted-foreground">No pending-payment history yet. Once customers start settling debts, Flow will learn their repayment rhythm.</p>
+      </div>
+    );
+  }
+
+  const active = insights.customers.filter(c => c.activeDebts > 0);
+  const shown = active.length > 0 ? active : insights.customers.slice(0, 5);
+
+  const tone = (r: number) => r >= 75 ? 'success' : r >= 45 ? 'warning' : 'destructive';
+
+  return (
+    <div className="p-4 rounded-2xl bg-card shadow-card space-y-4">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="font-display font-bold text-base">Repayment Predictions</h3>
+          <p className="text-xs text-muted-foreground">Learned from {insights.customers.length} customer{insights.customers.length === 1 ? '' : 's'} · {insights.customers.reduce((s, c) => s + c.sampleSize, 0)} payment events.</p>
+        </div>
+        <div className={`px-2.5 py-1 rounded-full text-[10px] font-display font-bold bg-${tone(insights.overallReliability)}/15 text-${tone(insights.overallReliability)} border border-${tone(insights.overallReliability)}/30`}>
+          {insights.overallReliability}% avg reliability
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <div className="p-2.5 rounded-xl bg-surface-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Avg debt</p>
+          <p className="font-display font-bold text-sm text-yellow-500">₦{insights.overallAvgDebtSize.toLocaleString()}</p>
+        </div>
+        <div className="p-2.5 rounded-xl bg-surface-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Clears in</p>
+          <p className="font-display font-bold text-sm">{insights.overallAvgDaysToClear !== null ? `${insights.overallAvgDaysToClear}d` : '—'}</p>
+        </div>
+        <div className="p-2.5 rounded-xl bg-surface-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Customers</p>
+          <p className="font-display font-bold text-sm">{insights.customers.length}</p>
+        </div>
+      </div>
+
+      {(insights.mostReliable || insights.riskiest) && (
+        <div className="grid grid-cols-2 gap-2">
+          {insights.mostReliable && (
+            <div className="p-2.5 rounded-xl bg-success/10 border border-success/30">
+              <p className="text-[10px] text-success uppercase font-semibold">⭐ Most reliable</p>
+              <p className="text-xs font-display font-bold truncate">{insights.mostReliable.customerName}</p>
+              <p className="text-[10px] text-muted-foreground">{insights.mostReliable.reliabilityScore}% score</p>
+            </div>
+          )}
+          {insights.riskiest && insights.riskiest.customerKey !== insights.mostReliable?.customerKey && (
+            <div className="p-2.5 rounded-xl bg-destructive/10 border border-destructive/30">
+              <p className="text-[10px] text-destructive uppercase font-semibold">⚠️ Watch closely</p>
+              <p className="text-xs font-display font-bold truncate">{insights.riskiest.customerName}</p>
+              <p className="text-[10px] text-muted-foreground">{insights.riskiest.reliabilityScore}% score</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {shown.slice(0, 8).map(c => {
+          const isOpen = expanded === c.customerKey;
+          const t = tone(c.reliabilityScore);
+          return (
+            <div key={c.customerKey} className="rounded-xl bg-surface-2 border border-border overflow-hidden">
+              <button onClick={() => setExpanded(isOpen ? null : c.customerKey)} className="w-full p-3 flex items-start justify-between gap-2 text-left">
+                <div className="min-w-0 flex-1">
+                  <p className="font-display font-bold text-sm truncate">{c.customerName}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {c.activeDebts > 0
+                      ? <>Owes <span className="text-warning font-semibold">₦{c.currentBalance.toLocaleString()}</span> · next pay {fmtRelDate(c.predictedNextPaymentDate)}</>
+                      : <>Cleared {c.completedDebts} debt{c.completedDebts === 1 ? '' : 's'} · avg ₦{c.avgDebtSize.toLocaleString()}</>
+                    }
+                  </p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full bg-${t}/15 text-${t} border border-${t}/30`}>
+                    {c.reliabilityScore}%
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">{c.sampleSize} events</p>
+                </div>
+              </button>
+              {isOpen && (
+                <div className="px-3 pb-3 pt-0 grid grid-cols-2 gap-2 border-t border-border/60">
+                  <Stat label="Avg debt size" value={`₦${c.avgDebtSize.toLocaleString()}`} />
+                  <Stat label="Largest debt" value={`₦${c.largestDebt.toLocaleString()}`} />
+                  <Stat label="Avg days to clear" value={c.avgDaysToClear !== null ? `${c.avgDaysToClear}d` : 'No data'} />
+                  <Stat label="Payment cadence" value={c.avgDaysBetweenPayments !== null ? `every ${c.avgDaysBetweenPayments}d` : 'No data'} />
+                  <Stat label="On-time rate" value={c.onTimeRate !== null ? `${c.onTimeRate}%` : 'No due dates'} />
+                  <Stat label="Debts (done / total)" value={`${c.completedDebts} / ${c.totalDebts}`} />
+                  {c.activeDebts > 0 && (
+                    <>
+                      <Stat label="Predicted next pay" value={fmtRelDate(c.predictedNextPaymentDate)} tone="primary" />
+                      <Stat label="Full clear by" value={fmtRelDate(c.predictedFullClearDate)} tone="primary" />
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {insights.customers.reduce((s, c) => s + c.sampleSize, 0) < 5 && (
+        <p className="text-[11px] text-warning p-2 rounded-lg bg-warning/10 border border-warning/20">📈 Predictions sharpen as more repayments are recorded.</p>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: 'primary' }) {
+  return (
+    <div className="p-2 rounded-lg bg-card border border-border/60">
+      <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</p>
+      <p className={`text-xs font-display font-bold ${tone === 'primary' ? 'text-primary' : 'text-foreground'}`}>{value}</p>
+    </div>
+  );
+}
