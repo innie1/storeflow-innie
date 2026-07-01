@@ -156,7 +156,11 @@ export default function PendingPayments({ store, onUpdate }: Props) {
             const tone = p.status === 'paid' ? 'text-success' : isOverdue ? 'text-destructive' : 'text-warning';
             const ins = insightFor(p.customerName);
             const rel = ins?.reliabilityScore ?? null;
-            const relTone = rel === null ? 'muted-foreground' : rel >= 75 ? 'success' : rel >= 45 ? 'warning' : 'destructive';
+            const relChipClass = rel === null
+              ? 'bg-muted text-muted-foreground border-border'
+              : rel >= 75 ? 'bg-success/15 text-success border-success/30'
+              : rel >= 45 ? 'bg-warning/15 text-warning border-warning/30'
+              : 'bg-destructive/15 text-destructive border-destructive/30';
             return (
               <div key={p.id} className="p-3 rounded-xl bg-card border border-border space-y-2 hover:border-border/80 transition-colors">
                 <div className="flex items-start justify-between gap-2">
@@ -164,7 +168,7 @@ export default function PendingPayments({ store, onUpdate }: Props) {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="font-display font-bold text-sm truncate">{p.customerName}</p>
                       {rel !== null && ins!.sampleSize >= 2 && (
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full bg-${relTone}/15 text-${relTone} border border-${relTone}/30 font-display font-bold`}>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-display font-bold ${relChipClass}`}>
                           {rel}% reliable
                         </span>
                       )}
