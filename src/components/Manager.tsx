@@ -1519,7 +1519,10 @@ function RepaymentPredictionsCard({ store }: { store: StoreData }) {
   const active = insights.customers.filter(c => c.activeDebts > 0);
   const shown = active.length > 0 ? active : insights.customers.slice(0, 5);
 
-  const tone = (r: number) => r >= 75 ? 'success' : r >= 45 ? 'warning' : 'destructive';
+  const toneClass = (r: number) =>
+    r >= 75 ? 'bg-success/15 text-success border-success/30'
+    : r >= 45 ? 'bg-warning/15 text-warning border-warning/30'
+    : 'bg-destructive/15 text-destructive border-destructive/30';
 
   return (
     <div className="p-4 rounded-2xl bg-card shadow-card space-y-4">
