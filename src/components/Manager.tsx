@@ -1531,7 +1531,7 @@ function RepaymentPredictionsCard({ store }: { store: StoreData }) {
           <h3 className="font-display font-bold text-base">Repayment Predictions</h3>
           <p className="text-xs text-muted-foreground">Learned from {insights.customers.length} customer{insights.customers.length === 1 ? '' : 's'} · {insights.customers.reduce((s, c) => s + c.sampleSize, 0)} payment events.</p>
         </div>
-        <div className={`px-2.5 py-1 rounded-full text-[10px] font-display font-bold bg-${tone(insights.overallReliability)}/15 text-${tone(insights.overallReliability)} border border-${tone(insights.overallReliability)}/30`}>
+        <div className={`px-2.5 py-1 rounded-full text-[10px] font-display font-bold border ${toneClass(insights.overallReliability)}`}>
           {insights.overallReliability}% avg reliability
         </div>
       </div>
