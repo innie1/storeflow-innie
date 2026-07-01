@@ -7,7 +7,7 @@ import {
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
   generateNotifications, ActivityRange, ActivityBucket, generateFlowReport,
-  getTopOpportunities, getProfitLeaks
+  getTopOpportunities, getProfitLeaks, getRepaymentInsights
 } from '@/lib/manager-intel';
 import { getLowStockThreshold } from '@/lib/settings';
 import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward } from '@/lib/flow-memory';
