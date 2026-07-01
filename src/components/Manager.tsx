@@ -1158,6 +1158,9 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
               <p className="text-xs text-warning mt-3 p-2 rounded-lg bg-warning/10 border border-warning/20">📊 Forecasts become more accurate as you record more sales. Keep going!</p>
             )}
           </div>
+
+          {/* Customer Repayment Predictions */}
+          <RepaymentPredictionsCard store={store} />
         </div>
       )}
 
