@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { StoreData, PendingPayment, PaymentMethod } from '@/types/store';
 import { addPaymentToPending, markPendingPaid, deletePendingPayment, getPendingSummary } from '@/lib/store-data';
+import { getRepaymentInsights, CustomerRepaymentInsight } from '@/lib/manager-intel';
 import { showToast } from '@/components/Toast';
 
 interface Props { store: StoreData; onUpdate: (s: StoreData) => void; }
