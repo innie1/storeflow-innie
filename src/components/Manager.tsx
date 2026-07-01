@@ -1573,7 +1573,7 @@ function RepaymentPredictionsCard({ store }: { store: StoreData }) {
       <div className="space-y-2">
         {shown.slice(0, 8).map(c => {
           const isOpen = expanded === c.customerKey;
-          const t = tone(c.reliabilityScore);
+          const chip = toneClass(c.reliabilityScore);
           return (
             <div key={c.customerKey} className="rounded-xl bg-surface-2 border border-border overflow-hidden">
               <button onClick={() => setExpanded(isOpen ? null : c.customerKey)} className="w-full p-3 flex items-start justify-between gap-2 text-left">
@@ -1587,7 +1587,7 @@ function RepaymentPredictionsCard({ store }: { store: StoreData }) {
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full bg-${t}/15 text-${t} border border-${t}/30`}>
+                  <div className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full border ${chip}`}>
                     {c.reliabilityScore}%
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1">{c.sampleSize} events</p>
