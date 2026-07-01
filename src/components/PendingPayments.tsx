@@ -32,6 +32,24 @@ export default function PendingPayments({ store, onUpdate }: Props) {
     return all.filter(p => p.status === 'pending');
   }, [all, filter]);
 
+  // Learned per-customer repayment intelligence
+  const repayInsights = useMemo(() => getRepaymentInsights(store), [store]);
+  const insightByKey = useMemo(() => {
+    const m = new Map<string, CustomerRepaymentInsight>();
+    repayInsights.customers.forEach(c => m.set(c.customerKey, c));
+    return m;
+  }, [repayInsights]);
+  const insightFor = (name: string) => insightByKey.get((name || '').trim().toLowerCase());
+  const relDate = (iso?: string) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    const diff = Math.round((d.getTime() - Date.now()) / 86400000);
+    if (diff === 0) return 'today';
+    if (diff === 1) return 'tomorrow';
+    if (diff > 0) return `in ${diff}d`;
+    return `${Math.abs(diff)}d ago`;
+  };
+
   const handleMarkPaid = (p: PendingPayment) => {
     const updated = markPendingPaid(store, p.id);
     onUpdate(updated);
