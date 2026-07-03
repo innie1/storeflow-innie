@@ -34,6 +34,7 @@ import Wishlist from '@/components/Wishlist';
 import StaffManagement from '@/components/StaffManagement';
 import CashDrawer from '@/components/CashDrawer';
 import CommunicationCenter from '@/components/CommunicationCenter';
+import QRHub from '@/components/qr/QRHub';
 
 // Games tabs
 import GamesDashboard from '@/components/games/GamesDashboard';
@@ -67,7 +68,8 @@ import {
   Briefcase,
   Coins,
   MessageSquare,
-  Bell
+  Bell,
+  QrCode
 } from 'lucide-react';
 
 
@@ -90,6 +92,7 @@ const RETAIL_MORE_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: 'documents', label: 'Doc Vault', icon: '📂' },
   { id: 'academy', label: 'Flow Academy', icon: '🎓' },
   { id: 'achievements', label: 'Achievements', icon: '🏆' },
+  { id: 'qr-hub', label: 'QR Codes', icon: '📱' },
   { id: 'wishlist', label: 'Wishlist', icon: '🌟' },
   { id: 'staff', label: 'Staff Accounts', icon: '💼' },
   { id: 'cash-drawer', label: 'Cash Drawer', icon: '💵' },
@@ -152,6 +155,7 @@ const MORE_CATEGORIES: MoreCategory[] = [
       { label: 'Document Vault', tabId: 'documents', icon: '📂' },
       { label: 'Flow Academy', tabId: 'academy', icon: '🎓' },
       { label: 'Achievements', tabId: 'achievements', icon: '🏆' },
+      { label: 'QR Codes', tabId: 'qr-hub', icon: '📱' },
     ]
   },
 
@@ -228,6 +232,8 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
       return <Star className={className} />;
     case 'staff':
       return <Briefcase className={className} />;
+    case 'qr-hub':
+      return <QrCode className={className} />;
     case 'cash-drawer':
       return <Coins className={className} />;
     case 'communication-center':
@@ -1035,6 +1041,9 @@ export default function Index() {
             </div>
             <div className={tab === 'communication-center' ? 'block' : 'hidden'}>
               <CommunicationCenter store={store} onUpdate={setStore} currentUser={currentUser} />
+            </div>
+            <div className={tab === 'qr-hub' ? 'block' : 'hidden'}>
+              <QRHub store={store} onUpdate={setStore} currentUser={currentUser} />
             </div>
             {isGames && (
               <>

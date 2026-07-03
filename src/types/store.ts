@@ -629,6 +629,6 @@ export interface CommunicationMessage {
 
 export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending' | 'marketplace'
-  | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings'
+  | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings' | 'qr-hub'
   | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer' | 'activity-log' | 'communication-center'
   | 'finance' | 'reports' | 'profile' | 'more';
