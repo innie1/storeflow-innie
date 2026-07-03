@@ -453,12 +453,12 @@ export function saveStore(store: StoreData): void {
       supabase
         .from('stores')
         .upsert({
-          id: store.accessCode,
           access_code: store.accessCode,
+          business_name: store.storeName,
           owner_password: store.managerSettings?.ownerPassword || '',
-          data: store,
+          data: store as any,
           updated_at: new Date().toISOString()
-        })
+        }, { onConflict: 'access_code' })
         .then(({ error }) => {
           if (error) {
             console.error('Supabase multi-device sync error:', error);

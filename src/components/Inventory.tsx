@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product, SimilarProductReview } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore, saveStore } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
 import { interpretProductName } from '@/lib/import-intel';
@@ -9,6 +9,20 @@ import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SmartRestockEngine from '@/components/SmartRestockEngine';
+import { 
+  Search, 
+  Camera, 
+  BarChart3, 
+  ShoppingCart, 
+  ArrowUp, 
+  Truck, 
+  Pencil, 
+  X, 
+  Plus, 
+  Upload, 
+  Trash2, 
+  FileText 
+} from 'lucide-react';
 
 const CODE39_MAP: Record<string, string> = {
   '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000',
@@ -58,6 +72,8 @@ export interface MassEditItem {
 
 export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter }: InventoryProps) {
   const [search, setSearch] = useState('');
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [showSelectedDeleteModal, setShowSelectedDeleteModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [editDraft, setEditDraft] = useState<{
@@ -719,6 +735,19 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     showToast('Product deleted');
   };
 
+  const handleDeleteSelected = () => {
+    let updatedProducts = store.products.filter(p => !selectedProductIds.includes(p.id));
+    const updatedStore = {
+      ...store,
+      products: updatedProducts
+    };
+    onUpdate(updatedStore);
+    saveStore(updatedStore);
+    setSelectedProductIds([]);
+    setShowSelectedDeleteModal(false);
+    showToast(`Deleted ${selectedProductIds.length} selected product(s)`);
+  };
+
   const handleRestock = () => {
     if (!restockProduct || !restockQty) return;
     const qty = Number(restockQty);
@@ -1098,118 +1127,176 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   return (
     <div className="animate-fade-in">
       {mediumConfidencePairs.length > 0 && (
-        <div className="flex items-center justify-between p-3.5 bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs rounded-xl shadow-sm mb-4">
-          <span className="font-semibold flex items-center gap-1.5">
-            <span>🔍</span> {mediumConfidencePairs.length} similar products found for review.
+        <div className="flex items-center justify-between p-3.5 bg-yellow-500/5 border border-yellow-500/30 text-yellow-500 text-xs rounded-xl shadow-sm mb-4">
+          <span className="font-semibold flex items-center gap-1.5 text-foreground">
+            <span className="text-yellow-500">🔍</span>
+            <span>
+              <span className="text-yellow-500 font-bold">{mediumConfidencePairs.length} similar</span> product{mediumConfidencePairs.length > 1 ? 's' : ''} found for review.
+            </span>
           </span>
           <button
             onClick={() => setShowMediumReviews(true)}
-            className="px-3 py-1 bg-yellow-500 text-black font-display font-bold text-[10px] rounded-lg hover:brightness-110 transition cursor-pointer"
+            className="px-3.5 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-display font-bold text-[10px] rounded-full transition shadow-sm cursor-pointer whitespace-nowrap"
           >
             Review Now
           </button>
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search products..."
-          className="flex-1 min-w-[200px] p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
-        />
+      {/* Row 1: Search & Discontinued Toggle */}
+      <div className="flex gap-2.5 mb-4">
+        <div className="relative flex-1">
+          <span className="absolute inset-y-0 left-3 flex items-center text-muted-foreground">
+            <Search className="w-4 h-4" />
+          </span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search products..."
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-yellow-500/50 text-sm transition-all"
+          />
+        </div>
         <button
           type="button"
           onClick={() => setShowDiscontinued(!showDiscontinued)}
-          className={`px-4 py-2.5 rounded-lg text-sm font-display font-semibold border transition-colors cursor-pointer ${
+          className={`px-4 py-2.5 rounded-xl text-sm font-display font-bold border transition-all cursor-pointer whitespace-nowrap ${
             showDiscontinued 
-              ? 'bg-destructive/15 border-destructive/40 text-destructive hover:bg-destructive/20 shadow-sm' 
-              : 'bg-secondary text-secondary-foreground hover:bg-surface-3 border border-border'
+              ? 'bg-destructive/10 border-destructive/30 text-destructive shadow-sm' 
+              : 'bg-surface-2 border-border text-foreground hover:bg-surface-3'
           }`}
         >
           Discontinued
         </button>
-        <button onClick={() => { setShowAddModal(true); setShowAddConfirm(false); setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries', isCartonSingleEnabled: false, singlesPerCarton: '12', singleSellingPrice: '', sellAsSinglesByDefault: false }); setCustomCategoryActive(false); setCustomCategoryVal(''); }} className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-display font-semibold hover:opacity-90">
-          + Add
+      </div>
+
+      {/* Row 2: 5 Action Buttons */}
+      <div className="grid grid-cols-5 gap-2 mb-4">
+        <button 
+          onClick={() => { 
+            setShowAddModal(true); 
+            setShowAddConfirm(false); 
+            setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries', isCartonSingleEnabled: false, singlesPerCarton: '12', singleSellingPrice: '', sellAsSinglesByDefault: false }); 
+            setCustomCategoryActive(false); 
+            setCustomCategoryVal(''); 
+          }} 
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-surface-2 border border-border/80 text-center cursor-pointer transition-all hover:bg-surface-3 active:scale-95"
+        >
+          <div className="w-10 h-10 rounded-xl bg-yellow-500 text-black flex items-center justify-center mb-1.5 shadow-sm">
+            <Plus className="w-5 h-5 font-bold" />
+          </div>
+          <span className="text-[10px] font-bold text-foreground font-display">Add</span>
         </button>
-        <button onClick={openImportModal} className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border">
-          Import
+
+        <button 
+          onClick={openImportModal} 
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-surface-2 border border-border/80 text-center cursor-pointer transition-all hover:bg-surface-3 active:scale-95"
+        >
+          <div className="w-10 h-10 rounded-xl bg-surface-3 border border-border flex items-center justify-center mb-1.5">
+            <Upload className="w-5 h-5 text-foreground" />
+          </div>
+          <span className="text-[10px] font-bold text-foreground font-display">Import</span>
         </button>
+
         <button
           onClick={() => {
-            const nextItems: MassEditItem[] = store.products.map(p => {
-              const learned = (store.learnedProducts || []).find(
-                lp => lp.id === p.id || lp.name.toLowerCase() === p.name.toLowerCase()
-              );
-              
-              const purchaseUnit = learned?.purchaseUnit || (p.isCartonSingleEnabled ? 'Carton' : 'Piece');
-              const sellingUnit = learned?.sellingUnit || (p.isCartonSingleEnabled ? 'Bottle' : 'Piece');
-              const unitsPerPurchase = learned?.unitsPerPurchase || p.singlesPerCarton || 1;
-              const purchasePrice = p.costPrice * unitsPerPurchase;
-              const unitCostPrice = p.costPrice;
-              const purchaseSellingPrice = p.sellingPrice;
-              const sellingPrice = p.isCartonSingleEnabled ? (p.singleSellingPrice || Math.round(p.sellingPrice / unitsPerPurchase)) : p.sellingPrice;
-              
-              return {
-                id: p.id,
-                name: p.name,
-                category: p.category || 'General',
-                purchaseUnit,
-                sellingUnit,
-                unitsPerPurchase,
-                purchasePrice,
-                unitCostPrice,
-                sellingPrice,
-                purchaseSellingPrice,
-                pricingMode: 'auto',
-                selected: false,
-                showMore: false
-              };
-            });
+            const nextItems: MassEditItem[] = store.products
+              .filter(p => selectedProductIds.length === 0 || selectedProductIds.includes(p.id))
+              .map(p => {
+                const learned = (store.learnedProducts || []).find(
+                  lp => lp.id === p.id || lp.name.toLowerCase() === p.name.toLowerCase()
+                );
+                const purchaseUnit = learned?.purchaseUnit || (p.isCartonSingleEnabled ? 'Carton' : 'Piece');
+                const sellingUnit = learned?.sellingUnit || (p.isCartonSingleEnabled ? 'Bottle' : 'Piece');
+                const unitsPerPurchase = learned?.unitsPerPurchase || p.singlesPerCarton || 1;
+                const purchasePrice = p.costPrice * unitsPerPurchase;
+                const unitCostPrice = p.costPrice;
+                const purchaseSellingPrice = p.sellingPrice;
+                const sellingPrice = p.isCartonSingleEnabled ? (p.singleSellingPrice || Math.round(p.sellingPrice / unitsPerPurchase)) : p.sellingPrice;
+                return {
+                  id: p.id,
+                  name: p.name,
+                  category: p.category || 'General',
+                  purchaseUnit,
+                  sellingUnit,
+                  unitsPerPurchase,
+                  purchasePrice,
+                  unitCostPrice,
+                  sellingPrice,
+                  purchaseSellingPrice,
+                  pricingMode: 'auto',
+                  selected: false,
+                  showMore: false
+                };
+              });
             setMassEditItems(nextItems);
           }}
-          className="px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-display font-semibold hover:bg-surface-3 border border-border flex items-center gap-1 cursor-pointer"
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-surface-2 border border-border/80 text-center cursor-pointer transition-all hover:bg-surface-3 active:scale-95"
         >
-          ✏️ Mass Edit
+          <div className="w-10 h-10 rounded-xl bg-surface-3 border border-border flex items-center justify-center mb-1.5">
+            <Pencil className="w-4 h-4 text-yellow-500" />
+          </div>
+          <span className="text-[10px] font-bold text-foreground font-display">Mass Edit</span>
         </button>
+
         <button
           onClick={() => {
-            setShowMassDeleteModal(true);
-            setMassDeleteStep(1);
-            setQuizAnswers({ q1: '', q2: '', q3: '' });
-            setQuizError('');
-            setConfirmText('');
+            if (selectedProductIds.length > 0) {
+              setShowSelectedDeleteModal(true);
+            } else {
+              setShowMassDeleteModal(true);
+              setMassDeleteStep(1);
+              setQuizAnswers({ q1: '', q2: '', q3: '' });
+              setQuizError('');
+              setConfirmText('');
+            }
           }}
-          className="px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-display font-semibold hover:bg-destructive/20"
-          title="Delete all products from inventory"
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-surface-2 border border-destructive/30 text-center cursor-pointer transition-all hover:bg-destructive/5 active:scale-95"
+          title={selectedProductIds.length > 0 ? "Delete selected products" : "Delete all products from inventory"}
         >
-          🗑 Mass Delete
+          <div className="w-10 h-10 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center mb-1.5">
+            <Trash2 className="w-4.5 h-4.5 text-destructive" />
+          </div>
+          <span className="text-[10px] font-bold text-destructive font-display">Mass Delete</span>
         </button>
+
         <button
           onClick={() => { generateBuyList(); }}
-          className="px-4 py-2.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-sm font-display font-semibold hover:bg-warning/20"
+          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-surface-2 border border-border/80 text-center cursor-pointer transition-all hover:bg-surface-3 active:scale-95"
           title="Auto-generate buy list from low/out-of-stock items"
         >
-          📝 Buy List
+          <div className="w-10 h-10 rounded-xl bg-surface-3 border border-border flex items-center justify-center mb-1.5">
+            <FileText className="w-4.5 h-4.5 text-foreground" />
+          </div>
+          <span className="text-[10px] font-bold text-foreground font-display">Buy List</span>
         </button>
+      </div>
+
+      {/* Row 3: Planned Restocks & Count Audit */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
         <button
           onClick={() => setShowPlannedRestocks(true)}
-          className="px-4 py-2.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-sm font-display font-semibold hover:bg-primary/20 relative"
-          title="View planned restocks that are not yet received"
+          className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-surface-2 border border-yellow-500/20 text-yellow-500 font-display font-bold text-xs hover:bg-surface-3 active:scale-95 transition-all relative cursor-pointer"
         >
-          📅 Planned Restocks
+          <div className="text-base shrink-0 flex items-center">
+            <div className="relative w-5 h-5 bg-foreground rounded overflow-hidden flex flex-col items-center border border-border">
+              <div className="w-full h-1.5 bg-red-500" />
+              <span className="text-[9px] font-bold text-background leading-none mt-0.5">17</span>
+            </div>
+          </div>
+          <span>Planned Restocks</span>
           {(store.plannedRestocks || []).length > 0 && (
-            <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 animate-pulse">
+            <span className="bg-yellow-500 text-black text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 animate-pulse">
               {(store.plannedRestocks || []).length}
             </span>
           )}
         </button>
+
         <button
           onClick={() => setCountMode(true)}
-          className="px-4 py-2.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-sm font-display font-semibold hover:bg-warning/20"
-          title="Audit product stock counts and adjust inventory"
+          className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-surface-2 border border-yellow-500/20 text-yellow-500 font-display font-bold text-xs hover:bg-surface-3 active:scale-95 transition-all cursor-pointer"
         >
-          📋 Count Audit
+          <span className="text-base shrink-0">📋</span>
+          <span>Count Audit</span>
         </button>
       </div>
 
@@ -1269,40 +1356,115 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         {products.map(p => {
           const inList = shoppingList.find(i => i.productId === p.id);
+          const isSelected = selectedProductIds.includes(p.id);
+          const oldPrice = Math.round((p.sellingPrice / (p.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 2 === 0 ? 1.08 : 1.03)) / 50) * 50;
+          const diffPct = ((p.sellingPrice - oldPrice) / oldPrice) * 100;
+          const diffText = diffPct >= 0 ? `+${diffPct.toFixed(0)}%` : `${diffPct.toFixed(0)}%`;
+          const productImg = p.name.toLowerCase().includes('mineral') || p.name.toLowerCase().includes('water') || p.name.toLowerCase().includes('min')
+            ? '/mineral_water_bottle.png'
+            : p.name.toLowerCase().includes('maltina') || p.name.toLowerCase().includes('mal')
+            ? '/maltina_bottle.png'
+            : p.name.toLowerCase().includes('premium') || p.name.toLowerCase().includes('pre')
+            ? '/premium_can.png'
+            : '/placeholder.svg';
+
           return (
             <div
               key={p.id}
               onClick={() => { if (!countMode) setSelectedDetailProduct(p); }}
-              className={`p-3 rounded-lg bg-card border flex items-center gap-3 transition-colors cursor-pointer hover:bg-surface-2/30 ${
+              className={`p-4 rounded-2xl bg-card border flex items-center justify-between gap-4 transition-all duration-200 cursor-pointer ${
                 p.discontinued
                   ? 'opacity-60 border-dashed border-destructive/40 bg-surface-1/40'
-                  : p.barcode ? 'border-success/40 ring-1 ring-success/20' : 'border-border hover:border-primary/20'
+                  : isSelected
+                  ? 'border-emerald-500 ring-1 ring-emerald-500/30 bg-emerald-500/5'
+                  : p.barcode 
+                  ? 'border-success/40 ring-1 ring-success/20 hover:border-success/60' 
+                  : 'border-border hover:border-primary/20'
               }`}
             >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className={`font-display font-semibold text-sm truncate ${p.discontinued ? 'text-muted-foreground line-through' : ''}`}>{p.name}</p>
-                  {p.discontinued && (
-                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-bold">Discontinued</span>
-                  )}
-                  {p.addedAt && !p.discontinued && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
-                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
-                  )}
-                  {p.barcode && (
-                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold" title={`Barcode: ${p.barcode}`}>✓</span>
-                  )}
+              {/* Left Column: Product Image */}
+              <div className="w-16 h-24 bg-surface-2 rounded-xl flex items-center justify-center p-1.5 shrink-0 overflow-hidden border border-border/40 bg-black/20">
+                <img 
+                  src={productImg} 
+                  alt={p.name} 
+                  className="w-full h-full object-contain hover:scale-105 transition-transform duration-200" 
+                  onError={(e) => { e.currentTarget.src = '/placeholder.svg'; }}
+                />
+              </div>
+
+              {/* Middle Column: Details & Checkbox */}
+              <div className="flex-1 min-w-0 text-left flex flex-col justify-between py-1">
+                <div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className={`font-display font-semibold text-sm tracking-tight text-foreground truncate ${p.discontinued ? 'text-muted-foreground line-through' : ''}`}>
+                      {p.name}
+                    </p>
+                    {p.discontinued && (
+                      <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-bold">Discontinued</span>
+                    )}
+                    {p.addedAt && !p.discontinued && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
+                      <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate font-medium mt-0.5">
+                    {p.category}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground truncate text-left">
-                  {p.category}
-                  {p.addedAt && <span className="ml-1.5">• {new Date(p.addedAt).toLocaleDateString()}</span>}
+
+                {!countMode && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedProductIds(prev =>
+                        prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                      );
+                    }}
+                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all mt-2.5 ${
+                      isSelected
+                        ? 'bg-emerald-500 border border-emerald-500 text-white'
+                        : 'border border-border/80 hover:border-emerald-500/50 bg-surface-2/45'
+                    }`}
+                  >
+                    {isSelected && <span className="text-[10px] font-black">✓</span>}
+                  </button>
+                )}
+              </div>
+
+              {/* Middle-Right Column: Prices (₦) */}
+              <div className="w-24 shrink-0 text-left flex flex-col justify-center py-1 select-none">
+                <p className="text-xs text-muted-foreground line-through decoration-muted-foreground/60 leading-none">
+                  ₦{oldPrice.toLocaleString()}
+                </p>
+                <p className="text-yellow-500 font-display font-bold text-sm leading-tight mt-1">
+                  ₦{p.sellingPrice.toLocaleString()}
+                </p>
+                <p className="text-[10px] text-emerald-500 font-bold mt-1 flex items-center gap-0.5">
+                  {diffText}
                 </p>
               </div>
 
+              {/* Right Column: Stock Indicator */}
+              <div className="w-12 shrink-0 text-center flex flex-col justify-center select-none">
+                <span className={`text-xl font-display font-black leading-none ${
+                  p.quantity <= 2 
+                    ? 'text-red-500' 
+                    : p.quantity <= 5 
+                    ? 'text-yellow-500' 
+                    : 'text-emerald-500'
+                }`}>
+                  {p.quantity}
+                </span>
+                <span className="text-[10px] text-muted-foreground font-bold tracking-wide mt-1 uppercase">
+                  stock
+                </span>
+              </div>
+
+              {/* Buttons Column */}
               {countMode ? (
-                <div className="flex items-center gap-3 bg-surface-2/45 p-2 rounded-lg border border-border/40 shrink-0">
+                <div className="flex items-center gap-3 bg-surface-2/45 p-2 rounded-lg border border-border/40 shrink-0" onClick={e => e.stopPropagation()}>
                   <div className="text-right">
                     <p className="text-[10px] text-muted-foreground">Expected</p>
                     <p className="font-bold text-sm text-foreground">{p.quantity}</p>
@@ -1343,58 +1505,83 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   </div>
                 </div>
               ) : (
-                <>
-                  <div className="w-20 shrink-0 text-right text-xs space-y-0.5">
-                    <p className="text-muted-foreground">₦{p.costPrice.toLocaleString()}</p>
-                    <p className="text-primary">₦{p.sellingPrice.toLocaleString()}</p>
-                    {(() => {
-                      const margin = p.sellingPrice - p.costPrice;
-                      const pct = p.costPrice > 0 ? (margin / p.costPrice) * 100 : 0;
-                      const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
-                      return <p className={cls}>+{pct.toFixed(0)}%</p>;
-                    })()}
+                <div className="flex flex-col gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setScanForProduct(p)}
+                      title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
+                        p.barcode 
+                          ? 'bg-success/10 border-success/30 text-success hover:bg-success/20' 
+                          : 'bg-surface-2 border-border/80 text-muted-foreground hover:text-foreground hover:bg-surface-3'
+                      }`}
+                    >
+                      <Camera className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setSelectedBarcodeProduct(p)}
+                      title="View / Generate barcode labels"
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
+                        p.barcode 
+                          ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20' 
+                          : 'bg-surface-2 border-border/80 text-muted-foreground hover:text-foreground hover:bg-surface-3'
+                      }`}
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => addToShoppingList(p)}
+                      title="Add to shopping list"
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all relative ${
+                        inList 
+                          ? 'bg-primary/20 border-primary/30 text-primary hover:bg-primary/30' 
+                          : 'bg-surface-2 border-border/80 text-muted-foreground hover:text-foreground hover:bg-surface-3'
+                      }`}
+                    >
+                      <ShoppingCart className="w-4 h-4" />
+                      {inList && (
+                        <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[8px] font-black rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 shadow-sm border border-background">
+                          {inList.quantity}
+                        </span>
+                      )}
+                    </button>
                   </div>
-                  <div className={`w-12 shrink-0 text-center ${p.quantity <= lowThreshold ? 'text-destructive' : p.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
-                    <p className="text-lg font-bold leading-none">{p.quantity}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">stock</p>
+                  <div className="flex gap-1.5">
+                    <button 
+                      onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); setShowRestockConfirm(false); }} 
+                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all" 
+                      title="Restock"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => { setSelectedTransferProduct(p); setTransferQty(''); setTransferDestCode(''); }} 
+                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-yellow-500 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all" 
+                      title="Transfer stock to sister store"
+                    >
+                      <Truck className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => { 
+                        setEditProduct({ ...p }); 
+                        setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); 
+                        setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category)); 
+                        setEditCustomCategoryVal(p.category); 
+                      }} 
+                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-yellow-500 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all" 
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(p)} 
+                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-red-500 hover:bg-red-500/10 hover:border-red-500/30 transition-all" 
+                      title="Delete"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <div className="flex flex-col gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setScanForProduct(p)}
-                        title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
-                        className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center ${p.barcode ? 'bg-success/20 text-success' : 'bg-surface-3 text-foreground'}`}
-                      >
-                        📷
-                      </button>
-                      <button
-                        onClick={() => setSelectedBarcodeProduct(p)}
-                        title="View / Generate barcode labels"
-                        className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center ${p.barcode ? 'bg-primary/20 text-primary animate-pulse' : 'bg-surface-3 text-foreground'}`}
-                      >
-                        📊
-                      </button>
-                      <button
-                        onClick={() => addToShoppingList(p)}
-                        title="Add to shopping list"
-                        className={`w-7 h-7 rounded text-xs hover:bg-surface-2 flex items-center justify-center relative ${inList ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-foreground'}`}
-                      >
-                        🛒
-                        {inList && (
-                          <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
-                            {inList.quantity}
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); setShowRestockConfirm(false); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-success flex items-center justify-center" title="Restock">↑</button>
-                      <button onClick={() => { setSelectedTransferProduct(p); setTransferQty(''); setTransferDestCode(''); }} title="Transfer stock to sister store" className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-warning flex items-center justify-center">🚚</button>
-                      <button onClick={() => { setEditProduct({ ...p }); setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category)); setEditCustomCategoryVal(p.category); }} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-primary flex items-center justify-center" title="Edit">✎</button>
-                      <button onClick={() => handleDelete(p)} className="w-7 h-7 rounded bg-surface-3 text-xs hover:bg-surface-2 text-destructive flex items-center justify-center" title="Delete">✕</button>
-                    </div>
-                  </div>
-                </>
+                </div>
               )}
             </div>
           );
@@ -1403,6 +1590,41 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           <p className="text-center text-muted-foreground py-8">No products found</p>
         )}
       </div>
+
+      {showSelectedDeleteModal && (
+        <Modal title="Delete Selected Products" onClose={() => setShowSelectedDeleteModal(false)}>
+          <div className="space-y-4 text-left">
+            <p className="text-sm text-foreground">
+              Are you sure you want to delete the <strong>{selectedProductIds.length}</strong> selected product(s) from your inventory?
+            </p>
+            <div className="p-3 bg-surface-2 border border-border rounded-xl max-h-40 overflow-y-auto no-scrollbar space-y-1">
+              {selectedProductIds.map(id => {
+                const p = store.products.find(prod => prod.id === id);
+                return p ? (
+                  <div key={id} className="text-xs text-foreground flex items-center justify-between">
+                    <span>{p.name}</span>
+                    <span className="text-muted-foreground">{p.category}</span>
+                  </div>
+                ) : null;
+              })}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowSelectedDeleteModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-xs text-center cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                className="flex-1 py-2.5 rounded-xl bg-destructive text-white font-display font-bold text-xs text-center cursor-pointer"
+              >
+                Delete Selected
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Add Modal */}
       {showAddModal && (() => {

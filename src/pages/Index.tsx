@@ -66,7 +66,8 @@ import {
   Star,
   Briefcase,
   Coins,
-  MessageSquare
+  MessageSquare,
+  Bell
 } from 'lucide-react';
 
 
@@ -681,24 +682,19 @@ export default function Index() {
               className="relative w-9 h-9 rounded-full bg-surface-2 hover:bg-surface-3 border border-border flex items-center justify-center text-sm transition-all active:scale-95 cursor-pointer"
               title="Notifications"
             >
-              🔔
+              <Bell className="w-4 h-4 text-foreground" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
-                  {unreadCount}
-                </span>
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
               )}
             </button>
 
             <button
               onClick={() => setShowSwitchUser(true)}
-              className="h-9 px-2.5 sm:px-3.5 rounded-full bg-black/40 border border-border/80 hover:border-yellow-500/40 text-xs text-foreground font-display font-semibold transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-sm active:scale-95 cursor-pointer whitespace-nowrap"
+              className="h-9 px-3.5 rounded-full bg-black/40 border border-border/80 hover:border-yellow-500/40 text-xs text-foreground font-display font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer whitespace-nowrap"
             >
-              <span className="flex items-center gap-1 whitespace-nowrap">
-                <span>👤</span>
-                <span className="truncate max-w-[50px] sm:max-w-none">{currentUser?.name}</span>
-              </span>
-              <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded bg-surface-2 border border-border/80 text-[9px] uppercase font-bold text-yellow-500 shrink-0">
-                {currentUser?.role}
+              <span className="flex items-center gap-1.5 whitespace-nowrap font-display">
+                <span className="text-muted-foreground text-[13px]">👤</span>
+                <span className="truncate capitalize">{currentUser?.role === 'owner' ? 'Owner' : (currentUser?.name || 'Staff')}</span>
               </span>
             </button>
             <button

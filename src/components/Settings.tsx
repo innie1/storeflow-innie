@@ -3,6 +3,8 @@ import {
   StoreData, StoreProfile, ManagerSettings, DEFAULT_MANAGER_SETTINGS,
   SavingsGoal, PaymentInfo, SavingsFrequency, RentInfo, RentFrequency,
 } from '@/types/store';
+import CloudAuthModal from '@/components/CloudAuthModal';
+import { supabase } from '@/integrations/supabase/client';
 import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex, getStoreIndex, STORE_PREFIX } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
@@ -154,6 +156,60 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Cloud Sync Auth Modal State
+  const [showCloudAuthModal, setShowCloudAuthModal] = useState(false);
+
+  const handleCloudAuthSuccess = async (profile: any) => {
+    setShowCloudAuthModal(false);
+    
+    try {
+      const { data: existingStore } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('access_code', store.accessCode)
+        .maybeSingle();
+
+      const { data: dbStore, error: storeError } = await supabase
+        .from('stores')
+        .upsert({
+          id: existingStore?.id,
+          owner_id: profile.id,
+          business_name: store.storeName,
+          business_type: store.category || 'retail',
+          logo: store.profile?.logoStyle || 'minimalist',
+          access_code: store.accessCode,
+          owner_password: store.managerSettings?.ownerPassword || 'owner',
+          data: store as any,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'access_code' })
+        .select()
+        .single();
+
+      if (storeError) {
+        return showToast(storeError.message, 'error');
+      }
+
+      await supabase.from('store_members').upsert({
+        store_id: dbStore.id,
+        profile_id: profile.id,
+        role: 'owner'
+      }, { onConflict: 'store_id,profile_id' });
+
+      updateMgr({ multiDeviceSync: true });
+      const updatedStore = {
+        ...store,
+        managerSettings: {
+          ...store.managerSettings,
+          multiDeviceSync: true
+        }
+      };
+      saveStore(updatedStore);
+      showToast('Cloud Sync Enabled! Backup created successfully.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to initialize cloud backup', 'error');
+    }
+  };
 
   // Backup system state
   const [localBackups, setLocalBackups] = useState<LocalBackup[]>([]);
@@ -1367,18 +1423,49 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           label="Multi-device Cloud Sync" 
           description="Enable real-time cloud backup to sync and access this store on other devices." 
           checked={mgr.multiDeviceSync || false} 
-          onChange={v => {
-            updateMgr({ multiDeviceSync: v });
+          onChange={async (v) => {
             if (v) {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (!session) {
+                setShowCloudAuthModal(true);
+                return;
+              }
+              // User already authenticated
+              let { data: profile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('auth_user_id', session.user.id)
+                .maybeSingle();
+
+              if (!profile) {
+                // Auto create profile
+                const { data: newProfile } = await supabase
+                  .from('profiles')
+                  .insert({
+                    auth_user_id: session.user.id,
+                    email: session.user.email || '',
+                    full_name: session.user.email?.split('@')[0] || 'User',
+                    role: 'owner'
+                  })
+                  .select()
+                  .single();
+                profile = newProfile;
+              }
+
+              if (profile) {
+                handleCloudAuthSuccess(profile);
+              }
+            } else {
+              updateMgr({ multiDeviceSync: false });
               const updatedStore = {
                 ...store,
                 managerSettings: {
                   ...store.managerSettings,
-                  multiDeviceSync: true
+                  multiDeviceSync: false
                 }
               };
               saveStore(updatedStore);
-              showToast('Cloud Sync Enabled! Initializing backup...');
+              showToast('Cloud Sync disabled.');
             }
           }} 
         />

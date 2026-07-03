@@ -4,7 +4,8 @@ import { StoreData, StoreCategory, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotMood } from '@/components/Mascot';
 import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
-import { Eye, EyeOff, Key, Shield, HelpCircle, Lock, Mail, Phone, Users } from 'lucide-react';
+import { Eye, EyeOff, Key, Shield, HelpCircle, Lock, Mail, Phone, Users, Cloud, Database, Sparkles, Plus, Check, LogIn, UserPlus, Building, ArrowLeft } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -25,7 +26,17 @@ const QUESTIONS = [
 ];
 
 export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
-  const [mode, setMode] = useState<'choose' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery'>('choose');
+  const [mode, setMode] = useState<'choose' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>('choose');
+
+  // Supabase Auth States
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authFullName, setAuthFullName] = useState('');
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('');
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
+  const [loadingAuth, setLoadingAuth] = useState(false);
+  const [userStores, setUserStores] = useState<any[]>([]);
+  const [activeProfile, setActiveProfile] = useState<any>(null);
   
   // Create / Access basic states
   const [storeName, setStoreName] = useState('');
@@ -400,6 +411,270 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     setRecoveryMode('options');
   };
 
+  // Handle Auth Sign Up
+  const handleAuthSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword.trim() || !authFullName.trim()) {
+      setAccessMood('worried');
+      return showToast('Please fill all fields', 'error');
+    }
+    if (authPassword !== authConfirmPassword) {
+      setAccessMood('worried');
+      return showToast('Passwords do not match', 'error');
+    }
+    if (authPassword.length < 6) {
+      setAccessMood('worried');
+      return showToast('Password must be at least 6 characters', 'error');
+    }
+
+    setLoadingAuth(true);
+    setAccessMood('thinking');
+
+    try {
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email: authEmail.trim(),
+        password: authPassword,
+      });
+
+      if (signUpError) {
+        setAccessMood('angry' as any);
+        return showToast(signUpError.message, 'error');
+      }
+
+      if (!authData.user) {
+        setAccessMood('angry' as any);
+        return showToast('Signup failed', 'error');
+      }
+
+      // Create public profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          auth_user_id: authData.user.id,
+          email: authEmail.trim(),
+          full_name: authFullName.trim(),
+          role: 'owner',
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+      }
+
+      setActiveProfile(profileData || { email: authEmail.trim(), full_name: authFullName.trim() });
+      setAccessMood('happy');
+      showToast('Account created! Let\'s set up your store.', 'success');
+      setMode('auth-store-create');
+    } catch (err: any) {
+      setAccessMood('angry' as any);
+      showToast(err.message || 'An error occurred during sign up', 'error');
+    } finally {
+      setLoadingAuth(false);
+    }
+  };
+
+  // Handle Auth Sign In
+  const handleAuthSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAccessMood('worried');
+      return showToast('Please fill all fields', 'error');
+    }
+
+    setLoadingAuth(true);
+    setAccessMood('thinking');
+
+    try {
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: authEmail.trim(),
+        password: authPassword,
+      });
+
+      if (signInError) {
+        setAccessMood('angry' as any);
+        return showToast(signInError.message, 'error');
+      }
+
+      if (!authData.user) {
+        setAccessMood('angry' as any);
+        return showToast('Login failed', 'error');
+      }
+
+      // Get or create profile
+      let { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('auth_user_id', authData.user.id)
+        .maybeSingle();
+
+      if (!profile) {
+        const { data: newProfile } = await supabase
+          .from('profiles')
+          .insert({
+            auth_user_id: authData.user.id,
+            email: authData.user.email || authEmail.trim(),
+            full_name: authData.user.email?.split('@')[0] || 'User',
+            role: 'owner'
+          })
+          .select()
+          .single();
+        profile = newProfile;
+      }
+
+      setActiveProfile(profile);
+
+      if (profile) {
+        // Query stores owned by user
+        const { data: ownedStores } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('owner_id', profile.id);
+
+        // Query stores where user is member
+        const { data: members } = await supabase
+          .from('store_members')
+          .select('store_id')
+          .eq('profile_id', profile.id);
+
+        const memberStoreIds = (members || []).map(m => m.store_id);
+
+        let allStores = [...(ownedStores || [])];
+        if (memberStoreIds.length > 0) {
+          const { data: memberStores } = await supabase
+            .from('stores')
+            .select('*')
+            .in('id', memberStoreIds);
+          
+          if (memberStores) {
+            memberStores.forEach(s => {
+              if (!allStores.some(as => as.id === s.id)) {
+                allStores.push(s);
+              }
+            });
+          }
+        }
+
+        setUserStores(allStores);
+        setAccessMood('happy');
+        showToast('Login successful!', 'success');
+
+        if (allStores.length > 0) {
+          setMode('auth-store-select');
+        } else {
+          setMode('auth-store-create');
+        }
+      }
+    } catch (err: any) {
+      setAccessMood('angry' as any);
+      showToast(err.message || 'An error occurred during sign in', 'error');
+    } finally {
+      setLoadingAuth(false);
+    }
+  };
+
+  // Handle Create Store for Cloud account
+  const handleCreateCloudStore = async () => {
+    if (!storeName.trim()) {
+      setAccessMood('worried');
+      return showToast('Enter a store name', 'error');
+    }
+    if (!activeProfile) {
+      return showToast('Active user session not found. Please log in again.', 'error');
+    }
+
+    setLoadingAuth(true);
+    setAccessMood('thinking');
+
+    try {
+      const store = createStore(storeName.trim(), category, category === 'retail' ? retailType : undefined, selectedLogoStyle);
+      
+      if (store.managerSettings) {
+        store.managerSettings.multiDeviceSync = true;
+        store.managerSettings.ownerPassword = ownerPassword.trim() || store.managerSettings.ownerPassword || 'owner';
+      }
+
+      const { data: dbStore, error: storeError } = await supabase
+        .from('stores')
+        .insert({
+          owner_id: activeProfile.id,
+          business_name: storeName.trim(),
+          business_type: category,
+          logo: selectedLogoStyle,
+          access_code: store.accessCode,
+          owner_password: store.managerSettings?.ownerPassword || 'owner',
+          data: store as any
+        })
+        .select()
+        .single();
+
+      if (storeError) {
+        setAccessMood('angry' as any);
+        return showToast(storeError.message, 'error');
+      }
+
+      await supabase.from('store_members').insert({
+        store_id: dbStore.id,
+        profile_id: activeProfile.id,
+        role: 'owner'
+      });
+
+      localStorage.setItem('storeflow_store_' + store.accessCode, JSON.stringify(store));
+
+      const ownerUser = {
+        name: activeProfile.full_name || 'Owner',
+        role: 'owner',
+        permissions: { sales: true, inventory: true, reports: true, settings: true }
+      };
+      localStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
+
+      setAccessMood('celebrating');
+      showToast('Cloud Store created successfully!', 'success');
+      onStoreLoaded(store);
+    } catch (err: any) {
+      setAccessMood('angry' as any);
+      showToast(err.message || 'Failed to create cloud store', 'error');
+    } finally {
+      setLoadingAuth(false);
+    }
+  };
+
+  // Handle loading a cloud store
+  const handleLoadCloudStore = async (storeRow: any) => {
+    if (!storeRow.data) {
+      return showToast('Store data is empty', 'error');
+    }
+
+    setLoadingAuth(true);
+    setAccessMood('thinking');
+
+    try {
+      const storeData = storeRow.data as StoreData;
+      if (storeData.managerSettings) {
+        storeData.managerSettings.multiDeviceSync = true;
+      }
+
+      localStorage.setItem('storeflow_store_' + storeData.accessCode, JSON.stringify(storeData));
+
+      const role = activeProfile?.role || 'owner';
+      const sessionUser = {
+        name: activeProfile?.full_name || 'Owner',
+        role: role,
+        permissions: { sales: true, inventory: true, reports: true, settings: true }
+      };
+      localStorage.setItem('storeflow_active_user', JSON.stringify(sessionUser));
+
+      setAccessMood('happy');
+      showToast(`Logged in to ${storeData.storeName}!`, 'success');
+      onStoreLoaded(storeData);
+    } catch (err: any) {
+      setAccessMood('angry' as any);
+      showToast('Failed to load cloud store data', 'error');
+    } finally {
+      setLoadingAuth(false);
+    }
+  };
+
   // Compile selectable profiles
   const profiles = [];
   if (loadedStore) {
@@ -422,16 +697,340 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           <div className="space-y-3">
             <button
               onClick={() => setMode('create')}
-              className="w-full p-4 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-lg hover:opacity-90 transition-opacity cursor-pointer"
+              className="w-full p-4 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-lg hover:opacity-90 transition-opacity cursor-pointer active:scale-95 transition-all shadow-md"
             >
               Create New Store
             </button>
             <button
               onClick={() => setMode('access')}
-              className="w-full p-4 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-lg hover:bg-surface-3 transition-colors border border-border cursor-pointer"
+              className="w-full p-4 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-lg hover:bg-surface-3 transition-colors border border-border cursor-pointer active:scale-95 transition-all"
             >
               Access Existing Store
             </button>
+          </div>
+        )}
+
+        {mode === 'auth-login' && (
+          <form onSubmit={handleAuthSignIn} className="space-y-4 text-left p-5 rounded-2xl bg-surface-2 border border-border/80 shadow-md">
+            <h3 className="font-display font-bold text-lg text-foreground flex items-center gap-2">
+              <LogIn className="w-5 h-5 text-primary" />
+              <span>Sign In to Cloud</span>
+            </h3>
+            
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">Email Address</label>
+              <input
+                type="email"
+                value={authEmail}
+                onChange={e => setAuthEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">Password</label>
+              <div className="relative">
+                <input
+                  type={showAuthPassword ? 'text' : 'password'}
+                  value={authPassword}
+                  onChange={e => setAuthPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-sm focus:outline-none focus:border-primary pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAuthPassword(!showAuthPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showAuthPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loadingAuth}
+              className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {loadingAuth ? 'Signing In...' : 'Sign In'}
+            </button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setMode('auth-signup')}
+                className="text-xs text-primary font-semibold hover:underline"
+              >
+                Don't have an account? Sign Up
+              </button>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => setMode('choose')}
+              className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2"
+            >
+              ← Back to Workspace Options
+            </button>
+          </form>
+        )}
+
+        {mode === 'auth-signup' && (
+          <form onSubmit={handleAuthSignUp} className="space-y-4 text-left p-5 rounded-2xl bg-surface-2 border border-border/80 shadow-md">
+            <h3 className="font-display font-bold text-lg text-foreground flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-primary" />
+              <span>Create Cloud Account</span>
+            </h3>
+
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">Full Name</label>
+              <input
+                type="text"
+                value={authFullName}
+                onChange={e => setAuthFullName(e.target.value)}
+                placeholder="John Doe"
+                className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                required
+              />
+            </div>
+            
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">Email Address</label>
+              <input
+                type="email"
+                value={authEmail}
+                onChange={e => setAuthEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">Password</label>
+              <div className="relative">
+                <input
+                  type={showAuthPassword ? 'text' : 'password'}
+                  value={authPassword}
+                  onChange={e => setAuthPassword(e.target.value)}
+                  placeholder="Create a password"
+                  className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-sm focus:outline-none focus:border-primary pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAuthPassword(!showAuthPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showAuthPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">Confirm Password</label>
+              <input
+                type="password"
+                value={authConfirmPassword}
+                onChange={e => setAuthConfirmPassword(e.target.value)}
+                placeholder="Confirm password"
+                className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loadingAuth}
+              className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {loadingAuth ? 'Creating Account...' : 'Sign Up'}
+            </button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setMode('auth-login')}
+                className="text-xs text-primary font-semibold hover:underline"
+              >
+                Already have an account? Sign In
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMode('choose')}
+              className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2"
+            >
+              ← Back to Workspace Options
+            </button>
+          </form>
+        )}
+
+        {mode === 'auth-store-select' && (
+          <div className="space-y-4 text-left p-5 rounded-2xl bg-surface-2 border border-border/80 shadow-md">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-display font-bold text-base text-foreground flex items-center gap-2">
+                <Building className="w-5 h-5 text-primary" />
+                <span>Your Cloud Stores</span>
+              </h3>
+              <button
+                onClick={() => setMode('auth-store-create')}
+                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Create New
+              </button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground">Select a store from your account to synchronize and launch.</p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
+              {userStores.map((s) => {
+                const icon = CATEGORIES.find(cat => cat.id === s.business_type)?.icon || '🏪';
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => handleLoadCloudStore(s)}
+                    disabled={loadingAuth}
+                    className="w-full p-3.5 rounded-xl bg-surface-3 hover:bg-surface-4 border border-border/80 flex items-center justify-between text-sm text-left transition-all active:scale-95 disabled:opacity-50 cursor-pointer animate-fade-in"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{icon}</span>
+                      <div>
+                        <p className="font-display font-bold text-foreground leading-snug">{s.business_name}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold mt-0.5">{s.business_type}</p>
+                      </div>
+                    </div>
+                    <span className="text-primary text-xs font-semibold flex items-center gap-1">Load Store</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => {
+                supabase.auth.signOut();
+                setActiveProfile(null);
+                setMode('auth-login');
+              }}
+              className="w-full text-center text-xs text-destructive hover:underline mt-4 cursor-pointer"
+            >
+              Sign Out from {activeProfile?.email}
+            </button>
+          </div>
+        )}
+
+        {mode === 'auth-store-create' && (
+          <div className="space-y-4 text-left p-5 rounded-2xl bg-surface-2 border border-border/80 shadow-md">
+            <h3 className="font-display font-bold text-base text-foreground flex items-center gap-2">
+              <Building className="w-5 h-5 text-primary" />
+              <span>Create Cloud Store</span>
+            </h3>
+
+            <div>
+              <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Store Name</label>
+              <input
+                value={storeName}
+                onChange={e => {
+                  setStoreName(e.target.value);
+                  setAccessMood('thinking');
+                }}
+                placeholder="e.g. Blessed Nnamdi Store"
+                className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-xs text-muted-foreground uppercase font-bold mb-2">Business Category</label>
+              <div className="grid grid-cols-2 gap-2">
+                {CATEGORIES.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setCategory(c.id);
+                      setAccessMood('thinking');
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                      category === c.id
+                        ? 'bg-primary/10 border-primary/40'
+                        : 'bg-surface-3 border-border hover:border-primary/30'
+                    }`}
+                  >
+                    <div className="text-xl mb-1">{c.icon}</div>
+                    <p className="font-display font-semibold text-xs text-foreground">{c.label}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">{c.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {category === 'retail' && (
+              <div className="space-y-1">
+                <label className="block text-xs text-muted-foreground uppercase font-bold">Select Retail Type</label>
+                <select
+                  value={retailType}
+                  onChange={e => setRetailType(e.target.value)}
+                  className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-xs focus:outline-none focus:border-primary focus:bg-surface-3 [&>option]:bg-card"
+                >
+                  <option value="provision_retail">Sales of Provision (Retail Provision)</option>
+                  <option value="provision_wholesale">Wholesale for Provision</option>
+                  <option value="pharmacy">Pharmacy / Chemist</option>
+                  <option value="electronics">Electronics Store</option>
+                  <option value="gasoline">Gasoline / Gas Filling Station</option>
+                  <option value="other">Other / General Retail</option>
+                </select>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Select Store Logo Concept</label>
+              <div className="grid grid-cols-5 gap-2">
+                {LOGO_STYLES.map(style => (
+                  <button
+                    key={style.id}
+                    type="button"
+                    onClick={() => setSelectedLogoStyle(style.id)}
+                    className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                      selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-3 border-border hover:border-primary/30'
+                    }`}
+                  >
+                    <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} className="w-8 h-8" />
+                    <span className="text-[7px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Owner Password (Optional)</label>
+              <input
+                type="password"
+                value={ownerPassword}
+                onChange={e => setOwnerPassword(e.target.value)}
+                placeholder="Leave blank for 'owner'"
+                className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+              />
+            </div>
+
+            <button
+              onClick={handleCreateCloudStore}
+              disabled={loadingAuth}
+              className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {loadingAuth ? 'Creating Cloud Store...' : 'Create Cloud Store'}
+            </button>
+
+            {userStores.length > 0 && (
+              <button
+                onClick={() => setMode('auth-store-select')}
+                className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2 animate-fade-in"
+              >
+                ← Back to Store List
+              </button>
+            )}
           </div>
         )}
 
@@ -680,6 +1279,15 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
             <button onClick={handleAccess} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Access Store
             </button>
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => setMode('auth-login')}
+                className="text-xs text-primary font-semibold hover:underline flex items-center justify-center gap-1.5 mx-auto"
+              >
+                <Cloud className="w-3.5 h-3.5" /> Or Login with Email
+              </button>
+            </div>
             <button onClick={() => setMode('choose')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground text-center cursor-pointer">
               ← Back
             </button>
