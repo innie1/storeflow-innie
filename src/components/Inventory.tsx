@@ -230,7 +230,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
         const key1 = `${p1.id}-${p2.id}`;
         const key2 = `${p2.id}-${p1.id}`;
-        if (reviewedKeys.includes(key1) || reviewedKeys.includes(key2)) continue;
+        const sortedNames = [p1.name, p2.name].map(n => n.toLowerCase().trim()).sort();
+        const nameKey = `name:${sortedNames[0]}~${sortedNames[1]}`;
+
+        if (
+          reviewedKeys.includes(key1) || 
+          reviewedKeys.includes(key2) || 
+          reviewedKeys.includes(nameKey)
+        ) continue;
 
         const score = calculateSimilarityScore(p1, p2);
 
@@ -308,12 +315,15 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       };
       updatedStore.similarProductReviews = [...reviews, newReview];
 
-      setLocalReviewedPairs(prev => [...prev, key]);
+      const sortedNames = [p1.name, p2.name].map(n => n.toLowerCase().trim()).sort();
+      const nameKey = `name:${sortedNames[0]}~${sortedNames[1]}`;
+
+      setLocalReviewedPairs(prev => [...prev, key, nameKey]);
       
       const dismissed = updatedStore.dismissedSimilarPairs || [];
       updatedStore = {
         ...updatedStore,
-        dismissedSimilarPairs: [...dismissed, key]
+        dismissedSimilarPairs: [...dismissed, key, nameKey]
       };
       showToast('Dismissed similar product suggestion');
 
