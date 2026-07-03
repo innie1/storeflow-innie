@@ -5,6 +5,7 @@ import {
 } from '@/types/store';
 import CloudAuthModal from '@/components/CloudAuthModal';
 import { supabase } from '@/integrations/supabase/client';
+import { drawQRCode, encodeQRData } from '@/lib/qr-code';
 import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex, getStoreIndex, STORE_PREFIX } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
@@ -344,6 +345,20 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showSQLDetails, setShowSQLDetails] = useState(false);
+  const storeQrCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Draw the branded QR whenever the QR modal opens
+  useEffect(() => {
+    if (!showQRModal || !storeQrCanvasRef.current) return;
+    const encoded = encodeQRData({
+      version: 1,
+      storeId: store.accessCode,
+      timestamp: Date.now(),
+      type: 'store',
+      payload: { name: store.storeName, uniqueCode: profile.uniqueCode }
+    });
+    drawQRCode({ text: encoded, canvas: storeQrCanvasRef.current });
+  }, [showQRModal]);
 
   const handlePrintQR = () => {
     const printWindow = window.open('', '_blank');
@@ -351,8 +366,83 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       showToast('Could not open print window. Please allow popups.', 'error');
       return;
     }
-    
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(profile.uniqueCode || '')}`;
+
+    // Generate a fresh branded QR onto a temp canvas, export as PNG
+    const tmpCanvas = document.createElement('canvas');
+    const encoded = encodeQRData({
+      version: 1,
+      storeId: store.accessCode,
+      timestamp: Date.now(),
+      type: 'store',
+      payload: { name: store.storeName, uniqueCode: profile.uniqueCode }
+    });
+
+    drawQRCode({ text: encoded, canvas: tmpCanvas }).then(() => {
+      const imgData = tmpCanvas.toDataURL('image/png');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Print QR Code - ${store.storeName}</title>
+            <style>
+              body {
+                font-family: system-ui, -apple-system, sans-serif;
+                text-align: center;
+                padding: 40px;
+                color: #0f172a;
+              }
+              .card {
+                border: 3px solid #FFC72C;
+                border-radius: 24px;
+                padding: 40px;
+                max-width: 420px;
+                margin: 0 auto;
+                background: #111111;
+                color: #ffffff;
+                box-shadow: 0 0 24px rgba(255,199,44,0.15);
+              }
+              h1 { font-size: 26px; margin-bottom: 6px; font-weight: 800; color: #fff; }
+              p { font-size: 13px; color: #aaa; margin-bottom: 20px; }
+              .qr-container {
+                margin: 0 auto 20px;
+                background: #fff;
+                border-radius: 16px;
+                display: inline-block;
+                padding: 12px;
+              }
+              img { width: 260px; height: 260px; display: block; }
+              .code-box {
+                background: #1a1a1a;
+                border: 1px solid #FFC72C44;
+                padding: 10px 20px;
+                border-radius: 12px;
+                font-family: monospace;
+                font-size: 18px;
+                font-weight: bold;
+                letter-spacing: 3px;
+                color: #FFC72C;
+                display: inline-block;
+                margin-top: 10px;
+              }
+              .footer { margin-top: 28px; font-size: 11px; color: #555; }
+              @media print { body { padding: 0; } .card { border: none; max-width: 100%; } }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h1>${store.storeName}</h1>
+              <p>Scan this premium QR to view store details, products & contact info.</p>
+              <div class="qr-container">
+                <img src="${imgData}" alt="StoreFlow QR Code" />
+              </div>
+              <div><div class="code-box">${profile.uniqueCode}</div></div>
+              <div class="footer">Powered by StoreFlow &bull; Secure &bull; Branded</div>
+            </div>
+            <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}<\/script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    });
     
     printWindow.document.write(`
       <html>
@@ -828,25 +918,22 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
 
       {showQRModal && (
         <div className="fixed inset-0 z-[80] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowQRModal(false)}>
-          <div className="w-full max-w-sm bg-card border border-border/40 rounded-2xl p-5 animate-slide-up space-y-4 text-center" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm bg-[#111111] border border-[#FFC72C]/40 rounded-2xl p-5 animate-slide-up space-y-4 text-center shadow-[0_0_30px_rgba(255,199,44,0.1)]" onClick={e => e.stopPropagation()}>
             <div className="space-y-1.5">
-              <h3 className="font-display font-bold text-lg text-foreground">Unique Store QR Code</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Scan this code to see items, products, stunning account number and details.
+              <h3 className="font-display font-bold text-lg text-white">Unique Store QR Code</h3>
+              <p className="text-xs text-neutral-400 leading-relaxed">
+                Scan this branded QR to view your store, products, and contact details.
               </p>
             </div>
             
-            <div className="flex justify-center p-4 bg-white rounded-xl max-w-[220px] mx-auto">
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(profile.uniqueCode || '')}`} 
-                alt="Store QR Code" 
-                className="w-48 h-48 select-none"
-              />
+            {/* Branded canvas QR */}
+            <div className="flex justify-center p-4 bg-white rounded-2xl max-w-[240px] mx-auto border border-[#FFC72C]/30 shadow-md">
+              <canvas ref={storeQrCanvasRef} className="w-48 h-48" />
             </div>
             
-            <div className="space-y-1 bg-surface-2 p-3 rounded-xl border border-border/20">
-              <span className="block text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Store ID (Unique Code)</span>
-              <span className="font-mono text-base font-semibold tracking-wider text-foreground select-all">{profile.uniqueCode}</span>
+            <div className="space-y-1 bg-[#1a1a1a] p-3 rounded-xl border border-[#FFC72C]/10">
+              <span className="block text-[10px] text-neutral-500 uppercase font-bold tracking-wider">Store Unique Code</span>
+              <span className="font-mono text-base font-semibold tracking-wider text-[#FFC72C] select-all">{profile.uniqueCode}</span>
             </div>
 
             <div className="flex gap-2">
@@ -855,6 +942,21 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                 className="flex-1 p-2.5 rounded-xl bg-surface-2 border border-border text-foreground font-display font-bold text-sm cursor-pointer hover:bg-surface-3 transition-colors"
               >
                 🖨️ Print
+              </button>
+              <button 
+                onClick={() => {
+                  if (storeQrCanvasRef.current) {
+                    const url = storeQrCanvasRef.current.toDataURL('image/png');
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${store.storeName}-store-qr.png`;
+                    a.click();
+                    showToast('QR Code downloaded!', 'success');
+                  }
+                }}
+                className="flex-1 p-2.5 rounded-xl bg-surface-2 border border-border text-foreground font-display font-bold text-sm cursor-pointer hover:bg-surface-3 transition-colors"
+              >
+                ⬇️ Save PNG
               </button>
               <button 
                 onClick={() => setShowQRModal(false)}

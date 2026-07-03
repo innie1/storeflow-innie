@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { StoreData, Sale } from '@/types/store';
 import { printSystem } from '@/lib/print-engine';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
+import { drawQRCode, encodeQRData } from '@/lib/qr-code';
 
 interface SaleReceiptProps {
   store: StoreData;
@@ -17,6 +18,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   const date = new Date(salesList[0]?.date || Date.now());
   const [buyerPhone, setBuyerPhone] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [generatingQR, setGeneratingQR] = useState(false);
   const settings = store.managerSettings || {};
 
   const subtotalBeforeDiscount = salesList.reduce((sum, s) => sum + s.quantity * s.unitPrice, 0);
@@ -122,14 +124,33 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
         const updated = { ...store, profile: nextProfile, managerSettings: nextSettings };
         onUpdateStore?.(updated);
         showToast('✓ Store logo updated');
-      } else {
-        const nextSettings = { ...(store.managerSettings || {}), receiptQrCode: base64 };
-        const updated = { ...store, managerSettings: nextSettings };
-        onUpdateStore?.(updated);
-        showToast('✓ Receipt QR code updated');
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleGenerateBrandedQR = async () => {
+    setGeneratingQR(true);
+    try {
+      const tmpCanvas = document.createElement('canvas');
+      const encoded = encodeQRData({
+        version: 1,
+        storeId: store.accessCode,
+        timestamp: Date.now(),
+        type: 'store',
+        payload: { name: store.storeName, uniqueCode: store.profile?.uniqueCode }
+      });
+      await drawQRCode({ text: encoded, canvas: tmpCanvas });
+      const base64 = tmpCanvas.toDataURL('image/png');
+      const nextSettings = { ...(store.managerSettings || {}), receiptQrCode: base64 };
+      const updated = { ...store, managerSettings: nextSettings };
+      onUpdateStore?.(updated);
+      showToast('✓ Branded QR Code generated and applied to receipt!');
+    } catch (err) {
+      showToast('Failed to generate QR code', 'error');
+    } finally {
+      setGeneratingQR(false);
+    }
   };
 
   const inputClass = "w-full p-2 rounded bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-xs";
@@ -427,26 +448,33 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
                 />
               </div>
 
-              {/* QR Upload */}
+              {/* QR Code section */}
               <div className="p-2 rounded bg-surface-2/50 border border-border/60 space-y-2">
-                <span className="text-xs font-semibold text-foreground block">Payment/WhatsApp QR Code</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={e => handleFileChange(e, 'qr')}
-                  className="block w-full text-xs text-muted-foreground file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-primary file:text-primary-foreground hover:file:opacity-90"
-                />
+                <span className="text-xs font-semibold text-foreground block">Receipt QR Code</span>
+                
+                {/* Generate branded QR button */}
+                <button
+                  onClick={handleGenerateBrandedQR}
+                  disabled={generatingQR}
+                  className="w-full py-2 rounded-lg bg-[#111111] border border-[#FFC72C]/40 text-[#FFC72C] text-[11px] font-display font-bold hover:bg-[#1a1a1a] transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 shadow-sm"
+                >
+                  {generatingQR ? '⏳ Generating...' : '✨ Generate Branded StoreFlow QR'}
+                </button>
+
                 {settings.receiptQrCode && (
-                  <button
-                    onClick={() => {
-                      const updated = { ...store, managerSettings: { ...settings, receiptQrCode: '' } };
-                      onUpdateStore?.(updated);
-                      showToast('✓ QR code removed');
-                    }}
-                    className="text-[9px] text-destructive hover:underline block"
-                  >
-                    Remove QR Code
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <img src={settings.receiptQrCode} alt="Preview" className="w-12 h-12 rounded border border-[#FFC72C]/20 bg-white p-0.5" />
+                    <button
+                      onClick={() => {
+                        const updated = { ...store, managerSettings: { ...settings, receiptQrCode: '' } };
+                        onUpdateStore?.(updated);
+                        showToast('✓ QR code removed');
+                      }}
+                      className="text-[9px] text-destructive hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
