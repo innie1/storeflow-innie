@@ -1366,6 +1366,46 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         </div>
       )}
 
+      {/* Shopping Cart Summary Bar — visible when cart has items */}
+      {shoppingList.length > 0 && (
+        <div className="mb-4 flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-surface-1 border border-yellow-500/30 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="relative shrink-0">
+              <ShoppingCart className="w-5 h-5 text-yellow-500" />
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-yellow-500 text-black text-[9px] font-black flex items-center justify-center shadow">
+                {shoppingList.reduce((s, i) => s + i.quantity, 0)}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-display font-bold text-foreground truncate">
+                {shoppingList.length} item{shoppingList.length !== 1 ? 's' : ''} in cart
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {shoppingList.map(i => i.name).join(', ').length > 40
+                  ? shoppingList.map(i => i.name).join(', ').slice(0, 40) + '…'
+                  : shoppingList.map(i => i.name).join(', ')}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowShoppingList(true)}
+              className="px-3 py-1.5 rounded-xl bg-yellow-500 text-black font-display font-bold text-[11px] hover:brightness-105 transition-all active:scale-95 cursor-pointer"
+            >
+              View Cart
+            </button>
+            <button
+              onClick={() => {
+                clearList();
+              }}
+              className="px-3 py-1.5 rounded-xl bg-surface-2 border border-destructive/30 text-destructive font-display font-bold text-[11px] hover:bg-destructive/10 transition-all active:scale-95 cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-3">
         {products.map(p => {
           const inList = shoppingList.find(i => i.productId === p.id);
