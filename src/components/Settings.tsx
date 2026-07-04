@@ -618,8 +618,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         .select()
         .single();
 
-      if (storeError) {
-        return showToast(storeError.message, 'error');
+      if (storeError || !dbStore) {
+        return showToast(storeError?.message || 'Database policy restricted the sync operation.', 'error');
       }
 
       await supabase.from('store_members').upsert({
@@ -2472,101 +2472,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
 
   if (view === 'security') return (
     <SubPage title="Security" onBack={() => setView('home')}>
-      {/* 1. Access Code Section */}
+      {/* 1. Multi-device Cloud Sync Section */}
       <div className="px-1">
-        <SectionLabel>Store Access Credentials</SectionLabel>
-      </div>
-      <div className={`${card} p-4 space-y-4`}>
-        <div className="space-y-1 text-left">
-          <label className="text-xs text-muted-foreground uppercase font-bold">Store Access Code (ID)</label>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type={revealCode ? "text" : "password"}
-              value={store.accessCode}
-              readOnly
-              className="flex-1 p-2.5 rounded-lg bg-surface-2/60 border border-border text-sm font-mono focus:outline-none text-muted-foreground select-all cursor-not-allowed"
-            />
-            <div className="flex gap-2 flex-shrink-0">
-              <button
-                onClick={() => setRevealCode(!revealCode)}
-                className="px-3.5 py-2.5 rounded-lg bg-surface-3 border border-border text-foreground hover:bg-surface-2 transition active:scale-95 flex items-center justify-center cursor-pointer"
-                title={revealCode ? "Hide access code" : "Review access code"}
-              >
-                {revealCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(store.accessCode);
-                  showToast('📋 Access code copied to clipboard!', 'success');
-                }}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 active:scale-95 transition cursor-pointer"
-              >
-                Copy Code
-              </button>
-            </div>
-          </div>
-          <p className="text-[10px] text-muted-foreground">Unique identifier used to access this store. This code cannot be changed.</p>
-        </div>
-
-        {/* Reset Owner Password */}
-        <div className="border-t border-border/40 pt-3 space-y-3 text-left">
-          <label className="text-xs text-muted-foreground uppercase font-bold">Reset Owner Password</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="relative flex items-center">
-              <input
-                type={showPass ? "text" : "password"}
-                placeholder="New Password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                className={`${inputClass} pr-10`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass(!showPass)}
-                className="absolute right-3 p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground transition cursor-pointer"
-                title={showPass ? "Hide Password" : "Show Password"}
-              >
-                {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-            <div className="relative flex items-center">
-              <input
-                type={showConfirmPass ? "text" : "password"}
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                className={`${inputClass} pr-10`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPass(!showConfirmPass)}
-                className="absolute right-3 p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground transition cursor-pointer"
-                title={showConfirmPass ? "Hide Password" : "Show Password"}
-              >
-                {showConfirmPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
-          <button
-            onClick={handleUpdatePassword}
-            className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 active:scale-95 transition cursor-pointer"
-          >
-            ✓ Reset Owner Password
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Biometric and Timer Locking Section */}
-      <div className="px-1 mt-4">
-        <SectionLabel>App Locking Settings</SectionLabel>
-      </div>
-      <div className={`${card} px-4 divide-y divide-border`}>
-        <ToggleRow label="Biometric Lock" description="Use fingerprint / Face ID where supported." checked={mgr.biometricLock} onChange={v => updateMgr({ biometricLock: v })} />
-        <ToggleRow label="PIN Lock" checked={mgr.pinLock} onChange={v => updateMgr({ pinLock: v })} />
-      </div>
-
-      {/* 2.5. Multi-device Cloud Sync Section */}
-      <div className="px-1 mt-4">
         <SectionLabel>Cloud Integration</SectionLabel>
       </div>
       <div className={`${card} px-4 divide-y divide-border`}>
@@ -2679,6 +2586,100 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         </div>
       )}
 
+      {/* 2. Biometric and Timer Locking Section */}
+      <div className="px-1 mt-4">
+        <SectionLabel>App Locking Settings</SectionLabel>
+      </div>
+      <div className={`${card} px-4 divide-y divide-border`}>
+        <ToggleRow label="Biometric Lock" description="Use fingerprint / Face ID where supported." checked={mgr.biometricLock} onChange={v => updateMgr({ biometricLock: v })} />
+        <ToggleRow label="PIN Lock" checked={mgr.pinLock} onChange={v => updateMgr({ pinLock: v })} />
+      </div>
+
+      {/* 3. Access Code & Password Section */}
+      <div className="px-1 mt-4">
+        <SectionLabel>Store Access Credentials</SectionLabel>
+      </div>
+      <div className={`${card} p-4 space-y-4`}>
+        <div className="space-y-1 text-left">
+          <label className="text-xs text-muted-foreground uppercase font-bold">Store Access Code (ID)</label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type={revealCode ? "text" : "password"}
+              value={store.accessCode}
+              readOnly
+              className="flex-1 p-2.5 rounded-lg bg-surface-2/60 border border-border text-sm font-mono focus:outline-none text-muted-foreground select-all cursor-not-allowed"
+            />
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => setRevealCode(!revealCode)}
+                className="px-3.5 py-2.5 rounded-lg bg-surface-3 border border-border text-foreground hover:bg-surface-2 transition active:scale-95 flex items-center justify-center cursor-pointer"
+                title={revealCode ? "Hide access code" : "Review access code"}
+              >
+                {revealCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(store.accessCode);
+                  showToast('📋 Access code copied to clipboard!', 'success');
+                }}
+                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 active:scale-95 transition cursor-pointer"
+              >
+                Copy Code
+              </button>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Unique identifier used to access this store. This code cannot be changed.</p>
+        </div>
+
+        {/* Reset Owner Password */}
+        <div className="border-t border-border/40 pt-3 space-y-3 text-left">
+          <label className="text-xs text-muted-foreground uppercase font-bold">Reset Owner Password</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="relative flex items-center">
+              <input
+                type={showPass ? "text" : "password"}
+                placeholder="New Password"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                className={`${inputClass} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(!showPass)}
+                className="absolute right-3 p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground transition cursor-pointer"
+                title={showPass ? "Hide Password" : "Show Password"}
+              >
+                {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <div className="relative flex items-center">
+              <input
+                type={showConfirmPass ? "text" : "password"}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                className={`${inputClass} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPass(!showConfirmPass)}
+                className="absolute right-3 p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground transition cursor-pointer"
+                title={showConfirmPass ? "Hide Password" : "Show Password"}
+              >
+                {showConfirmPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={handleUpdatePassword}
+            className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold hover:opacity-90 active:scale-95 transition cursor-pointer"
+          >
+            ✓ Reset Owner Password
+          </button>
+        </div>
+      </div>
+
+      {/* 4. Auto Lock Timer */}
       <div className={`${card} p-4 space-y-2`}>
         <h3 className="font-display font-bold text-sm text-left">Auto Lock Timer</h3>
         {[
@@ -2698,7 +2699,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         ))}
       </div>
 
-      {/* 3. Lock Action */}
+      {/* 5. Lock Action */}
       <div className="pt-4">
         <button onClick={handleLock} className="w-full p-3 rounded-xl bg-surface-2 border border-border text-foreground font-display font-semibold hover:bg-surface-3 cursor-pointer">
           🔒 Lock Store Now
