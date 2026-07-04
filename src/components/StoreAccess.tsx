@@ -524,7 +524,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
       setActiveProfile(profile);
 
-      if (profile) {
+      if (profile && profile.id) {
         // Query stores owned by user
         const { data: ownedStores } = await supabase
           .from('stores')
@@ -579,7 +579,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       setAccessMood('worried');
       return showToast('Enter a store name', 'error');
     }
-    if (!activeProfile) {
+    if (!activeProfile || !activeProfile.id) {
       return showToast('Active user session not found. Please log in again.', 'error');
     }
 
@@ -608,9 +608,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         .select()
         .single();
 
-      if (storeError) {
+      if (storeError || !dbStore || !dbStore.id) {
         setAccessMood('angry' as any);
-        return showToast(storeError.message, 'error');
+        return showToast(storeError?.message || 'Database policy restricted the store creation.', 'error');
       }
 
       await supabase.from('store_members').insert({

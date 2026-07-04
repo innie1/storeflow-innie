@@ -28,16 +28,16 @@ export default function CloudAuthModal({
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+      if (session && session.user && session.user.id) {
         supabase
           .from('profiles')
           .select('*')
           .eq('auth_user_id', session.user.id)
           .maybeSingle()
           .then(({ data: profile }) => {
-            if (profile) {
+            if (profile && profile.id) {
               onAuthSuccess(profile);
-            } else {
+            } else if (session.user) {
               supabase
                 .from('profiles')
                 .insert({
@@ -47,9 +47,13 @@ export default function CloudAuthModal({
                   role: 'owner'
                 })
                 .select()
-                .single()
+                .maybeSingle()
                 .then(({ data: newProfile }) => {
-                  if (newProfile) onAuthSuccess(newProfile);
+                  if (newProfile && newProfile.id) {
+                    onAuthSuccess(newProfile);
+                  } else {
+                    console.error("CloudAuthModal: failed to create profile on mount");
+                  }
                 });
             }
           });
@@ -73,17 +77,21 @@ export default function CloudAuthModal({
         return showToast(error.message, 'error');
       }
 
-      if (data.user) {
+      if (data && data.user && data.user.id) {
         // Fetch profile
-        let { data: profile } = await supabase
+        let { data: profile, error: profileErr } = await supabase
           .from('profiles')
           .select('*')
           .eq('auth_user_id', data.user.id)
           .maybeSingle();
 
-        if (!profile) {
+        if (profileErr) {
+          console.warn("CloudAuthModal: failed to fetch profile:", profileErr);
+        }
+
+        if (!profile || !profile.id) {
           // Fallback create profile
-          const { data: newProfile } = await supabase
+          const { data: newProfile, error: createProfileErr } = await supabase
             .from('profiles')
             .insert({
               auth_user_id: data.user.id,
@@ -92,12 +100,23 @@ export default function CloudAuthModal({
               role: 'owner'
             })
             .select()
-            .single();
+            .maybeSingle();
+
+          if (createProfileErr) {
+            console.error("CloudAuthModal: failed to create profile fallback:", createProfileErr);
+          }
+
           profile = newProfile;
         }
 
-        showToast('Successfully signed in!', 'success');
-        onAuthSuccess(profile);
+        if (profile && profile.id) {
+          showToast('Successfully signed in!', 'success');
+          onAuthSuccess(profile);
+        } else {
+          showToast('Failed to retrieve user profile details.', 'error');
+        }
+      } else {
+        showToast('Login response contains empty user.', 'error');
       }
     } catch (err: any) {
       showToast(err.message || 'Login failed', 'error');
@@ -140,15 +159,19 @@ export default function CloudAuthModal({
             return showToast(logError.message, 'error');
           }
 
-          if (logData.user) {
-            let { data: profile } = await supabase
+          if (logData && logData.user && logData.user.id) {
+            let { data: profile, error: profileErr } = await supabase
               .from('profiles')
               .select('*')
               .eq('auth_user_id', logData.user.id)
               .maybeSingle();
 
-            if (!profile) {
-              const { data: newProfile } = await supabase
+            if (profileErr) {
+              console.warn("CloudAuthModal: failed to fetch profile in signup fallback:", profileErr);
+            }
+
+            if (!profile || !profile.id) {
+              const { data: newProfile, error: createProfileErr } = await supabase
                 .from('profiles')
                 .insert({
                   auth_user_id: logData.user.id,
@@ -157,21 +180,29 @@ export default function CloudAuthModal({
                   role: 'owner'
                 })
                 .select()
-                .single();
+                .maybeSingle();
+
+              if (createProfileErr) {
+                console.error("CloudAuthModal: failed to create profile in signup fallback:", createProfileErr);
+              }
               profile = newProfile;
             }
 
-            showToast('Successfully signed in!', 'success');
-            onAuthSuccess(profile);
+            if (profile && profile.id) {
+              showToast('Successfully signed in!', 'success');
+              onAuthSuccess(profile);
+            } else {
+              showToast('Failed to retrieve user profile details.', 'error');
+            }
           }
           return;
         }
         return showToast(error.message, 'error');
       }
 
-      if (data.user) {
+      if (data && data.user && data.user.id) {
         // Create profile
-        const { data: profile } = await supabase
+        const { data: profile, error: createProfileErr } = await supabase
           .from('profiles')
           .insert({
             auth_user_id: data.user.id,
@@ -180,10 +211,19 @@ export default function CloudAuthModal({
             role: 'owner'
           })
           .select()
-          .single();
+          .maybeSingle();
 
-        showToast('Successfully signed up!', 'success');
-        onAuthSuccess(profile || { email: email.trim(), full_name: fullName.trim() });
+        if (createProfileErr) {
+          console.error("CloudAuthModal: failed to create profile:", createProfileErr);
+        }
+
+        if (profile && profile.id) {
+          showToast('Successfully signed up!', 'success');
+          onAuthSuccess(profile);
+        } else {
+          showToast('Successfully signed up! Profile details loading...', 'success');
+          onAuthSuccess({ email: email.trim(), full_name: fullName.trim() });
+        }
       }
     } catch (err: any) {
       showToast(err.message || 'Signup failed', 'error');

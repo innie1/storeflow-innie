@@ -595,38 +595,83 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const handleCloudAuthSuccess = async (profile: any) => {
     setShowCloudAuthModal(false);
     
+    if (!profile || !profile.id) {
+      showToast("Please sign in again.", "error");
+      return;
+    }
+
+    if (!store || !store.accessCode) {
+      showToast("Store record does not exist. Please load or create a store first.", "error");
+      return;
+    }
+
     try {
-      const { data: existingStore } = await supabase
+      // 1. Wait until authentication is fully loaded
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session || !session.user) {
+        console.error("Cloud sync: auth session not loaded/missing", sessionError);
+        showToast("Please sign in again.", "error");
+        return;
+      }
+
+      // Check profile matches active session
+      if (profile.auth_user_id !== session.user.id) {
+        console.error("Cloud sync: profile auth_user_id mismatch with session user id", { profileUid: profile.auth_user_id, sessionUid: session.user.id });
+        showToast("Please sign in again.", "error");
+        return;
+      }
+
+      const { data: existingStore, error: fetchError } = await supabase
         .from('stores')
-        .select('*')
+        .select('id')
         .eq('access_code', store.accessCode)
         .maybeSingle();
 
-      const { data: dbStore, error: storeError } = await supabase
-        .from('stores')
-        .upsert({
-          id: existingStore?.id,
-          owner_id: profile.id,
-          business_name: store.storeName,
-          business_type: store.category || 'retail',
-          logo: store.profile?.logoStyle || 'minimalist',
-          access_code: store.accessCode,
-          owner_password: store.managerSettings?.ownerPassword || 'owner',
-          data: store as any,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'access_code' })
-        .select()
-        .single();
-
-      if (storeError || !dbStore) {
-        return showToast(storeError?.message || 'Database policy restricted the sync operation.', 'error');
+      if (fetchError) {
+        console.warn("Cloud sync: error querying existing store:", fetchError);
       }
 
-      await supabase.from('store_members').upsert({
+      const payload: any = {
+        owner_id: profile.id,
+        business_name: store.storeName,
+        business_type: store.category || 'retail',
+        logo: store.profile?.logoStyle || 'minimalist',
+        access_code: store.accessCode,
+        owner_password: store.managerSettings?.ownerPassword || 'owner',
+        data: store as any,
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingStore && existingStore.id) {
+        payload.id = existingStore.id;
+      }
+
+      const { data: dbStore, error: storeError } = await supabase
+        .from('stores')
+        .upsert(payload, { onConflict: 'access_code' })
+        .select('id')
+        .maybeSingle();
+
+      if (storeError) {
+        console.error("Cloud sync: database upsert failed:", storeError);
+        return showToast(storeError.message || 'Database policy restricted the sync operation.', 'error');
+      }
+
+      if (!dbStore || !dbStore.id) {
+        console.error("Cloud sync: upsert returned no store details or missing ID");
+        return showToast('Database policy restricted the sync operation.', 'error');
+      }
+
+      const { error: memberError } = await supabase.from('store_members').upsert({
         store_id: dbStore.id,
         profile_id: profile.id,
         role: 'owner'
       }, { onConflict: 'store_id,profile_id' });
+
+      if (memberError) {
+        console.error("Cloud sync: member link failed:", memberError);
+        return showToast(memberError.message || 'Failed to link account to the store.', 'error');
+      }
 
       updateMgr({ multiDeviceSync: true });
       const updatedStore = {
@@ -639,6 +684,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       saveStore(updatedStore);
       showToast('Cloud Sync Enabled! Backup created successfully.', 'success');
     } catch (err: any) {
+      console.error("Cloud sync failed to start:", err);
       showToast(err.message || 'Failed to initialize cloud backup', 'error');
     }
   };

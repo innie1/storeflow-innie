@@ -471,21 +471,60 @@ export function saveStore(store: StoreData): void {
   }
   
   if (store.managerSettings?.multiDeviceSync) {
-    import('@/integrations/supabase/client').then(({ supabase }) => {
-      supabase
-        .from('stores')
-        .upsert({
-          access_code: store.accessCode,
+    import('@/integrations/supabase/client').then(async ({ supabase }) => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session || !session.user) {
+          console.warn('Cloud Sync: No active authenticated session found.', sessionError);
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('auth_user_id', session.user.id)
+          .maybeSingle();
+
+        if (profileError || !profile || !profile.id) {
+          console.warn('Cloud Sync: Active owner profile is missing or missing ID.', profileError);
+          return;
+        }
+
+        const payload: any = {
+          owner_id: profile.id,
           business_name: store.storeName,
+          business_type: store.category || 'retail',
+          logo: store.profile?.logoStyle || 'minimalist',
+          access_code: store.accessCode,
           owner_password: store.managerSettings?.ownerPassword || '',
           data: store as any,
           updated_at: new Date().toISOString()
-        }, { onConflict: 'access_code' })
-        .then(({ error }) => {
-          if (error) {
-            console.error('Supabase multi-device sync error:', error);
-          }
-        });
+        };
+
+        const { data: existingStore, error: fetchError } = await supabase
+          .from('stores')
+          .select('id')
+          .eq('access_code', store.accessCode)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.warn('Cloud Sync: Failed to query existing store row ID:', fetchError);
+        }
+
+        if (existingStore && existingStore.id) {
+          payload.id = existingStore.id;
+        }
+
+        const { error: upsertError } = await supabase
+          .from('stores')
+          .upsert(payload, { onConflict: 'access_code' });
+
+        if (upsertError) {
+          console.error('Supabase multi-device sync error during background auto-save:', upsertError);
+        }
+      } catch (err) {
+        console.error('Cloud Sync background execution failed:', err);
+      }
     }).catch(err => console.error('Failed to load supabase client for sync:', err));
   }
 }
