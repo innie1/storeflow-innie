@@ -1891,6 +1891,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       className={inputClass}
                     />
                   )}
+                </div>
+              </div>
               <div className="flex gap-2">
                 <input
                   value={newProduct.barcode || ''}
@@ -2090,7 +2092,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     placeholder="Enter custom category..."
                     className={inputClass}
                   />
-                )}
+                 )}
+              </div>
+            </div>
             <div className="flex gap-2">
               <input
                 value={editDraft.barcode || ''}
