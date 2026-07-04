@@ -165,6 +165,7 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
   const [isVisible, setIsVisible] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const barcodeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [showFullBarcode, setShowFullBarcode] = useState(false);
 
   // Cache/Store generated dataURLs to prevent redrawing on scroll
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -422,9 +423,9 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
       ref={containerRef}
       className="bg-card border border-border/40 hover:border-primary/20 rounded-2xl p-4 flex flex-col justify-between gap-3 min-h-[140px] relative overflow-hidden transition-all shadow-sm select-none"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          {/* Thumbnail */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Product Thumbnail */}
           <div className="w-14 h-14 rounded-xl bg-surface-2 border border-border overflow-hidden shrink-0 flex items-center justify-center text-2xl font-display font-black text-primary">
             {product.image ? (
               <img src={product.image} alt="" className="w-full h-full object-cover" />
@@ -432,7 +433,7 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
               '📦'
             )}
           </div>
-          {/* Details */}
+          {/* Product Details */}
           <div className="text-left min-w-0 flex-1">
             <h4 className="font-display font-bold text-sm text-foreground truncate">{product.name}</h4>
             <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -443,25 +444,52 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
               }`}>
                 {isOutOfStock ? '🔴 Out of Stock' : `🟢 In Stock (${product.quantity})`}
               </span>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-3 border border-border text-muted-foreground text-[9px] font-mono truncate max-w-[100px]" title={product.barcode || 'No barcode'}>
-                {product.barcode ? `🏷️ ${product.barcode}` : 'No Barcode'}
-              </span>
             </div>
             <p className="text-xs font-display font-black text-yellow-500 mt-1">₦{(product.sellingPrice || 0).toLocaleString()}</p>
+            {product.barcode && (
+              <p className="text-[9px] text-muted-foreground font-mono mt-0.5 truncate">🏷️ {product.barcode}</p>
+            )}
           </div>
         </div>
 
-        {/* Small QR Code image */}
-        <div className="w-14 h-14 bg-white p-1 rounded-xl border border-border flex items-center justify-center shrink-0 shadow-inner relative">
-          <canvas ref={qrCanvasRef} className={`w-12 h-12 ${!isVisible ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`} />
-          {!isVisible && (
-            <div className="absolute inset-0 bg-surface-2 animate-pulse rounded-lg" />
-          )}
-        </div>
+        {/* Small Barcode Thumbnail (top-right) — tap to expand */}
+        {product.barcode && barcodeDataUrl ? (
+          <button
+            onClick={() => setShowFullBarcode(!showFullBarcode)}
+            className="w-16 h-14 bg-white p-1.5 rounded-xl border border-border flex items-center justify-center shrink-0 shadow-inner cursor-pointer hover:border-primary/30 transition-all active:scale-95 relative"
+            title="Tap to view full barcode"
+          >
+            <img src={barcodeDataUrl} alt="barcode" className="w-full h-full object-contain" />
+            <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[7px] font-display font-bold text-muted-foreground bg-card px-1 rounded">SCAN</span>
+          </button>
+        ) : (
+          <div className="w-16 h-14 bg-surface-2 p-1.5 rounded-xl border border-border/60 flex items-center justify-center shrink-0 relative">
+            {!isVisible ? (
+              <div className="absolute inset-0 bg-surface-2 animate-pulse rounded-lg" />
+            ) : (
+              <span className="text-[8px] text-muted-foreground/60 font-display font-bold text-center leading-tight">No<br/>Barcode</span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Hidden Barcode Canvas for downloads/prints */}
+      {/* Hidden canvases for generation */}
+      <canvas ref={qrCanvasRef} className="hidden" />
       <canvas ref={barcodeCanvasRef} className="hidden" />
+
+      {/* Expanded Full Barcode (shown when tapped) */}
+      {showFullBarcode && barcodeDataUrl && (
+        <div className="animate-scale-up">
+          <div 
+            className="p-4 bg-white rounded-2xl border border-border/40 flex flex-col items-center gap-2 shadow-md cursor-pointer"
+            onClick={() => setShowFullBarcode(false)}
+          >
+            <img src={barcodeDataUrl} alt="Full Barcode" className="w-full max-w-[260px] h-14 object-contain" />
+            <span className="text-[10px] font-mono text-muted-foreground">{product.barcode}</span>
+            <span className="text-[9px] text-primary font-display font-bold">Scan to buy · Tap to close</span>
+          </div>
+        </div>
+      )}
 
       {/* Buttons */}
       <div className="border-t border-border/40 my-0.5" />
