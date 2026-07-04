@@ -15,3 +15,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+console.log("Supabase Connection Status:");
+console.log("URL:", SUPABASE_URL);
+console.log("Key Prefix:", SUPABASE_PUBLISHABLE_KEY ? SUPABASE_PUBLISHABLE_KEY.substring(0, 20) + "..." : "undefined");

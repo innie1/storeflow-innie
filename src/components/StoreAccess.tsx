@@ -573,19 +573,30 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     setAccessMood('thinking');
 
     try {
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+      console.log("Detail Log: Initiating supabase.auth.signUp with email =", authEmail.trim());
+      const result = await supabase.auth.signUp({
         email: authEmail.trim(),
         password: authPassword,
       });
+      console.log("Detail Log: Complete supabase.auth.signUp response:", JSON.stringify(result, null, 2));
+
+      const { data: authData, error: signUpError } = result;
 
       if (signUpError) {
         setAccessMood('angry' as any);
-        return showToast(signUpError.message, 'error');
+        console.error("Detail Log: signUp failed:", signUpError);
+        
+        const errCodeStr = signUpError.code ? ` [Code: ${signUpError.code}]` : '';
+        const statusStr = signUpError.status ? ` [Status: ${signUpError.status}]` : '';
+        const exactErrorText = `Signup failed: ${signUpError.message}${errCodeStr}${statusStr}`;
+        
+        return showToast(exactErrorText, 'error');
       }
 
-      if (!authData.user) {
+      if (!authData || !authData.user || !authData.user.id) {
         setAccessMood('angry' as any);
-        return showToast('Signup failed', 'error');
+        console.error("Detail Log: signUp response did not return a valid user payload", authData);
+        return showToast('Signup response did not return a valid authenticated user.', 'error');
       }
 
       // Create public profile

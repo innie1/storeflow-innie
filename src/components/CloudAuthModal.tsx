@@ -157,17 +157,28 @@ export default function CloudAuthModal({
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
+      console.log("Detail Log: Initiating supabase.auth.signUp with email =", email.trim());
+      const result = await supabase.auth.signUp({
         email: email.trim(),
         password: password,
       });
+      console.log("Detail Log: Complete supabase.auth.signUp response:", JSON.stringify(result, null, 2));
+
+      const { data, error } = result;
 
       if (error) {
+        console.error("Detail Log: signUp failed:", error);
         const errorMsg = error.message.toLowerCase();
+        
+        const errCodeStr = error.code ? `[Code: ${error.code}]` : '';
+        const statusStr = error.status ? `[Status: ${error.status}]` : '';
+        const exactErrorText = `Signup failed: ${error.message} ${errCodeStr} ${statusStr}`;
+
         if (errorMsg.includes('already') || errorMsg.includes('registered') || errorMsg.includes('taken') || errorMsg.includes('exist')) {
           showToast('Account already exists. Logging you in automatically...', 'info');
           setTab('login');
           
+          console.log("Detail Log: Fallback login initiated for existing user...");
           const { data: logData, error: logError } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password,
@@ -175,7 +186,8 @@ export default function CloudAuthModal({
 
           if (logError) {
             console.error("Supabase signin during signup fallback error:", logError);
-            return showToast(logError.message || 'Auto-login failed.', 'error');
+            const fallbackCodeStr = logError.code ? `[Code: ${logError.code}]` : '';
+            return showToast(`Auto-login failed: ${logError.message} ${fallbackCodeStr}`, 'error');
           }
 
           if (logData && logData.user && logData.user.id) {
@@ -221,7 +233,7 @@ export default function CloudAuthModal({
           return;
         }
         console.error("Supabase signup error:", error);
-        return showToast(error.message || 'Signup failed.', 'error');
+        return showToast(exactErrorText, 'error');
       }
 
       if (data && data.user && data.user.id) {
