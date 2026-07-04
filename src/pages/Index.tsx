@@ -673,7 +673,7 @@ export default function Index() {
 
       {/* Main Layout Area */}
       <div className="flex-1 flex flex-col md:pl-64">
-        <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-5 py-3.5 flex items-center justify-between">
+        <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-4 md:px-6 py-3.5 flex items-center justify-between">
           <div className="flex flex-col text-left">
             <h1 className="font-display font-black text-xl text-foreground tracking-tight select-none">StoreFlow</h1>
             <button 
@@ -1071,7 +1071,7 @@ export default function Index() {
 
         {/* Bottom Nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
-          <div className="flex justify-around max-w-3xl mx-auto">
+          <div className="flex justify-around max-w-3xl mx-auto px-4">
             {allowedMainTabs.map(t => {
               const isActive = tab === t.id;
               return (
