@@ -2537,36 +2537,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           checked={mgr.multiDeviceSync || false} 
           onChange={async (v) => {
             if (v) {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (!session) {
-                setShowCloudAuthModal(true);
-                return;
-              }
-              // User already authenticated
-              let { data: profile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('auth_user_id', session.user.id)
-                .maybeSingle();
-
-              if (!profile) {
-                // Auto create profile
-                const { data: newProfile } = await supabase
-                  .from('profiles')
-                  .insert({
-                    auth_user_id: session.user.id,
-                    email: session.user.email || '',
-                    full_name: session.user.email?.split('@')[0] || 'User',
-                    role: 'owner'
-                  })
-                  .select()
-                  .single();
-                profile = newProfile;
-              }
-
-              if (profile) {
-                handleCloudAuthSuccess(profile);
-              }
+              setShowCloudAuthModal(true);
             } else {
               updateMgr({ multiDeviceSync: false });
               const updatedStore = {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Lock, Mail, User, X, Cloud, LogIn, UserPlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showToast } from '@/components/Toast';
@@ -25,6 +25,37 @@ export default function CloudAuthModal({
   const [confirmPassword, setConfirmPassword] = useState(initialPassword || '');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('auth_user_id', session.user.id)
+          .maybeSingle()
+          .then(({ data: profile }) => {
+            if (profile) {
+              onAuthSuccess(profile);
+            } else {
+              supabase
+                .from('profiles')
+                .insert({
+                  auth_user_id: session.user.id,
+                  email: session.user.email || email || '',
+                  full_name: session.user.email?.split('@')[0] || 'User',
+                  role: 'owner'
+                })
+                .select()
+                .single()
+                .then(({ data: newProfile }) => {
+                  if (newProfile) onAuthSuccess(newProfile);
+                });
+            }
+          });
+      }
+    });
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
