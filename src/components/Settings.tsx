@@ -3020,10 +3020,15 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         </div>
       </div>
 
-      <div className="p-5 rounded-2xl bg-primary/5 border border-primary/20 text-center space-y-1">
-        <p className="text-sm text-muted-foreground">Thank you for choosing StoreFlow.</p>
-        <p className="font-display font-bold text-primary">Your growth is our mission. 🌱</p>
-      </div>
+      {showCloudAuthModal && (
+        <CloudAuthModal
+          onAuthSuccess={handleCloudAuthSuccess}
+          onClose={() => setShowCloudAuthModal(false)}
+          initialEmail={store.profile?.email || ''}
+          initialPassword={store.managerSettings?.ownerPassword || ''}
+          initialFullName={store.profile?.ownerName || store.storeName || ''}
+        />
+      )}
     </SubPage>
   );
 

@@ -6,14 +6,23 @@ import { showToast } from '@/components/Toast';
 interface CloudAuthModalProps {
   onClose: () => void;
   onAuthSuccess: (profile: any) => void;
+  initialEmail?: string;
+  initialPassword?: string;
+  initialFullName?: string;
 }
 
-export default function CloudAuthModal({ onClose, onAuthSuccess }: CloudAuthModalProps) {
+export default function CloudAuthModal({ 
+  onClose, 
+  onAuthSuccess, 
+  initialEmail, 
+  initialPassword, 
+  initialFullName 
+}: CloudAuthModalProps) {
   const [tab, setTab] = useState<'login' | 'signup'>('signup');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState(initialEmail || '');
+  const [password, setPassword] = useState(initialPassword || '');
+  const [fullName, setFullName] = useState(initialFullName || '');
+  const [confirmPassword, setConfirmPassword] = useState(initialPassword || '');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -86,6 +95,46 @@ export default function CloudAuthModal({ onClose, onAuthSuccess }: CloudAuthModa
       });
 
       if (error) {
+        const errorMsg = error.message.toLowerCase();
+        if (errorMsg.includes('already') || errorMsg.includes('registered') || errorMsg.includes('taken') || errorMsg.includes('exist')) {
+          showToast('Account already exists. Logging you in automatically...', 'info');
+          setTab('login');
+          
+          const { data: logData, error: logError } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password: password,
+          });
+
+          if (logError) {
+            return showToast(logError.message, 'error');
+          }
+
+          if (logData.user) {
+            let { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('auth_user_id', logData.user.id)
+              .maybeSingle();
+
+            if (!profile) {
+              const { data: newProfile } = await supabase
+                .from('profiles')
+                .insert({
+                  auth_user_id: logData.user.id,
+                  email: logData.user.email || email.trim(),
+                  full_name: fullName.trim() || logData.user.email?.split('@')[0] || 'User',
+                  role: 'owner'
+                })
+                .select()
+                .single();
+              profile = newProfile;
+            }
+
+            showToast('Successfully signed in!', 'success');
+            onAuthSuccess(profile);
+          }
+          return;
+        }
         return showToast(error.message, 'error');
       }
 
