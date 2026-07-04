@@ -2587,6 +2587,17 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           🔒 Lock Store Now
         </button>
       </div>
+
+      {/* Cloud Auth Modal — rendered inside security view */}
+      {showCloudAuthModal && (
+        <CloudAuthModal
+          onAuthSuccess={handleCloudAuthSuccess}
+          onClose={() => setShowCloudAuthModal(false)}
+          initialEmail={store.profile?.email || ''}
+          initialPassword={store.managerSettings?.ownerPassword || ''}
+          initialFullName={store.profile?.ownerName || store.storeName || ''}
+        />
+      )}
     </SubPage>
   );
 
