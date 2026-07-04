@@ -243,7 +243,9 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
   const games: GameService[] | undefined = category === 'games'
     ? DEFAULT_GAMES.map(g => ({ ...g, id: generateId() }))
     : undefined;
+  const storeId = generatePermanentStoreId();
   const store: StoreData = {
+    storeId,
     storeName,
     accessCode: code,
     category,

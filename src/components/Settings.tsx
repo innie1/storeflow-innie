@@ -18,6 +18,7 @@ import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
 import { compileBackupPayload, triggerBackupExport, restoreBackupPayload, BackupPayload, decryptBackup } from '@/lib/backup-system';
 import { LocalBackup, getLocalBackups, saveLocalBackup, deleteLocalBackup } from '@/lib/backup-db';
 import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
+import { Html5Qrcode } from 'html5-qrcode';
 import { generateInsights } from '@/lib/manager-intel';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import {
@@ -540,6 +541,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showUrl, setShowUrl] = useState(false);
   const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [storeExistsInCloud, setStoreExistsInCloud] = useState<boolean | null>(null);
+  const [checkingCloudStatus, setCheckingCloudStatus] = useState(false);
+  const [cloudStatusError, setCloudStatusError] = useState<string | null>(null);
 
   const setView = (newView: View) => {
     setViewStack(prev => {
@@ -823,14 +827,104 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showSQLDetails, setShowSQLDetails] = useState(false);
 
   // Draw the store QR code and Barcode when barcode view is active
+  // 1. Verify that the store already exists in the cloud database before showing the QR code
   useEffect(() => {
     if (view !== 'barcode') return;
-    const storeId = store.storeId || store.accessCode;
+
+    if (!store.storeId) {
+      setCloudStatusError("Permanent Store ID is missing.");
+      setStoreExistsInCloud(false);
+      return;
+    }
+
+    setCheckingCloudStatus(true);
+    setCloudStatusError(null);
+    setStoreExistsInCloud(null);
+
+    console.log("QR Generation: Verifying cloud status for Store ID:", store.storeId);
+
+    // Query stores table to see if it exists in the cloud database
+    supabase
+      .from('stores')
+      .select('id')
+      .eq('access_code', store.accessCode)
+      .maybeSingle()
+      .then(({ data: cloudStore, error }) => {
+        setCheckingCloudStatus(false);
+        if (error) {
+          console.error("Cloud status check failed query:", error);
+          setCloudStatusError("Failed to verify cloud connection: " + error.message);
+          setStoreExistsInCloud(false);
+          return;
+        }
+
+        if (cloudStore && cloudStore.id) {
+          console.log("Cloud status check: Store exists in cloud with table ID =", cloudStore.id);
+          setStoreExistsInCloud(true);
+        } else {
+          console.warn("Cloud status check: Store does not exist in the cloud.");
+          setStoreExistsInCloud(false);
+          setCloudStatusError("Store has not been uploaded to the cloud yet. Please enable Multi-device Cloud Sync under Security Settings to back up and publish your store first.");
+        }
+      }).catch(err => {
+        setCheckingCloudStatus(false);
+        console.error("Cloud check execution error:", err);
+        setStoreExistsInCloud(false);
+        setCloudStatusError("Network error occurred while connecting to the cloud.");
+      });
+  }, [view, store.accessCode, store.storeId]);
+
+  // 2. Draw and decode-verify the store QR code and Barcode
+  useEffect(() => {
+    if (view !== 'barcode') return;
+    if (!storeExistsInCloud) {
+      console.warn("Skipping QR code generation because store is not published to the cloud.");
+      return;
+    }
+
+    const storeId = store.storeId;
+    if (!storeId) {
+      console.error("Cannot generate QR code: Store ID is missing.");
+      return;
+    }
+
+    const storeUrl = generateStoreUrl(storeId);
+    console.log("QR Generation: Store ID =", storeId, "Generated URL =", storeUrl);
 
     // Draw QR code
     if (barcodeQrCanvasRef.current) {
-      const storeUrl = generateStoreUrl(storeId);
-      drawQRCode({ text: storeUrl, canvas: barcodeQrCanvasRef.current, logoType: 'cube' }).catch(() => {});
+      drawQRCode({ text: storeUrl, canvas: barcodeQrCanvasRef.current, logoType: 'cube' })
+        .then(() => {
+          console.log("QR Generation Success!");
+          
+          // Verify by decoding after generation
+          if (barcodeQrCanvasRef.current) {
+            barcodeQrCanvasRef.current.toBlob(async (blob) => {
+              if (!blob) {
+                console.error("QR Verification: Failed to convert canvas to blob");
+                return;
+              }
+              const file = new File([blob], "qr.png", { type: "image/png" });
+              try {
+                // Initialize Html5Qrcode using our hidden container
+                const html5QrCode = new Html5Qrcode("temp-qr-scanner-element");
+                const decodedText = await html5QrCode.scanFile(file, false);
+                console.log("QR Verification SUCCESS! Decoded text:", decodedText);
+                if (decodedText === storeUrl) {
+                  console.log("QR Verification: Decoded URL matches generated URL.");
+                } else {
+                  console.error("QR Verification ERROR: Decoded URL does not match generated URL!", { decodedText, storeUrl });
+                  showToast("QR verification warning: Decoded URL mismatch.", "warning");
+                }
+              } catch (scanErr) {
+                console.error("QR Verification ERROR: Failed to decode generated QR canvas:", scanErr);
+              }
+            }, "image/png");
+          }
+        })
+        .catch((err) => {
+          console.error("QR Generation Failed:", err);
+        });
     }
 
     // Draw Barcode
@@ -843,26 +937,20 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         showText: true
       });
     }
-  }, [view, store.storeId, store.accessCode, store.storeName]);
-
-  const handlePrintQR = () => {
+  }, [view, storeExistsInCloud, store.storeId, stor  const handlePrintQR = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       showToast('Could not open print window. Please allow popups.', 'error');
       return;
     }
 
+    const storeId = store.storeId || store.accessCode;
+    const storeUrl = generateStoreUrl(storeId);
+
     // Generate a fresh branded QR onto a temp canvas, export as PNG
     const tmpCanvas = document.createElement('canvas');
-    const encoded = encodeQRData({
-      version: 1,
-      storeId: store.accessCode,
-      timestamp: Date.now(),
-      type: 'store',
-      payload: { name: store.storeName, uniqueCode: store.accessCode }
-    });
 
-    drawQRCode({ text: encoded, canvas: tmpCanvas, logoType: 'cart' }).then(() => {
+    drawQRCode({ text: storeUrl, canvas: tmpCanvas, logoType: 'cart' }).then(() => {
       const imgData = tmpCanvas.toDataURL('image/png');
       printWindow.document.write(`
         <html>
@@ -919,109 +1007,15 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
               <div class="qr-container">
                 <img src="${imgData}" alt="StoreFlow QR Code" />
               </div>
-              <div><div class="code-box">${profile.uniqueCode}</div></div>
+              <div><div class="code-box">${storeId}</div></div>
               <div class="footer">Powered by StoreFlow &bull; Secure &bull; Branded</div>
             </div>
-            <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}<\/script>
+            <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script>
           </body>
         </html>
       `);
       printWindow.document.close();
     });
-    
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Print QR Code - ${store.storeName}</title>
-          <style>
-            body {
-              font-family: system-ui, -apple-system, sans-serif;
-              text-align: center;
-              padding: 40px;
-              color: #0f172a;
-            }
-            .card {
-              border: 3px dashed #cbd5e1;
-              border-radius: 24px;
-              padding: 40px;
-              max-width: 400px;
-              margin: 0 auto;
-              background: #ffffff;
-            }
-            h1 {
-              font-size: 28px;
-              margin-bottom: 8px;
-              font-weight: 800;
-            }
-            p {
-              font-size: 14px;
-              color: #64748b;
-              margin-bottom: 24px;
-              line-height: 1.5;
-            }
-            .qr-container {
-              margin: 0 auto 24px;
-              padding: 16px;
-              background: #f8fafc;
-              border-radius: 16px;
-              display: inline-block;
-            }
-            img {
-              width: 250px;
-              height: 250px;
-              display: block;
-            }
-            .code-box {
-              background: #f1f5f9;
-              padding: 12px;
-              border-radius: 12px;
-              font-family: monospace;
-              font-size: 18px;
-              font-weight: bold;
-              letter-spacing: 2px;
-              color: #0f172a;
-              display: inline-block;
-            }
-            .footer {
-              margin-top: 32px;
-              font-size: 12px;
-              color: #94a3b8;
-            }
-            @media print {
-              body {
-                padding: 0;
-              }
-              .card {
-                border: none;
-                max-width: 100%;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <h1>${store.storeName}</h1>
-            <p>Scan to see our items, products, and details!</p>
-            <div class="qr-container">
-              <img src="${qrUrl}" alt="QR Code" />
-            </div>
-            <div>
-              <div class="code-box">${profile.uniqueCode}</div>
-            </div>
-            <div class="footer">
-              Powered by StoreFlow
-            </div>
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
   const [delStoreNameInput, setDelStoreNameInput] = useState('');
   const [delCodeInput, setDelCodeInput] = useState('');
@@ -1583,78 +1577,101 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
               </span>
             </div>
 
-            {/* QR Canvas */}
-            <div className="relative flex justify-center p-5 bg-white rounded-3xl max-w-[200px] w-full mx-auto border border-border/30 shadow-md">
-              <canvas ref={barcodeQrCanvasRef} className="w-40 h-40" />
-            </div>
-
-            <div className="space-y-1">
-              <h4 className="font-display font-black text-base text-foreground">Scan to Shop</h4>
-              <p className="text-[10px] text-muted-foreground max-w-xs mx-auto">Scan with a mobile camera to browse products and buy directly.</p>
-            </div>
-
-            {/* Benefit Grid */}
-            <div className="grid grid-cols-2 gap-3 max-w-xs mx-auto text-left text-[11px] text-muted-foreground font-display font-semibold py-2.5 border-t border-b border-border/40">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">📦</span>
-                <span>Browse Products</span>
+            {checkingCloudStatus ? (
+              <div className="flex flex-col items-center justify-center p-8 space-y-3">
+                <span className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+                <p className="text-xs text-muted-foreground">Verifying Cloud Status...</p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm">⚡</span>
-                <span>Order Instantly</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm">💳</span>
-                <span>Pay Securely</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm">🚚</span>
-                <span>Pickup or Delivery</span>
-              </div>
-            </div>
-
-            {/* View Link Toggle */}
-            <div className="space-y-2">
-              <button 
-                onClick={() => setShowUrl(!showUrl)}
-                className="text-xs text-primary font-semibold hover:underline flex items-center justify-center gap-1 mx-auto"
-              >
-                {showUrl ? 'Hide Store URL' : 'View Store URL'}
-              </button>
-              {showUrl && (
-                <div className="p-2.5 rounded-xl bg-surface-2 border border-border text-[10px] font-mono text-muted-foreground break-all select-all animate-scale-up">
-                  {storeUrl}
+            ) : cloudStatusError || !storeExistsInCloud ? (
+              <div className="flex flex-col items-center justify-center p-6 space-y-4 border border-destructive/20 bg-destructive/5 rounded-3xl text-center">
+                <div className="w-12 h-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center text-xl">⚠️</div>
+                <div className="space-y-1">
+                  <h4 className="font-display font-black text-sm text-foreground">Cloud Sync Required</h4>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed max-w-xs">{cloudStatusError || "This store is not published to the cloud."}</p>
                 </div>
-              )}
-            </div>
+                <button
+                  onClick={() => setView('security')}
+                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs hover:opacity-90 active:scale-95 transition"
+                >
+                  Enable Cloud Sync
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* QR Canvas */}
+                <div className="relative flex justify-center p-5 bg-white rounded-3xl max-w-[200px] w-full mx-auto border border-border/30 shadow-md">
+                  <canvas ref={barcodeQrCanvasRef} className="w-40 h-40" />
+                </div>
 
-            {/* Equal Buttons Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <button
-                onClick={handleDownloadQR}
-                className="py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-black font-display font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
-              >
-                <Download className="w-4 h-4" /> Download
-              </button>
-              <button
-                onClick={handlePrintQR}
-                className="py-2 rounded-xl bg-surface-2 border border-border hover:bg-surface-3 hover:text-primary text-foreground text-xs font-display font-bold flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
-              >
-                <Printer className="w-4 h-4" /> Print
-              </button>
-              <button
-                onClick={handleShare}
-                className="py-2 rounded-xl bg-surface-2 border border-border hover:bg-surface-3 hover:text-primary text-foreground text-xs font-display font-bold flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
-              >
-                <Share2 className="w-4 h-4" /> Share
-              </button>
-              <button
-                onClick={handleCopy}
-                className="py-2 rounded-xl bg-surface-2 border border-border hover:bg-surface-3 hover:text-primary text-foreground text-xs font-display font-bold flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
-              >
-                <Link2 className="w-4 h-4" /> Copy Link
-              </button>
-            </div>
+                <div className="space-y-1">
+                  <h4 className="font-display font-black text-base text-foreground">Scan to Shop</h4>
+                  <p className="text-[10px] text-muted-foreground max-w-xs mx-auto">Scan with a mobile camera to browse products and buy directly.</p>
+                </div>
+
+                {/* Benefit Grid */}
+                <div className="grid grid-cols-2 gap-3 max-w-xs mx-auto text-left text-[11px] text-muted-foreground font-display font-semibold py-2.5 border-t border-b border-border/40">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">📦</span>
+                    <span>Browse Products</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">⚡</span>
+                    <span>Order Instantly</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">💳</span>
+                    <span>Pay Securely</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🚚</span>
+                    <span>Pickup or Delivery</span>
+                  </div>
+                </div>
+
+                {/* View Link Toggle */}
+                <div className="space-y-2">
+                  <button 
+                    onClick={() => setShowUrl(!showUrl)}
+                    className="text-xs text-primary font-semibold hover:underline flex items-center justify-center gap-1 mx-auto"
+                  >
+                    {showUrl ? 'Hide Store URL' : 'View Store URL'}
+                  </button>
+                  {showUrl && (
+                    <div className="p-2.5 rounded-xl bg-surface-2 border border-border text-[10px] font-mono text-muted-foreground break-all select-all/80 animate-scale-up">
+                      {storeUrl}
+                    </div>
+                  )}
+                </div>
+
+                {/* Equal Buttons Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    onClick={handleDownloadQR}
+                    className="py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-black font-display font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+                  >
+                    <Download className="w-4 h-4" /> Download
+                  </button>
+                  <button
+                    onClick={handlePrintQR}
+                    className="py-2 rounded-xl bg-surface-2 border border-border hover:bg-surface-3 hover:text-primary text-foreground text-xs font-display font-bold flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+                  >
+                    <Printer className="w-4 h-4" /> Print
+                  </button>
+                  <button
+                    onClick={handleShare}
+                    className="py-2 rounded-xl bg-surface-2 border border-border hover:bg-surface-3 hover:text-primary text-foreground text-xs font-display font-bold flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+                  >
+                    <Share2 className="w-4 h-4" /> Share
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    className="py-2 rounded-xl bg-surface-2 border border-border hover:bg-surface-3 hover:text-primary text-foreground text-xs font-display font-bold flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+                  >
+                    <Link2 className="w-4 h-4" /> Copy Link
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Store Barcode Card (Breathing room layout) */}
@@ -1908,6 +1925,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             </div>
           </div>
         )}
+        <div id="temp-qr-scanner-element" style={{ display: 'none' }} />
       </SubPage>
     );
   }
