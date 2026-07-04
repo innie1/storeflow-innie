@@ -552,7 +552,7 @@ export default function Index() {
         </div>
 
         {/* Sidebar Nav Links */}
-        <div className="flex-1 py-4 overflow-y-auto px-3 space-y-1 no-scrollbar">
+        <div className="flex-1 py-4 overflow-y-auto px-3 space-y-1">
           <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">Main Menu</p>
           {allowedMainTabs.map(t => (
             <button

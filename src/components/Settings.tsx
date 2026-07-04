@@ -2481,83 +2481,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           label="Multi-device Cloud Sync" 
           description="Enable real-time cloud backup to sync and access this store on other devices." 
           checked={mgr.multiDeviceSync || false} 
-          onChange={async (v) => {
+          onChange={(v) => {
             if (v) {
-              try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session) {
-                  // Auto detect active session
-                  let { data: profile } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('auth_user_id', session.user.id)
-                    .maybeSingle();
-
-                  if (!profile) {
-                    const { data: newProfile } = await supabase
-                      .from('profiles')
-                      .insert({
-                        auth_user_id: session.user.id,
-                        email: session.user.email || store.profile?.email || '',
-                        full_name: session.user.email?.split('@')[0] || store.storeName || 'User',
-                        role: 'owner'
-                      })
-                      .select()
-                      .single();
-                    profile = newProfile;
-                  }
-
-                  if (profile) {
-                    updateMgr({ multiDeviceSync: true });
-                    const updatedStore = {
-                      ...store,
-                      managerSettings: {
-                        ...store.managerSettings,
-                        multiDeviceSync: true
-                      }
-                    };
-                    saveStore(updatedStore);
-
-                    // Push data immediately to the Internet
-                    const { data: existingStore } = await supabase
-                      .from('stores')
-                      .select('*')
-                      .eq('access_code', store.accessCode)
-                      .maybeSingle();
-
-                    const { data: dbStore } = await supabase
-                      .from('stores')
-                      .upsert({
-                        id: existingStore?.id,
-                        owner_id: profile.id,
-                        business_name: store.storeName,
-                        business_type: store.category || 'retail',
-                        logo: store.profile?.logoStyle || 'minimalist',
-                        access_code: store.accessCode,
-                        owner_password: store.managerSettings?.ownerPassword || 'owner',
-                        data: updatedStore as any,
-                        updated_at: new Date().toISOString()
-                      }, { onConflict: 'access_code' })
-                      .select()
-                      .single();
-
-                    if (dbStore) {
-                      await supabase.from('store_members').upsert({
-                        store_id: dbStore.id,
-                        profile_id: profile.id,
-                        role: 'owner'
-                      }, { onConflict: 'store_id,profile_id' });
-                    }
-
-                    showToast('✓ Cloud Sync auto-enabled and data pushed to internet!', 'success');
-                  }
-                } else {
-                  setShowCloudAuthModal(true);
-                }
-              } catch (e: any) {
-                showToast(e.message || 'Auto-sync failed. Opening login popup...', 'error');
-                setShowCloudAuthModal(true);
-              }
+              setShowCloudAuthModal(true);
             } else {
               updateMgr({ multiDeviceSync: false });
               const updatedStore = {
