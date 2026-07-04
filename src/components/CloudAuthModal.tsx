@@ -27,17 +27,25 @@ export default function CloudAuthModal({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
+      if (sessionError) {
+        console.error("CloudAuthModal: session fetch error on mount:", sessionError);
+        return;
+      }
       if (session && session.user && session.user.id) {
         supabase
           .from('profiles')
           .select('*')
           .eq('auth_user_id', session.user.id)
           .maybeSingle()
-          .then(({ data: profile }) => {
+          .then(({ data: profile, error: profileErr }) => {
+            if (profileErr) {
+              console.error("CloudAuthModal database SELECT error on mount:", profileErr);
+            }
             if (profile && profile.id) {
               onAuthSuccess(profile);
             } else if (session.user) {
+              // Create missing profile
               supabase
                 .from('profiles')
                 .insert({
@@ -48,11 +56,15 @@ export default function CloudAuthModal({
                 })
                 .select()
                 .maybeSingle()
-                .then(({ data: newProfile }) => {
+                .then(({ data: newProfile, error: createProfileErr }) => {
+                  if (createProfileErr) {
+                    console.error("CloudAuthModal database INSERT error on mount fallback:", createProfileErr);
+                  }
                   if (newProfile && newProfile.id) {
                     onAuthSuccess(newProfile);
                   } else {
-                    console.error("CloudAuthModal: failed to create profile on mount");
+                    console.error("CloudAuthModal: failed to load or create profile on mount");
+                    showToast("Failed to load user profile details.", "error");
                   }
                 });
             }
@@ -74,7 +86,8 @@ export default function CloudAuthModal({
       });
 
       if (error) {
-        return showToast(error.message, 'error');
+        console.error("Supabase signin error:", error);
+        return showToast(error.message || 'Authentication failed. Please check credentials.', 'error');
       }
 
       if (data && data.user && data.user.id) {
@@ -86,7 +99,7 @@ export default function CloudAuthModal({
           .maybeSingle();
 
         if (profileErr) {
-          console.warn("CloudAuthModal: failed to fetch profile:", profileErr);
+          console.error("CloudAuthModal database SELECT error during login:", profileErr);
         }
 
         if (!profile || !profile.id) {
@@ -103,7 +116,7 @@ export default function CloudAuthModal({
             .maybeSingle();
 
           if (createProfileErr) {
-            console.error("CloudAuthModal: failed to create profile fallback:", createProfileErr);
+            console.error("CloudAuthModal database INSERT error during login fallback:", createProfileErr);
           }
 
           profile = newProfile;
@@ -116,9 +129,10 @@ export default function CloudAuthModal({
           showToast('Failed to retrieve user profile details.', 'error');
         }
       } else {
-        showToast('Login response contains empty user.', 'error');
+        showToast('Login response did not return a valid user.', 'error');
       }
     } catch (err: any) {
+      console.error("Login execution crash:", err);
       showToast(err.message || 'Login failed', 'error');
     } finally {
       setLoading(false);
@@ -156,7 +170,8 @@ export default function CloudAuthModal({
           });
 
           if (logError) {
-            return showToast(logError.message, 'error');
+            console.error("Supabase signin during signup fallback error:", logError);
+            return showToast(logError.message || 'Auto-login failed.', 'error');
           }
 
           if (logData && logData.user && logData.user.id) {
@@ -167,7 +182,7 @@ export default function CloudAuthModal({
               .maybeSingle();
 
             if (profileErr) {
-              console.warn("CloudAuthModal: failed to fetch profile in signup fallback:", profileErr);
+              console.error("CloudAuthModal database SELECT error during signup fallback:", profileErr);
             }
 
             if (!profile || !profile.id) {
@@ -183,7 +198,7 @@ export default function CloudAuthModal({
                 .maybeSingle();
 
               if (createProfileErr) {
-                console.error("CloudAuthModal: failed to create profile in signup fallback:", createProfileErr);
+                console.error("CloudAuthModal database INSERT error during signup fallback:", createProfileErr);
               }
               profile = newProfile;
             }
@@ -197,7 +212,8 @@ export default function CloudAuthModal({
           }
           return;
         }
-        return showToast(error.message, 'error');
+        console.error("Supabase signup error:", error);
+        return showToast(error.message || 'Signup failed.', 'error');
       }
 
       if (data && data.user && data.user.id) {
@@ -214,18 +230,20 @@ export default function CloudAuthModal({
           .maybeSingle();
 
         if (createProfileErr) {
-          console.error("CloudAuthModal: failed to create profile:", createProfileErr);
+          console.error("CloudAuthModal database INSERT error during signup:", createProfileErr);
         }
 
         if (profile && profile.id) {
           showToast('Successfully signed up!', 'success');
           onAuthSuccess(profile);
         } else {
-          showToast('Successfully signed up! Profile details loading...', 'success');
-          onAuthSuccess({ email: email.trim(), full_name: fullName.trim() });
+          showToast('Failed to load user profile after signup. Please sign in.', 'error');
         }
+      } else {
+        showToast('Signup response did not return a valid user.', 'error');
       }
     } catch (err: any) {
+      console.error("Signup execution crash:", err);
       showToast(err.message || 'Signup failed', 'error');
     } finally {
       setLoading(false);
