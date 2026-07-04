@@ -435,6 +435,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [showPlannedRestocks, setShowPlannedRestocks] = useState(false);
   const [selectedBarcodeProduct, setSelectedBarcodeProduct] = useState<Product | null>(null);
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
+  const [globalScannerOpen, setGlobalScannerOpen] = useState(false);
+  const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
+  const [scanForNewProduct, setScanForNewProduct] = useState(false);
+  const [scanForEditProduct, setScanForEditProduct] = useState(false);
   const [selectedTransferProduct, setSelectedTransferProduct] = useState<Product | null>(null);
   const [transferQty, setTransferQty] = useState('');
   const [transferDestCode, setTransferDestCode] = useState('');
@@ -1163,8 +1167,16 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search products..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-yellow-500/50 text-sm transition-all"
+            className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-yellow-500/50 text-sm transition-all"
           />
+          <button
+            type="button"
+            onClick={() => setGlobalScannerOpen(true)}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-yellow-500 transition-colors cursor-pointer"
+            title="Scan product barcode / QR"
+          >
+            <Camera className="w-4 h-4" />
+          </button>
         </div>
         <button
           type="button"
@@ -1879,7 +1891,21 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       className={inputClass}
                     />
                   )}
-                </div>
+              <div className="flex gap-2">
+                <input
+                  value={newProduct.barcode || ''}
+                  onChange={e => setNewProduct({ ...newProduct, barcode: e.target.value })}
+                  placeholder="Barcode (Optional)"
+                  className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setScanForNewProduct(true)}
+                  className="px-3 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+                  title="Scan barcode"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
               </div>
               <button onClick={handleAdd} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Item</button>
             </div>
@@ -2065,7 +2091,21 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     className={inputClass}
                   />
                 )}
-              </div>
+            <div className="flex gap-2">
+              <input
+                value={editDraft.barcode || ''}
+                onChange={e => setEditDraft(prev => prev ? ({ ...prev, barcode: e.target.value }) : null)}
+                placeholder="Barcode (Optional)"
+                className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setScanForEditProduct(true)}
+                className="px-3 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Scan barcode"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
             </div>
             <button onClick={handleEdit} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Changes</button>
 
@@ -3415,6 +3455,82 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         />
       )}
 
+      {globalScannerOpen && (
+        <BarcodeScanner
+          title="Global Barcode Search"
+          subtitle="Point at a product barcode or StoreFlow QR code"
+          onClose={() => setGlobalScannerOpen(false)}
+          onDetected={(code) => {
+            setGlobalScannerOpen(false);
+            let targetId = code;
+            if (code.includes('/product/')) {
+              const parts = code.split('/product/');
+              targetId = parts[parts.length - 1];
+            }
+            const matching = store.products.find(p => p.barcode === targetId || p.id === targetId);
+            if (matching) {
+              setSelectedDetailProduct(matching);
+              showToast(`✓ Scanned: ${matching.name}`);
+            } else {
+              setNotFoundBarcode(targetId);
+            }
+          }}
+        />
+      )}
+
+      {notFoundBarcode && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-up space-y-4 text-center">
+            <span className="text-4xl">🔍</span>
+            <div>
+              <h3 className="font-display font-bold text-base text-foreground">Product Not Found</h3>
+              <p className="text-xs text-muted-foreground mt-1">No product matched barcode: <span className="font-mono text-yellow-500 font-bold">{notFoundBarcode}</span></p>
+            </div>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setNewProduct({
+                    name: '',
+                    costPrice: '',
+                    sellingPrice: '',
+                    quantity: '',
+                    category: 'Groceries',
+                    isCartonSingleEnabled: false,
+                    singlesPerCarton: '12',
+                    singleSellingPrice: '',
+                    sellAsSinglesByDefault: false,
+                    barcode: notFoundBarcode
+                  });
+                  setCustomCategoryActive(false);
+                  setCustomCategoryVal('');
+                  setShowAddModal(true);
+                  setShowAddConfirm(false);
+                  setNotFoundBarcode(null);
+                }}
+                className="w-full py-2.5 rounded-xl bg-yellow-500 hover:brightness-110 text-black font-display font-bold text-xs cursor-pointer transition active:scale-95"
+              >
+                Create New Product
+              </button>
+              <button
+                onClick={() => {
+                  setNotFoundBarcode(null);
+                  setGlobalScannerOpen(true);
+                }}
+                className="w-full py-2.5 rounded-xl bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-xs cursor-pointer transition active:scale-95"
+              >
+                Scan Again
+              </button>
+              <button
+                onClick={() => setNotFoundBarcode(null)}
+                className="w-full py-2.5 rounded-xl bg-surface-2 border border-destructive/30 text-destructive hover:bg-destructive/10 font-display font-bold text-xs cursor-pointer transition active:scale-95"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {scanForProduct && (
         <BarcodeScanner
           title={`Scan barcode for: ${scanForProduct.name}`}
@@ -3431,6 +3547,32 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             onUpdate(updated);
             showToast(`✓ Saved barcode for ${scanForProduct.name}`);
             setScanForProduct(null);
+          }}
+        />
+      )}
+
+      {scanForNewProduct && (
+        <BarcodeScanner
+          title="Scan barcode for new product"
+          subtitle="Point at the barcode on the item"
+          onClose={() => setScanForNewProduct(false)}
+          onDetected={(code) => {
+            setNewProduct(prev => ({ ...prev, barcode: code }));
+            setScanForNewProduct(false);
+            showToast(`✓ Scanned barcode: ${code}`);
+          }}
+        />
+      )}
+
+      {scanForEditProduct && (
+        <BarcodeScanner
+          title="Scan barcode for product"
+          subtitle="Point at the barcode on the item"
+          onClose={() => setScanForEditProduct(false)}
+          onDetected={(code) => {
+            setEditDraft(prev => prev ? ({ ...prev, barcode: code }) : null);
+            setScanForEditProduct(false);
+            showToast(`✓ Scanned barcode: ${code}`);
           }}
         />
       )}

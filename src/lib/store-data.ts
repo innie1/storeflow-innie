@@ -32,6 +32,27 @@ function generateStoreUniqueCode(): string {
   return code;
 }
 
+/** Generates a permanent UUID-style Store ID (e.g. SF-8F3A2C1D-B4E9). Never changes after creation. */
+function generatePermanentStoreId(): string {
+  const hex = () => Math.floor(Math.random() * 0x10000).toString(16).toUpperCase().padStart(4, '0');
+  return `SF-${hex()}${hex()}-${hex()}`;
+}
+
+/**
+ * Ensures a store has a permanent storeId. If one doesn't exist (e.g. existing stores),
+ * it generates one and persists it immediately. Call this at app load.
+ */
+export function ensureStoreId(store: StoreData): StoreData {
+  if (store.storeId) return store; // Already has one — never overwrite
+  const storeId = generatePermanentStoreId();
+  const updated = { ...store, storeId };
+  // Persist immediately to localStorage
+  try {
+    localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(updated));
+  } catch (_) { /* storage quota — non-fatal */ }
+  return updated;
+}
+
 const RAW_DEFAULT_PRODUCTS = [
   { name: "Peak Milk Liquid (New)", costPrice: 700, quantity: 1, category: "Beverage" },
   { name: "Peak Milk Liquid (Old)", costPrice: 1100, quantity: 1, category: "Beverage" },
@@ -427,6 +448,7 @@ export function loadStore(code: string): StoreData | null {
   if (!data) return null;
   let store = JSON.parse(data);
   
+  store = ensureStoreId(store);
   store = runScheduledSavingsDeduction(store);
   store = syncStoreData(store);
   

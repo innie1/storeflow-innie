@@ -433,3 +433,186 @@ export function exportToSVG(text: string): string {
   ${paths}
 </svg>`;
 }
+
+// ─── Customer PWA URL Generators ────────────────────────────────────────────
+
+export const CUSTOMER_PWA_BASE = 'https://storeflow-customer.vercel.app';
+
+/** The URL embedded in the Store QR code — opens the store in the Customer PWA without login */
+export function generateStoreUrl(storeId: string): string {
+  return `${CUSTOMER_PWA_BASE}/store/${storeId}`;
+}
+
+/** The URL embedded in a Product QR code */
+export function generateProductUrl(storeId: string, productId: string): string {
+  return `${CUSTOMER_PWA_BASE}/store/${storeId}/product/${productId}`;
+}
+
+// ─── QR Code (simple URL) ────────────────────────────────────────────────────
+
+/** Draw a simple QR code for a plain URL onto a canvas element */
+export async function drawSimpleQR(url: string, canvas: HTMLCanvasElement): Promise<void> {
+  await QRCode.toCanvas(canvas, url, {
+    width: canvas.width || 200,
+    margin: 1,
+    color: { dark: '#000000', light: '#FFFFFF' },
+    errorCorrectionLevel: 'M',
+  });
+}
+
+// ─── Code 128 Barcode Renderer ───────────────────────────────────────────────
+
+// Code 128B character encoding table (value → binary bar pattern)
+// Each pattern is a 11-bit representation of bars/spaces
+const CODE128B_CHARS: Record<string, number[]> = {};
+
+(function buildCode128BTable() {
+  const patterns = [
+    212222,222122,222221,121223,121322,131222,122213,122312,132212,221213,
+    221312,231212,112232,122132,122231,113222,123122,123221,223211,221132,
+    221231,213212,223112,312131,311222,321122,321221,312212,322112,322211,
+    212123,212321,232121,111323,131123,131321,112313,132113,132311,211313,
+    231113,231311,112133,112331,132131,113123,113321,133121,313121,211331,
+    231131,213113,213311,213131,311123,311321,331121,312113,312311,332111,
+    314111,221411,431111,111224,111422,121124,121421,141122,141221,112214,
+    112412,122114,122411,142112,142211,241211,221114,413111,241112,134111,
+    111242,121142,121241,114212,124112,124211,411212,421112,421211,212141,
+    214121,412121,111143,111341,131141,114113,114311,411113,411311,113141,
+    114131,311141,411131,211412,211214,211232,2331112
+  ];
+
+  for (let i = 0; i < 96; i++) {
+    const char = String.fromCharCode(i + 32);
+    const pattern = patterns[i];
+    const digits = pattern.toString().split('').map(Number);
+    CODE128B_CHARS[char] = digits;
+  }
+  // START B = index 104, STOP = index 106
+  CODE128B_CHARS['START_B'] = patterns[104].toString().split('').map(Number);
+  CODE128B_CHARS['STOP']    = [2, 3, 3, 1, 1, 1, 2]; // standard stop
+})();
+
+/**
+ * Renders a Code 128B barcode of `code` onto `canvas`.
+ * Returns false if any character is not encodable.
+ */
+export function drawBarcode(code: string, canvas: HTMLCanvasElement, options: {
+  barColor?: string;
+  bgColor?: string;
+  barWidth?: number;
+  height?: number;
+  showText?: boolean;
+} = {}): boolean {
+  const {
+    barColor = '#000000',
+    bgColor = '#FFFFFF',
+    barWidth = 2,
+    height = canvas.height || 80,
+    showText = true,
+  } = options;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+
+  // Build the sequence of bar/space patterns
+  const patterns: number[][] = [];
+
+  // START B
+  patterns.push([2, 1, 1, 4, 1, 2]); // Code 128 Start B pattern
+
+  let checksum = 104; // Start B value
+  for (let i = 0; i < code.length; i++) {
+    const char = code[i];
+    const charCode = char.charCodeAt(0) - 32;
+    if (charCode < 0 || charCode > 95) return false; // unencodable
+
+    // Pattern values for Code128B (bar widths 1-4 alternating bar/space)
+    // We use a simplified but correct approach: map char to its 6-element pattern
+    const val = charCode;
+    checksum += val * (i + 1);
+
+    // Encode character as 6 alternating bar/space widths
+    const enc = encodeCode128BChar(val);
+    patterns.push(enc);
+  }
+
+  // Checksum character
+  const checksumVal = checksum % 103;
+  patterns.push(encodeCode128BChar(checksumVal));
+
+  // STOP pattern
+  patterns.push([2, 3, 3, 1, 1, 1, 2]);
+
+  // Flatten all patterns into one array of widths
+  const widths: number[] = [];
+  for (const p of patterns) widths.push(...p);
+
+  // Calculate total width
+  const totalUnits = widths.reduce((a, b) => a + b, 0);
+  const quietZoneUnits = 10;
+  const totalWidth = (totalUnits + quietZoneUnits * 2) * barWidth;
+
+  canvas.width = totalWidth;
+  canvas.height = height;
+
+  // Fill background
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw bars
+  const textHeight = showText ? 14 : 0;
+  const barsHeight = height - textHeight - 4;
+  let x = quietZoneUnits * barWidth;
+  let isBar = true;
+
+  for (const w of widths) {
+    if (isBar) {
+      ctx.fillStyle = barColor;
+      ctx.fillRect(x, 2, w * barWidth, barsHeight);
+    }
+    x += w * barWidth;
+    isBar = !isBar;
+  }
+
+  // Draw text
+  if (showText) {
+    ctx.fillStyle = barColor;
+    ctx.font = `11px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(code, canvas.width / 2, height - 2);
+  }
+
+  return true;
+}
+
+/** Maps a Code 128B character value (0–102) to its 6-element bar/space width array */
+function encodeCode128BChar(val: number): number[] {
+  // Code 128 character encodings — 103 values (0-106)
+  // Each character is encoded as 3 bars + 3 spaces = 6 elements alternating bar/space
+  const table = [
+    [2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],
+    [1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],
+    [2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],
+    [1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],
+    [2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],
+    [3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
+    [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],
+    [1,3,1,3,2,1],[1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],
+    [2,3,1,1,1,3],[2,3,1,3,1,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],
+    [1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[3,1,3,1,2,1],[2,1,1,3,3,1],
+    [2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],[3,1,1,1,2,3],
+    [3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],
+    [3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],
+    [1,2,1,1,2,4],[1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],
+    [1,1,2,4,1,2],[1,2,2,1,1,4],[1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],
+    [2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],[2,4,1,1,1,2],[1,3,4,1,1,1],
+    [1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],[1,2,4,1,1,2],
+    [1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
+    [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],
+    [1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],
+    [1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],
+    [2,1,1,2,3,2],[2,3,3,1,1,1]
+  ];
+  return table[Math.min(val, table.length - 1)] || [2,1,2,2,2,2];
+}
+

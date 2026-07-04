@@ -5,7 +5,7 @@ import {
 } from '@/types/store';
 import CloudAuthModal from '@/components/CloudAuthModal';
 import { supabase } from '@/integrations/supabase/client';
-import { drawQRCode, encodeQRData } from '@/lib/qr-code';
+import { drawQRCode, encodeQRData, drawSimpleQR, drawBarcode, generateStoreUrl, generateProductUrl } from '@/lib/qr-code';
 import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex, getStoreIndex, STORE_PREFIX } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
@@ -155,49 +155,185 @@ function SubPage({ title, subtitle, onBack, children, right }: { title: string; 
 }
 
 function ProductQRRow({ product, store }: { product: Product; store: StoreData }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const barcodeCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const storeId = store.storeId || store.accessCode;
+  const productUrl = generateProductUrl(storeId, product.id);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const encoded = encodeQRData({
-      version: 1,
-      storeId: store.accessCode,
-      timestamp: Date.now(),
-      type: 'product',
-      payload: { id: product.id, name: product.name, price: product.sellingPrice, sku: product.barcode || '' }
-    });
-    drawQRCode({ text: encoded, canvas: canvasRef.current, logoType: 'cart', logoSizePercent: 0.22 });
-  }, [product, store.accessCode]);
+    if (qrCanvasRef.current) {
+      drawSimpleQR(productUrl, qrCanvasRef.current).catch(() => {});
+    }
+    if (barcodeCanvasRef.current && product.barcode) {
+      drawBarcode(product.barcode, barcodeCanvasRef.current, {
+        barColor: '#000000',
+        bgColor: '#FFFFFF',
+        barWidth: 1.5,
+        height: 50,
+        showText: true
+      });
+    }
+  }, [productUrl, product.barcode]);
 
-  const handlePrintProduct = () => {
+  const handlePrintShelfLabel = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       showToast('Could not open print window. Please allow popups.', 'error');
       return;
     }
-    if (!canvasRef.current) return;
-    const imgData = canvasRef.current.toDataURL('image/png');
+
+    const qrImgData = qrCanvasRef.current ? qrCanvasRef.current.toDataURL('image/png') : '';
+    const barcodeImgData = (barcodeCanvasRef.current && product.barcode) 
+      ? barcodeCanvasRef.current.toDataURL('image/png') 
+      : '';
+
+    const storeLogoHtml = store.profile?.photo 
+      ? `<img class="store-logo" src="${store.profile.photo}" alt="" />`
+      : `<div class="store-icon-placeholder">🏪</div>`;
+
     printWindow.document.write(`
       <html>
         <head>
-          <title>Print Product Barcode - ${product.name}</title>
+          <title>Shelf Label - ${product.name}</title>
           <style>
-            body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 20px; background: #08080f; color: #ffffff; }
-            .badge { border: 2px solid #FFC72C; border-radius: 16px; padding: 20px; max-width: 300px; margin: 0 auto; bg: #111111; color: #ffffff; }
-            h1 { font-size: 18px; margin: 0 0 4px; }
-            p { font-size: 12px; color: #FFC72C; font-weight: bold; margin: 0 0 10px; }
-            img { width: 180px; height: 180px; margin: 0 auto; display: block; background: white; padding: 6px; border-radius: 12px; }
-            .sku { font-family: monospace; font-size: 12px; color: #888; margin-top: 10px; }
+            body {
+              font-family: system-ui, -apple-system, sans-serif;
+              margin: 0;
+              padding: 20px;
+              background: #f8fafc;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+            }
+            .label-card {
+              width: 320px;
+              border: 2px solid #000;
+              border-radius: 12px;
+              background: #ffffff;
+              padding: 16px;
+              box-sizing: border-box;
+              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            }
+            .header {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              border-bottom: 1px solid #e2e8f0;
+              padding-bottom: 8px;
+              margin-bottom: 10px;
+            }
+            .store-logo {
+              width: 24px;
+              height: 24px;
+              object-fit: cover;
+              border-radius: 4px;
+            }
+            .store-icon-placeholder {
+              font-size: 18px;
+            }
+            .store-name {
+              font-size: 12px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              color: #1e293b;
+            }
+            .product-name {
+              font-size: 16px;
+              font-weight: 700;
+              color: #0f172a;
+              margin: 0 0 4px 0;
+              word-break: break-word;
+              line-height: 1.25;
+            }
+            .price-tag {
+              font-size: 24px;
+              font-weight: 900;
+              color: #000000;
+              margin: 6px 0 12px 0;
+            }
+            .codes-container {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+              margin-top: 10px;
+              border-top: 1px dashed #cbd5e1;
+              padding-top: 10px;
+            }
+            .barcode-wrap {
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+            }
+            .barcode-img {
+              max-width: 100%;
+              height: 40px;
+              object-fit: contain;
+            }
+            .qr-wrap {
+              width: 60px;
+              height: 60px;
+              background: #fff;
+              padding: 4px;
+              border: 1px solid #cbd5e1;
+              border-radius: 6px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-shrink: 0;
+            }
+            .qr-img {
+              width: 100%;
+              height: 100%;
+            }
+            .scan-text {
+              font-size: 8px;
+              font-weight: bold;
+              color: #64748b;
+              text-align: center;
+              margin-top: 2px;
+            }
+            @media print {
+              body {
+                background: none;
+                padding: 0;
+              }
+              .label-card {
+                box-shadow: none;
+                border: 2px solid #000;
+              }
+            }
           </style>
         </head>
         <body>
-          <div class="badge">
-            <h1>${product.name}</h1>
-            <p>₦${(product.sellingPrice || 0).toLocaleString()}</p>
-            <img src="${imgData}" />
-            <div class="sku">SKU: ${product.barcode || 'N/A'}</div>
+          <div class="label-card">
+            <div class="header">
+              ${storeLogoHtml}
+              <span class="store-name">${store.storeName}</span>
+            </div>
+            <h1 class="product-name">${product.name}</h1>
+            <div class="price-tag">₦${(product.sellingPrice || 0).toLocaleString()}</div>
+            <div class="codes-container">
+              <div class="barcode-wrap">
+                ${barcodeImgData ? `<img class="barcode-img" src="${barcodeImgData}" alt="barcode" />` : `<div style="font-size:10px;color:#94a3b8;font-style:italic;">No Barcode</div>`}
+              </div>
+              <div style="display: flex; flex-direction: column; align-items: center;">
+                <div class="qr-wrap">
+                  <img class="qr-img" src="${qrImgData}" alt="QR" />
+                </div>
+                <span class="scan-text">SCAN TO BUY</span>
+              </div>
+            </div>
           </div>
-          <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
         </body>
       </html>
     `);
@@ -207,35 +343,44 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
   const isOutOfStock = (product.quantity || 0) <= 0;
 
   return (
-    <div className="flex items-center justify-between p-3.5 bg-surface-2 border border-border/85 rounded-2xl gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-12 h-12 rounded-xl bg-surface-3 flex items-center justify-center text-xl shrink-0 overflow-hidden border border-border">
-          {product.image ? (
-            <img src={product.image} alt="" className="w-full h-full object-cover" />
-          ) : (
-            '📦'
-          )}
+    <div className="flex flex-col p-4 bg-surface-2 border border-border/80 rounded-2xl gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-12 h-12 rounded-xl bg-surface-3 flex items-center justify-center text-xl shrink-0 overflow-hidden border border-border">
+            {product.image ? (
+              <img src={product.image} alt="" className="w-full h-full object-cover" />
+            ) : (
+              '📦'
+            )}
+          </div>
+          <div className="text-left min-w-0">
+            <h4 className="font-display font-bold text-xs text-foreground truncate">{product.name}</h4>
+            <span className={`inline-block text-[9px] uppercase px-1.5 py-0.5 rounded font-bold mt-0.5 ${isOutOfStock ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'}`}>
+              {isOutOfStock ? 'Out of stock' : 'In Stock'}
+            </span>
+            <p className="text-xs font-display font-bold text-yellow-500 mt-1">₦{(product.sellingPrice || 0).toLocaleString()}</p>
+          </div>
         </div>
-        <div className="text-left min-w-0">
-          <h4 className="font-display font-bold text-xs text-foreground truncate">{product.name}</h4>
-          <span className={`inline-block text-[10px] font-semibold mt-0.5 ${isOutOfStock ? 'text-destructive' : 'text-success'}`}>
-            {isOutOfStock ? 'Out of stock' : 'In Stock'}
-          </span>
-          <p className="text-xs font-display font-bold text-foreground mt-0.5">₦{(product.sellingPrice || 0).toLocaleString()}</p>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-11 h-11 bg-white p-1 rounded-lg border border-border flex items-center justify-center">
+            <canvas ref={qrCanvasRef} className="w-9 h-9" />
+          </div>
+          <button
+            onClick={handlePrintShelfLabel}
+            className="px-3 py-2 bg-yellow-500 hover:brightness-110 text-black font-display font-bold text-[11px] rounded-xl cursor-pointer shadow-sm transition-all active:scale-95 whitespace-nowrap"
+          >
+            Print Label
+          </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5">
-        <div className="w-11 h-11 bg-white p-1 rounded-lg border border-border flex items-center justify-center shrink-0">
-          <canvas ref={canvasRef} className="w-9 h-9" />
+      {product.barcode && (
+        <div className="flex flex-col items-start gap-1 p-2 bg-white rounded-xl border border-border mt-1">
+          <span className="text-[9px] font-bold text-slate-500">Product Barcode ({product.barcode})</span>
+          <canvas ref={barcodeCanvasRef} className="max-w-full h-10 object-contain mx-auto" />
         </div>
-        <button
-          onClick={handlePrintProduct}
-          className="px-3.5 py-1.5 bg-surface-3 border border-border hover:bg-surface-1 text-foreground transition-all rounded-xl font-display font-bold text-[11px] cursor-pointer"
-        >
-          Print
-        </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -245,6 +390,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [view, setViewState] = useState<View>('home');
   const [viewStack, setViewStack] = useState<View[]>(['home']);
   const barcodeQrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const storeBarcodeCanvasRef = useRef<HTMLCanvasElement>(null);
   const [showAllProductsQR, setShowAllProductsQR] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
 
@@ -483,18 +629,28 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSQLDetails, setShowSQLDetails] = useState(false);
 
-  // Draw the store QR code when barcode view is active
+  // Draw the store QR code and Barcode when barcode view is active
   useEffect(() => {
-    if (view !== 'barcode' || !barcodeQrCanvasRef.current) return;
-    const encoded = encodeQRData({
-      version: 1,
-      storeId: store.accessCode,
-      timestamp: Date.now(),
-      type: 'store',
-      payload: { name: store.storeName, uniqueCode: store.accessCode }
-    });
-    drawQRCode({ text: encoded, canvas: barcodeQrCanvasRef.current, logoType: 'cart' });
-  }, [view, store.accessCode, store.storeName]);
+    if (view !== 'barcode') return;
+    const storeId = store.storeId || store.accessCode;
+
+    // Draw QR code
+    if (barcodeQrCanvasRef.current) {
+      const storeUrl = generateStoreUrl(storeId);
+      drawSimpleQR(storeUrl, barcodeQrCanvasRef.current).catch(() => {});
+    }
+
+    // Draw Barcode
+    if (storeBarcodeCanvasRef.current) {
+      drawBarcode(storeId, storeBarcodeCanvasRef.current, {
+        barColor: '#000000',
+        bgColor: '#FFFFFF',
+        barWidth: 2,
+        height: 70,
+        showText: true
+      });
+    }
+  }, [view, store.storeId, store.accessCode, store.storeName]);
 
   const handlePrintQR = () => {
     const printWindow = window.open('', '_blank');
@@ -895,39 +1051,161 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
 
   // ============ BARCODE / QR SCREEN ============
   if (view === 'barcode') {
+    const storeId = store.storeId || store.accessCode;
+    const storeUrl = generateStoreUrl(storeId);
 
     const handlePrint = () => {
-      handlePrintQR();
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        showToast('Could not open print window. Please allow popups.', 'error');
+        return;
+      }
+      
+      const qrDataUrl = barcodeQrCanvasRef.current ? barcodeQrCanvasRef.current.toDataURL('image/png') : '';
+      const barcodeDataUrl = storeBarcodeCanvasRef.current ? storeBarcodeCanvasRef.current.toDataURL('image/png') : '';
+      
+      const logoHtml = store.profile?.photo 
+        ? `<img class="store-logo" src="${store.profile.photo}" alt="" />`
+        : `<div class="store-icon-placeholder">🏪</div>`;
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Store Details - ${store.storeName}</title>
+            <style>
+              body {
+                font-family: system-ui, -apple-system, sans-serif;
+                text-align: center;
+                padding: 40px;
+                background: #ffffff;
+                color: #0f172a;
+              }
+              .container {
+                max-width: 500px;
+                margin: 0 auto;
+                border: 2px solid #e2e8f0;
+                border-radius: 24px;
+                padding: 32px;
+                box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+              }
+              .store-logo {
+                width: 64px;
+                height: 64px;
+                object-fit: cover;
+                border-radius: 50%;
+                margin: 0 auto 12px;
+                border: 2px solid #FFC72C;
+              }
+              .store-icon-placeholder {
+                font-size: 48px;
+                margin-bottom: 12px;
+              }
+              h1 {
+                font-size: 24px;
+                font-weight: 800;
+                margin: 0 0 4px 0;
+              }
+              .store-id {
+                font-size: 11px;
+                font-family: monospace;
+                color: #64748b;
+                text-transform: uppercase;
+                margin-bottom: 24px;
+              }
+              .section-title {
+                font-size: 12px;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: #64748b;
+                margin-top: 20px;
+                margin-bottom: 8px;
+              }
+              .qr-img {
+                width: 200px;
+                height: 200px;
+                margin: 0 auto 8px;
+              }
+              .barcode-img {
+                max-width: 100%;
+                height: 60px;
+                object-fit: contain;
+                margin: 0 auto;
+              }
+              .url-text {
+                font-size: 11px;
+                color: #2563eb;
+                word-break: break-all;
+                margin-top: 4px;
+              }
+              @media print {
+                body { padding: 0; }
+                .container { border: none; box-shadow: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              ${logoHtml}
+              <h1>${store.storeName}</h1>
+              <div class="store-id">Store ID: ${storeId}</div>
+              
+              <div class="section-title">Scan Store QR Code to Shop</div>
+              <img class="qr-img" src="${qrDataUrl}" alt="QR" />
+              <div class="url-text">${generateStoreUrl(storeId)}</div>
+              
+              <div class="section-title" style="margin-top: 32px;">Official Store Barcode</div>
+              <img class="barcode-img" src="${barcodeDataUrl}" alt="Barcode" />
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(function() { window.close(); }, 500);
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
     };
 
     const handleShare = () => {
-      const shareUrl = `${window.location.origin}/?store=${store.accessCode}`;
       if (navigator.share) {
         navigator.share({
           title: store.storeName,
           text: `Scan to shop at ${store.storeName}!`,
-          url: shareUrl
+          url: storeUrl
         }).catch(() => {});
       } else {
-        navigator.clipboard.writeText(shareUrl);
-        showToast('Store link copied to clipboard!', 'success');
+        navigator.clipboard.writeText(storeUrl);
+        showToast('Store URL copied to clipboard!', 'success');
       }
     };
 
     const handleCopy = () => {
-      const shareUrl = `${window.location.origin}/?store=${store.accessCode}`;
-      navigator.clipboard.writeText(shareUrl);
-      showToast('Store link copied!', 'success');
+      navigator.clipboard.writeText(storeUrl);
+      showToast('Store URL copied!', 'success');
     };
 
-    const handleDownload = () => {
+    const handleDownloadQR = () => {
       if (barcodeQrCanvasRef.current) {
         const url = barcodeQrCanvasRef.current.toDataURL('image/png');
         const a = document.createElement('a');
         a.href = url;
         a.download = `${store.storeName.replace(/\s+/g, '_')}_qr.png`;
         a.click();
-        showToast('QR Code downloaded!', 'success');
+        showToast('Store QR Code downloaded!', 'success');
+      }
+    };
+
+    const handleDownloadBarcode = () => {
+      if (storeBarcodeCanvasRef.current) {
+        const url = storeBarcodeCanvasRef.current.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${store.storeName.replace(/\s+/g, '_')}_barcode.png`;
+        a.click();
+        showToast('Store Barcode downloaded!', 'success');
       }
     };
 
@@ -936,15 +1214,37 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         title="QR & Barcodes" 
         onBack={() => setView('home')}
       >
-        <div className="space-y-4">
-          {/* Store Details Card */}
-          <div className="p-4 rounded-2xl bg-surface-1 border border-border flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
-              <Store className="w-5 h-5" />
+        <div className="space-y-4 pb-12">
+          {/* Store Details Header Card */}
+          <div className="p-4 rounded-2xl bg-surface-1 border border-border flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center shrink-0 overflow-hidden border border-border">
+                {store.profile?.photo ? (
+                  <img src={store.profile.photo} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <StoreLogo styleName={store.profile?.logoStyle} storeName={store.storeName} size="md" />
+                )}
+              </div>
+              <div className="text-left min-w-0">
+                <h4 className="font-display font-bold text-sm text-foreground truncate">{store.storeName}</h4>
+                <p className="text-[10px] text-muted-foreground font-mono truncate">Store ID: <span className="text-yellow-500 font-bold">{storeId}</span></p>
+              </div>
             </div>
-            <div className="text-left">
-              <h4 className="font-display font-bold text-sm text-foreground">{store.storeName}</h4>
-              <p className="text-[10px] text-muted-foreground font-mono">Store ID: <span className="text-yellow-500 font-bold">{store.accessCode}</span></p>
+            <div className="flex gap-2">
+              <button 
+                onClick={handlePrint}
+                className="w-8 h-8 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition active:scale-95 cursor-pointer"
+                title="Print Label Sheet"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={handleShare}
+                className="w-8 h-8 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition active:scale-95 cursor-pointer"
+                title="Share Store link"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -952,67 +1252,63 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           <div className={`${card} p-5 space-y-4 text-center border border-border/60`}>
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <div className="text-left">
-                <h3 className="font-display font-bold text-base text-foreground">Store QR Code</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Customers scan this code to browse your store, see products and place orders.</p>
+                <h3 className="font-display font-bold text-sm text-foreground">Store QR Code</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Customers scan this code to browse products and place orders.</p>
               </div>
-              <span className="px-2.5 py-0.5 rounded-full bg-success/10 text-success border border-success/20 text-[10px] font-display font-semibold flex items-center gap-1">
-                <Shield className="w-3.5 h-3.5" /> Permanent
+              <span className="px-2.5 py-0.5 rounded-full bg-success/10 text-success border border-success/20 text-[9px] font-display font-semibold flex items-center gap-1">
+                <Shield className="w-3 h-3" /> Permanent
               </span>
             </div>
 
-            {/* QR Code Container (White rounded square) */}
-            <div className="relative flex justify-center p-5 bg-white rounded-3xl max-w-[220px] mx-auto border border-border/30 shadow-md">
-              <canvas ref={barcodeQrCanvasRef} className="w-44 h-44" />
+            {/* QR Code Container */}
+            <div className="relative flex justify-center p-4 bg-white rounded-3xl max-w-[180px] mx-auto border border-border/30 shadow-md">
+              <canvas ref={barcodeQrCanvasRef} className="w-36 h-36" />
             </div>
 
-            {/* Branded Title below QR code */}
-            <div className="space-y-0.5 pt-1">
-              <h4 className="font-display font-black text-lg text-foreground tracking-tight">{store.storeName}</h4>
-              <p className="text-xs text-yellow-500 font-display font-medium">✨ Scan to shop ✨</p>
+            <div className="space-y-2 text-center">
+              <div className="p-2.5 rounded-xl bg-surface-2 border border-border text-[11px] font-mono text-muted-foreground break-all select-all">
+                {storeUrl}
+              </div>
+              <div className="flex gap-2 justify-center">
+                <button 
+                  onClick={handleDownloadQR}
+                  className="py-1.5 px-3 rounded-lg bg-yellow-500 hover:brightness-110 text-black font-display font-bold text-[10px] cursor-pointer transition active:scale-95 flex items-center gap-1"
+                >
+                  <Download className="w-3 h-3" /> Download QR
+                </button>
+                <button 
+                  onClick={handleCopy}
+                  className="py-1.5 px-3 rounded-lg bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-[10px] cursor-pointer transition active:scale-95 flex items-center gap-1"
+                >
+                  <Link2 className="w-3 h-3" /> Copy Link
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Store Barcode Card */}
+          <div className={`${card} p-5 space-y-4 text-center border border-border/60`}>
+            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+              <div className="text-left">
+                <h3 className="font-display font-bold text-sm text-foreground">Official Store Barcode</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Scan inside StoreFlow ecosystem to identify this store.</p>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-success/10 text-success border border-success/20 text-[9px] font-display font-semibold flex items-center gap-1">
+                <Shield className="w-3 h-3" /> Permanent
+              </span>
             </div>
 
-            {/* Action Features row */}
-            <div className="grid grid-cols-4 gap-1.5 pt-3 border-t border-border/40">
-              {[
-                { icon: <Package className="w-4 h-4" />, label: 'Browse Products' },
-                { icon: <ShoppingBag className="w-4 h-4" />, label: 'Order Instantly' },
-                { icon: <CreditCard className="w-4 h-4" />, label: 'Pay with OPay' },
-                { icon: <Bike className="w-4 h-4" />, label: 'Pickup or Delivery' }
-              ].map((feat, i) => (
-                <div key={i} className="flex flex-col items-center gap-1.5">
-                  <div className="w-10 h-10 rounded-full bg-surface-2 border border-border flex items-center justify-center text-yellow-500">
-                    {feat.icon}
-                  </div>
-                  <span className="text-[9px] text-muted-foreground font-display font-semibold leading-tight text-center max-w-[70px]">{feat.label}</span>
-                </div>
-              ))}
+            {/* Barcode Canvas */}
+            <div className="p-4 bg-white rounded-2xl border border-border/30 max-w-[280px] mx-auto flex justify-center shadow-md">
+              <canvas ref={storeBarcodeCanvasRef} className="max-w-full h-16 object-contain" />
             </div>
 
-            {/* Control buttons */}
-            <div className="grid grid-cols-4 gap-2 pt-1.5">
+            <div className="flex justify-center">
               <button 
-                onClick={handleDownload}
-                className="py-2 px-1 rounded-xl bg-yellow-500 hover:brightness-110 text-black font-display font-bold text-[11px] cursor-pointer transition flex items-center justify-center gap-1"
+                onClick={handleDownloadBarcode}
+                className="py-1.5 px-3 rounded-lg bg-yellow-500 hover:brightness-110 text-black font-display font-bold text-[10px] cursor-pointer transition active:scale-95 flex items-center gap-1"
               >
-                <Download className="w-3 h-3" /> Download
-              </button>
-              <button 
-                onClick={handlePrint}
-                className="py-2 px-1 rounded-xl bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-[11px] cursor-pointer transition flex items-center justify-center gap-1"
-              >
-                <Printer className="w-3 h-3" /> Print
-              </button>
-              <button 
-                onClick={handleShare}
-                className="py-2 px-1 rounded-xl bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-[11px] cursor-pointer transition flex items-center justify-center gap-1"
-              >
-                <Share2 className="w-3 h-3" /> Share
-              </button>
-              <button 
-                onClick={handleCopy}
-                className="py-2 px-1 rounded-xl bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-[11px] cursor-pointer transition flex items-center justify-center gap-1"
-              >
-                <Link2 className="w-3 h-3" /> Copy Link
+                <Download className="w-3 h-3" /> Download Barcode
               </button>
             </div>
           </div>
@@ -1035,7 +1331,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                 onClick={() => setShowAllProductsQR(true)}
                 className="text-xs text-yellow-500 hover:text-yellow-600 font-display font-bold cursor-pointer"
               >
-                View all
+                View all ({store.products.length})
               </button>
             </div>
 

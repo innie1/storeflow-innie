@@ -559,6 +559,7 @@ export interface SimilarProductReview {
 }
 
 export interface StoreData {
+  storeId?: string;          // Permanent immutable ID — never changes; generated once at store creation
   learnedProducts?: LearnedProduct[];
   dismissedSimilarPairs?: string[];
   similarProductReviews?: SimilarProductReview[];

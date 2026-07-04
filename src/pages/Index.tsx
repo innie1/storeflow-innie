@@ -446,7 +446,12 @@ export default function Index() {
 
   const handleBarcodeDetected = useCallback((code: string) => {
     if (!store) return;
-    const existing = findProductByBarcode(store, code);
+    let targetId = code;
+    if (code.includes('/product/')) {
+      const parts = code.split('/product/');
+      targetId = parts[parts.length - 1];
+    }
+    const existing = store.products.find(p => p.barcode === targetId || p.id === targetId);
     if (existing) {
       // Sell mode: add to scan cart
       if (existing.quantity <= 0) {
@@ -472,7 +477,7 @@ export default function Index() {
     } else {
       // Save mode
       setShowBarcodeScanner(false);
-      setNewProductPrompt({ barcode: code, name: '', costPrice: '', sellingPrice: '', quantity: '1' });
+      setNewProductPrompt({ barcode: targetId, name: '', costPrice: '', sellingPrice: '', quantity: '1' });
     }
   }, [store]);
 

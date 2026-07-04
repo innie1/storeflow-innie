@@ -56,6 +56,8 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [showLostSaleModal, setShowLostSaleModal] = useState(false);
   const [lostSaleName, setLostSaleName] = useState('');
   const [lostSaleQty, setLostSaleQty] = useState('1');
+  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
+  const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
 
   // Automatically shut down voice selling when navigating away
   useEffect(() => {
@@ -434,11 +436,30 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   };
 
   const handleBarcodeDetected = (code: string) => {
-    const product = findProductByBarcode(store, code);
-    if (!product) return showToast('Barcode not linked to any product', 'error');
-    if (getAvailableQty(product.id) < 1) return showToast(`${product.name} out of stock`, 'error');
-    addToCart(product.id, 1);
     setScanning(false);
+    
+    // Support parsing product URLs from QR code
+    let targetId = code;
+    if (code.includes('/product/')) {
+      const parts = code.split('/product/');
+      targetId = parts[parts.length - 1];
+    }
+
+    const product = store.products.find(p => p.barcode === targetId || p.id === targetId);
+    if (!product) {
+      setNotFoundBarcode(targetId);
+      return;
+    }
+    
+    if (product.isCartonSingleEnabled) {
+      // Show variant picker modal
+      setVariantPickerProduct(product);
+    } else {
+      // Add directly
+      if (getAvailableQty(product.id) < 1) return showToast(`${product.name} out of stock`, 'error');
+      addToCart(product.id, 1);
+      showToast(`✓ Added to cart: ${product.name}`);
+    }
   };
 
   // auto switch to pending when balance > 0
@@ -990,6 +1011,88 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       {scanning && (
         <BarcodeScanner title="Scan to Sell" subtitle="Aim at the product's barcode"
           onClose={() => setScanning(false)} onDetected={handleBarcodeDetected} />
+      )}
+
+      {variantPickerProduct && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setVariantPickerProduct(null)}>
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-up space-y-4 text-left" onClick={e => e.stopPropagation()}>
+            <div>
+              <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-wider">Multiple Variants Found</span>
+              <h3 className="font-display font-bold text-base text-foreground mt-0.5">{variantPickerProduct.name}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Please select the correct packaging/size to add to the cart.</p>
+            </div>
+            
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => {
+                  addToCart(variantPickerProduct.id, 1, 'carton');
+                  setVariantPickerProduct(null);
+                  showToast(`✓ Added 1 Carton of ${variantPickerProduct.name} to cart`);
+                }}
+                className="w-full p-3.5 rounded-2xl bg-surface-2 border border-border hover:border-yellow-500/40 text-left flex items-center justify-between transition cursor-pointer active:scale-95"
+              >
+                <div>
+                  <p className="text-xs font-bold text-foreground">📦 Carton Package</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Price per Carton</p>
+                </div>
+                <span className="text-xs font-display font-bold text-yellow-500">₦{(variantPickerProduct.sellingPrice || 0).toLocaleString()}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  addToCart(variantPickerProduct.id, 1, 'single');
+                  setVariantPickerProduct(null);
+                  showToast(`✓ Added 1 Single of ${variantPickerProduct.name} to cart`);
+                }}
+                className="w-full p-3.5 rounded-2xl bg-surface-2 border border-border hover:border-yellow-500/40 text-left flex items-center justify-between transition cursor-pointer active:scale-95"
+              >
+                <div>
+                  <p className="text-xs font-bold text-foreground">🥤 Single Unit</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Price per Single</p>
+                </div>
+                <span className="text-xs font-display font-bold text-yellow-500">
+                  ₦{(variantPickerProduct.singleSellingPrice ?? Math.round(variantPickerProduct.sellingPrice / (variantPickerProduct.singlesPerCarton || 1))).toLocaleString()}
+                </span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setVariantPickerProduct(null)}
+              className="w-full py-2.5 rounded-xl bg-surface-3 border border-border text-foreground hover:bg-surface-2 font-display font-bold text-xs cursor-pointer transition active:scale-95 text-center mt-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {notFoundBarcode && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNotFoundBarcode(null)}>
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-up space-y-4 text-center" onClick={e => e.stopPropagation()}>
+            <span className="text-4xl">🔍</span>
+            <div>
+              <h3 className="font-display font-bold text-base text-foreground">Barcode Not Found</h3>
+              <p className="text-xs text-muted-foreground mt-1">No product matches barcode: <span className="font-mono text-yellow-500 font-bold">{notFoundBarcode}</span></p>
+            </div>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setNotFoundBarcode(null);
+                  setScanning(true);
+                }}
+                className="w-full py-2.5 rounded-xl bg-yellow-500 hover:brightness-110 text-black font-display font-bold text-xs cursor-pointer transition active:scale-95"
+              >
+                Scan Again
+              </button>
+              <button
+                onClick={() => setNotFoundBarcode(null)}
+                className="w-full py-2.5 rounded-xl bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-xs cursor-pointer transition active:scale-95"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
 
