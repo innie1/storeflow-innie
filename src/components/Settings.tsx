@@ -40,7 +40,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  Bell,
+
   ChevronDown,
   Share2,
   Printer,
