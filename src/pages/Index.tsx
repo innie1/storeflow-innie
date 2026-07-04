@@ -332,6 +332,7 @@ export default function Index() {
   const [showSwitchPassField, setShowSwitchPassField] = useState(false);
 
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showVerifySuccess, setShowVerifySuccess] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   const toggleCategory = (catId: string) => {
@@ -416,6 +417,23 @@ export default function Index() {
         setStore(null);
         setCurrentUser(null);
       }
+    }
+  }, []);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const searchParams = new URLSearchParams(window.location.search);
+    
+    // Check if redirect is from email verification signup
+    const isSignupVerify = hash.includes('type=signup') || 
+                           hash.includes('type=invite') || 
+                           searchParams.get('type') === 'signup' ||
+                           searchParams.get('type') === 'invite';
+                           
+    if (isSignupVerify) {
+      setShowVerifySuccess(true);
+      // Clean up the URL hash so it looks nice
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }, []);
 
@@ -1334,6 +1352,32 @@ export default function Index() {
             setShowNotifications(false);
           }}
         />
+      )}
+      {showVerifySuccess && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border/80 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl animate-scale-up select-none">
+            <div className="w-16 h-16 bg-success/15 border border-success/30 rounded-2xl flex items-center justify-center text-3xl mx-auto animate-bounce">
+              ✓
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-display font-black text-lg text-foreground">Email Verified!</h3>
+              <p className="text-xs text-muted-foreground">Thank you, your email has been verified successfully. Your StoreFlow account is now fully active.</p>
+            </div>
+            <div className="p-3 bg-primary/5 rounded-2xl border border-primary/10 text-[11px] text-muted-foreground text-left leading-relaxed flex gap-2">
+              <span className="text-base">✨</span>
+              <div>
+                <strong className="text-foreground block mb-0.5">Flow's Tip:</strong>
+                Start setting up your store details and sync your products to access them from any device instantly.
+              </div>
+            </div>
+            <button
+              onClick={() => setShowVerifySuccess(false)}
+              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs hover:opacity-90 active:scale-95 transition cursor-pointer"
+            >
+              Get Started
+            </button>
+          </div>
+        </div>
       )}
       <ToastContainer />
       <InstallPrompt />
