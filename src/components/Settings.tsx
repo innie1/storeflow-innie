@@ -636,6 +636,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         console.warn("Cloud sync: error querying existing store:", fetchError);
       }
 
+      const storeId = store.storeId || store.accessCode;
+      const storeUrl = generateStoreUrl(storeId);
+
       const payload: any = {
         owner_id: profile.id,
         business_name: store.storeName,
@@ -644,6 +647,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         access_code: store.accessCode,
         owner_password: store.managerSettings?.ownerPassword || 'owner',
         data: store as any,
+        store_id: storeId,
+        qr_code: storeUrl,
+        barcode: storeId,
         updated_at: new Date().toISOString()
       };
 

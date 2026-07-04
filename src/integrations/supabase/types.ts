@@ -1315,6 +1315,9 @@ export type Database = {
           subscription_status: string | null
           timezone: string | null
           updated_at: string | null
+          store_id: string | null
+          qr_code: string | null
+          barcode: string | null
         }
         Insert: {
           access_code?: string | null
@@ -1337,6 +1340,9 @@ export type Database = {
           subscription_status?: string | null
           timezone?: string | null
           updated_at?: string | null
+          store_id?: string | null
+          qr_code?: string | null
+          barcode?: string | null
         }
         Update: {
           access_code?: string | null
@@ -1359,6 +1365,9 @@ export type Database = {
           subscription_status?: string | null
           timezone?: string | null
           updated_at?: string | null
+          store_id?: string | null
+          qr_code?: string | null
+          barcode?: string | null
         }
         Relationships: [
           {
