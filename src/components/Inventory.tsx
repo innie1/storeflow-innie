@@ -1410,22 +1410,11 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         {products.map(p => {
           const inList = shoppingList.find(i => i.productId === p.id);
           const isSelected = selectedProductIds.includes(p.id);
-          const oldPrice = Math.round((p.sellingPrice / (p.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 2 === 0 ? 1.08 : 1.03)) / 50) * 50;
-          const diffPct = ((p.sellingPrice - oldPrice) / oldPrice) * 100;
-          const diffText = diffPct >= 0 ? `+${diffPct.toFixed(0)}%` : `${diffPct.toFixed(0)}%`;
-          const productImg = p.name.toLowerCase().includes('mineral') || p.name.toLowerCase().includes('water') || p.name.toLowerCase().includes('min')
-            ? '/mineral_water_bottle.png'
-            : p.name.toLowerCase().includes('maltina') || p.name.toLowerCase().includes('mal')
-            ? '/maltina_bottle.png'
-            : p.name.toLowerCase().includes('premium') || p.name.toLowerCase().includes('pre')
-            ? '/premium_can.png'
-            : '/placeholder.svg';
-
           return (
             <div
               key={p.id}
               onClick={() => { if (!countMode) setSelectedDetailProduct(p); }}
-              className={`p-4 rounded-2xl bg-card border flex items-center justify-between gap-4 transition-all duration-200 cursor-pointer ${
+              className={`p-3 rounded-2xl bg-card border flex items-center gap-2 transition-all duration-200 cursor-pointer ${
                 p.discontinued
                   ? 'opacity-60 border-dashed border-destructive/40 bg-surface-1/40'
                   : isSelected
@@ -1435,34 +1424,31 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   : 'border-border hover:border-primary/20'
               }`}
             >
-              {/* Left Column: Product Image */}
-              <div className="w-16 h-24 bg-surface-2 rounded-xl flex items-center justify-center p-1.5 shrink-0 overflow-hidden border border-border/40 bg-black/20">
-                <img 
-                  src={productImg} 
-                  alt={p.name} 
-                  className="w-full h-full object-contain hover:scale-105 transition-transform duration-200" 
-                  onError={(e) => { e.currentTarget.src = '/placeholder.svg'; }}
-                />
+              {/* Left Column: Product Image / Icon */}
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-surface-2 rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-border/40">
+                {p.image ? (
+                  <img src={p.image} alt={p.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display='none'; }} />
+                ) : (
+                  <span className="text-2xl">{p.category === 'Beverages' ? '🥤' : p.category === 'Groceries' ? '🛒' : p.category === 'Snacks' ? '🍪' : '📦'}</span>
+                )}
               </div>
 
               {/* Middle Column: Details & Checkbox */}
-              <div className="flex-1 min-w-0 text-left flex flex-col justify-between py-1">
-                <div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className={`font-display font-semibold text-sm tracking-tight text-foreground truncate ${p.discontinued ? 'text-muted-foreground line-through' : ''}`}>
-                      {p.name}
-                    </p>
-                    {p.discontinued && (
-                      <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-bold">Discontinued</span>
-                    )}
-                    {p.addedAt && !p.discontinued && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
-                      <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground truncate font-medium mt-0.5">
-                    {p.category}
+              <div className="flex-1 min-w-0 text-left">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className={`font-display font-semibold text-sm tracking-tight text-foreground truncate ${p.discontinued ? 'text-muted-foreground line-through' : ''}`}>
+                    {p.name}
                   </p>
+                  {p.discontinued && (
+                    <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-bold">Discontinued</span>
+                  )}
+                  {p.addedAt && !p.discontinued && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
+                    <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
+                  )}
                 </div>
+                <p className="text-[11px] text-muted-foreground truncate font-medium mt-0.5">{p.category}</p>
+                <p className="text-yellow-500 font-display font-bold text-sm mt-1">₦{p.sellingPrice.toLocaleString()}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Cost: ₦{p.costPrice.toLocaleString()}</p>
 
                 {!countMode && (
                   <button
@@ -1472,7 +1458,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                         prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
                       );
                     }}
-                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all mt-2.5 ${
+                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all mt-2 ${
                       isSelected
                         ? 'bg-emerald-500 border border-emerald-500 text-white'
                         : 'border border-border/80 hover:border-emerald-500/50 bg-surface-2/45'
@@ -1483,22 +1469,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 )}
               </div>
 
-              {/* Middle-Right Column: Prices (₦) */}
-              <div className="w-24 shrink-0 text-left flex flex-col justify-center py-1 select-none">
-                <p className="text-xs text-muted-foreground line-through decoration-muted-foreground/60 leading-none">
-                  ₦{oldPrice.toLocaleString()}
-                </p>
-                <p className="text-yellow-500 font-display font-bold text-sm leading-tight mt-1">
-                  ₦{p.sellingPrice.toLocaleString()}
-                </p>
-                <p className="text-[10px] text-emerald-500 font-bold mt-1 flex items-center gap-0.5">
-                  {diffText}
-                </p>
-              </div>
-
-              {/* Right Column: Stock Indicator */}
-              <div className="w-12 shrink-0 text-center flex flex-col justify-center select-none">
-                <span className={`text-xl font-display font-black leading-none ${
+              {/* Stock Column */}
+              <div className="w-10 shrink-0 text-center flex flex-col items-center justify-center select-none">
+                <span className={`text-lg font-display font-black leading-none ${
                   p.quantity <= 2 
                     ? 'text-red-500' 
                     : p.quantity <= 5 
@@ -1507,9 +1480,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 }`}>
                   {p.quantity}
                 </span>
-                <span className="text-[10px] text-muted-foreground font-bold tracking-wide mt-1 uppercase">
-                  stock
-                </span>
+                <span className="text-[9px] text-muted-foreground font-bold tracking-wide mt-0.5 uppercase">stock</span>
               </div>
 
               {/* Buttons Column */}

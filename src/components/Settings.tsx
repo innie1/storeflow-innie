@@ -895,11 +895,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
 
   // ============ BARCODE / QR SCREEN ============
   if (view === 'barcode') {
-    // Mock analytics values matching mockup
-    const totalScans = Math.max(120, store.sales.length * 4 + 48);
-    const ordersFromScans = Math.max(24, Math.floor(totalScans * 0.225));
-    const convRate = totalScans > 0 ? ((ordersFromScans / totalScans) * 100).toFixed(1) : '22.6';
-    const topScannedProductName = store.products[0]?.name || 'Peak Milk 400g';
 
     const handlePrint = () => {
       handlePrintQR();
@@ -940,26 +935,17 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       <SubPage 
         title="QR & Barcodes" 
         onBack={() => setView('home')}
-        right={
-          <button className="relative w-9 h-9 rounded-full bg-surface-2 border border-border flex items-center justify-center text-sm cursor-pointer hover:bg-surface-3 transition-all active:scale-95">
-            <Bell className="w-4 h-4 text-foreground" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-yellow-500 text-black text-[9px] font-bold flex items-center justify-center">3</span>
-          </button>
-        }
       >
         <div className="space-y-4">
-          {/* Store Details Selector Card */}
-          <div className="p-4 rounded-2xl bg-surface-1 border border-border flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
-                <Store className="w-5 h-5" />
-              </div>
-              <div className="text-left">
-                <h4 className="font-display font-bold text-sm text-foreground">{store.storeName}</h4>
-                <p className="text-[10px] text-muted-foreground font-mono">Store ID: <span className="text-yellow-500 font-bold">{store.accessCode}</span></p>
-              </div>
+          {/* Store Details Card */}
+          <div className="p-4 rounded-2xl bg-surface-1 border border-border flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
+              <Store className="w-5 h-5" />
             </div>
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            <div className="text-left">
+              <h4 className="font-display font-bold text-sm text-foreground">{store.storeName}</h4>
+              <p className="text-[10px] text-muted-foreground font-mono">Store ID: <span className="text-yellow-500 font-bold">{store.accessCode}</span></p>
+            </div>
           </div>
 
           {/* Store QR Code Card */}
@@ -1031,60 +1017,13 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             </div>
           </div>
 
-          {/* QR Code Analytics Section */}
+          {/* QR Code Analytics Section — coming soon */}
           <div className="space-y-3 pt-2 text-left">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display font-bold text-sm text-foreground">QR Code Analytics</h3>
-              <button className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground font-semibold cursor-pointer">
-                <Calendar className="w-3.5 h-3.5" /> This 7 days <ChevronDown className="w-3 h-3" />
-              </button>
-            </div>
-
-            {/* KPI grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3.5 rounded-2xl bg-surface-1 border border-border space-y-1">
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Total Scans</span>
-                  <span className="w-5 h-5 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center text-[10px]">📊</span>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-display font-bold text-foreground">{totalScans}</span>
-                  <span className="text-[10px] text-success font-bold font-display">↑ 18.6%</span>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-surface-1 border border-border space-y-1">
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Orders from Scans</span>
-                  <span className="w-5 h-5 rounded-full bg-success/10 text-success flex items-center justify-center text-[10px]">🛒</span>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-display font-bold text-foreground">{ordersFromScans}</span>
-                  <span className="text-[10px] text-success font-bold font-display">↑ 22.4%</span>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-surface-1 border border-border space-y-1">
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Conversion Rate</span>
-                  <span className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center text-[10px]">📈</span>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-display font-bold text-foreground">{convRate}%</span>
-                  <span className="text-[10px] text-success font-bold font-display">↑ 3.7%</span>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-surface-1 border border-border space-y-1 min-w-0">
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Most Scanned</span>
-                  <span className="w-5 h-5 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center text-[10px]"><Flame className="w-3 h-3" /></span>
-                </div>
-                <div className="space-y-0.5">
-                  <span className="block text-xs font-display font-bold text-foreground truncate">{topScannedProductName}</span>
-                  <span className="block text-[10px] text-muted-foreground font-semibold">32 scans</span>
-                </div>
-              </div>
+            <h3 className="font-display font-bold text-sm text-foreground">QR Code Analytics</h3>
+            <div className="p-5 rounded-2xl bg-surface-1 border border-dashed border-border/60 text-center space-y-2">
+              <span className="text-2xl">📊</span>
+              <p className="text-xs font-display font-bold text-foreground">Analytics Coming Soon</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">Scan tracking, conversion rates, and customer insights will appear here once your store QR is live.</p>
             </div>
           </div>
 
