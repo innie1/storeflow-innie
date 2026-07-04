@@ -141,12 +141,14 @@ export async function drawQRCode({
   text,
   canvas,
   logoSizePercent = 0.22,
-  transparent = false
+  transparent = false,
+  logoType = 'cube'
 }: {
   text: string;
   canvas: HTMLCanvasElement;
   logoSizePercent?: number;
   transparent?: boolean;
+  logoType?: 'cube' | 'cart';
 }): Promise<void> {
   const qr = QRCode.create(text, { errorCorrectionLevel: 'H' });
   const size = qr.modules.size;
@@ -269,29 +271,80 @@ export async function drawQRCode({
   const logoWidth = canvasSize * logoSizePercent;
   const logoX = (canvasSize - logoWidth) / 2;
   const logoY = (canvasSize - logoWidth) / 2;
-  const logoRadius = logoWidth * 0.25;
 
-  ctx.save();
-  // Set glow
-  ctx.shadowColor = '#FFC72C';
-  ctx.shadowBlur = 12;
-  ctx.fillStyle = '#141414';
-  ctx.strokeStyle = '#FFC72C';
-  ctx.lineWidth = 2.5;
+  if (logoType === 'cart') {
+    const cx = canvasSize / 2;
+    const cy = canvasSize / 2;
+    const r = logoWidth / 2;
 
-  drawRoundedRect(ctx, logoX, logoY, logoWidth, logoWidth, logoRadius, true, true);
-  ctx.restore();
+    ctx.save();
+    ctx.shadowColor = '#FFC72C';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#111111';
+    ctx.strokeStyle = '#FFC72C';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
 
-  // Draw StoreFlow Isometric Cube Inside Container
-  const cubeSize = logoWidth * 0.45;
-  const cubeY = logoY + logoWidth / 2 - cubeSize * 0.12; // Center offset adjustment
-  drawStoreFlowCube(ctx, canvasSize / 2, cubeY, cubeSize, '#FFC72C');
+    // Draw Golden Shopping Cart Icon in center
+    ctx.save();
+    ctx.strokeStyle = '#FFC72C';
+    ctx.fillStyle = '#FFC72C';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-  // Draw optional text "StoreFlow" below cube inside the center badge
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = `bold ${logoWidth * 0.11}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText('StoreFlow', canvasSize / 2, logoY + logoWidth * 0.84);
+    const scale = logoWidth / 24;
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+
+    // Draw wheels
+    ctx.beginPath();
+    ctx.arc(-3, 8, 1.8, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8, 8, 1.8, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Draw cart body
+    ctx.beginPath();
+    ctx.moveTo(-10, -9);
+    ctx.lineTo(-6, -9);
+    ctx.lineTo(-3.5, 2);
+    ctx.lineTo(6.5, 2);
+    ctx.lineTo(9.5, -6);
+    ctx.lineTo(-4.5, -6);
+    ctx.stroke();
+
+    ctx.restore();
+  } else {
+    const logoRadius = logoWidth * 0.25;
+
+    ctx.save();
+    // Set glow
+    ctx.shadowColor = '#FFC72C';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#141414';
+    ctx.strokeStyle = '#FFC72C';
+    ctx.lineWidth = 2.5;
+
+    drawRoundedRect(ctx, logoX, logoY, logoWidth, logoWidth, logoRadius, true, true);
+    ctx.restore();
+
+    // Draw StoreFlow Isometric Cube Inside Container
+    const cubeSize = logoWidth * 0.45;
+    const cubeY = logoY + logoWidth / 2 - cubeSize * 0.12; // Center offset adjustment
+    drawStoreFlowCube(ctx, canvasSize / 2, cubeY, cubeSize, '#FFC72C');
+
+    // Draw optional text "StoreFlow" below cube inside the center badge
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${logoWidth * 0.11}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('StoreFlow', canvasSize / 2, logoY + logoWidth * 0.84);
+  }
 }
 
 // Exports the QR Code as a SVG string

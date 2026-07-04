@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  StoreData, StoreProfile, ManagerSettings, DEFAULT_MANAGER_SETTINGS,
+  StoreData, StoreProfile, ManagerSettings, DEFAULT_MANAGER_SETTINGS, Product,
   SavingsGoal, PaymentInfo, SavingsFrequency, RentInfo, RentFrequency,
 } from '@/types/store';
 import CloudAuthModal from '@/components/CloudAuthModal';
@@ -39,7 +39,18 @@ import {
   ShieldCheck,
   RefreshCw,
   Eye,
-  EyeOff
+  EyeOff,
+  Bell,
+  ChevronDown,
+  Share2,
+  Printer,
+  Link2,
+  ShoppingBag,
+  Flame,
+  Calendar,
+  Store,
+  Shield,
+  Bike
 } from 'lucide-react';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
@@ -82,7 +93,7 @@ type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
   | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
   | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount' | 'activity-log'
-  | 'wishlist';
+  | 'wishlist' | 'barcode';
 
 interface SettingsProps {
   store: StoreData;
@@ -123,26 +134,153 @@ function IconBadge({ children, color }: { children: React.ReactNode; color: stri
   );
 }
 
-function SubPage({ title, subtitle, onBack, children }: { title: string; subtitle?: string; onBack: () => void; children: React.ReactNode }) {
+function SubPage({ title, subtitle, onBack, children, right }: { title: string; subtitle?: string; onBack: () => void; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="animate-fade-in max-w-md mx-auto space-y-5">
-      <div className="flex items-start gap-3.5">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0 mt-0.5 transition-colors" aria-label="Back">
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h2 className="font-display font-bold text-2xl text-foreground leading-tight">{title}</h2>
-          {subtitle && <p className="text-xs text-muted-foreground mt-1 leading-snug">{subtitle}</p>}
+      <div className="flex items-start justify-between gap-3.5">
+        <div className="flex items-start gap-3.5">
+          <button onClick={onBack} className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0 mt-0.5 transition-colors" aria-label="Back">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h2 className="font-display font-bold text-2xl text-foreground leading-tight">{title}</h2>
+            {subtitle && <p className="text-xs text-muted-foreground mt-1 leading-snug">{subtitle}</p>}
+          </div>
         </div>
+        {right && <div className="shrink-0">{right}</div>}
       </div>
       {children}
     </div>
   );
 }
 
+function ProductQRRow({ product, store }: { product: Product; store: StoreData }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const encoded = encodeQRData({
+      version: 1,
+      storeId: store.accessCode,
+      timestamp: Date.now(),
+      type: 'product',
+      payload: { id: product.id, name: product.name, price: product.sellingPrice, sku: product.barcode || '' }
+    });
+    drawQRCode({ text: encoded, canvas: canvasRef.current, logoType: 'cart', logoSizePercent: 0.22 });
+  }, [product, store.accessCode]);
+
+  const handlePrintProduct = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast('Could not open print window. Please allow popups.', 'error');
+      return;
+    }
+    if (!canvasRef.current) return;
+    const imgData = canvasRef.current.toDataURL('image/png');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Print Product Barcode - ${product.name}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 20px; background: #08080f; color: #ffffff; }
+            .badge { border: 2px solid #FFC72C; border-radius: 16px; padding: 20px; max-width: 300px; margin: 0 auto; bg: #111111; color: #ffffff; }
+            h1 { font-size: 18px; margin: 0 0 4px; }
+            p { font-size: 12px; color: #FFC72C; font-weight: bold; margin: 0 0 10px; }
+            img { width: 180px; height: 180px; margin: 0 auto; display: block; background: white; padding: 6px; border-radius: 12px; }
+            .sku { font-family: monospace; font-size: 12px; color: #888; margin-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="badge">
+            <h1>${product.name}</h1>
+            <p>₦${(product.sellingPrice || 0).toLocaleString()}</p>
+            <img src="${imgData}" />
+            <div class="sku">SKU: ${product.barcode || 'N/A'}</div>
+          </div>
+          <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const isOutOfStock = (product.quantity || 0) <= 0;
+
+  return (
+    <div className="flex items-center justify-between p-3.5 bg-surface-2 border border-border/85 rounded-2xl gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-12 h-12 rounded-xl bg-surface-3 flex items-center justify-center text-xl shrink-0 overflow-hidden border border-border">
+          {product.image ? (
+            <img src={product.image} alt="" className="w-full h-full object-cover" />
+          ) : (
+            '📦'
+          )}
+        </div>
+        <div className="text-left min-w-0">
+          <h4 className="font-display font-bold text-xs text-foreground truncate">{product.name}</h4>
+          <span className={`inline-block text-[10px] font-semibold mt-0.5 ${isOutOfStock ? 'text-destructive' : 'text-success'}`}>
+            {isOutOfStock ? 'Out of stock' : 'In Stock'}
+          </span>
+          <p className="text-xs font-display font-bold text-foreground mt-0.5">₦{(product.sellingPrice || 0).toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2.5">
+        <div className="w-11 h-11 bg-white p-1 rounded-lg border border-border flex items-center justify-center shrink-0">
+          <canvas ref={canvasRef} className="w-9 h-9" />
+        </div>
+        <button
+          onClick={handlePrintProduct}
+          className="px-3.5 py-1.5 bg-surface-3 border border-border hover:bg-surface-1 text-foreground transition-all rounded-xl font-display font-bold text-[11px] cursor-pointer"
+        >
+          Print
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ============ MAIN ============
 export default function Settings({ store, onUpdate, onLock, currentUser }: SettingsProps) {
-  const [view, setView] = useState<View>('home');
+  const [view, setViewState] = useState<View>('home');
+  const [viewStack, setViewStack] = useState<View[]>(['home']);
+  const barcodeQrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [showAllProductsQR, setShowAllProductsQR] = useState(false);
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+
+  const setView = (newView: View) => {
+    setViewStack(prev => {
+      const idx = prev.indexOf(newView);
+      if (idx !== -1) {
+        const stepsBack = prev.length - 1 - idx;
+        if (stepsBack > 0) {
+          window.history.go(-stepsBack);
+        }
+        return prev;
+      } else {
+        window.history.pushState({ settingsView: newView }, '', '');
+        setViewState(newView);
+        return [...prev, newView];
+      }
+    });
+  };
+
+  useEffect(() => {
+    const handlePop = (e: PopStateEvent) => {
+      const targetView = (e.state && e.state.settingsView) || 'home';
+      setViewState(targetView);
+      setViewStack(prev => {
+        const idx = prev.indexOf(targetView);
+        if (idx !== -1) {
+          return prev.slice(0, idx + 1);
+        } else {
+          return [...prev, targetView];
+        }
+      });
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
   const [theme, setTheme] = useState<ThemeId>(getTheme());
@@ -343,22 +481,20 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showContactPopup, setShowContactPopup] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showQRModal, setShowQRModal] = useState(false);
   const [showSQLDetails, setShowSQLDetails] = useState(false);
-  const storeQrCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Draw the branded QR whenever the QR modal opens
+  // Draw the store QR code when barcode view is active
   useEffect(() => {
-    if (!showQRModal || !storeQrCanvasRef.current) return;
+    if (view !== 'barcode' || !barcodeQrCanvasRef.current) return;
     const encoded = encodeQRData({
       version: 1,
       storeId: store.accessCode,
       timestamp: Date.now(),
       type: 'store',
-      payload: { name: store.storeName, uniqueCode: profile.uniqueCode }
+      payload: { name: store.storeName, uniqueCode: store.accessCode }
     });
-    drawQRCode({ text: encoded, canvas: storeQrCanvasRef.current });
-  }, [showQRModal]);
+    drawQRCode({ text: encoded, canvas: barcodeQrCanvasRef.current, logoType: 'cart' });
+  }, [view, store.accessCode, store.storeName]);
 
   const handlePrintQR = () => {
     const printWindow = window.open('', '_blank');
@@ -374,10 +510,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       storeId: store.accessCode,
       timestamp: Date.now(),
       type: 'store',
-      payload: { name: store.storeName, uniqueCode: profile.uniqueCode }
+      payload: { name: store.storeName, uniqueCode: store.accessCode }
     });
 
-    drawQRCode({ text: encoded, canvas: tmpCanvas }).then(() => {
+    drawQRCode({ text: encoded, canvas: tmpCanvas, logoType: 'cart' }).then(() => {
       const imgData = tmpCanvas.toDataURL('image/png');
       printWindow.document.write(`
         <html>
@@ -757,6 +893,272 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     if (next && !store.savingsGoal) setShowSavingsModal(true);
   };
 
+  // ============ BARCODE / QR SCREEN ============
+  if (view === 'barcode') {
+    // Mock analytics values matching mockup
+    const totalScans = Math.max(120, store.sales.length * 4 + 48);
+    const ordersFromScans = Math.max(24, Math.floor(totalScans * 0.225));
+    const convRate = totalScans > 0 ? ((ordersFromScans / totalScans) * 100).toFixed(1) : '22.6';
+    const topScannedProductName = store.products[0]?.name || 'Peak Milk 400g';
+
+    const handlePrint = () => {
+      handlePrintQR();
+    };
+
+    const handleShare = () => {
+      const shareUrl = `${window.location.origin}/?store=${store.accessCode}`;
+      if (navigator.share) {
+        navigator.share({
+          title: store.storeName,
+          text: `Scan to shop at ${store.storeName}!`,
+          url: shareUrl
+        }).catch(() => {});
+      } else {
+        navigator.clipboard.writeText(shareUrl);
+        showToast('Store link copied to clipboard!', 'success');
+      }
+    };
+
+    const handleCopy = () => {
+      const shareUrl = `${window.location.origin}/?store=${store.accessCode}`;
+      navigator.clipboard.writeText(shareUrl);
+      showToast('Store link copied!', 'success');
+    };
+
+    const handleDownload = () => {
+      if (barcodeQrCanvasRef.current) {
+        const url = barcodeQrCanvasRef.current.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${store.storeName.replace(/\s+/g, '_')}_qr.png`;
+        a.click();
+        showToast('QR Code downloaded!', 'success');
+      }
+    };
+
+    return (
+      <SubPage 
+        title="QR & Barcodes" 
+        onBack={() => setView('home')}
+        right={
+          <button className="relative w-9 h-9 rounded-full bg-surface-2 border border-border flex items-center justify-center text-sm cursor-pointer hover:bg-surface-3 transition-all active:scale-95">
+            <Bell className="w-4 h-4 text-foreground" />
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-yellow-500 text-black text-[9px] font-bold flex items-center justify-center">3</span>
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          {/* Store Details Selector Card */}
+          <div className="p-4 rounded-2xl bg-surface-1 border border-border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
+                <Store className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="font-display font-bold text-sm text-foreground">{store.storeName}</h4>
+                <p className="text-[10px] text-muted-foreground font-mono">Store ID: <span className="text-yellow-500 font-bold">{store.accessCode}</span></p>
+              </div>
+            </div>
+            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          </div>
+
+          {/* Store QR Code Card */}
+          <div className={`${card} p-5 space-y-4 text-center border border-border/60`}>
+            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+              <div className="text-left">
+                <h3 className="font-display font-bold text-base text-foreground">Store QR Code</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Customers scan this code to browse your store, see products and place orders.</p>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-success/10 text-success border border-success/20 text-[10px] font-display font-semibold flex items-center gap-1">
+                <Shield className="w-3.5 h-3.5" /> Permanent
+              </span>
+            </div>
+
+            {/* QR Code Container (White rounded square) */}
+            <div className="relative flex justify-center p-5 bg-white rounded-3xl max-w-[220px] mx-auto border border-border/30 shadow-md">
+              <canvas ref={barcodeQrCanvasRef} className="w-44 h-44" />
+            </div>
+
+            {/* Branded Title below QR code */}
+            <div className="space-y-0.5 pt-1">
+              <h4 className="font-display font-black text-lg text-foreground tracking-tight">{store.storeName}</h4>
+              <p className="text-xs text-yellow-500 font-display font-medium">✨ Scan to shop ✨</p>
+            </div>
+
+            {/* Action Features row */}
+            <div className="grid grid-cols-4 gap-1.5 pt-3 border-t border-border/40">
+              {[
+                { icon: <Package className="w-4 h-4" />, label: 'Browse Products' },
+                { icon: <ShoppingBag className="w-4 h-4" />, label: 'Order Instantly' },
+                { icon: <CreditCard className="w-4 h-4" />, label: 'Pay with OPay' },
+                { icon: <Bike className="w-4 h-4" />, label: 'Pickup or Delivery' }
+              ].map((feat, i) => (
+                <div key={i} className="flex flex-col items-center gap-1.5">
+                  <div className="w-10 h-10 rounded-full bg-surface-2 border border-border flex items-center justify-center text-yellow-500">
+                    {feat.icon}
+                  </div>
+                  <span className="text-[9px] text-muted-foreground font-display font-semibold leading-tight text-center max-w-[70px]">{feat.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Control buttons */}
+            <div className="grid grid-cols-4 gap-2 pt-1.5">
+              <button 
+                onClick={handleDownload}
+                className="py-2 px-1 rounded-xl bg-yellow-500 hover:brightness-110 text-black font-display font-bold text-[11px] cursor-pointer transition flex items-center justify-center gap-1"
+              >
+                <Download className="w-3 h-3" /> Download
+              </button>
+              <button 
+                onClick={handlePrint}
+                className="py-2 px-1 rounded-xl bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-[11px] cursor-pointer transition flex items-center justify-center gap-1"
+              >
+                <Printer className="w-3 h-3" /> Print
+              </button>
+              <button 
+                onClick={handleShare}
+                className="py-2 px-1 rounded-xl bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-[11px] cursor-pointer transition flex items-center justify-center gap-1"
+              >
+                <Share2 className="w-3 h-3" /> Share
+              </button>
+              <button 
+                onClick={handleCopy}
+                className="py-2 px-1 rounded-xl bg-surface-2 border border-border text-foreground hover:bg-surface-3 font-display font-bold text-[11px] cursor-pointer transition flex items-center justify-center gap-1"
+              >
+                <Link2 className="w-3 h-3" /> Copy Link
+              </button>
+            </div>
+          </div>
+
+          {/* QR Code Analytics Section */}
+          <div className="space-y-3 pt-2 text-left">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-bold text-sm text-foreground">QR Code Analytics</h3>
+              <button className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground font-semibold cursor-pointer">
+                <Calendar className="w-3.5 h-3.5" /> This 7 days <ChevronDown className="w-3 h-3" />
+              </button>
+            </div>
+
+            {/* KPI grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3.5 rounded-2xl bg-surface-1 border border-border space-y-1">
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Total Scans</span>
+                  <span className="w-5 h-5 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center text-[10px]">📊</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xl font-display font-bold text-foreground">{totalScans}</span>
+                  <span className="text-[10px] text-success font-bold font-display">↑ 18.6%</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-surface-1 border border-border space-y-1">
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Orders from Scans</span>
+                  <span className="w-5 h-5 rounded-full bg-success/10 text-success flex items-center justify-center text-[10px]">🛒</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xl font-display font-bold text-foreground">{ordersFromScans}</span>
+                  <span className="text-[10px] text-success font-bold font-display">↑ 22.4%</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-surface-1 border border-border space-y-1">
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Conversion Rate</span>
+                  <span className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center text-[10px]">📈</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xl font-display font-bold text-foreground">{convRate}%</span>
+                  <span className="text-[10px] text-success font-bold font-display">↑ 3.7%</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-surface-1 border border-border space-y-1 min-w-0">
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Most Scanned</span>
+                  <span className="w-5 h-5 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center text-[10px]"><Flame className="w-3 h-3" /></span>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="block text-xs font-display font-bold text-foreground truncate">{topScannedProductName}</span>
+                  <span className="block text-[10px] text-muted-foreground font-semibold">32 scans</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Product QR Codes Section */}
+          <div className="space-y-3 pt-2 text-left">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-bold text-sm text-foreground">Product QR Codes</h3>
+              <button 
+                onClick={() => setShowAllProductsQR(true)}
+                className="text-xs text-yellow-500 hover:text-yellow-600 font-display font-bold cursor-pointer"
+              >
+                View all
+              </button>
+            </div>
+
+            {/* List of Product QR Codes (first 3) */}
+            <div className="space-y-2">
+              {store.products.slice(0, 3).map(prod => (
+                <ProductQRRow key={prod.id} product={prod} store={store} />
+              ))}
+              {store.products.length === 0 && (
+                <div className="p-6 rounded-2xl border border-dashed border-border/80 text-center text-xs text-muted-foreground">
+                  No products in inventory yet. Add products to generate QR codes.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* View All Modal */}
+        {showAllProductsQR && (
+          <div className="fixed inset-0 z-[80] bg-background/95 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowAllProductsQR(false)}>
+            <div className="w-full max-w-md bg-card border border-border rounded-3xl p-5 animate-slide-up space-y-4 max-h-[85vh] flex flex-col shadow-[0_0_30px_rgba(0,0,0,0.3)]" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-display font-bold text-base text-foreground">All Product QR Codes</h3>
+                  <p className="text-[10px] text-muted-foreground">Print secure tag labels for inventory tracking.</p>
+                </div>
+                <button 
+                  onClick={() => { setShowAllProductsQR(false); setProductSearchQuery(''); }}
+                  className="w-8 h-8 rounded-full bg-surface-2 border border-border flex items-center justify-center text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Search bar inside View All Modal */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
+                <input 
+                  type="text"
+                  placeholder="Search products..."
+                  value={productSearchQuery}
+                  onChange={e => setProductSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-surface-2 border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              {/* Scrollable Products List */}
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 select-none">
+                {store.products
+                  .filter(p => p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) || (p.barcode && p.barcode.includes(productSearchQuery)))
+                  .map(prod => (
+                    <ProductQRRow key={prod.id} product={prod} store={store} />
+                  ))
+                }
+              </div>
+            </div>
+          </div>
+        )}
+      </SubPage>
+    );
+  }
+
   // ============ SUB-VIEWS ============
   if (view === 'profile') return (
     <SubPage title="Edit Profile" onBack={() => setView('home')}>
@@ -780,26 +1182,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <div className="text-[11px] text-muted-foreground font-mono">Store ID: {store.accessCode}</div>
           </div>
         </div>
-        <div className="space-y-1 text-left">
-          <label className="block text-xs text-muted-foreground mb-1">Unique Store Code</label>
-          <div className="flex items-center gap-2">
-            <input 
-              readOnly 
-              value={profile.uniqueCode || ''} 
-              className={`${inputClass} font-mono select-all bg-surface-2 cursor-pointer`}
-              onClick={() => setShowQRModal(true)}
-              title="Click to view QR code"
-            />
-            <button 
-              type="button" 
-              onClick={() => setShowQRModal(true)}
-              className="px-3.5 py-2.5 bg-primary/10 border border-primary/20 text-primary hover:bg-primary/15 transition rounded-xl font-display font-semibold text-xs whitespace-nowrap cursor-pointer"
-            >
-              QR Code
-            </button>
-          </div>
-          <p className="text-[10px] text-muted-foreground">Click to view QR code and scan details. This code cannot be edited.</p>
-        </div>
+
         <Field label="Owner Name" value={profile.ownerName || ''} onChange={v => setProfile({ ...profile, ownerName: v })} placeholder="Your full name" />
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Store Type</label>
@@ -916,58 +1299,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       }}
         className="w-full p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold">Save Profile</button>
 
-      {showQRModal && (
-        <div className="fixed inset-0 z-[80] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowQRModal(false)}>
-          <div className="w-full max-w-sm bg-[#111111] border border-[#FFC72C]/40 rounded-2xl p-5 animate-slide-up space-y-4 text-center shadow-[0_0_30px_rgba(255,199,44,0.1)]" onClick={e => e.stopPropagation()}>
-            <div className="space-y-1.5">
-              <h3 className="font-display font-bold text-lg text-white">Unique Store QR Code</h3>
-              <p className="text-xs text-neutral-400 leading-relaxed">
-                Scan this branded QR to view your store, products, and contact details.
-              </p>
-            </div>
-            
-            {/* Branded canvas QR */}
-            <div className="flex justify-center p-4 bg-white rounded-2xl max-w-[240px] mx-auto border border-[#FFC72C]/30 shadow-md">
-              <canvas ref={storeQrCanvasRef} className="w-48 h-48" />
-            </div>
-            
-            <div className="space-y-1 bg-[#1a1a1a] p-3 rounded-xl border border-[#FFC72C]/10">
-              <span className="block text-[10px] text-neutral-500 uppercase font-bold tracking-wider">Store Unique Code</span>
-              <span className="font-mono text-base font-semibold tracking-wider text-[#FFC72C] select-all">{profile.uniqueCode}</span>
-            </div>
-
-            <div className="flex gap-2">
-              <button 
-                onClick={handlePrintQR}
-                className="flex-1 p-2.5 rounded-xl bg-surface-2 border border-border text-foreground font-display font-bold text-sm cursor-pointer hover:bg-surface-3 transition-colors"
-              >
-                🖨️ Print
-              </button>
-              <button 
-                onClick={() => {
-                  if (storeQrCanvasRef.current) {
-                    const url = storeQrCanvasRef.current.toDataURL('image/png');
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${store.storeName}-store-qr.png`;
-                    a.click();
-                    showToast('QR Code downloaded!', 'success');
-                  }
-                }}
-                className="flex-1 p-2.5 rounded-xl bg-surface-2 border border-border text-foreground font-display font-bold text-sm cursor-pointer hover:bg-surface-3 transition-colors"
-              >
-                ⬇️ Save PNG
-              </button>
-              <button 
-                onClick={() => setShowQRModal(false)}
-                className="flex-1 p-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm cursor-pointer"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </SubPage>
   );
 
@@ -2466,6 +2797,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
               <div className="flex gap-1 mt-1">{['📊','⭐','⚠️','📘','💰'].map((e,i)=><span key={i} className="w-6 h-6 rounded bg-surface-2 border border-border flex items-center justify-center text-[10px]">{e}</span>)}</div></> } />
 
           <SettingTile icon="🛡️" color="#2EBFB1" title="Security" desc="App lock, access code, reset password, and credentials." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='4h'?'4 Hours':timer==='8h'?'8 Hours':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
+
+          <SettingTile icon="📱" color="#FFC72C" title="QR & Barcodes" desc="Branded QR codes, analytics, and product tags." onClick={() => setView('barcode')} />
 
           <SettingTile icon="🗄️" color="#3B82F6" title="Data & Storage" desc="Import, export, backups, and store deletion." onClick={() => setView('data')}
             right={<div className="flex gap-1">
