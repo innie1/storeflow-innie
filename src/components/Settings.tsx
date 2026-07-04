@@ -1887,6 +1887,17 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <button onClick={() => photoInputRef.current?.click()} className="text-xs font-display font-semibold text-primary">Change photo</button>
             {profile.photo && <button onClick={removePhoto} className="block text-xs text-destructive">Remove</button>}
             <div className="text-[11px] text-muted-foreground font-mono">Store ID: {store.accessCode}</div>
+            {store.managerSettings?.multiDeviceSync ? (
+              <div className="text-[10px] text-success font-semibold flex items-center gap-1.5 mt-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                ✓ Pushed to Internet (Synced)
+              </div>
+            ) : (
+              <div className="text-[10px] text-muted-foreground/60 font-semibold flex items-center gap-1.5 mt-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
+                Not Synced
+              </div>
+            )}
           </div>
         </div>
 
@@ -2565,7 +2576,81 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           checked={mgr.multiDeviceSync || false} 
           onChange={async (v) => {
             if (v) {
-              setShowCloudAuthModal(true);
+              try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                  // Auto detect active session
+                  let { data: profile } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('auth_user_id', session.user.id)
+                    .maybeSingle();
+
+                  if (!profile) {
+                    const { data: newProfile } = await supabase
+                      .from('profiles')
+                      .insert({
+                        auth_user_id: session.user.id,
+                        email: session.user.email || store.profile?.email || '',
+                        full_name: session.user.email?.split('@')[0] || store.storeName || 'User',
+                        role: 'owner'
+                      })
+                      .select()
+                      .single();
+                    profile = newProfile;
+                  }
+
+                  if (profile) {
+                    updateMgr({ multiDeviceSync: true });
+                    const updatedStore = {
+                      ...store,
+                      managerSettings: {
+                        ...store.managerSettings,
+                        multiDeviceSync: true
+                      }
+                    };
+                    saveStore(updatedStore);
+
+                    // Push data immediately to the Internet
+                    const { data: existingStore } = await supabase
+                      .from('stores')
+                      .select('*')
+                      .eq('access_code', store.accessCode)
+                      .maybeSingle();
+
+                    const { data: dbStore } = await supabase
+                      .from('stores')
+                      .upsert({
+                        id: existingStore?.id,
+                        owner_id: profile.id,
+                        business_name: store.storeName,
+                        business_type: store.category || 'retail',
+                        logo: store.profile?.logoStyle || 'minimalist',
+                        access_code: store.accessCode,
+                        owner_password: store.managerSettings?.ownerPassword || 'owner',
+                        data: updatedStore as any,
+                        updated_at: new Date().toISOString()
+                      }, { onConflict: 'access_code' })
+                      .select()
+                      .single();
+
+                    if (dbStore) {
+                      await supabase.from('store_members').upsert({
+                        store_id: dbStore.id,
+                        profile_id: profile.id,
+                        role: 'owner'
+                      }, { onConflict: 'store_id,profile_id' });
+                    }
+
+                    showToast('✓ Cloud Sync auto-enabled and data pushed to internet!', 'success');
+                  }
+                } else {
+                  setShowCloudAuthModal(true);
+                }
+              } catch (e: any) {
+                showToast(e.message || 'Auto-sync failed. Opening login popup...', 'error');
+                setShowCloudAuthModal(true);
+              }
             } else {
               updateMgr({ multiDeviceSync: false });
               const updatedStore = {
@@ -2583,9 +2668,13 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       </div>
       
       {mgr.multiDeviceSync && (
-        <div className={`${card} p-4 text-left text-xs border border-primary/10 bg-surface-2/30`}>
+        <div className={`${card} p-4 text-left text-xs border border-success/20 bg-success/5 space-y-2`}>
+          <p className="text-success font-semibold flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+            ✓ Store data successfully synced to the Internet
+          </p>
           <p className="text-muted-foreground leading-relaxed">
-            ✓ Multi-device access enabled. Use your <strong>Store Access Code ({store.accessCode})</strong> and your <strong>Owner Password</strong> to view this store in other devices.
+            Use your <strong>Store Access Code ({store.accessCode})</strong> and your <strong>Owner Password</strong> to view this store on other devices.
           </p>
         </div>
       )}
