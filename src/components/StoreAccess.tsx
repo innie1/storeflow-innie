@@ -222,37 +222,167 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     }
   };
 
-  const handleAccess = () => {
-    const code = accessCode.trim();
-    const store = loadStore(code);
-    if (store) {
-      proceedWithStore(store);
-    } else {
-      // Attempt to load from Supabase cloud sync
-      setAccessMood('thinking' as any);
-      import('@/integrations/supabase/client').then(({ supabase }) => {
-        supabase
+  // Simple retry wrapper for Supabase client calls
+  const runWithRetry = async <T,>(fn: () => Promise<{ data: T | null; error: any }>, retries = 3, delay = 1000): Promise<{ data: T | null; error: any }> => {
+    let lastError: any = null;
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fn();
+        if (!res.error) {
+          return res;
+        }
+        lastError = res.error;
+        const msg = (res.error.message || '').toLowerCase();
+        if (!msg.includes('fetch') && !msg.includes('network') && !msg.includes('connection')) {
+          return res; // Database policy error - return immediately
+        }
+      } catch (err: any) {
+        lastError = err;
+      }
+      console.warn(`Query failed, retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+    return { data: null, error: lastError || new Error("Failed after retries") };
+  };
+
+  // Comprehensive cloud store lookup helper
+  const loadCloudStoreData = async (profile: any, accessCodeText?: string, storeIdText?: string) => {
+    console.log("Detail Log: Starting cloud store lookup. Auth status:", profile ? "authenticated" : "unauthenticated", "User profile ID:", profile?.id, "Access code to search:", accessCodeText, "Store ID to search:", storeIdText);
+
+    try {
+      let matchingStores: any[] = [];
+
+      // 1. Search by owner_id (Profile UUID)
+      if (profile && profile.id) {
+        const { data: owned, error: err } = await runWithRetry(() => supabase
           .from('stores')
           .select('*')
-          .eq('access_code', code)
+          .eq('owner_id', profile.id)
+        );
+        
+        if (err) {
+          console.error("Query failed: SELECT from stores where owner_id = " + profile.id, err);
+        } else if (owned && owned.length > 0) {
+          console.log("Found stores by owner_id:", owned.map(s => s.id));
+          matchingStores = [...matchingStores, ...owned];
+        } else {
+          console.log("No stores found for owner_id:", profile.id);
+        }
+
+        // Search by store memberships
+        const { data: memberships, error: memErr } = await runWithRetry(() => supabase
+          .from('store_members')
+          .select('store_id')
+          .eq('profile_id', profile.id)
+        );
+
+        if (memErr) {
+          console.error("Query failed: SELECT from store_members where profile_id = " + profile.id, memErr);
+        } else if (memberships && memberships.length > 0) {
+          const storeIds = memberships.map(m => m.store_id);
+          console.log("Found store memberships:", storeIds);
+          
+          const { data: memberStores, error: memStoresErr } = await runWithRetry(() => supabase
+            .from('stores')
+            .select('*')
+            .in('id', storeIds)
+          );
+
+          if (memStoresErr) {
+            console.error("Query failed: SELECT from stores where id IN membership list", memStoresErr);
+          } else if (memberStores) {
+            matchingStores = [...matchingStores, ...memberStores];
+          }
+        }
+      }
+
+      // 2. Fallback search by permanent Store ID
+      if (matchingStores.length === 0 && storeIdText) {
+        const { data: storeByPk, error: pkErr } = await runWithRetry(() => supabase
+          .from('stores')
+          .select('*')
+          .eq('id', storeIdText)
           .maybeSingle()
-          .then(({ data, error }) => {
-            if (data && data.data) {
-              const remoteStore = data.data as StoreData;
-              // Persist locally
-              localStorage.setItem(`storeflow_store_${remoteStore.accessCode}`, JSON.stringify(remoteStore));
-              setAccessMood('happy' as any);
-              showToast('Cloud backup loaded successfully!', 'success');
-              proceedWithStore(remoteStore);
-            } else {
-              setAccessMood('angry');
-              showToast('Store not found locally or in cloud backup', 'error');
-            }
-          });
-      }).catch(err => {
-        setAccessMood('angry');
-        showToast('Store not found', 'error');
-      });
+        );
+
+        if (pkErr) {
+          console.error("Query failed: SELECT from stores where id = " + storeIdText, pkErr);
+        } else if (storeByPk) {
+          console.log("Found store by table primary key UUID:", storeByPk.id);
+          matchingStores.push(storeByPk);
+        }
+      }
+
+      // 3. Search by access_code
+      if (matchingStores.length === 0 && accessCodeText) {
+        const { data: storeByCode, error: codeErr } = await runWithRetry(() => supabase
+          .from('stores')
+          .select('*')
+          .eq('access_code', accessCodeText.trim().toUpperCase())
+          .maybeSingle()
+        );
+
+        if (codeErr) {
+          console.error("Query failed: SELECT from stores where access_code = " + accessCodeText, codeErr);
+        } else if (storeByCode) {
+          console.log("Found store by access_code:", storeByCode.id);
+          matchingStores.push(storeByCode);
+        }
+      }
+
+      // De-duplicate stores by ID
+      const uniqueStores = matchingStores.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+      console.log("Total unique stores resolved from cloud search:", uniqueStores.length);
+      return uniqueStores;
+    } catch (e) {
+      console.error("Failed to perform cloud store query execution:", e);
+      return [];
+    }
+  };
+
+  const handleAccess = async () => {
+    const code = accessCode.trim().toUpperCase();
+    if (!code || code.length < 6) {
+      return showToast('Please enter a valid 6-character access code', 'error');
+    }
+
+    const localStore = loadStore(code);
+    if (localStore) {
+      proceedWithStore(localStore);
+      return;
+    }
+
+    // Try to load from Supabase cloud sync
+    setAccessMood('thinking' as any);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentProfile = session?.user?.id ? await supabase
+        .from('profiles')
+        .select('*')
+        .eq('auth_user_id', session.user.id)
+        .maybeSingle()
+        .then(({ data }) => data) : null;
+
+      const remoteStores = await loadCloudStoreData(currentProfile || null, code);
+      if (remoteStores && remoteStores.length > 0) {
+        const selectedRow = remoteStores[0];
+        if (selectedRow && selectedRow.data) {
+          const remoteStore = selectedRow.data as StoreData;
+          // Rebuild local database and save
+          localStorage.setItem(`storeflow_store_${remoteStore.accessCode}`, JSON.stringify(remoteStore));
+          setAccessMood('happy' as any);
+          showToast('Cloud backup loaded successfully!', 'success');
+          proceedWithStore(remoteStore);
+          return;
+        }
+      }
+      
+      setAccessMood('angry');
+      showToast('Store not found locally or in cloud backup', 'error');
+    } catch (err: any) {
+      console.error("handleAccess failed to load store:", err);
+      setAccessMood('angry');
+      showToast('Failed to connect to cloud storage. Please check connection.', 'error');
     }
   };
 
@@ -525,35 +655,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       setActiveProfile(profile);
 
       if (profile && profile.id) {
-        // Query stores owned by user
-        const { data: ownedStores } = await supabase
-          .from('stores')
-          .select('*')
-          .eq('owner_id', profile.id);
-
-        // Query stores where user is member
-        const { data: members } = await supabase
-          .from('store_members')
-          .select('store_id')
-          .eq('profile_id', profile.id);
-
-        const memberStoreIds = (members || []).map(m => m.store_id);
-
-        let allStores = [...(ownedStores || [])];
-        if (memberStoreIds.length > 0) {
-          const { data: memberStores } = await supabase
-            .from('stores')
-            .select('*')
-            .in('id', memberStoreIds);
-          
-          if (memberStores) {
-            memberStores.forEach(s => {
-              if (!allStores.some(as => as.id === s.id)) {
-                allStores.push(s);
-              }
-            });
-          }
-        }
+        // Query stores owned by user using our comprehensive, de-duplicated and retry-enabled helper
+        const allStores = await loadCloudStoreData(profile, accessCode || undefined);
 
         setUserStores(allStores);
         setAccessMood('happy');
@@ -562,6 +665,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         if (allStores.length > 0) {
           setMode('auth-store-select');
         } else {
+          console.warn("No StoreFlow business found for account:", profile.email);
+          showToast('No StoreFlow business found for this account.', 'info');
           setMode('auth-store-create');
         }
       }
