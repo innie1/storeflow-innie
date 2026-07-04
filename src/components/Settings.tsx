@@ -215,6 +215,7 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
   }, [isVisible, productUrl, product.barcode]);
 
   const handlePrintShelfLabel = () => {
+    if (typeof window === 'undefined') return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       showToast('Could not open print window. Please allow popups.', 'error');
@@ -937,7 +938,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         showText: true
       });
     }
-  }, [view, storeExistsInCloud, store.storeId, stor  const handlePrintQR = () => {
+  }, [view, storeExistsInCloud, store.storeId, store.accessCode, store.storeName]);
+
+  const handlePrintQR = () => {
+    if (typeof window === 'undefined') return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       showToast('Could not open print window. Please allow popups.', 'error');
@@ -1242,6 +1246,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     const storeUrl = generateStoreUrl(storeId);
 
     const handlePrint = () => {
+      if (typeof window === 'undefined') return;
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
         showToast('Could not open print window. Please allow popups.', 'error');
@@ -1346,6 +1351,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     };
 
     const handlePrintQR = () => {
+      if (typeof window === 'undefined') return;
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
         showToast('Could not open print window. Please allow popups.', 'error');
@@ -1395,6 +1401,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     };
 
     const handlePrintBarcode = () => {
+      if (typeof window === 'undefined') return;
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
         showToast('Could not open print window. Please allow popups.', 'error');
