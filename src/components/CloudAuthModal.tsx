@@ -98,13 +98,15 @@ export default function CloudAuthModal({
           .eq('auth_user_id', data.user.id)
           .maybeSingle();
 
+        let createProfileErr: any = null;
+
         if (profileErr) {
           console.error("CloudAuthModal database SELECT error during login:", profileErr);
         }
 
         if (!profile || !profile.id) {
           // Fallback create profile
-          const { data: newProfile, error: createProfileErr } = await supabase
+          const { data: newProfile, error: insErr } = await supabase
             .from('profiles')
             .insert({
               auth_user_id: data.user.id,
@@ -115,6 +117,7 @@ export default function CloudAuthModal({
             .select()
             .maybeSingle();
 
+          createProfileErr = insErr;
           if (createProfileErr) {
             console.error("CloudAuthModal database INSERT error during login fallback:", createProfileErr);
           }
@@ -126,7 +129,8 @@ export default function CloudAuthModal({
           showToast('Successfully signed in!', 'success');
           onAuthSuccess(profile);
         } else {
-          showToast('Failed to retrieve user profile details.', 'error');
+          const detailMsg = profileErr?.message || createProfileErr?.message || "Profile record could not be found or created in the database.";
+          showToast(`Failed to retrieve user profile details: ${detailMsg}`, 'error');
         }
       } else {
         showToast('Login response did not return a valid user.', 'error');
@@ -181,12 +185,14 @@ export default function CloudAuthModal({
               .eq('auth_user_id', logData.user.id)
               .maybeSingle();
 
+            let createProfileErr: any = null;
+
             if (profileErr) {
               console.error("CloudAuthModal database SELECT error during signup fallback:", profileErr);
             }
 
             if (!profile || !profile.id) {
-              const { data: newProfile, error: createProfileErr } = await supabase
+              const { data: newProfile, error: insErr } = await supabase
                 .from('profiles')
                 .insert({
                   auth_user_id: logData.user.id,
@@ -197,6 +203,7 @@ export default function CloudAuthModal({
                 .select()
                 .maybeSingle();
 
+              createProfileErr = insErr;
               if (createProfileErr) {
                 console.error("CloudAuthModal database INSERT error during signup fallback:", createProfileErr);
               }
@@ -207,7 +214,8 @@ export default function CloudAuthModal({
               showToast('Successfully signed in!', 'success');
               onAuthSuccess(profile);
             } else {
-              showToast('Failed to retrieve user profile details.', 'error');
+              const detailMsg = profileErr?.message || createProfileErr?.message || "Profile record could not be found or created in the database.";
+              showToast(`Failed to retrieve user profile details: ${detailMsg}`, 'error');
             }
           }
           return;
@@ -237,7 +245,8 @@ export default function CloudAuthModal({
           showToast('Successfully signed up!', 'success');
           onAuthSuccess(profile);
         } else {
-          showToast('Failed to load user profile after signup. Please sign in.', 'error');
+          const detailMsg = createProfileErr?.message || "Profile record could not be created in the database.";
+          showToast(`Failed to load user profile after signup: ${detailMsg}`, 'error');
         }
       } else {
         showToast('Signup response did not return a valid user.', 'error');

@@ -693,6 +693,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         }
       };
       saveStore(updatedStore);
+      setStoreExistsInCloud(true);
       showToast('Cloud Sync Enabled! Backup created successfully.', 'success');
     } catch (err: any) {
       console.error("Cloud sync failed to start:", err);

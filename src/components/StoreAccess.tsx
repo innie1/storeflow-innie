@@ -699,6 +699,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         store.managerSettings.ownerPassword = ownerPassword.trim() || store.managerSettings.ownerPassword || 'owner';
       }
 
+      const storeId = store.storeId || store.accessCode;
+      const storeUrl = `https://storeflow-customer.vercel.app/store/${storeId}`;
+
       const { data: dbStore, error: storeError } = await supabase
         .from('stores')
         .insert({
@@ -708,6 +711,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           logo: selectedLogoStyle,
           access_code: store.accessCode,
           owner_password: store.managerSettings?.ownerPassword || 'owner',
+          store_id: storeId,
+          qr_code: storeUrl,
+          barcode: storeId,
           data: store as any
         })
         .select()
@@ -715,7 +721,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
       if (storeError || !dbStore || !dbStore.id) {
         setAccessMood('angry' as any);
-        return showToast(storeError?.message || 'Database policy restricted the store creation.', 'error');
+        console.error("Cloud store creation failed:", storeError);
+        return showToast(storeError?.message || 'Failed to create store in the cloud database.', 'error');
       }
 
       await supabase.from('store_members').insert({
