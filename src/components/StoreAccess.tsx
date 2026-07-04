@@ -252,52 +252,32 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     try {
       let matchingStores: any[] = [];
 
-      // 1. Search by owner_id (Profile UUID)
-      if (profile && profile.id) {
-        const { data: owned, error: err } = await runWithRetry(() => supabase
+      // 1. Prioritized search by access_code if specified
+      if (accessCodeText) {
+        const queryVal = accessCodeText.trim().toUpperCase();
+        console.log(`Detail Log: SQL SELECT * FROM public.stores WHERE access_code = '${queryVal}'`);
+        const { data: storeByCode, error: codeErr } = await runWithRetry(() => supabase
           .from('stores')
           .select('*')
-          .eq('owner_id', profile.id)
+          .eq('access_code', queryVal)
+          .maybeSingle()
         );
-        
-        if (err) {
-          console.error("Query failed: SELECT from stores where owner_id = " + profile.id, err);
-        } else if (owned && owned.length > 0) {
-          console.log("Found stores by owner_id:", owned.map(s => s.id));
-          matchingStores = [...matchingStores, ...owned];
+
+        if (codeErr) {
+          console.error(`Detail Log: Query failed for access_code = '${queryVal}':`, codeErr);
         } else {
-          console.log("No stores found for owner_id:", profile.id);
-        }
-
-        // Search by store memberships
-        const { data: memberships, error: memErr } = await runWithRetry(() => supabase
-          .from('store_members')
-          .select('store_id')
-          .eq('profile_id', profile.id)
-        );
-
-        if (memErr) {
-          console.error("Query failed: SELECT from store_members where profile_id = " + profile.id, memErr);
-        } else if (memberships && memberships.length > 0) {
-          const storeIds = memberships.map(m => m.store_id);
-          console.log("Found store memberships:", storeIds);
-          
-          const { data: memberStores, error: memStoresErr } = await runWithRetry(() => supabase
-            .from('stores')
-            .select('*')
-            .in('id', storeIds)
-          );
-
-          if (memStoresErr) {
-            console.error("Query failed: SELECT from stores where id IN membership list", memStoresErr);
-          } else if (memberStores) {
-            matchingStores = [...matchingStores, ...memberStores];
+          console.log(`Detail Log: Supabase response for access_code '${queryVal}' query:`, storeByCode);
+          if (!storeByCode) {
+            console.warn(`Detail Log: No store found with access_code = '${queryVal}'. Reason: Table exists but returned zero rows (either the code is incorrect, RLS blocks public read, or the record does not exist in the cloud).`);
+          } else {
+            matchingStores.push(storeByCode);
           }
         }
       }
 
-      // 2. Fallback search by permanent Store ID
-      if (matchingStores.length === 0 && storeIdText) {
+      // 2. Search by permanent Store ID if specified
+      if (storeIdText) {
+        console.log(`Detail Log: SQL SELECT * FROM public.stores WHERE id = '${storeIdText}'`);
         const { data: storeByPk, error: pkErr } = await runWithRetry(() => supabase
           .from('stores')
           .select('*')
@@ -306,36 +286,68 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         );
 
         if (pkErr) {
-          console.error("Query failed: SELECT from stores where id = " + storeIdText, pkErr);
-        } else if (storeByPk) {
-          console.log("Found store by table primary key UUID:", storeByPk.id);
-          matchingStores.push(storeByPk);
+          console.error(`Detail Log: Query failed for storeId = '${storeIdText}':`, pkErr);
+        } else {
+          console.log(`Detail Log: Supabase response for storeId '${storeIdText}' query:`, storeByPk);
+          if (!storeByPk) {
+            console.warn(`Detail Log: No store found with storeId = '${storeIdText}'.`);
+          } else {
+            matchingStores.push(storeByPk);
+          }
         }
       }
 
-      // 3. Search by access_code
-      if (matchingStores.length === 0 && accessCodeText) {
-        const { data: storeByCode, error: codeErr } = await runWithRetry(() => supabase
+      // 3. Search by owner_id (Profile UUID) and memberships if authenticated
+      if (profile && profile.id) {
+        console.log(`Detail Log: SQL SELECT * FROM public.stores WHERE owner_id = '${profile.id}'`);
+        const { data: owned, error: err } = await runWithRetry(() => supabase
           .from('stores')
           .select('*')
-          .eq('access_code', accessCodeText.trim().toUpperCase())
-          .maybeSingle()
+          .eq('owner_id', profile.id)
+        );
+        
+        if (err) {
+          console.error(`Detail Log: Query failed for owner_id = '${profile.id}':`, err);
+        } else if (owned && owned.length > 0) {
+          console.log(`Detail Log: Found ${owned.length} stores for owner_id:`, owned.map(s => s.id));
+          matchingStores = [...matchingStores, ...owned];
+        }
+
+        // Search by store memberships
+        console.log(`Detail Log: SQL SELECT store_id FROM public.store_members WHERE profile_id = '${profile.id}'`);
+        const { data: memberships, error: memErr } = await runWithRetry(() => supabase
+          .from('store_members')
+          .select('store_id')
+          .eq('profile_id', profile.id)
         );
 
-        if (codeErr) {
-          console.error("Query failed: SELECT from stores where access_code = " + accessCodeText, codeErr);
-        } else if (storeByCode) {
-          console.log("Found store by access_code:", storeByCode.id);
-          matchingStores.push(storeByCode);
+        if (memErr) {
+          console.error(`Detail Log: Query failed for store memberships where profile_id = '${profile.id}':`, memErr);
+        } else if (memberships && memberships.length > 0) {
+          const storeIds = memberships.map(m => m.store_id);
+          console.log("Detail Log: Found store membership IDs:", storeIds);
+          
+          const { data: memberStores, error: memStoresErr } = await runWithRetry(() => supabase
+            .from('stores')
+            .select('*')
+            .in('id', storeIds)
+          );
+
+          if (memStoresErr) {
+            console.error("Detail Log: Query failed for stores by membership IDs:", memStoresErr);
+          } else if (memberStores) {
+            console.log(`Detail Log: Found ${memberStores.length} stores via memberships`);
+            matchingStores = [...matchingStores, ...memberStores];
+          }
         }
       }
 
       // De-duplicate stores by ID
       const uniqueStores = matchingStores.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
-      console.log("Total unique stores resolved from cloud search:", uniqueStores.length);
+      console.log("Detail Log: Total unique stores resolved:", uniqueStores.length);
       return uniqueStores;
     } catch (e) {
-      console.error("Failed to perform cloud store query execution:", e);
+      console.error("Detail Log: Failed to perform cloud store query execution:", e);
       return [];
     }
   };
