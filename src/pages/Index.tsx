@@ -423,18 +423,100 @@ export default function Index() {
   }, [store?.id, store?.managerSettings?.orderAlertSoundsEnabled, playOrderAlertSound]);
 
   // Order status transition callback
-  const handleUpdateOrderStatus = useCallback(async (orderId: string, newStatus: string) => {
+  const handleUpdateOrderStatus = useCallback(async (orderId: string, newStatus: string, metadata?: any) => {
     try {
+      const targetOrder = orders.find(o => o.id === orderId);
+      if (!targetOrder) return;
+
+      let updatedStore = store;
+      let parsedNotes: any = {};
+      if (targetOrder.notes) {
+        try {
+          parsedNotes = JSON.parse(targetOrder.notes);
+        } catch {
+          parsedNotes = { instructions: targetOrder.notes };
+        }
+      }
+
+      // 1. Reserve Stock if transitioning to Preparing (Accepted)
+      if (newStatus === 'Preparing' && store) {
+        const updatedProducts = store.products.map((p: any) => {
+          const item = (targetOrder.order_items || []).find((oi: any) => oi.product_id === p.id);
+          if (item) {
+            return {
+              ...p,
+              quantity: Math.max(0, p.quantity - Number(item.quantity))
+            };
+          }
+          return p;
+        });
+        
+        updatedStore = { ...store, products: updatedProducts };
+        
+        // Update stores table in cloud DB
+        const { error: storeErr } = await supabase
+          .from('stores')
+          .update({ data: updatedStore })
+          .eq('id', store.id);
+        if (storeErr) throw storeErr;
+        
+        setStore(updatedStore);
+        saveStore(updatedStore); // Sync locally and trigger cloud backup
+      }
+
+      // 2. Release Stock if previously accepted (Preparing/Ready) but now rejected/cancelled
+      if ((newStatus === 'Rejected' || newStatus === 'Cancelled') && 
+          (targetOrder.status === 'Preparing' || targetOrder.status === 'Ready') && store) {
+        const updatedProducts = store.products.map((p: any) => {
+          const item = (targetOrder.order_items || []).find((oi: any) => oi.product_id === p.id);
+          if (item) {
+            return {
+              ...p,
+              quantity: p.quantity + Number(item.quantity)
+            };
+          }
+          return p;
+        });
+
+        updatedStore = { ...store, products: updatedProducts };
+
+        // Update stores table in cloud DB
+        const { error: storeErr } = await supabase
+          .from('stores')
+          .update({ data: updatedStore })
+          .eq('id', store.id);
+        if (storeErr) throw storeErr;
+        
+        setStore(updatedStore);
+        saveStore(updatedStore); // Sync locally and trigger cloud backup
+      }
+
+      // Merge additional metadata (rejection reason or change request message)
+      if (metadata) {
+        Object.assign(parsedNotes, metadata);
+      }
+
       const { error } = await supabase
         .from('orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .update({ 
+          status: newStatus, 
+          notes: JSON.stringify(parsedNotes),
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', orderId);
+        
       if (error) throw error;
       showToast(`Order status updated to ${newStatus}`);
+
+      // Update local state directly
+      setOrders(prev =>
+        prev.map(o => o.id === orderId ? { ...o, status: newStatus, notes: JSON.stringify(parsedNotes) } : o)
+      );
+
     } catch (err: any) {
       showToast('Failed to update order status: ' + err.message, 'error');
     }
-  }, []);
+  }, [store, orders]);
 
   const setTab = useCallback((targetTab: TabId) => {
     setTabState(targetTab);
