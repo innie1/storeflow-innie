@@ -9,7 +9,7 @@ import StoreLogo from '@/components/StoreLogo';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 import Orders from '@/components/Orders';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 // Eager helper imports from settings
 import { saveSession, clearSession, getActiveSession } from '@/components/Settings';

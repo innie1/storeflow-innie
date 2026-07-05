@@ -21,6 +21,7 @@ import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
 import { Html5Qrcode } from 'html5-qrcode';
 import { generateInsights } from '@/lib/manager-intel';
 import BarcodeScanner from '@/components/BarcodeScanner';
+import MarketplaceSettings from '@/components/MarketplaceSettings';
 import {
   ChevronLeft,
   ChevronRight,
@@ -100,7 +101,7 @@ type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
   | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
   | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount' | 'activity-log'
-  | 'wishlist' | 'barcode';
+  | 'wishlist' | 'barcode' | 'marketplace-settings';
 
 interface SettingsProps {
   store: StoreData;
@@ -1944,6 +1945,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     );
   }
 
+  if (view === 'marketplace-settings') return (
+    <SubPage title="Marketplace Settings" onBack={() => setView('home')}>
+      <MarketplaceSettings store={store} onUpdate={onUpdate} />
+    </SubPage>
+  );
+
   // ============ SUB-VIEWS ============
   if (view === 'profile') return (
     <SubPage title="Edit Profile" onBack={() => setView('home')}>
@@ -3713,6 +3720,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           <SettingTile icon="🛡️" color="#2EBFB1" title="Security" desc="App lock, access code, reset password, and credentials." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='4h'?'4 Hours':timer==='8h'?'8 Hours':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
 
           <SettingTile icon="📱" color="#FFC72C" title="QR & Barcodes" desc="Branded QR codes, analytics, and product tags." onClick={() => setView('barcode')} />
+
+          <SettingTile icon="🛍️" color="#EC4899" title="Marketplace Settings" desc="Configure storefront visibility, pricing, delivery, and rewards." onClick={() => setView('marketplace-settings')} />
 
           <SettingTile icon="🗄️" color="#3B82F6" title="Data & Storage" desc="Import, export, backups, and store deletion." onClick={() => setView('data')}
             right={<div className="flex gap-1">
