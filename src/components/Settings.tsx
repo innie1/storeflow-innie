@@ -2157,6 +2157,31 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <ToggleRow label="Business Questions" checked={mgr.businessQuestions} onChange={v => updateMgr({ businessQuestions: v })} />
           </div>
 
+          {/* Customer Pricing Mode */}
+          <div className="px-1 mt-4">
+            <SectionLabel>Customer Marketplace Settings</SectionLabel>
+          </div>
+          <div className={`${card} px-4 divide-y divide-border`}>
+            <ToggleRow 
+              label="Enable Retail Pricing Mode" 
+              description="Allow customers to browse and purchase items at retail prices." 
+              checked={mgr.retailPricingEnabled !== false} 
+              onChange={v => updateMgr({ retailPricingEnabled: v })} 
+            />
+            <ToggleRow 
+              label="Enable Wholesale Pricing Mode" 
+              description="Allow customers to browse and purchase items at wholesale prices." 
+              checked={mgr.wholesalePricingEnabled !== false} 
+              onChange={v => updateMgr({ wholesalePricingEnabled: v })} 
+            />
+            <ToggleRow 
+              label="Order Alert Sound Notifications" 
+              description="Play a synthesized alert chime whenever a customer order is received." 
+              checked={mgr.orderAlertSoundsEnabled !== false} 
+              onChange={v => updateMgr({ orderAlertSoundsEnabled: v })} 
+            />
+          </div>
+
           {/* Flow Speech Voice Selection */}
           <div className="px-1 mt-4">
             <SectionLabel>Flow Speech Voice</SectionLabel>

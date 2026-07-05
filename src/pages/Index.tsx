@@ -8,6 +8,8 @@ import Dashboard from '@/components/Dashboard';
 import StoreLogo from '@/components/StoreLogo';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
+import Orders from '@/components/Orders';
+import { supabase } from '@/lib/supabase';
 
 // Eager helper imports from settings
 import { saveSession, clearSession, getActiveSession } from '@/components/Settings';
@@ -76,6 +78,7 @@ import {
 
 const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
+  { id: 'orders', label: 'Orders', icon: '🛍️' },
   { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '💰' },
   { id: 'manager', label: 'Flow', icon: '✨' },
@@ -182,6 +185,8 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
   switch (id) {
     case 'dashboard':
       return <Home className={className} />;
+    case 'orders':
+      return <ShoppingCart className={className} />;
     case 'inventory':
       return <Package className={className} />;
     case 'sales':
@@ -274,6 +279,7 @@ export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [tab, setTabState] = useState<TabId>('dashboard');
+  const [orders, setOrders] = useState<any[]>([]);
 
   // Synchronize browser back/forward buttons with active tab
   useEffect(() => {
@@ -295,6 +301,139 @@ export default function Index() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Synthesize a premium audio alert chime using native web audio context
+  const playOrderAlertSound = useCallback(() => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playBeep = (time: number, freq: number, duration: number) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.setValueAtTime(freq, time);
+        gain.gain.setValueAtTime(0.25, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+        osc.start(time);
+        osc.stop(time + duration);
+      };
+      const now = audioCtx.currentTime;
+      playBeep(now, 587.33, 0.15); // D5
+      playBeep(now + 0.12, 880, 0.25); // A5
+    } catch (e) {
+      console.warn("Failed to play synthesized alert sound:", e);
+    }
+  }, []);
+
+  // Fetch store orders on mount and store change
+  useEffect(() => {
+    if (!store?.id) return;
+    let active = true;
+    const fetchOrders = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .eq('store_id', store.id)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        if (active) {
+          setOrders(data || []);
+          console.log('[StoreFlow Orders] Loaded orders count:', data?.length);
+        }
+      } catch (err) {
+        console.error('[StoreFlow Orders] Error fetching orders:', err);
+      }
+    };
+    fetchOrders();
+    return () => {
+      active = false;
+    };
+  }, [store?.id]);
+
+  // Set up Supabase Realtime channel listener on orders table
+  useEffect(() => {
+    if (!store?.id) return;
+    const channel = supabase
+      .channel(`store-orders-${store.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `store_id=eq.${store.id}`
+        },
+        async (payload) => {
+          console.log('[StoreFlow Realtime] Order payload received:', payload);
+          if (payload.eventType === 'INSERT') {
+            const { data, error } = await supabase
+              .from('orders')
+              .select('*, order_items(*)')
+              .eq('id', payload.new.id)
+              .single();
+            if (!error && data) {
+              setOrders(prev => [data, ...prev]);
+              
+              // Sound alert if enabled in settings (default to enabled)
+              const isSoundEnabled = store.managerSettings?.orderAlertSoundsEnabled !== false;
+              if (isSoundEnabled) {
+                playOrderAlertSound();
+              }
+
+              // Build flow alert notification
+              const newNotification = {
+                id: 'order-' + Date.now(),
+                title: 'New Storefront Order',
+                message: `Received order #${data.order_number} from ${data.customer_name} for ₦${data.total?.toLocaleString()}`,
+                time: 'Just now',
+                read: false,
+                category: 'alerts' as const,
+                tone: 'info' as const
+              };
+
+              setStore(prev => {
+                if (!prev) return prev;
+                const list = prev.flowNotifications || [];
+                const updated = {
+                  ...prev,
+                  flowNotifications: [newNotification, ...list]
+                };
+                saveStore(updated);
+                return updated;
+              });
+
+              showToast(`New Order #${data.order_number} from ${data.customer_name}! 🔔`, 'success');
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            setOrders(prev =>
+              prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o)
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setOrders(prev => prev.filter(o => o.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [store?.id, store?.managerSettings?.orderAlertSoundsEnabled, playOrderAlertSound]);
+
+  // Order status transition callback
+  const handleUpdateOrderStatus = useCallback(async (orderId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', orderId);
+      if (error) throw error;
+      showToast(`Order status updated to ${newStatus}`);
+    } catch (err: any) {
+      showToast('Failed to update order status: ' + err.message, 'error');
+    }
   }, []);
 
   const setTab = useCallback((targetTab: TabId) => {
@@ -572,23 +711,29 @@ export default function Index() {
         {/* Sidebar Nav Links */}
         <div className="flex-1 py-4 overflow-y-auto px-3 space-y-1">
           <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">Main Menu</p>
-          {allowedMainTabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors relative ${
-                tab === t.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
-              }`}
-            >
-              <span className="relative flex items-center justify-center">
-                {renderTabIcon(t.id, tab === t.id, "w-4.5 h-4.5")}
-                {t.id === 'manager' && unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
-                )}
-              </span>
-              <span>{t.label}</span>
-            </button>
-          ))}
+          {allowedMainTabs.map(t => {
+            const hasPendingOrders = t.id === 'orders' && orders.some(o => o.status === 'Pending');
+            return (
+              <button
+                key={t.id}
+                onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors relative ${
+                  tab === t.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
+                }`}
+              >
+                <span className="relative flex items-center justify-center">
+                  {renderTabIcon(t.id, tab === t.id, "w-4.5 h-4.5")}
+                  {t.id === 'manager' && unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                  )}
+                  {hasPendingOrders && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-yellow-500 animate-bounce" />
+                  )}
+                </span>
+                <span>{t.label}</span>
+              </button>
+            );
+          })}
 
           <div className="pt-4 mt-4 border-t border-border space-y-2">
             <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">More Features</p>
@@ -999,6 +1144,9 @@ export default function Index() {
           }>
             <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
               <Dashboard store={store} onNavigate={handleNavigate} currentUser={currentUser} />
+            </div>
+            <div className={tab === 'orders' ? 'block' : 'hidden'}>
+              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} />
             </div>
             <div className={tab === 'inventory' ? 'block' : 'hidden'}>
               <Inventory
