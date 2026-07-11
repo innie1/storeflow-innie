@@ -774,11 +774,6 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
           </div>
           <div className="flex-shrink-0 flex flex-col items-center gap-1">
             <Mascot size={72} mood={flowMood} animate={settings.mascotAnimations !== false} store={store} />
-            {/* Notification bell */}
-            <button onClick={() => setShowNotifications(true)} className="relative w-8 h-8 rounded-full bg-surface-2 border border-border flex items-center justify-center text-sm">
-              🔔
-              {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center">{unreadCount}</span>}
-            </button>
           </div>
         </div>
       </div>
