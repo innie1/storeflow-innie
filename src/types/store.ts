@@ -588,6 +588,7 @@ export interface StoreData {
   coins?: number;
   lastDailyClaim?: string;
   marketplaceListings?: any[];
+  marketplaceSettings?: any;
   registeredSuppliers?: any[];
   
   // Feature expansion variables

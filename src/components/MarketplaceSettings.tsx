@@ -3,6 +3,7 @@ import { StoreData, Product } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { generateStoreUrl } from '@/lib/qr-code';
+import { saveStore } from '@/lib/store-data';
 import { 
   Store, Eye, Percent, Clock, CreditCard, MapPin, 
   Calendar, Bell, UserCheck, ShieldAlert, Check, X,
@@ -89,6 +90,9 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       alertVibration: true,
       alertPopup: true,
       alertBadge: true,
+      notificationSoundType: 'chime' as 'chime' | 'beep' | 'bell' | 'success',
+      maxDailyOrders: null as number | null,
+      autoPrintReceipt: store.managerSettings?.autoPrintReceipt || false,
 
       // 10. Checkout requirements
       reqCustomerName: true,
@@ -150,6 +154,9 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
     if (key === 'alertSound') {
       extraMgr.orderAlertSoundsEnabled = val;
     }
+    if (key === 'autoPrintReceipt') {
+      extraMgr.autoPrintReceipt = val;
+    }
 
     const updatedStore: StoreData = {
       ...store,
@@ -161,6 +168,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
     };
 
     // Save locally and trigger background Supabase sync
+    saveStore(updatedStore);
     onUpdate(updatedStore);
   };
 
@@ -683,7 +691,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                   onChange={v => handleChange('orderWorkflowMode', v ? 'approval' : 'auto')}
                 />
                 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Default Prep Time (Mins)</label>
                     <select
@@ -712,7 +720,24 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                       />
                     </div>
                   )}
+                  <div>
+                    <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Max Daily Orders (Optional)</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 50 (empty for unlimited)"
+                      value={form.maxDailyOrders || ''}
+                      onChange={e => handleChange('maxDailyOrders', e.target.value ? parseInt(e.target.value) || null : null)}
+                      className="w-full p-2 bg-surface-2 border border-border rounded text-xs text-foreground"
+                    />
+                  </div>
                 </div>
+
+                <ToggleRow
+                  label="Auto Print Receipts"
+                  description="Automatically trigger receipt printing after accepting a customer order."
+                  checked={form.autoPrintReceipt}
+                  onChange={v => handleChange('autoPrintReceipt', v)}
+                />
               </div>
 
               {/* Order Workflow Simulation */}
@@ -1026,8 +1051,25 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
 
               <div className="space-y-4">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-primary">Alert Methods</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <ToggleRow label="Synthesized Sound Chime" checked={form.alertSound} onChange={v => handleChange('alertSound', v)} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <ToggleRow label="Synthesized Sound Chime" checked={form.alertSound} onChange={v => handleChange('alertSound', v)} />
+                    {form.alertSound && (
+                      <div className="pl-2 space-y-1">
+                        <label className="block text-[10px] text-muted-foreground uppercase font-bold">Sound Tone Style</label>
+                        <select
+                          value={form.notificationSoundType || 'chime'}
+                          onChange={e => handleChange('notificationSoundType', e.target.value)}
+                          className="w-full p-1.5 bg-surface-2 border border-border rounded text-xs text-foreground"
+                        >
+                          <option value="chime">Classic Chime 🎵</option>
+                          <option value="beep">Radar Beep 📡</option>
+                          <option value="bell">Triple Bell 🔔</option>
+                          <option value="success">Success Chord 🎉</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   <ToggleRow label="Device Vibration Pulse" checked={form.alertVibration} onChange={v => handleChange('alertVibration', v)} />
                   <ToggleRow label="Interactive Header Popups" checked={form.alertPopup} onChange={v => handleChange('alertPopup', v)} />
                   <ToggleRow label="Tab Badge Notification Counter" checked={form.alertBadge} onChange={v => handleChange('alertBadge', v)} />

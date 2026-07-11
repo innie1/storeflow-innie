@@ -303,28 +303,59 @@ export default function Index() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Helper to normalize order status casing and old values
+  const getNormalizedStatus = useCallback((status?: string): string => {
+    if (!status) return 'Pending';
+    const s = status.trim().toLowerCase();
+    if (s === 'pending' || s === 'pending approval') return 'Pending';
+    if (s === 'accepted') return 'Accepted';
+    if (s === 'preparing') return 'Preparing';
+    if (s === 'ready' || s === 'ready for pickup' || s === 'ready for delivery') return 'Ready';
+    if (s === 'completed') return 'Completed';
+    if (s === 'rejected') return 'Rejected';
+    if (s === 'cancelled') return 'Cancelled';
+    return status;
+  }, []);
+
   // Synthesize a premium audio alert chime using native web audio context
   const playOrderAlertSound = useCallback(() => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const playBeep = (time: number, freq: number, duration: number) => {
+      const playTone = (time: number, freq: number, duration: number, type: OscillatorType = 'sine') => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
+        osc.type = type;
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.frequency.setValueAtTime(freq, time);
-        gain.gain.setValueAtTime(0.25, time);
+        gain.gain.setValueAtTime(0.2, time);
         gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
         osc.start(time);
         osc.stop(time + duration);
       };
+      
+      const soundType = store?.marketplaceSettings?.notificationSoundType || 'chime';
       const now = audioCtx.currentTime;
-      playBeep(now, 587.33, 0.15); // D5
-      playBeep(now + 0.12, 880, 0.25); // A5
+      
+      if (soundType === 'beep') {
+        playTone(now, 1000, 0.15, 'sine');
+      } else if (soundType === 'bell') {
+        playTone(now, 659.25, 0.12, 'sine'); // E5
+        playTone(now + 0.1, 783.99, 0.12, 'sine'); // G5
+        playTone(now + 0.2, 1046.50, 0.25, 'sine'); // C6
+      } else if (soundType === 'success') {
+        playTone(now, 523.25, 0.1, 'sine'); // C5
+        playTone(now + 0.08, 659.25, 0.1, 'sine'); // E5
+        playTone(now + 0.16, 783.99, 0.1, 'sine'); // G5
+        playTone(now + 0.24, 1046.50, 0.25, 'sine'); // C6
+      } else { // default 'chime'
+        playTone(now, 587.33, 0.15, 'sine'); // D5
+        playTone(now + 0.12, 880, 0.25, 'sine'); // A5
+      }
     } catch (e) {
       console.warn("Failed to play synthesized alert sound:", e);
     }
-  }, []);
+  }, [store?.marketplaceSettings?.notificationSoundType]);
 
   // Fetch store orders on mount and store change
   useEffect(() => {
@@ -339,8 +370,12 @@ export default function Index() {
           .order('created_at', { ascending: false });
         if (error) throw error;
         if (active) {
-          setOrders(data || []);
-          console.log('[StoreFlow Orders] Loaded orders count:', data?.length);
+          const normalized = (data || []).map(o => ({
+            ...o,
+            status: getNormalizedStatus(o.status)
+          }));
+          setOrders(normalized);
+          console.log('[StoreFlow Orders] Loaded orders count:', normalized.length);
         }
       } catch (err) {
         console.error('[StoreFlow Orders] Error fetching orders:', err);
@@ -350,7 +385,7 @@ export default function Index() {
     return () => {
       active = false;
     };
-  }, [store?.id]);
+  }, [store?.id, getNormalizedStatus]);
 
   // Set up Supabase Realtime channel listener on orders table
   useEffect(() => {
@@ -374,10 +409,14 @@ export default function Index() {
               .eq('id', payload.new.id)
               .single();
             if (!error && data) {
-              setOrders(prev => [data, ...prev]);
+              const normalizedItem = {
+                ...data,
+                status: getNormalizedStatus(data.status)
+              };
+              setOrders(prev => [normalizedItem, ...prev]);
               
               // Sound alert if enabled in settings (default to enabled)
-              const isSoundEnabled = store.managerSettings?.orderAlertSoundsEnabled !== false;
+              const isSoundEnabled = store.marketplaceSettings?.alertSound !== false && store.marketplaceSettings?.notifNewOrders !== false;
               if (isSoundEnabled) {
                 playOrderAlertSound();
               }
@@ -408,7 +447,7 @@ export default function Index() {
             }
           } else if (payload.eventType === 'UPDATE') {
             setOrders(prev =>
-              prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o)
+              prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new, status: getNormalizedStatus(payload.new.status) } : o)
             );
           } else if (payload.eventType === 'DELETE') {
             setOrders(prev => prev.filter(o => o.id !== payload.old.id));
@@ -420,7 +459,7 @@ export default function Index() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [store?.id, store?.managerSettings?.orderAlertSoundsEnabled, playOrderAlertSound]);
+  }, [store?.id, store?.marketplaceSettings?.alertSound, store?.marketplaceSettings?.notifNewOrders, playOrderAlertSound, getNormalizedStatus]);
 
   // Order status transition callback
   const handleUpdateOrderStatus = useCallback(async (orderId: string, newStatus: string, metadata?: any) => {
@@ -438,8 +477,8 @@ export default function Index() {
         }
       }
 
-      // 1. Reserve Stock if transitioning to Preparing (Accepted)
-      if (newStatus === 'Preparing' && store) {
+      // 1. Reserve Stock if transitioning to Accepted
+      if (newStatus === 'Accepted' && store) {
         const updatedProducts = store.products.map((p: any) => {
           const item = (targetOrder.order_items || []).find((oi: any) => oi.product_id === p.id);
           if (item) {
@@ -464,9 +503,9 @@ export default function Index() {
         saveStore(updatedStore); // Sync locally and trigger cloud backup
       }
 
-      // 2. Release Stock if previously accepted (Preparing/Ready) but now rejected/cancelled
-      if ((newStatus === 'Rejected' || newStatus === 'Cancelled') && 
-          (targetOrder.status === 'Preparing' || targetOrder.status === 'Ready') && store) {
+      // 2. Release Stock if previously accepted (Accepted/Preparing/Ready) but now rejected/cancelled
+      const wasAccepted = targetOrder.status === 'Accepted' || targetOrder.status === 'Preparing' || targetOrder.status === 'Ready';
+      if ((newStatus === 'Rejected' || newStatus === 'Cancelled') && wasAccepted && store) {
         const updatedProducts = store.products.map((p: any) => {
           const item = (targetOrder.order_items || []).find((oi: any) => oi.product_id === p.id);
           if (item) {
@@ -510,7 +549,7 @@ export default function Index() {
 
       // Update local state directly
       setOrders(prev =>
-        prev.map(o => o.id === orderId ? { ...o, status: newStatus, notes: JSON.stringify(parsedNotes) } : o)
+        prev.map(o => o.id === orderId ? { ...o, status: getNormalizedStatus(newStatus), notes: JSON.stringify(parsedNotes) } : o)
       );
 
     } catch (err: any) {
@@ -794,7 +833,7 @@ export default function Index() {
         <div className="flex-1 py-4 overflow-y-auto px-3 space-y-1">
           <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">Main Menu</p>
           {allowedMainTabs.map(t => {
-            const hasPendingOrders = t.id === 'orders' && orders.some(o => o.status === 'Pending');
+            const pendingOrdersCount = t.id === 'orders' ? orders.filter(o => o.status === 'Pending').length : 0;
             return (
               <button
                 key={t.id}
@@ -808,8 +847,10 @@ export default function Index() {
                   {t.id === 'manager' && unreadCount > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
                   )}
-                  {hasPendingOrders && (
-                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-yellow-500 animate-bounce" />
+                  {pendingOrdersCount > 0 && (
+                    <span className="absolute -top-2.5 -right-2.5 min-w-[16px] h-4 rounded-full bg-yellow-500 text-black text-[9px] font-bold flex items-center justify-center px-1 animate-bounce border border-card shadow-sm">
+                      {pendingOrdersCount}
+                    </span>
                   )}
                 </span>
                 <span>{t.label}</span>
