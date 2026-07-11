@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Camera, QrCode, Sparkles, AlertCircle, ShoppingCart, Users, Tag, CreditCard, Receipt, Database, LayoutGrid } from 'lucide-react';
 import { StoreData, Product } from '@/types/store';
-import { encodeQRData, decodeQRData, QRData } from '@/lib/qr-code';
+import { encodeQRData, decodeQRData, QRData, parseScannedQRText } from '@/lib/qr-code';
 import QRDisplayCard from './QRDisplayCard';
 import QRScannerPage from './QRScannerPage';
 import { showToast } from '@/components/Toast';
@@ -106,13 +106,38 @@ export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
   const handleScanSuccess = (decodedText: string) => {
     setScannerOpen(false);
     setRawScannedText(decodedText);
+
+    // 1. Try to decode as an encoded StoreFlow token
     const parsed = decodeQRData(decodedText);
     if (parsed) {
       setScannedResult(parsed);
-    } else {
-      setScannedResult(null);
-      showToast('Decoded QR is not a valid StoreFlow token', 'warning');
+      return;
     }
+
+    // 2. Try to parse as a StoreFlow URL (e.g. from Settings QR code or external camera scan)
+    const urlParsed = parseScannedQRText(decodedText);
+    if (urlParsed) {
+      // Build a synthetic QRData for display purposes
+      const syntheticResult: QRData = {
+        version: 1,
+        uuid: 'url-scan',
+        token: urlParsed.source,
+        storeId: urlParsed.storeId,
+        timestamp: Date.now(),
+        type: urlParsed.productId ? 'product' : 'store',
+        payload: {
+          scannedUrl: decodedText,
+          ...(urlParsed.productId ? { productId: urlParsed.productId } : {}),
+        }
+      };
+      setScannedResult(syntheticResult);
+      showToast(`StoreFlow ${urlParsed.productId ? 'product' : 'store'} QR identified!`, 'success');
+      return;
+    }
+
+    // 3. Not recognizable
+    setScannedResult(null);
+    showToast('Decoded QR is not a valid StoreFlow token or URL', 'warning');
   };
 
   return (

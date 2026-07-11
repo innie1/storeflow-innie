@@ -465,6 +465,48 @@ export function generateStoreUrl(storeId: string): string {
   return `${CUSTOMER_PWA_BASE}/s/${storeId}`;
 }
 
+/**
+ * Parse QR-scanned text and attempt to extract a StoreFlow store ID and optional product ID.
+ * Supports:
+ *  - Customer PWA URLs: https://storeflow-customer.vercel.app/s/{storeId}
+ *  - Customer PWA product URLs: .../s/{storeId}/p/{productId}
+ *  - Innie app deep-link URLs: {origin}/s/{storeId}
+ *  - Any URL containing /s/{storeId} path segment
+ *  - Encoded StoreFlow QR tokens (decodeQRData)
+ *  - Raw access codes (6-char uppercase alphanumeric)
+ *
+ * Returns null if nothing recognizable is found.
+ */
+export function parseScannedQRText(scannedText: string): { storeId: string; productId?: string; source: 'url' | 'token' | 'code' } | null {
+  const text = (scannedText || '').trim();
+  if (!text) return null;
+
+  // 1. Try URL parsing — match /s/{storeId} and optional /p/{productId}
+  const urlPatterns = [
+    /\/s\/([A-Za-z0-9_-]+)(?:\/p\/([A-Za-z0-9_-]+))?/,
+  ];
+  for (const pattern of urlPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      return { storeId: match[1], productId: match[2] || undefined, source: 'url' };
+    }
+  }
+
+  // 2. Try to decode as an encoded StoreFlow QR token
+  const decoded = decodeQRData(text);
+  if (decoded && decoded.storeId) {
+    return { storeId: decoded.storeId, source: 'token' };
+  }
+
+  // 3. Treat as a raw access code if it looks like one (6 uppercase alphanumeric)
+  const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (cleaned.length === 6) {
+    return { storeId: cleaned, source: 'code' };
+  }
+
+  return null;
+}
+
 /** The URL embedded in a Product QR code */
 export function generateProductUrl(storeId: string, productId: string): string {
   return `${CUSTOMER_PWA_BASE}/s/${storeId}/p/${productId}`;

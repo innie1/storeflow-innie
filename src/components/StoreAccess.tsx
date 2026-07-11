@@ -4,9 +4,10 @@ import { StoreData, StoreCategory, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotMood } from '@/components/Mascot';
 import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
-import { Eye, EyeOff, Key, Shield, HelpCircle, Lock, Mail, Phone, Users, Cloud, Database, Sparkles, Plus, Check, LogIn, UserPlus, Building, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Key, Shield, HelpCircle, Lock, Mail, Phone, Users, Cloud, Database, Sparkles, Plus, Check, LogIn, UserPlus, Building, ArrowLeft, Camera } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { generateStoreUrl } from '@/lib/qr-code';
+import { generateStoreUrl, parseScannedQRText } from '@/lib/qr-code';
+import QRScannerPage from '@/components/qr/QRScannerPage';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -74,6 +75,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [newPassVal, setNewPassVal] = useState('');
   const [confirmNewPassVal, setConfirmNewPassVal] = useState('');
   const [recoveryMethodSelected, setRecoveryMethodSelected] = useState<'email' | 'sms'>('email');
+
+  // QR Scanner state for store identification
+  const [showQRScanner, setShowQRScanner] = useState(false);
 
   // Change mood on mode switches
   useEffect(() => {
@@ -1415,6 +1419,12 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
             <button onClick={handleAccess} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Access Store
             </button>
+            <button
+              onClick={() => setShowQRScanner(true)}
+              className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground font-display font-bold hover:bg-surface-3 transition-colors cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Camera className="w-4 h-4" /> Scan Store QR Code
+            </button>
             <div className="text-center pt-1">
               <button
                 type="button"
@@ -1428,6 +1438,95 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
               ← Back
             </button>
           </div>
+        )}
+
+        {/* QR Scanner Overlay for Store Identification */}
+        {showQRScanner && (
+          <QRScannerPage
+            onScanSuccess={(decodedText: string) => {
+              setShowQRScanner(false);
+
+              // Try to extract a store ID from the scanned QR
+              const parsed = parseScannedQRText(decodedText);
+              if (parsed && parsed.storeId) {
+                setAccessCode(parsed.storeId.toUpperCase());
+                setAccessMood('happy');
+                showToast('Store QR code scanned! Accessing store...', 'success');
+
+                // Auto-trigger access with the extracted code
+                setTimeout(() => {
+                  const code = parsed.storeId.toUpperCase();
+                  // Try local first
+                  const localStore = loadStore(code);
+                  if (localStore) {
+                    proceedWithStore(localStore);
+                    return;
+                  }
+
+                  // Also try scanning all local stores by storeId field
+                  for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('storeflow_store_')) {
+                      try {
+                        const raw = localStorage.getItem(key);
+                        if (raw) {
+                          const data = JSON.parse(raw) as StoreData;
+                          if (data.storeId === parsed.storeId || data.accessCode === code) {
+                            proceedWithStore(data);
+                            return;
+                          }
+                        }
+                      } catch { /* skip */ }
+                    }
+                  }
+
+                  // Try cloud lookup
+                  (async () => {
+                    setAccessMood('thinking' as any);
+                    try {
+                      let cloudStore = null;
+                      // Try by store_id
+                      const { data: byId } = await supabase
+                        .from('stores')
+                        .select('*')
+                        .eq('store_id', parsed.storeId)
+                        .maybeSingle();
+                      cloudStore = byId;
+
+                      // Fallback: by access_code
+                      if (!cloudStore) {
+                        const { data: byCode } = await supabase
+                          .from('stores')
+                          .select('*')
+                          .eq('access_code', code)
+                          .maybeSingle();
+                        cloudStore = byCode;
+                      }
+
+                      if (cloudStore && cloudStore.data) {
+                        const remoteStore = cloudStore.data as StoreData;
+                        localStorage.setItem(`storeflow_store_${remoteStore.accessCode}`, JSON.stringify(remoteStore));
+                        setAccessMood('happy' as any);
+                        showToast('Cloud store loaded!', 'success');
+                        proceedWithStore(remoteStore);
+                        return;
+                      }
+
+                      setAccessMood('angry');
+                      showToast('Store not found. Try entering the access code manually.', 'error');
+                    } catch {
+                      setAccessMood('angry');
+                      showToast('Failed to look up store. Check your connection.', 'error');
+                    }
+                  })();
+                }, 300);
+              } else {
+                setAccessMood('worried');
+                showToast('Could not identify a store from this QR code', 'error');
+              }
+            }}
+            onClose={() => setShowQRScanner(false)}
+          />
         )}
 
         {mode === 'login-select' && (
