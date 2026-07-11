@@ -723,7 +723,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       }
 
       const storeId = store.storeId || store.accessCode;
-      const storeUrl = `https://storeflow-customer.vercel.app/store/${storeId}`;
+      const storeUrl = `https://customer.storeflow.app/s/${storeId}`;
 
       const { data: dbStore, error: storeError } = await supabase
         .from('stores')

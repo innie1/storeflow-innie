@@ -145,8 +145,9 @@ export function healthScore(store: StoreData): HealthScore {
 
   // 15%: Inventory Health
   const threshold = getLowStockThreshold();
-  const total = store.products.length || 1;
-  const healthy = store.products.filter(p => p.quantity > threshold).length;
+  const activeProducts = store.products.filter(p => !p.discontinued);
+  const total = activeProducts.length || 1;
+  const healthy = activeProducts.filter(p => p.quantity > threshold).length;
   const inventoryScore = Math.round((healthy / total) * 100);
   const invDetail = `${healthy}/${total} products well-stocked`;
 
@@ -219,7 +220,7 @@ export function analyzeSales(store: StoreData): SalesAnalysis {
   const soldIds = new Set(last30.map(s => s.productId));
   const slowMovers: SalesAnalysis['slowMovers'] = [];
   const neverSold: SalesAnalysis['neverSold'] = [];
-  store.products.forEach(p => {
+  store.products.filter(p => !p.discontinued).forEach(p => {
     const daysInStock = p.addedAt ? Math.floor((Date.now() - new Date(p.addedAt).getTime()) / 86400000) : 0;
     if (!soldIds.has(p.id)) {
       if (daysInStock > 7) neverSold.push({ name: p.name, daysInStock });
@@ -275,6 +276,7 @@ export interface StockForecast {
 export function inventoryIntelligence(store: StoreData): StockForecast[] {
   const threshold = getLowStockThreshold();
   return store.products
+    .filter(p => !p.discontinued)
     .map(p => {
       const sold14 = store.sales
         .filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(13))
@@ -371,7 +373,7 @@ export interface PricingAlert {
 
 export function pricingAlerts(store: StoreData, targetMargin = 0.25): PricingAlert[] {
   return store.products
-    .filter(p => p.costPrice > 0)
+    .filter(p => p.costPrice > 0 && !p.discontinued)
     .map(p => {
       const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
       const suggested = Math.round((p.costPrice * (1 + targetMargin)) / 10) * 10;
@@ -661,7 +663,7 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
     out.push({ id: 'rev', icon: '📈', text: `Revenue is growing — keep going!`, tone: 'success' });
   }
   const threshold = getLowStockThreshold();
-  const low = store.products.filter(p => p.quantity > 0 && p.quantity <= threshold);
+  const low = store.products.filter(p => !p.discontinued && p.quantity > 0 && p.quantity <= threshold);
   if (!isStoreOnboarding(store) && low.length > 0) {
     out.push({ id: 'low', icon: '⚠', text: `${low.length} product${low.length === 1 ? '' : 's'} need restocking`, tone: 'warning' });
   }
@@ -703,7 +705,7 @@ export function forecastDaysRemaining(store: StoreData, p: Product): number {
 export function generateRecommendations(store: StoreData): Recommendation[] {
   const recs: Recommendation[] = [];
   if (isStoreOnboarding(store)) return [];
-  store.products.forEach(p => {
+  store.products.filter(p => !p.discontinued).forEach(p => {
     const days = forecastDaysRemaining(store, p);
     if (Number.isFinite(days) && days <= 5 && p.quantity > 0) {
       const lostRev = Math.round(p.sellingPrice * (p.quantity / Math.max(1, days)) * 7);
@@ -724,7 +726,7 @@ export function generateRecommendations(store: StoreData): Recommendation[] {
       }
     });
   }
-  store.products.forEach(p => {
+  store.products.filter(p => !p.discontinued).forEach(p => {
     if (!p.costPrice) return;
     const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
     const sold = store.sales.filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(6)).reduce((sum, s) => sum + s.quantity, 0);
@@ -815,9 +817,9 @@ export function generateFlowReport(store: StoreData): string {
   const profit7 = last7.reduce((s, d) => s + d.profit, 0);
   const exp7 = last7.reduce((s, d) => s + d.expenses, 0);
   
-  const outOfStock = store.products.filter(p => p.quantity === 0);
+  const outOfStock = store.products.filter(p => !p.discontinued && p.quantity === 0);
   const threshold = getLowStockThreshold();
-  const lowStock = store.products.filter(p => p.quantity > 0 && p.quantity <= threshold);
+  const lowStock = store.products.filter(p => !p.discontinued && p.quantity > 0 && p.quantity <= threshold);
   
   const ea = expenseAnalysis(store);
   
@@ -1033,7 +1035,7 @@ export function getProfitLeaks(store: StoreData): ProfitLeak[] {
   let deadStockValue = 0;
   const last30 = store.sales.filter(s => (now.getTime() - new Date(s.date).getTime()) < 30 * 86400000);
   const soldIds = new Set(last30.map(s => s.productId));
-  store.products.forEach(p => {
+  store.products.filter(p => !p.discontinued).forEach(p => {
     if (!soldIds.has(p.id) && p.quantity > 0) {
       deadStockValue += p.costPrice * p.quantity;
     }
@@ -1050,7 +1052,7 @@ export function getProfitLeaks(store: StoreData): ProfitLeak[] {
 
   // 3. Poor profit margins
   let thinMarginCount = 0;
-  store.products.forEach(p => {
+  store.products.filter(p => !p.discontinued).forEach(p => {
     if (p.costPrice > 0) {
       const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
       if (margin < 0.15) thinMarginCount++;
@@ -1206,7 +1208,7 @@ export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
   const last14DaysSales = store.sales.filter(s => (now.getTime() - new Date(s.date).getTime()) < 14 * 86400000);
   const soldIds = new Set(last14DaysSales.map(s => s.productId));
   
-  store.products.forEach(p => {
+  store.products.filter(p => !p.discontinued).forEach(p => {
     if (!soldIds.has(p.id) && p.quantity > 5 && p.costPrice > 0) {
       const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
       if (margin > 0.15) {

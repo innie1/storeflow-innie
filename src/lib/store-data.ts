@@ -499,7 +499,7 @@ export function saveStore(store: StoreData): void {
         }
 
         const storeId = store.storeId || store.accessCode;
-        const storeUrl = `https://storeflow-customer.vercel.app/store/${storeId}`;
+        const storeUrl = `https://customer.storeflow.app/s/${storeId}`;
 
         const payload: any = {
           owner_id: profile.id,

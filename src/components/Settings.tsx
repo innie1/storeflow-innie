@@ -897,11 +897,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       return;
     }
 
-    console.log("QR Generation: Store ID =", storeId);
+    const storeUrl = generateStoreUrl(storeId);
+    console.log("QR Generation: Store ID =", storeId, "Generated URL =", storeUrl);
 
     // Draw QR code
     if (barcodeQrCanvasRef.current) {
-      drawQRCode({ text: storeId, canvas: barcodeQrCanvasRef.current, standard: true })
+      drawQRCode({ text: storeUrl, canvas: barcodeQrCanvasRef.current, standard: true })
         .then(() => {
           console.log("QR Generation Success!");
           
@@ -918,11 +919,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                 const html5QrCode = new Html5Qrcode("temp-qr-scanner-element");
                 const decodedText = await html5QrCode.scanFile(file, false);
                 console.log("QR Verification SUCCESS! Decoded text:", decodedText);
-                if (decodedText === storeId) {
-                  console.log("QR Verification: Decoded Store ID matches.");
+                if (decodedText === storeUrl) {
+                  console.log("QR Verification: Decoded URL matches.");
                 } else {
-                  console.error("QR Verification ERROR: Decoded text does not match Store ID!", { decodedText, storeId });
-                  showToast("QR verification warning: Decoded Store ID mismatch.", "warning");
+                  console.error("QR Verification ERROR: Decoded text does not match URL!", { decodedText, storeUrl });
+                  showToast("QR verification warning: Decoded URL mismatch.", "warning");
                 }
               } catch (scanErr) {
                 console.error("QR Verification ERROR: Failed to decode generated QR canvas:", scanErr);
@@ -956,11 +957,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     }
 
     const storeId = store.storeId || store.accessCode;
+    const storeUrl = generateStoreUrl(storeId);
 
     // Generate a fresh QR onto a temp canvas, export as PNG
     const tmpCanvas = document.createElement('canvas');
 
-    drawQRCode({ text: storeId, canvas: tmpCanvas, standard: true }).then(() => {
+    drawQRCode({ text: storeUrl, canvas: tmpCanvas, standard: true }).then(() => {
       const imgData = tmpCanvas.toDataURL('image/png');
       printWindow.document.write(`
         <html>
@@ -1507,9 +1509,18 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       if (code.includes('/product/')) {
         const parts = code.split('/product/');
         targetId = parts[parts.length - 1];
+      } else if (code.includes('/p/')) {
+        const parts = code.split('/p/');
+        targetId = parts[parts.length - 1];
       }
 
-      if (code === storeId || code === storeUrl) {
+      const isStoreMatch = 
+        code === storeId || 
+        code === storeUrl || 
+        code.endsWith(`/s/${storeId}`) || 
+        code.endsWith(`/store/${storeId}`);
+
+      if (isStoreMatch) {
         showToast(`✓ Scanned Store QR: Verified ${store.storeName}`, 'success');
         setScannerOpen(false);
         return;

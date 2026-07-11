@@ -175,7 +175,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       }
 
       const storeId = store.storeId || store.accessCode;
-      const storeUrl = `https://storeflow-customer.vercel.app/store/${storeId}`;
+      const storeUrl = `https://customer.storeflow.app/s/${storeId}`;
 
       const { error } = await supabase
         .from('stores')
