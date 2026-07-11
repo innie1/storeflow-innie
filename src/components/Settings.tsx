@@ -897,12 +897,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       return;
     }
 
-    const storeUrl = generateStoreUrl(storeId);
-    console.log("QR Generation: Store ID =", storeId, "Generated URL =", storeUrl);
+    console.log("QR Generation: Store ID =", storeId);
 
     // Draw QR code
     if (barcodeQrCanvasRef.current) {
-      drawQRCode({ text: storeUrl, canvas: barcodeQrCanvasRef.current, logoType: 'cube' })
+      drawQRCode({ text: storeId, canvas: barcodeQrCanvasRef.current, standard: true })
         .then(() => {
           console.log("QR Generation Success!");
           
@@ -919,11 +918,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                 const html5QrCode = new Html5Qrcode("temp-qr-scanner-element");
                 const decodedText = await html5QrCode.scanFile(file, false);
                 console.log("QR Verification SUCCESS! Decoded text:", decodedText);
-                if (decodedText === storeUrl) {
-                  console.log("QR Verification: Decoded URL matches generated URL.");
+                if (decodedText === storeId) {
+                  console.log("QR Verification: Decoded Store ID matches.");
                 } else {
-                  console.error("QR Verification ERROR: Decoded URL does not match generated URL!", { decodedText, storeUrl });
-                  showToast("QR verification warning: Decoded URL mismatch.", "warning");
+                  console.error("QR Verification ERROR: Decoded text does not match Store ID!", { decodedText, storeId });
+                  showToast("QR verification warning: Decoded Store ID mismatch.", "warning");
                 }
               } catch (scanErr) {
                 console.error("QR Verification ERROR: Failed to decode generated QR canvas:", scanErr);
@@ -957,12 +956,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     }
 
     const storeId = store.storeId || store.accessCode;
-    const storeUrl = generateStoreUrl(storeId);
 
-    // Generate a fresh branded QR onto a temp canvas, export as PNG
+    // Generate a fresh QR onto a temp canvas, export as PNG
     const tmpCanvas = document.createElement('canvas');
 
-    drawQRCode({ text: storeUrl, canvas: tmpCanvas, logoType: 'cart' }).then(() => {
+    drawQRCode({ text: storeId, canvas: tmpCanvas, standard: true }).then(() => {
       const imgData = tmpCanvas.toDataURL('image/png');
       printWindow.document.write(`
         <html>
@@ -1015,12 +1013,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           <body>
             <div class="card">
               <h1>${store.storeName}</h1>
-              <p>Scan this premium QR to view store details, products & contact info.</p>
+              <p>Scan this QR code or enter the Store ID manually to view store details and products.</p>
               <div class="qr-container">
                 <img src="${imgData}" alt="StoreFlow QR Code" />
               </div>
               <div><div class="code-box">${storeId}</div></div>
-              <div class="footer">Powered by StoreFlow &bull; Secure &bull; Branded</div>
+              <div class="footer">Powered by StoreFlow &bull; Secure &bull; Compatibility Redesigned</div>
             </div>
             <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script>
           </body>
@@ -1614,8 +1612,16 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             ) : (
               <>
                 {/* QR Canvas */}
-                <div className="relative flex justify-center p-5 bg-white rounded-3xl max-w-[200px] w-full mx-auto border border-border/30 shadow-md">
+                <div className="relative flex flex-col items-center justify-center p-5 bg-white rounded-3xl max-w-[200px] w-full mx-auto border border-border/30 shadow-md">
                   <canvas ref={barcodeQrCanvasRef} className="w-40 h-40" />
+                  
+                  {/* Store ID Display below QR */}
+                  <div className="mt-3.5 w-full flex flex-col items-center gap-1 select-all">
+                    <span className="text-[8px] font-display font-black uppercase tracking-widest text-neutral-400">Store ID</span>
+                    <span className="font-mono text-sm font-black text-slate-900 bg-neutral-100 px-3 py-0.5 rounded border border-neutral-200 tracking-wider">
+                      {store.storeId || store.accessCode}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-1">

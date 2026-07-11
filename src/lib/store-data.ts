@@ -32,18 +32,24 @@ function generateStoreUniqueCode(): string {
   return code;
 }
 
-/** Generates a permanent UUID-style Store ID (e.g. SF-8F3A2C1D-B4E9). Never changes after creation. */
+/** Generates a permanent short Store ID (e.g. SF-A8K29M). Never changes after creation. */
 function generatePermanentStoreId(): string {
-  const hex = () => Math.floor(Math.random() * 0x10000).toString(16).toUpperCase().padStart(4, '0');
-  return `SF-${hex()}${hex()}-${hex()}`;
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Highly legible characters (avoiding O, 0, I, 1)
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `SF-${code}`;
 }
 
 /**
- * Ensures a store has a permanent storeId. If one doesn't exist (e.g. existing stores),
- * it generates one and persists it immediately. Call this at app load.
+ * Ensures a store has a permanent storeId in the correct short format (SF-[A-Z0-9]{6}).
+ * If one doesn't exist or is in the old format, it generates a new short one and persists it immediately.
+ * Call this at app load.
  */
 export function ensureStoreId(store: StoreData): StoreData {
-  if (store.storeId) return store; // Already has one — never overwrite
+  const hasValidFormat = store.storeId && /^SF-[A-Z0-9]{6}$/.test(store.storeId);
+  if (hasValidFormat) return store; // Already has a valid short format — never overwrite
   const storeId = generatePermanentStoreId();
   const updated = { ...store, storeId };
   // Persist immediately to localStorage

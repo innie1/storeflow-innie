@@ -142,13 +142,15 @@ export async function drawQRCode({
   canvas,
   logoSizePercent = 0.22,
   transparent = false,
-  logoType = 'cube'
+  logoType = 'cube',
+  standard = false
 }: {
   text: string;
   canvas: HTMLCanvasElement;
   logoSizePercent?: number;
   transparent?: boolean;
   logoType?: 'cube' | 'cart';
+  standard?: boolean;
 }): Promise<void> {
   const qr = QRCode.create(text, { errorCorrectionLevel: 'H' });
   const size = qr.modules.size;
@@ -157,24 +159,44 @@ export async function drawQRCode({
   if (!ctx) throw new Error('Could not get 2D context');
 
   // Scale settings
-  const canvasSize = 400; // Fixed high-resolution output size
+  const canvasSize = standard ? 512 : 400; // Minimum 512x512 resolution for standard
   canvas.width = canvasSize;
   canvas.height = canvasSize;
 
-  const margin = 4; // Margin in module count
+  const margin = standard ? 8 : 4; // Large quiet zone (8 modules) for standard
   const totalModules = size + margin * 2;
   const moduleSize = canvasSize / totalModules;
   const marginPx = margin * moduleSize;
 
   // Clear background
   ctx.clearRect(0, 0, canvasSize, canvasSize);
-  if (!transparent) {
+  if (!transparent || standard) {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvasSize, canvasSize);
   }
 
-  // Draw QR Modules (Skip Finders & Clear Center)
+  // Draw QR Modules (Skip Finders & Clear Center if not standard)
   ctx.fillStyle = '#000000';
+
+  if (standard) {
+    // Render standard black and white square modules
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (qr.modules.get(r, c)) {
+          const x = marginPx + c * moduleSize;
+          const y = marginPx + r * moduleSize;
+          // Use Math.ceil to prevent tiny gaps between modules due to rounding/subpixel rendering
+          ctx.fillRect(
+            Math.floor(x),
+            Math.floor(y),
+            Math.ceil(moduleSize),
+            Math.ceil(moduleSize)
+          );
+        }
+      }
+    }
+    return;
+  }
 
   // Center clearance bounds
   const clearSize = Math.floor(size * 0.28); // Clears center 28% for border safety
