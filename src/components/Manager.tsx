@@ -610,8 +610,9 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
     const isSleepTime = currentHour >= 21 || currentHour < 6;
     if (isSleepTime) return 'sleeping';
 
-    const hasZeroStock = store.products.length > 0 && store.products.every(p => p.quantity === 0);
-    const hasLowStock = store.products.some(p => p.quantity <= 3);
+    const activeProducts = store.products.filter(p => !p.discontinued);
+    const hasZeroStock = activeProducts.length > 0 && activeProducts.every(p => p.quantity === 0);
+    const hasLowStock = activeProducts.some(p => p.quantity <= 3);
     const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
     const isGoalAchieved = savings && savings.saved >= savings.amount && savings.amount > 0;
     

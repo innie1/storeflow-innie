@@ -1082,11 +1082,12 @@ export function getTopSellers(store: StoreData, limit = 5): { name: string; tota
 export function getDashboardStats(store: StoreData) {
   const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
   const totalProfit = store.sales.reduce((sum, s) => sum + s.profit, 0);
-  const totalProducts = store.products.length;
+  const activeProducts = store.products.filter(p => !p.discontinued);
+  const totalProducts = activeProducts.length;
   const threshold = getLowStockThreshold();
-  const lowStockProducts = store.products.filter(p => p.quantity <= threshold);
+  const lowStockProducts = activeProducts.filter(p => p.quantity <= threshold);
   const totalSales = store.sales.length;
-  const inventoryValue = store.products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
+  const inventoryValue = activeProducts.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
   const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
   const savingsSaved = store.savingsGoal?.saved || 0;
   const netIncome = totalRevenue - totalExpenses - savingsSaved;

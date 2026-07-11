@@ -370,8 +370,9 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
     const isSleepTime = currentHour >= 21 || currentHour < 6;
     if (isSleepTime) return 'sleeping';
 
-    const hasZeroStock = store.products.length > 0 && store.products.every(p => p.quantity === 0);
-    const hasLowStock = store.products.some(p => p.quantity <= 3);
+    const activeProducts = store.products.filter(p => !p.discontinued);
+    const hasZeroStock = activeProducts.length > 0 && activeProducts.every(p => p.quantity === 0);
+    const hasLowStock = activeProducts.some(p => p.quantity <= 3);
     const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
     const isGoalAchieved =
       store.savingsGoal && store.savingsGoal.saved >= store.savingsGoal.amount && store.savingsGoal.amount > 0;

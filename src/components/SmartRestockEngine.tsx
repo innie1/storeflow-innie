@@ -60,7 +60,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     const list: BuyListItem[] = [];
 
     // Map existing products
-    store.products.forEach(p => {
+    store.products.filter(p => !p.discontinued).forEach(p => {
       const isOutOfStock = p.quantity <= 0;
       const minStock = p.minimumStock || 5;
       const isBelowMin = p.quantity < minStock;
