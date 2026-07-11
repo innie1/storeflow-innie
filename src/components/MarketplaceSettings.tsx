@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
+import { generateStoreUrl } from '@/lib/qr-code';
 import { 
   Store, Eye, Percent, Clock, CreditCard, MapPin, 
   Calendar, Bell, UserCheck, ShieldAlert, Check, X,
@@ -175,7 +176,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       }
 
       const storeId = store.storeId || store.accessCode;
-      const storeUrl = `https://customer.storeflow.app/s/${storeId}`;
+      const storeUrl = generateStoreUrl(storeId);
 
       const { error } = await supabase
         .from('stores')

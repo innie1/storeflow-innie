@@ -458,7 +458,7 @@ export function exportToSVG(text: string): string {
 
 // ─── Customer PWA URL Generators ────────────────────────────────────────────
 
-export const CUSTOMER_PWA_BASE = 'https://customer.storeflow.app';
+export const CUSTOMER_PWA_BASE = 'https://storeflow-customer.vercel.app';
 
 /** The URL embedded in the Store QR code — opens the store in the Customer PWA without login */
 export function generateStoreUrl(storeId: string): string {

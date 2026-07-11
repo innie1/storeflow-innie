@@ -7,6 +7,7 @@ import {
 } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
+import { generateStoreUrl } from '@/lib/qr-code';
 
 const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -499,7 +500,7 @@ export function saveStore(store: StoreData): void {
         }
 
         const storeId = store.storeId || store.accessCode;
-        const storeUrl = `https://customer.storeflow.app/s/${storeId}`;
+        const storeUrl = generateStoreUrl(storeId);
 
         const payload: any = {
           owner_id: profile.id,

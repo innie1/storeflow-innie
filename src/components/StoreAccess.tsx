@@ -6,6 +6,7 @@ import Mascot, { MascotMood } from '@/components/Mascot';
 import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
 import { Eye, EyeOff, Key, Shield, HelpCircle, Lock, Mail, Phone, Users, Cloud, Database, Sparkles, Plus, Check, LogIn, UserPlus, Building, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { generateStoreUrl } from '@/lib/qr-code';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -723,7 +724,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       }
 
       const storeId = store.storeId || store.accessCode;
-      const storeUrl = `https://customer.storeflow.app/s/${storeId}`;
+      const storeUrl = generateStoreUrl(storeId);
 
       const { data: dbStore, error: storeError } = await supabase
         .from('stores')
