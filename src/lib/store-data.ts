@@ -479,7 +479,9 @@ export function saveStore(store: StoreData): void {
     createAutoBackupSnapshot().catch(() => {});
   }
   
-  if (store.managerSettings?.multiDeviceSync) {
+  // Always sync to cloud if the store has a storeId (QR code) — customers need the row
+  // to exist in Supabase when they scan. Also sync if multiDeviceSync is explicitly on.
+  if (store.storeId || store.managerSettings?.multiDeviceSync) {
     import('@/integrations/supabase/client').then(async ({ supabase }) => {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
