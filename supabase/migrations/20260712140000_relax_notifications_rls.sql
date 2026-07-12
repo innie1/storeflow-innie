@@ -8,6 +8,7 @@ CREATE POLICY "Allow public INSERT on notifications" ON public.notifications
 
 -- Drop old function signature if it exists
 DROP FUNCTION IF EXISTS public.place_order_atomic(uuid, text, text, text, text, numeric, numeric, text, jsonb);
+DROP FUNCTION IF EXISTS public.place_order_atomic(text, text, text, text, text, numeric, numeric, text, jsonb);
 
 -- Atomic order submission helper function (p_store_id as text for JS type-matching compatibility)
 CREATE OR REPLACE FUNCTION public.place_order_atomic(
@@ -56,8 +57,8 @@ BEGIN
       subtotal
     ) VALUES (
       v_order_id,
-      (v_item->>'product_id')::uuid,
-      (v_item->>'quantity')::integer,
+      (v_item->>'product_id')::text,
+      (v_item->>'quantity')::numeric,
       (v_item->>'price')::numeric,
       (v_item->>'subtotal')::numeric
     );
