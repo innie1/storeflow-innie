@@ -6,9 +6,12 @@ DROP POLICY IF EXISTS "Allow public INSERT on notifications" ON public.notificat
 CREATE POLICY "Allow public INSERT on notifications" ON public.notifications
   FOR INSERT WITH CHECK (true);
 
--- Atomic order submission helper function
+-- Drop old function signature if it exists
+DROP FUNCTION IF EXISTS public.place_order_atomic(uuid, text, text, text, text, numeric, numeric, text, jsonb);
+
+-- Atomic order submission helper function (p_store_id as text for JS type-matching compatibility)
 CREATE OR REPLACE FUNCTION public.place_order_atomic(
-  p_store_id uuid,
+  p_store_id text,
   p_customer_name text,
   p_customer_phone text,
   p_order_number text,
@@ -33,7 +36,7 @@ BEGIN
     total,
     notes
   ) VALUES (
-    p_store_id,
+    p_store_id::uuid,
     p_customer_name,
     p_customer_phone,
     p_order_number,
@@ -64,4 +67,4 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-GRANT EXECUTE ON FUNCTION public.place_order_atomic TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.place_order_atomic(text, text, text, text, text, numeric, numeric, text, jsonb) TO anon, authenticated, service_role;
