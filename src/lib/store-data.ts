@@ -3,7 +3,7 @@ import {
   Investment, StoreCategory, GameService, GameSession,
   Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift, 
   CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
-  DEFAULT_MANAGER_SETTINGS
+  DEFAULT_MANAGER_SETTINGS, InventoryMovement
 } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
@@ -14,6 +14,84 @@ const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Restock', 'Rent', 'Utilities', 'Salaries', 'Transport', 'Other'];
 
 export const STORE_PREFIX = 'storeflow_';
+
+export function recordInventoryMovement(
+  store: StoreData,
+  productId: string,
+  movementType: 'Restock' | 'Sale' | 'Transfer' | 'Return' | 'Adjustment',
+  quantity: number,
+  user?: string,
+  source?: string
+): StoreData {
+  const movement: InventoryMovement = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    productId,
+    movementType,
+    quantity: Math.round(quantity * 100) / 100,
+    date: new Date().toISOString(),
+    user: user || 'Staff',
+    source: source || 'System',
+  };
+
+  return {
+    ...store,
+    inventoryMovements: [movement, ...(store.inventoryMovements || [])],
+  };
+}
+
+export function syncProductPerformance(store: StoreData): StoreData {
+  if (!store || !store.products) return store;
+
+  const sales = store.sales || [];
+  const restocks = store.restocks || [];
+  
+  const restockCounts: Record<string, number> = {};
+  restocks.forEach(r => {
+    if (r.productId) {
+      restockCounts[r.productId] = (restockCounts[r.productId] || 0) + 1;
+    }
+  });
+
+  const updatedProducts = store.products.map(p => {
+    const productSales = sales.filter(s => s.productId === p.id);
+    const unitsSold = productSales.reduce((sum, s) => sum + s.quantity, 0);
+    const totalRevenue = productSales.reduce((sum, s) => sum + s.total, 0);
+    const totalProfit = productSales.reduce((sum, s) => sum + s.profit, 0);
+
+    let firstSaleAt = p.first_sale_at;
+    let lastSoldAt = p.last_sold_at;
+
+    if (productSales.length > 0) {
+      const sortedSales = [...productSales].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      firstSaleAt = sortedSales[0].date;
+      lastSoldAt = sortedSales[sortedSales.length - 1].date;
+    }
+
+    let restockCount = p.restock_count;
+    if (restockCount === undefined) {
+      const computedCount = restockCounts[p.id] || 0;
+      restockCount = computedCount + ((p.initialQuantity && p.initialQuantity > 0) ? 1 : 0);
+      if (restockCount === 0 && p.quantity > 0) {
+        restockCount = 1;
+      }
+    }
+
+    return {
+      ...p,
+      restock_count: restockCount,
+      units_sold: Math.round(unitsSold * 100) / 100,
+      total_revenue: Math.round(totalRevenue * 100) / 100,
+      total_profit: Math.round(totalProfit * 100) / 100,
+      first_sale_at: firstSaleAt,
+      last_sold_at: lastSoldAt,
+    };
+  });
+
+  return {
+    ...store,
+    products: updatedProducts,
+  };
+}
 
 function generateCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -453,6 +531,9 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
 }
 
 export function loadStore(code: string): StoreData | null {
+  if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') {
+    return null;
+  }
   const data = localStorage.getItem(STORE_PREFIX + code.toUpperCase());
   if (!data) return null;
   let store = JSON.parse(data);
@@ -460,6 +541,7 @@ export function loadStore(code: string): StoreData | null {
   store = ensureStoreId(store);
   store = runScheduledSavingsDeduction(store);
   store = syncStoreData(store);
+  store = syncProductPerformance(store);
   
   upsertStoreIndex(store);
   return store;
@@ -474,7 +556,9 @@ export function saveStore(store: StoreData): void {
   const trash = (store.trash || []).filter(t => new Date(t.deletedAt).getTime() > cutoff);
   store.trash = trash;
 
-  localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
+  if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+    localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
+  }
   if (store.managerSettings?.autoBackupsEnabled !== false) {
     createAutoBackupSnapshot().catch(() => {});
   }
@@ -572,6 +656,7 @@ function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | 
 }
 
 export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actorName?: string, actorRole?: string): StoreData {
+  const id = generateId();
   const now = new Date().toISOString();
   const costTotal = Math.round(product.costPrice * product.quantity * 100) / 100;
   const newInvestments = [...(store.investments || [])];
@@ -597,10 +682,14 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actor
     ...store,
     products: [...store.products, { 
       ...product, 
-      id: generateId(), 
+      id, 
       initialQuantity: product.quantity, 
       addedAt: now,
-      priceHistory: product.costPrice > 0 ? [{ costPrice: product.costPrice, date: now }] : []
+      priceHistory: product.costPrice > 0 ? [{ costPrice: product.costPrice, date: now }] : [],
+      restock_count: 0,
+      units_sold: 0,
+      total_revenue: 0,
+      total_profit: 0
     }],
     investments: newInvestments,
     expenses: newExpenses,
@@ -608,12 +697,24 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actor
   if (actorName) {
     updated = recordActivityLog(updated, actorName, actorRole, `Added product: ${product.name} (${product.quantity} units)`);
   }
+  if (product.quantity > 0) {
+    updated = recordInventoryMovement(
+      updated,
+      id,
+      'Adjustment',
+      product.quantity,
+      actorName,
+      'Manual'
+    );
+  }
   saveStore(updated);
   return updated;
 }
 
 export function updateProduct(store: StoreData, id: string, updates: Partial<Product>, actorName?: string, actorRole?: string): StoreData {
-  const pName = store.products.find(p => p.id === id)?.name || 'Product';
+  const oldProd = store.products.find(p => p.id === id);
+  const oldQty = oldProd ? oldProd.quantity : 0;
+  const pName = oldProd?.name || 'Product';
   let updated = {
     ...store,
     products: store.products.map(p => {
@@ -630,6 +731,17 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
   if (actorName) {
     const details = updates.quantity !== undefined ? ` (set qty to ${updates.quantity})` : '';
     updated = recordActivityLog(updated, actorName, actorRole, `Updated product: ${pName}${details}`);
+  }
+  if (updates.quantity !== undefined && oldProd && updates.quantity !== oldQty) {
+    const diff = updates.quantity - oldQty;
+    updated = recordInventoryMovement(
+      updated,
+      id,
+      'Adjustment',
+      diff,
+      actorName,
+      'Manual'
+    );
   }
   saveStore(updated);
   return updated;
@@ -651,6 +763,16 @@ export function deleteProduct(store: StoreData, id: string, actorName?: string, 
   
   if (actorName) {
     updated = recordActivityLog(updated, actorName, actorRole, `Deleted product: ${product.name} (wiped financial and sales history)`);
+  }
+  if (product.quantity > 0) {
+    updated = recordInventoryMovement(
+      updated,
+      id,
+      'Adjustment',
+      -product.quantity,
+      actorName,
+      'Delete Product'
+    );
   }
   saveStore(updated);
   return updated;
@@ -710,9 +832,67 @@ export function deleteSale(store: StoreData, id: string): StoreData {
     }
   }
 
+  let nextProducts = [...store.products];
+  let nextMovements = store.inventoryMovements || [];
+  
+  for (const sale of salesToDelete) {
+    const pIndex = nextProducts.findIndex(p => p.id === sale.productId);
+    if (pIndex >= 0) {
+      const p = nextProducts[pIndex];
+      const isSingle = sale.productName.endsWith(' (Single)');
+      const singles = p.singlesPerCarton || 1;
+      const qtyToRestore = isSingle ? (sale.quantity / singles) : sale.quantity;
+      
+      const unitsSold = Math.max(0, (p.units_sold || 0) - sale.quantity);
+      const totalRevenue = Math.max(0, (p.total_revenue || 0) - sale.total);
+      const totalProfit = (p.total_profit || 0) - sale.profit;
+      
+      nextProducts[pIndex] = {
+        ...p,
+        quantity: Math.round((p.quantity + qtyToRestore) * 100) / 100,
+        units_sold: Math.round(unitsSold * 100) / 100,
+        total_revenue: Math.round(totalRevenue * 100) / 100,
+        total_profit: Math.round(totalProfit * 100) / 100,
+      };
+      
+      nextMovements = [
+        {
+          id: generateId(),
+          productId: p.id,
+          movementType: 'Return',
+          quantity: qtyToRestore,
+          date: new Date().toISOString(),
+          user: 'Staff',
+          source: 'Refund/Return',
+        },
+        ...nextMovements,
+      ];
+    }
+  }
+  
+  const remainingSales = store.sales.filter(s => s.id !== id && (!s.transactionId || s.transactionId !== id));
+  const affectedProductIds = Array.from(new Set(salesToDelete.map(s => s.productId)));
+  for (const pid of affectedProductIds) {
+    const pIndex = nextProducts.findIndex(p => p.id === pid);
+    if (pIndex >= 0) {
+      const p = nextProducts[pIndex];
+      const productSales = remainingSales.filter(s => s.productId === pid);
+      if (productSales.length > 0) {
+        const sortedSales = [...productSales].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        p.first_sale_at = sortedSales[0].date;
+        p.last_sold_at = sortedSales[sortedSales.length - 1].date;
+      } else {
+        p.first_sale_at = undefined;
+        p.last_sold_at = undefined;
+      }
+    }
+  }
+
   const updated = {
     ...store,
-    sales: store.sales.filter(s => s.id !== id && (!s.transactionId || s.transactionId !== id)),
+    products: nextProducts,
+    inventoryMovements: nextMovements,
+    sales: remainingSales,
     trash: nextTrash,
     cashBalance: Math.max(0, (store.cashBalance || 0) - cashDeduct),
     bankBalance: Math.max(0, (store.bankBalance || 0) - bankDeduct),
@@ -760,11 +940,34 @@ export function recordSale(
     transactionId,
   };
 
+  const newQty = Math.round((product.quantity - qtyDeduction) * 100) / 100;
+  const newUnitsSold = Math.round(((product.units_sold || 0) + sale.quantity) * 100) / 100;
+  const newTotalRevenue = Math.round(((product.total_revenue || 0) + sale.total) * 100) / 100;
+  const newTotalProfit = Math.round(((product.total_profit || 0) + sale.profit) * 100) / 100;
+
   let updated = {
     ...store,
-    products: store.products.map(p => p.id === productId ? { ...p, quantity: Math.round((p.quantity - qtyDeduction) * 100) / 100 } : p),
+    products: store.products.map(p => p.id === productId ? { 
+      ...p, 
+      quantity: newQty,
+      units_sold: newUnitsSold,
+      total_revenue: newTotalRevenue,
+      total_profit: newTotalProfit,
+      first_sale_at: p.first_sale_at || sale.date,
+      last_sold_at: sale.date
+    } : p),
     sales: [sale, ...store.sales],
   };
+
+  updated = recordInventoryMovement(
+    updated,
+    productId,
+    'Sale',
+    -qtyDeduction,
+    actorName,
+    'Sales Checkout'
+  );
+
   if (actorName) {
     const displayQty = isSingle ? `${quantity} pcs` : `${quantity} ctn`;
     updated = recordActivityLog(updated, actorName, actorRole, `Completed sale: ${product.name} × ${displayQty} (Total: ₦${sale.total.toLocaleString()})`);
@@ -783,9 +986,23 @@ export function clearSales(store: StoreData): StoreData {
   return updated;
 }
 
-export function importProducts(store: StoreData, products: Omit<Product, 'id'>[]): StoreData {
+export function importProducts(
+  store: StoreData, 
+  products: Omit<Product, 'id'>[], 
+  source: string = 'Supplier Invoice', 
+  actorName?: string
+): StoreData {
   const now = new Date().toISOString();
-  const newProducts = products.map(p => ({ ...p, id: generateId(), initialQuantity: p.quantity, addedAt: now }));
+  const newProducts = products.map(p => ({ 
+    ...p, 
+    id: generateId(), 
+    initialQuantity: p.quantity, 
+    addedAt: now,
+    restock_count: p.quantity > 0 ? 1 : 0,
+    units_sold: 0,
+    total_revenue: 0,
+    total_profit: 0
+  }));
   
   let importTotal = 0;
   products.forEach(p => {
@@ -823,12 +1040,26 @@ export function importProducts(store: StoreData, products: Omit<Product, 'id'>[]
     }
   }
 
-  const updated = {
+  let updated = {
     ...store,
     products: [...store.products, ...newProducts],
     investments: newInvestments,
     expenses: newExpenses,
   };
+
+  newProducts.forEach(p => {
+    if (p.quantity > 0) {
+      updated = recordInventoryMovement(
+        updated,
+        p.id,
+        'Restock',
+        p.quantity,
+        actorName,
+        source
+      );
+    }
+  });
+
   saveStore(updated);
   return updated;
 }
@@ -841,7 +1072,14 @@ export interface RestockEntry {
 
 export type RestockFunding = 'balance' | 'new_money';
 
-export function receiveStock(store: StoreData, entries: RestockEntry[], funding: RestockFunding = 'balance'): StoreData {
+export function receiveStock(
+  store: StoreData, 
+  entries: RestockEntry[], 
+  funding: RestockFunding = 'balance', 
+  source: string = 'Restock Button',
+  actorName?: string,
+  actorRole?: string
+): StoreData {
   const now = new Date().toISOString();
   const batchId = generateId();
   const newRestocks: Restock[] = [];
@@ -873,7 +1111,8 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
       quantity: Math.round((p.quantity + entry.quantity) * 100) / 100,
       costPrice: entry.costPrice > 0 ? entry.costPrice : p.costPrice,
       initialQuantity: p.initialQuantity ?? p.quantity,
-      priceHistory: newPriceHistory
+      priceHistory: newPriceHistory,
+      restock_count: (p.restock_count || 0) + 1,
     };
   });
 
@@ -964,7 +1203,7 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
     }
   }
 
-  const updated: StoreData = {
+  let updated: StoreData = {
     ...store,
     products: updatedProducts,
     restocks: [...newRestocks, ...(store.restocks || [])],
@@ -974,6 +1213,20 @@ export function receiveStock(store: StoreData, entries: RestockEntry[], funding:
     bankBalance: Math.round(newBankBalance * 100) / 100,
     walletBalance: Math.round(newWalletBalance * 100) / 100,
   };
+
+  for (const entry of entries) {
+    if (entry.quantity > 0) {
+      updated = recordInventoryMovement(
+        updated,
+        entry.productId,
+        'Restock',
+        entry.quantity,
+        actorName,
+        source
+      );
+    }
+  }
+
   saveStore(updated);
   return updated;
 }
@@ -1147,6 +1400,8 @@ export function recordCheckout(
     customerNote?: string;
     dueDate?: string;
     discount?: number;
+    actorName?: string;
+    actorRole?: string;
   }
 ): { store: StoreData; sales: Sale[]; pending?: PendingPayment } {
   let updated = store;
@@ -1164,7 +1419,7 @@ export function recordCheckout(
     }
     if (p.quantity < qtyDeduction) continue;
 
-    updated = recordSale(updated, it.productId, it.quantity, undefined, undefined, transactionId, it.saleType);
+    updated = recordSale(updated, it.productId, it.quantity, opts.actorName, opts.actorRole, transactionId, it.saleType);
     const created = updated.sales[0];
     newSales.push(created);
     pendingItems.push({
@@ -1732,18 +1987,29 @@ export function transferStock(
     ]
   };
 
+  updatedSource = recordInventoryMovement(
+    updatedSource,
+    productId,
+    'Transfer',
+    -quantity,
+    'Staff',
+    `To Store ${destStoreCode}`
+  );
+
   // Load and update destination store
   const destStore = loadStore(destStoreCode);
   if (destStore) {
     let destProducts = [...destStore.products];
     const destProd = destProducts.find(p => p.name.toLowerCase() === product.name.toLowerCase() || (product.barcode && p.barcode === product.barcode));
+    let targetProductId = destProd ? destProd.id : '';
     
     if (destProd) {
       destProducts = destProducts.map(p => p.id === destProd.id ? { ...p, quantity: Math.round((p.quantity + quantity) * 100) / 100 } : p);
     } else {
+      targetProductId = generateId();
       // Add product as new in destination store
       destProducts.push({
-        id: generateId(),
+        id: targetProductId,
         name: product.name,
         costPrice: product.costPrice,
         sellingPrice: product.sellingPrice,
@@ -1756,13 +2022,13 @@ export function transferStock(
       });
     }
 
-    const updatedDest: StoreData = {
+    let updatedDest: StoreData = {
       ...destStore,
       products: destProducts,
       transfers: [
         {
           id: generateId(),
-          productId: destProd ? destProd.id : 'new',
+          productId: targetProductId || 'new',
           productName: product.name,
           quantity,
           sourceStoreCode: sourceStore.accessCode,
@@ -1772,6 +2038,15 @@ export function transferStock(
         ...(destStore.transfers || [])
       ]
     };
+
+    updatedDest = recordInventoryMovement(
+      updatedDest,
+      targetProductId,
+      'Transfer',
+      quantity,
+      'Staff',
+      `From Store ${sourceStore.accessCode}`
+    );
     saveStore(updatedDest);
   }
 

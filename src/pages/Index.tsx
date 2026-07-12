@@ -763,7 +763,7 @@ export default function Index() {
     if (!store || scanCart.length === 0) return;
     let updated = store;
     for (const item of scanCart) {
-      updated = recordSale(updated, item.product.id, item.qty);
+      updated = recordSale(updated, item.product.id, item.qty, currentUser?.name, currentUser?.role);
     }
     setStore(updated);
     const total = scanCart.reduce((s, c) => s + c.product.sellingPrice * c.qty, 0);
@@ -1277,6 +1277,7 @@ export default function Index() {
                 onUpdate={setStore}
                 filterLowStock={filterLowStock}
                 onClearFilter={() => setFilterLowStock(false)}
+                currentUser={currentUser}
               />
             </div>
             <div className={tab === 'sales' ? 'block' : 'hidden'}>
@@ -1404,6 +1405,7 @@ export default function Index() {
           store={store}
           onUpdate={setStore}
           onClose={() => setShowScanner(false)}
+          currentUser={currentUser}
         />
       )}
 

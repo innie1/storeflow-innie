@@ -396,6 +396,8 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         customerPhone: saveAs === 'pending' ? customerPhone.trim() || undefined : undefined,
         dueDate: saveAs === 'pending' && dueDate ? new Date(dueDate).toISOString() : undefined,
         customerNote: saveAs === 'pending' ? customerNote.trim() || undefined : undefined,
+        actorName: currentUser?.name,
+        actorRole: currentUser?.role,
       });
     onUpdate(result.store);
     if (result.sales.length > 0) {

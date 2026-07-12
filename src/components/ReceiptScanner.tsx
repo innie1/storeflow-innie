@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { StoreData, Product, LearnedProduct } from '@/types/store';
-import { recordSale, saveStore } from '@/lib/store-data';
+import { recordSale, saveStore, recordInventoryMovement } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { interpretProductName, lookupStoreMemory } from '@/lib/import-intel';
@@ -20,6 +20,7 @@ interface ReceiptScannerProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
   onClose: () => void;
+  currentUser?: any;
 }
 
 interface GroupInfo {
@@ -38,7 +39,7 @@ interface GroupInfo {
   sachetsPerRoll?: number;
 }
 
-export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScannerProps) {
+export default function ReceiptScanner({ store, onUpdate, onClose, currentUser }: ReceiptScannerProps) {
   const [scanning, setScanning] = useState(false);
   const [items, setItems] = useState<ScannedItem[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
@@ -366,8 +367,18 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
           ...existing,
           quantity: existing.quantity + addQty,
           costPrice: item.costPrice,
-          sellingPrice: item.sellingPrice
+          sellingPrice: item.sellingPrice,
+          restock_count: (existing.restock_count || 0) + 1,
         };
+
+        updated = recordInventoryMovement(
+          updated,
+          existing.id,
+          'Restock',
+          addQty,
+          currentUser?.name,
+          'Supplier Invoice'
+        );
       } else {
         let unitsPerPurchase = 1;
         const matchedGroup = groups.find(g => g.items.some(gi => gi.name.toLowerCase() === item.name.toLowerCase()));
@@ -376,18 +387,35 @@ export default function ReceiptScanner({ store, onUpdate, onClose }: ReceiptScan
         }
 
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + stocked;
+        const addQty = item.quantity * unitsPerPurchase;
+
         updated.products.push({
           id,
           name: item.name,
           costPrice: item.costPrice,
           sellingPrice: item.sellingPrice,
-          quantity: item.quantity * unitsPerPurchase,
+          quantity: addQty,
           category: item.category || 'Groceries',
           isCartonSingleEnabled: unitsPerPurchase > 1,
           singlesPerCarton: unitsPerPurchase,
           sellAsSinglesByDefault: unitsPerPurchase > 1,
-          singleSellingPrice: item.sellingPrice
+          singleSellingPrice: item.sellingPrice,
+          restock_count: addQty > 0 ? 1 : 0,
+          units_sold: 0,
+          total_revenue: 0,
+          total_profit: 0
         });
+
+        if (addQty > 0) {
+          updated = recordInventoryMovement(
+            updated,
+            id,
+            'Restock',
+            addQty,
+            currentUser?.name,
+            'Supplier Invoice'
+          );
+        }
       }
       stocked++;
     }

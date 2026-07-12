@@ -9,6 +9,7 @@ import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SmartRestockEngine from '@/components/SmartRestockEngine';
+import Mascot, { MascotMood } from '@/components/Mascot';
 import { 
   Search, 
   Camera, 
@@ -45,6 +46,7 @@ interface InventoryProps {
   onUpdate: (store: StoreData) => void;
   filterLowStock?: boolean;
   onClearFilter?: () => void;
+  currentUser?: any;
 }
 
 interface ShoppingListItem {
@@ -70,8 +72,284 @@ export interface MassEditItem {
   showMore?: boolean;
 }
 
-export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter }: InventoryProps) {
+export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter, currentUser }: InventoryProps) {
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
+  const [performancePeriod, setPerformancePeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  
+  // ---------- Product Performance Calculations ----------
+  const filteredSales = useMemo(() => {
+    if (!selectedDetailProduct) return [];
+    const sales = store.sales.filter(s => s.productId === selectedDetailProduct.id);
+    const now = new Date();
+    
+    if (performancePeriod === 'today') {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      return sales.filter(s => new Date(s.date).getTime() >= todayStart);
+    } else if (performancePeriod === 'week') {
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getDay() * 24 * 60 * 60 * 1000;
+      return sales.filter(s => new Date(s.date).getTime() >= weekStart);
+    } else if (performancePeriod === 'month') {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return sales.filter(s => new Date(s.date).getTime() >= monthStart);
+    }
+    return sales;
+  }, [store.sales, selectedDetailProduct, performancePeriod]);
+
+  const storeTotalProfit = useMemo(() => {
+    const sales = store.sales || [];
+    const now = new Date();
+    let periodSales = sales;
+    if (performancePeriod === 'today') {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      periodSales = sales.filter(s => new Date(s.date).getTime() >= todayStart);
+    } else if (performancePeriod === 'week') {
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getDay() * 24 * 60 * 60 * 1000;
+      periodSales = sales.filter(s => new Date(s.date).getTime() >= weekStart);
+    } else if (performancePeriod === 'month') {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      periodSales = sales.filter(s => new Date(s.date).getTime() >= monthStart);
+    }
+    return periodSales.reduce((sum, s) => sum + s.profit, 0);
+  }, [store.sales, performancePeriod]);
+
+  const productRankInfo = useMemo(() => {
+    if (!selectedDetailProduct) return { rank: 0, total: 0, pct: 100, hasSales: false };
+    const sales = store.sales || [];
+    const now = new Date();
+    let periodSales = sales;
+    if (performancePeriod === 'today') {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      periodSales = sales.filter(s => new Date(s.date).getTime() >= todayStart);
+    } else if (performancePeriod === 'week') {
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getDay() * 24 * 60 * 60 * 1000;
+      periodSales = sales.filter(s => new Date(s.date).getTime() >= weekStart);
+    } else if (performancePeriod === 'month') {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      periodSales = sales.filter(s => new Date(s.date).getTime() >= monthStart);
+    }
+
+    const productSalesMap: Record<string, number> = {};
+    store.products.forEach(p => { productSalesMap[p.id] = 0; });
+    periodSales.forEach(s => {
+      if (productSalesMap[s.productId] !== undefined) {
+        productSalesMap[s.productId] += s.quantity;
+      }
+    });
+
+    const sorted = Object.entries(productSalesMap)
+      .map(([id, qty]) => ({ id, qty }))
+      .sort((a, b) => b.qty - a.qty);
+
+    const rankIdx = sorted.findIndex(item => item.id === selectedDetailProduct.id);
+    const rank = rankIdx + 1;
+    const total = store.products.length;
+    const pct = total > 0 ? (rank / total) * 100 : 100;
+    const hasSales = (productSalesMap[selectedDetailProduct.id] || 0) > 0;
+
+    return { rank, total, pct, hasSales };
+  }, [store.products, store.sales, selectedDetailProduct, performancePeriod]);
+
+  const filteredRestocksCount = useMemo(() => {
+    if (!selectedDetailProduct) return 0;
+    const movements = store.inventoryMovements || [];
+    const now = new Date();
+    let periodMovements = movements.filter(m => m.productId === selectedDetailProduct.id && m.movementType === 'Restock');
+    
+    if (performancePeriod === 'today') {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      periodMovements = periodMovements.filter(m => new Date(m.date).getTime() >= todayStart);
+    } else if (performancePeriod === 'week') {
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getDay() * 24 * 60 * 60 * 1000;
+      periodMovements = periodMovements.filter(m => new Date(m.date).getTime() >= weekStart);
+    } else if (performancePeriod === 'month') {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      periodMovements = periodMovements.filter(m => new Date(m.date).getTime() >= monthStart);
+    }
+    
+    if (performancePeriod === 'all') {
+      return selectedDetailProduct.restock_count || periodMovements.length || 0;
+    }
+    return periodMovements.length;
+  }, [store.inventoryMovements, selectedDetailProduct, performancePeriod]);
+
+  const unitsSold = useMemo(() => filteredSales.reduce((sum, s) => sum + s.quantity, 0), [filteredSales]);
+  const totalRevenue = useMemo(() => filteredSales.reduce((sum, s) => sum + s.total, 0), [filteredSales]);
+  const totalProfit = useMemo(() => filteredSales.reduce((sum, s) => sum + s.profit, 0), [filteredSales]);
+
+  const avgSalesSpeed = useMemo(() => {
+    if (!selectedDetailProduct || !selectedDetailProduct.first_sale_at) return 0;
+    const now = new Date();
+    let divisor = 1;
+
+    if (performancePeriod === 'today') {
+      divisor = 1;
+    } else if (performancePeriod === 'week') {
+      const daysSinceFirst = (now.getTime() - new Date(selectedDetailProduct.first_sale_at).getTime()) / (1000 * 60 * 60 * 24);
+      divisor = Math.max(1, Math.min(7, Math.ceil(daysSinceFirst)));
+    } else if (performancePeriod === 'month') {
+      const daysSinceFirst = (now.getTime() - new Date(selectedDetailProduct.first_sale_at).getTime()) / (1000 * 60 * 60 * 24);
+      divisor = Math.max(1, Math.min(30, Math.ceil(daysSinceFirst)));
+    } else {
+      const daysSinceFirst = (now.getTime() - new Date(selectedDetailProduct.first_sale_at).getTime()) / (1000 * 60 * 60 * 24);
+      divisor = Math.max(1, Math.ceil(daysSinceFirst));
+    }
+    
+    return Math.round((unitsSold / divisor) * 10) / 10;
+  }, [selectedDetailProduct, unitsSold, performancePeriod]);
+
+  const contributionPct = useMemo(() => {
+    if (storeTotalProfit <= 0) return 0;
+    return Math.round((totalProfit / storeTotalProfit) * 1000) / 10;
+  }, [totalProfit, storeTotalProfit]);
+
+  const salesSummary = useMemo(() => {
+    if (!selectedDetailProduct) return { today: 0, week: 0, month: 0, all: 0 };
+    const sales = store.sales.filter(s => s.productId === selectedDetailProduct.id);
+    const now = new Date();
+    
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const weekStart = todayStart - now.getDay() * 24 * 60 * 60 * 1000;
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    
+    let today = 0, week = 0, month = 0, all = 0;
+    sales.forEach(s => {
+      const t = new Date(s.date).getTime();
+      if (t >= todayStart) today += s.quantity;
+      if (t >= weekStart) week += s.quantity;
+      if (t >= monthStart) month += s.quantity;
+      all += s.quantity;
+    });
+    
+    return { today, week, month, all };
+  }, [store.sales, selectedDetailProduct]);
+
+  const flowInsights = useMemo(() => {
+    if (!selectedDetailProduct) return { list: [], mood: 'idle' as MascotMood, badge: 'Standard' };
+    const list: string[] = [];
+    
+    const salesAll = store.sales.filter(s => s.productId === selectedDetailProduct.id);
+    const profitAll = salesAll.reduce((sum, s) => sum + s.profit, 0);
+    const storeProfitAll = store.sales.reduce((sum, s) => sum + s.profit, 0);
+    const contribAll = storeProfitAll > 0 ? (profitAll / storeProfitAll) * 100 : 0;
+    
+    let isTopPerformer = false;
+    if (contribAll >= 10) {
+      list.push(`🔥 This product generated ${contribAll.toFixed(0)}% of your total store profit.`);
+      isTopPerformer = true;
+    }
+    
+    const now = new Date();
+    const last30Start = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+    const prev30Start = now.getTime() - 60 * 24 * 60 * 60 * 1000;
+    
+    const last30Sales = salesAll.filter(s => {
+      const t = new Date(s.date).getTime();
+      return t >= last30Start;
+    }).reduce((sum, s) => sum + s.quantity, 0);
+    
+    const prev30Sales = salesAll.filter(s => {
+      const t = new Date(s.date).getTime();
+      return t >= prev30Start && t < last30Start;
+    }).reduce((sum, s) => sum + s.quantity, 0);
+    
+    if (last30Sales > prev30Sales && prev30Sales > 0) {
+      const inc = ((last30Sales - prev30Sales) / prev30Sales) * 100;
+      list.push(`📈 Sales increased ${inc.toFixed(0)}% compared to last month.`);
+    } else if (last30Sales < prev30Sales && prev30Sales > 0) {
+      const dec = ((prev30Sales - last30Sales) / prev30Sales) * 100;
+      list.push(`🐢 Sales have slowed ${dec.toFixed(0)}% compared to last month.`);
+    } else if (salesAll.length > 0 && last30Sales === 0) {
+      list.push(`🐢 Sales have slowed compared to previous weeks.`);
+    }
+
+    const daysSinceFirst = selectedDetailProduct.first_sale_at 
+      ? (now.getTime() - new Date(selectedDetailProduct.first_sale_at).getTime()) / (1000 * 60 * 60 * 24)
+      : 0;
+    const speed = daysSinceFirst > 0 ? (salesAll.reduce((sum, s) => sum + s.quantity, 0) / daysSinceFirst) : 0;
+    
+    let isLowStockWarning = false;
+    if (selectedDetailProduct.quantity <= 0) {
+      list.push(`⚠️ Out of stock! Customers cannot purchase this item.`);
+      isLowStockWarning = true;
+    } else if (speed > 0) {
+      const daysToRunOut = selectedDetailProduct.quantity / speed;
+      if (daysToRunOut <= 14) {
+        list.push(`⚠️ Stock will likely run out in ${Math.ceil(daysToRunOut)} days based on current sales.`);
+        isLowStockWarning = true;
+      }
+    }
+
+    const allSpeeds = store.products.map(p => {
+      const pSales = store.sales.filter(s => s.productId === p.id);
+      const firstSale = p.first_sale_at;
+      const days = firstSale ? (now.getTime() - new Date(firstSale).getTime()) / (1000 * 60 * 60 * 24) : 0;
+      return days > 0 ? (pSales.reduce((sum, s) => sum + s.quantity, 0) / days) : 0;
+    }).sort((a, b) => b - a);
+    
+    const pSpeedIdx = allSpeeds.indexOf(speed);
+    const speedRankPct = allSpeeds.length > 0 ? (pSpeedIdx / allSpeeds.length) * 100 : 100;
+    
+    let isFastMoving = false;
+    if (speed > 0.5 && speedRankPct <= 15) {
+      list.push(`💡 This is one of your fastest-moving products. Consider restocking soon.`);
+      isFastMoving = true;
+    }
+
+    if (list.length === 0) {
+      list.push(`📊 This product has stable inventory and is performing normally.`);
+    }
+
+    let mood: MascotMood = 'idle';
+    let badge = 'Standard';
+    if (isLowStockWarning) {
+      mood = 'concerned';
+      badge = 'Stock Warning';
+    } else if (isTopPerformer) {
+      mood = 'celebrating';
+      badge = 'Top Performer';
+    } else if (isFastMoving) {
+      mood = 'confident';
+      badge = 'Fast Moving';
+    } else if (salesAll.length === 0) {
+      mood = 'neutral';
+      badge = 'New Item';
+    } else {
+      mood = 'happy';
+      badge = 'Healthy Product';
+    }
+
+    return { list, mood, badge };
+  }, [selectedDetailProduct, store.sales, store.products]);
+
+  const formatRelativeDate = (dateStr?: string) => {
+    if (!dateStr) return 'Never';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMs < 0) return 'Just now';
+    
+    const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    if (diffDays === 0) {
+      if (date.getDate() === now.getDate()) {
+        return `Today ${timeString}`;
+      } else {
+        return `Yesterday`;
+      }
+    }
+    if (diffDays === 1) {
+      return `Yesterday`;
+    }
+    if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    }
+    return date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  // ------------------------------------------------------
+
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [showSelectedDeleteModal, setShowSelectedDeleteModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -434,7 +712,6 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [showRestockConfirm, setShowRestockConfirm] = useState(false);
   const [showPlannedRestocks, setShowPlannedRestocks] = useState(false);
   const [selectedBarcodeProduct, setSelectedBarcodeProduct] = useState<Product | null>(null);
-  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [globalScannerOpen, setGlobalScannerOpen] = useState(false);
   const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
   const [scanForNewProduct, setScanForNewProduct] = useState(false);
@@ -555,7 +832,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       singlesPerCarton: singlesPerCartonVal,
       singleSellingPrice: singlePriceVal,
       sellAsSinglesByDefault: newProduct.sellAsSinglesByDefault,
-    });
+    }, currentUser?.name, currentUser?.role);
     onUpdate(updated);
     setNewProduct({
       name: '',
@@ -731,7 +1008,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       singleSellingPrice: singlePriceVal,
       sellAsSinglesByDefault: editDraft.sellAsSinglesByDefault,
     };
-    const updated = updateProduct(store, editProduct.id, updates);
+    const updated = updateProduct(store, editProduct.id, updates, currentUser?.name, currentUser?.role);
     onUpdate(updated);
     setEditProduct(null); setEditDraft(null);
     showToast('Product updated — inventory value recalculated');
@@ -744,7 +1021,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   const doDelete = () => {
     if (!confirmDelete) return;
-    onUpdate(deleteProduct(store, confirmDelete.id));
+    onUpdate(deleteProduct(store, confirmDelete.id, currentUser?.name, currentUser?.role));
     setConfirmDelete(null);
     showToast('Product deleted');
   };
@@ -777,6 +1054,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       store,
       [{ productId: restockProduct.id, quantity: qty, costPrice: restockProduct.costPrice }],
       singleRestockFunding,
+      'Restock Button',
+      currentUser?.name,
+      currentUser?.role
     );
     onUpdate(updated);
     setRestockProduct(null);
@@ -1056,7 +1336,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
     if (entries.length === 0) return showToast('Add quantities to confirm', 'error');
 
-    const updated = receiveStock(store, entries, funding);
+    const updated = receiveStock(store, entries, funding, 'Purchase Order Receiving', currentUser?.name, currentUser?.role);
     onUpdate(updated);
     setShoppingList([]);
     setReceiveData({});
@@ -2284,7 +2564,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                           const updated = receiveStock(
                             store,
                             [{ productId: pr.productId, quantity: pr.quantity, costPrice: pr.costPrice }],
-                            pr.funding
+                            pr.funding,
+                            'Purchase Order Receiving',
+                            currentUser?.name,
+                            currentUser?.role
                           );
                           const final = {
                             ...updated,
@@ -3315,6 +3598,201 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               </div>
             </div>
 
+            {/* Product Performance Section */}
+            <div className="space-y-3 mt-3 pt-3 border-t border-border">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-xs font-display font-bold text-primary flex items-center gap-1.5">
+                    📊 Product Performance
+                  </h4>
+                  <div className="group relative">
+                    <span className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">ⓘ</span>
+                    <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden w-48 rounded bg-slate-900 p-2 text-[9px] leading-relaxed text-slate-100 shadow-xl border border-border group-hover:block z-50">
+                      View business metrics calculated from store sales history and restock transactions. Contribution % represents this product's share of total store profit.
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-1 bg-surface-2 px-2 py-1 rounded-lg border border-border text-[10px]">
+                  <span className="text-muted-foreground">📅</span>
+                  <select 
+                    value={performancePeriod} 
+                    onChange={(e) => setPerformancePeriod(e.target.value as any)}
+                    className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                {/* Times Restocked */}
+                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Times Restocked</span>
+                    <div className="w-5 h-5 rounded-md bg-purple-500/10 flex items-center justify-center text-[10px]">📦</div>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-sm font-black text-foreground">{filteredRestocksCount}</span>
+                    <span className="text-[8px] text-muted-foreground ml-1">times</span>
+                  </div>
+                </div>
+
+                {/* Units Sold */}
+                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Units Sold</span>
+                    <div className="w-5 h-5 rounded-md bg-blue-500/10 flex items-center justify-center text-[10px]">🛒</div>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-sm font-black text-foreground">{Math.round(unitsSold * 100) / 100}</span>
+                    <span className="text-[8px] text-muted-foreground ml-1">
+                      {selectedDetailProduct.isCartonSingleEnabled ? 'ctn' : 'units'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Total Revenue */}
+                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Total Revenue</span>
+                    <div className="w-5 h-5 rounded-md bg-emerald-500/10 flex items-center justify-center text-[10px]">💰</div>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-sm font-black text-foreground">₦{Math.round(totalRevenue).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Total Profit */}
+                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Total Profit</span>
+                    <div className="w-5 h-5 rounded-md bg-amber-500/10 flex items-center justify-center text-[10px]">📈</div>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-sm font-black text-foreground">₦{Math.round(totalProfit).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Contribution */}
+                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Contribution</span>
+                    <div className="w-5 h-5 rounded-md bg-pink-500/10 flex items-center justify-center text-[10px]">📊</div>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-sm font-black text-foreground">{contributionPct}%</span>
+                    <span className="text-[8px] text-muted-foreground ml-1">of Store Profit</span>
+                  </div>
+                </div>
+
+                {/* Product Rank */}
+                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Product Rank</span>
+                    <div className="w-5 h-5 rounded-md bg-yellow-500/10 flex items-center justify-center text-[10px]">🏆</div>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-sm font-black text-foreground">
+                      {productRankInfo.hasSales ? `#${productRankInfo.rank}` : '—'}
+                    </span>
+                    <span className="text-[8px] text-muted-foreground ml-1">
+                      {productRankInfo.hasSales ? 'Best Seller' : 'No sales'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Last Sold */}
+                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Last Sold</span>
+                    <div className="w-5 h-5 rounded-md bg-teal-500/10 flex items-center justify-center text-[10px]">📅</div>
+                  </div>
+                  <div className="mt-1 flex flex-col">
+                    {(() => {
+                      const rel = formatRelativeDate(selectedDetailProduct.last_sold_at);
+                      const parts = rel.split(' ');
+                      const mainVal = parts[0];
+                      const subVal = parts.slice(1).join(' ');
+                      return (
+                        <>
+                          <span className="text-sm font-black text-foreground">{mainVal}</span>
+                          {subVal && <span className="text-[8px] text-muted-foreground mt-0.5">{subVal}</span>}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Avg. Sales Speed */}
+                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Avg Speed</span>
+                    <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-[10px]">⚡</div>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-sm font-black text-foreground">{avgSalesSpeed}</span>
+                    <span className="text-[8px] text-muted-foreground ml-1">
+                      {selectedDetailProduct.isCartonSingleEnabled ? 'ctn/day' : 'units/day'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sales Summary */}
+                <div className="bg-[#13161c] border border-border/60 p-2 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
+                  <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex justify-between items-center border-b border-border/30 pb-1">
+                    <span>Sales Summary</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-1 gap-y-0.5 text-[8px] mt-1 text-muted-foreground leading-tight">
+                    <div className="flex justify-between">
+                      <span>Today:</span>
+                      <strong className="text-success">{Math.round(salesSummary.today)}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Week:</span>
+                      <strong className="text-success">{Math.round(salesSummary.week)}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Month:</span>
+                      <strong className="text-success">{Math.round(salesSummary.month)}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>All:</span>
+                      <strong className="text-foreground">{Math.round(salesSummary.all)}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Flow Manager Insight Card */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-purple-500/30 p-3 mt-3 flex items-center gap-3">
+                <div className="flex-shrink-0 bg-[#0f1117]/80 rounded-xl p-1 border border-purple-500/20 shadow-inner">
+                  <Mascot size={52} mood={flowInsights.mood} />
+                </div>
+                
+                <div className="flex-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-display font-black text-purple-300 text-[10px] uppercase tracking-wider flex items-center gap-1">
+                      ✨ Flow Manager Insight
+                    </span>
+                    <span className="px-1.5 py-0.5 text-[8px] rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                      {flowInsights.badge}
+                    </span>
+                  </div>
+                  <div className="mt-1 space-y-0.5 text-[10px] text-slate-200 leading-normal font-medium animate-fade-in">
+                    {flowInsights.list.map((ins, i) => (
+                      <p key={i} className="flex items-start gap-1">
+                        <span>{ins}</span>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Price History Section */}
             {(() => {
               const priceHistory = selectedDetailProduct.priceHistory || [];
@@ -3430,7 +3908,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 type="button"
                 onClick={() => {
                   const isDiscontinued = !!selectedDetailProduct.discontinued;
-                  const updated = updateProduct(store, selectedDetailProduct.id, { discontinued: !isDiscontinued });
+                  const updated = updateProduct(store, selectedDetailProduct.id, { discontinued: !isDiscontinued }, currentUser?.name, currentUser?.role);
                   onUpdate(updated);
                   setSelectedDetailProduct({ ...selectedDetailProduct, discontinued: !isDiscontinued });
                   showToast(isDiscontinued ? 'Product reactivated' : 'Product discontinued');

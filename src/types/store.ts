@@ -20,7 +20,24 @@ export interface Product {
   singlesPerCarton?: number;
   singleSellingPrice?: number;
   sellAsSinglesByDefault?: boolean;
+  restock_count?: number;
+  units_sold?: number;
+  total_revenue?: number;
+  total_profit?: number;
+  first_sale_at?: string;
+  last_sold_at?: string;
 }
+
+export interface InventoryMovement {
+  id: string;
+  productId: string;
+  movementType: 'Restock' | 'Sale' | 'Transfer' | 'Return' | 'Adjustment';
+  quantity: number;
+  date: string; // ISO String
+  user: string;
+  source: string;
+}
+
 
 export interface Restock {
   id: string;
@@ -560,6 +577,7 @@ export interface SimilarProductReview {
 
 export interface StoreData {
   storeId?: string;          // Permanent immutable ID — never changes; generated once at store creation
+  qrDesignVersion?: number;  // Permanent QR code design version
   learnedProducts?: LearnedProduct[];
   dismissedSimilarPairs?: string[];
   similarProductReviews?: SimilarProductReview[];
@@ -592,6 +610,7 @@ export interface StoreData {
   registeredSuppliers?: any[];
   
   // Feature expansion variables
+  inventoryMovements?: InventoryMovement[];
   customers?: Customer[];
   suppliers?: Supplier[];
   goals?: BusinessGoal[];

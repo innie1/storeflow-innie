@@ -546,6 +546,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [storeExistsInCloud, setStoreExistsInCloud] = useState<boolean | null>(null);
   const [checkingCloudStatus, setCheckingCloudStatus] = useState(false);
   const [cloudStatusError, setCloudStatusError] = useState<string | null>(null);
+  const [cachedQR, setCachedQR] = useState<{ qrDataUrl: string; qrVersion: number; storeUrl: string; storeId: string } | null>(() => {
+    try {
+      const cached = localStorage.getItem(`storeflow_qr_cache_${store.accessCode}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const setView = (newView: View) => {
     setViewStack(prev => {
@@ -836,107 +844,102 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [showSQLDetails, setShowSQLDetails] = useState(false);
 
   // Draw the store QR code and Barcode when barcode view is active
-  // 1. Verify that the store already exists in the cloud database before showing the QR code
+  // 1. Permanent QR Cache & Background Validation
   useEffect(() => {
     if (view !== 'barcode') return;
 
-    if (!store.storeId) {
-      setCloudStatusError("Permanent Store ID is missing.");
-      setStoreExistsInCloud(false);
-      return;
+    const storeId = store.storeId || store.accessCode;
+    const storeUrl = generateStoreUrl(storeId);
+
+    // Initial check: if no cache exists, set cloud validation state to show spinner
+    if (!cachedQR) {
+      setCheckingCloudStatus(true);
+      setCloudStatusError(null);
+      setStoreExistsInCloud(null);
+    } else {
+      // Immediate display: cache exists
+      setStoreExistsInCloud(true);
+      setCheckingCloudStatus(false);
     }
 
-    setCheckingCloudStatus(true);
-    setCloudStatusError(null);
-    setStoreExistsInCloud(null);
+    const validateQR = async () => {
+      try {
+        // Query stores table to see if it exists in the cloud database
+        const { data: cloudStore, error } = await supabase
+          .from('stores')
+          .select('id, store_id, qr_code, data')
+          .eq('access_code', store.accessCode)
+          .maybeSingle();
 
-    console.log("QR Generation: Verifying cloud status for Store ID:", store.storeId);
-
-    // Query stores table to see if it exists in the cloud database
-    supabase
-      .from('stores')
-      .select('id')
-      .eq('access_code', store.accessCode)
-      .maybeSingle()
-      .then(({ data: cloudStore, error }) => {
-        setCheckingCloudStatus(false);
         if (error) {
           console.error("Cloud status check failed query:", error);
-          setCloudStatusError("Failed to verify cloud connection: " + error.message);
-          setStoreExistsInCloud(false);
+          if (!cachedQR) {
+            setCloudStatusError("Failed to verify cloud connection: " + error.message);
+            setStoreExistsInCloud(false);
+          }
+          setCheckingCloudStatus(false);
           return;
         }
 
         if (cloudStore && cloudStore.id) {
-          console.log("Cloud status check: Store exists in cloud with table ID =", cloudStore.id);
           setStoreExistsInCloud(true);
-        } else {
-          console.warn("Cloud status check: Store does not exist in the cloud.");
-          setStoreExistsInCloud(false);
-          setCloudStatusError("Store has not been uploaded to the cloud yet. Please enable Multi-device Cloud Sync under Security Settings to back up and publish your store first.");
-        }
-      }).catch(err => {
-        setCheckingCloudStatus(false);
-        console.error("Cloud check execution error:", err);
-        setStoreExistsInCloud(false);
-        setCloudStatusError("Network error occurred while connecting to the cloud.");
-      });
-  }, [view, store.accessCode, store.storeId]);
+          setCheckingCloudStatus(false);
 
-  // 2. Draw and decode-verify the store QR code and Barcode
+          const cloudUrl = cloudStore.qr_code || generateStoreUrl(cloudStore.store_id || storeId);
+          const cloudVersion = cloudStore.data?.qrDesignVersion || 1;
+          const cloudStoreId = cloudStore.store_id || storeId;
+
+          const needsUpdate = 
+            !cachedQR ||
+            cachedQR.qrVersion !== cloudVersion ||
+            cachedQR.storeUrl !== cloudUrl ||
+            cachedQR.storeId !== cloudStoreId;
+
+          if (needsUpdate) {
+            console.log("QR Cache: Mismatch or no cache. Drawing QR in background...");
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 400;
+            tempCanvas.height = 400;
+            
+            await drawQRCode({ text: cloudUrl, canvas: tempCanvas, standard: true });
+            const dataUrl = tempCanvas.toDataURL('image/png');
+            const cacheData = {
+              qrDataUrl: dataUrl,
+              qrVersion: cloudVersion,
+              storeUrl: cloudUrl,
+              storeId: cloudStoreId
+            };
+            localStorage.setItem(`storeflow_qr_cache_${store.accessCode}`, JSON.stringify(cacheData));
+            setCachedQR(cacheData);
+            console.log("QR Cache: Successfully cached new QR.");
+          } else {
+            console.log("QR Cache: Cache matches server version.");
+          }
+        } else {
+          setCheckingCloudStatus(false);
+          if (!cachedQR) {
+            setStoreExistsInCloud(false);
+            setCloudStatusError("Store has not been uploaded to the cloud yet. Please enable Multi-device Cloud Sync under Security Settings to back up and publish your store first.");
+          }
+        }
+      } catch (err: any) {
+        console.error("Cloud check execution error:", err);
+        setCheckingCloudStatus(false);
+        if (!cachedQR) {
+          setStoreExistsInCloud(false);
+          setCloudStatusError("Network error occurred while connecting to the cloud.");
+        }
+      }
+    };
+
+    validateQR();
+  }, [view, store.accessCode, store.storeId, cachedQR]);
+
+  // 2. Draw Barcode (Separate Hook)
   useEffect(() => {
     if (view !== 'barcode') return;
-    if (!storeExistsInCloud) {
-      console.warn("Skipping QR code generation because store is not published to the cloud.");
-      return;
-    }
-
-    const storeId = store.storeId;
-    if (!storeId) {
-      console.error("Cannot generate QR code: Store ID is missing.");
-      return;
-    }
-
-    const storeUrl = generateStoreUrl(storeId);
-    console.log("QR Generation: Store ID =", storeId, "Generated URL =", storeUrl);
-
-    // Draw QR code
-    if (barcodeQrCanvasRef.current) {
-      drawQRCode({ text: storeUrl, canvas: barcodeQrCanvasRef.current, standard: true })
-        .then(() => {
-          console.log("QR Generation Success!");
-          
-          // Verify by decoding after generation
-          if (barcodeQrCanvasRef.current) {
-            barcodeQrCanvasRef.current.toBlob(async (blob) => {
-              if (!blob) {
-                console.error("QR Verification: Failed to convert canvas to blob");
-                return;
-              }
-              const file = new File([blob], "qr.png", { type: "image/png" });
-              try {
-                // Initialize Html5Qrcode using our hidden container
-                const html5QrCode = new Html5Qrcode("temp-qr-scanner-element");
-                const decodedText = await html5QrCode.scanFile(file, false);
-                console.log("QR Verification SUCCESS! Decoded text:", decodedText);
-                if (decodedText === storeUrl) {
-                  console.log("QR Verification: Decoded URL matches.");
-                } else {
-                  console.error("QR Verification ERROR: Decoded text does not match URL!", { decodedText, storeUrl });
-                  showToast("QR verification warning: Decoded URL mismatch.", "warning");
-                }
-              } catch (scanErr) {
-                console.error("QR Verification ERROR: Failed to decode generated QR canvas:", scanErr);
-              }
-            }, "image/png");
-          }
-        })
-        .catch((err) => {
-          console.error("QR Generation Failed:", err);
-        });
-    }
-
-    // Draw Barcode
+    const storeId = store.storeId || store.accessCode;
+    
     if (storeBarcodeCanvasRef.current) {
       drawBarcode(storeId, storeBarcodeCanvasRef.current, {
         barColor: '#000000',
@@ -946,7 +949,124 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         showText: true
       });
     }
-  }, [view, storeExistsInCloud, store.storeId, store.accessCode, store.storeName]);
+  }, [view, store.storeId, store.accessCode]);
+
+  // 3. Silent Store Data Sync & Product Statistics Sync Hook
+  useEffect(() => {
+    if (view !== 'barcode') return;
+
+    const performSilentSync = async () => {
+      try {
+        console.log("Silent Sync: Checking for store updates in background...");
+        const { data: cloudStore, error } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('access_code', store.accessCode)
+          .maybeSingle();
+
+        if (error || !cloudStore) {
+          console.warn("Silent Sync: Failed to retrieve updates.", error);
+          return;
+        }
+
+        const serverData = cloudStore.data as StoreData | null;
+        if (!serverData) return;
+
+        // Perform diff and update only changed values
+        let hasChanges = false;
+        const mergedStore = { ...store };
+
+        if (serverData.storeName && serverData.storeName !== store.storeName) {
+          mergedStore.storeName = serverData.storeName;
+          hasChanges = true;
+        }
+
+        if (serverData.profile && JSON.stringify(serverData.profile) !== JSON.stringify(store.profile)) {
+          mergedStore.profile = serverData.profile;
+          hasChanges = true;
+        }
+
+        if (serverData.marketplaceSettings && JSON.stringify(serverData.marketplaceSettings) !== JSON.stringify(store.marketplaceSettings)) {
+          mergedStore.marketplaceSettings = serverData.marketplaceSettings;
+          hasChanges = true;
+        }
+
+        if (serverData.products && JSON.stringify(serverData.products) !== JSON.stringify(store.products)) {
+          mergedStore.products = serverData.products;
+          hasChanges = true;
+        }
+
+        if (serverData.storeId && serverData.storeId !== store.storeId) {
+          mergedStore.storeId = serverData.storeId;
+          hasChanges = true;
+        }
+
+        if (hasChanges) {
+          console.log("Silent Sync: Found updates, updating local state.");
+          onUpdate(mergedStore);
+        } else {
+          console.log("Silent Sync: No updates found, store is up to date.");
+        }
+      } catch (syncErr) {
+        console.warn("Silent Sync: Execution error:", syncErr);
+      }
+    };
+
+    if (!navigator.onLine) {
+      console.log("Silent Sync: Offline. Listening for online event...");
+      const handleOnline = () => {
+        window.removeEventListener('online', handleOnline);
+        performSilentSync();
+      };
+      window.addEventListener('online', handleOnline);
+      return;
+    }
+
+    performSilentSync();
+  }, [view, store.accessCode]);
+
+  // 4. Manual QR Refresh Handler
+  const handleManualQRRefresh = () => {
+    const storeId = store.storeId || store.accessCode;
+    const storeUrl = generateStoreUrl(storeId);
+    showToast("Refreshing QR Code...", "info");
+
+    supabase
+      .from('stores')
+      .select('id, store_id, qr_code, data')
+      .eq('access_code', store.accessCode)
+      .maybeSingle()
+      .then(({ data: cloudStore, error }) => {
+        if (error) {
+          showToast("Failed to check server: " + error.message, "error");
+          return;
+        }
+
+        const cloudUrl = cloudStore?.qr_code || storeUrl;
+        const cloudVersion = (cloudStore?.data?.qrDesignVersion || 1) + 1; // force increment version
+        const cloudStoreId = cloudStore?.store_id || storeId;
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 400;
+        tempCanvas.height = 400;
+
+        drawQRCode({ text: cloudUrl, canvas: tempCanvas, standard: true }).then(() => {
+          const dataUrl = tempCanvas.toDataURL('image/png');
+          const cacheData = {
+            qrDataUrl: dataUrl,
+            qrVersion: cloudVersion,
+            storeUrl: cloudUrl,
+            storeId: cloudStoreId
+          };
+          localStorage.setItem(`storeflow_qr_cache_${store.accessCode}`, JSON.stringify(cacheData));
+          setCachedQR(cacheData);
+          showToast("Store QR Code successfully refreshed!", "success");
+        });
+      })
+      .catch(err => {
+        showToast("Network error: failed to refresh QR.", "error");
+      });
+  };
 
   const handlePrintQR = () => {
     if (typeof window === 'undefined') return;
@@ -1365,7 +1485,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         showToast('Could not open print window. Please allow popups.', 'error');
         return;
       }
-      const qrDataUrl = barcodeQrCanvasRef.current ? barcodeQrCanvasRef.current.toDataURL('image/png') : '';
+      const qrDataUrl = cachedQR?.qrDataUrl || (barcodeQrCanvasRef.current ? barcodeQrCanvasRef.current.toDataURL('image/png') : '');
       printWindow.document.write(`
         <html>
           <head>
@@ -1483,8 +1603,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     };
 
     const handleDownloadQR = () => {
-      if (barcodeQrCanvasRef.current) {
-        const url = barcodeQrCanvasRef.current.toDataURL('image/png');
+      const url = cachedQR?.qrDataUrl || (barcodeQrCanvasRef.current ? barcodeQrCanvasRef.current.toDataURL('image/png') : '');
+      if (url) {
         const a = document.createElement('a');
         a.href = url;
         a.download = `${store.storeName.replace(/\s+/g, '_')}_qr.png`;
@@ -1596,17 +1716,26 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-sm flex flex-col gap-4 text-center">
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <h3 className="font-display font-bold text-sm text-foreground">Official Store QR Code</h3>
-              <span className="px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/30 text-[9px] font-display font-bold flex items-center gap-1">
-                <Shield className="w-3 h-3" /> Permanent
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleManualQRRefresh}
+                  className="p-1 px-2 rounded-lg bg-surface-2 border border-border hover:text-primary transition-colors text-muted-foreground text-[10px] font-bold flex items-center gap-1 cursor-pointer active:scale-95"
+                  title="Manual QR Refresh"
+                >
+                  <RefreshCw className="w-3 h-3 animate-none hover:animate-spin" /> Refresh
+                </button>
+                <span className="px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/30 text-[9px] font-display font-bold flex items-center gap-1">
+                  <Shield className="w-3 h-3" /> Permanent
+                </span>
+              </div>
             </div>
 
-            {checkingCloudStatus ? (
+            {checkingCloudStatus && !cachedQR ? (
               <div className="flex flex-col items-center justify-center p-8 space-y-3">
                 <span className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
                 <p className="text-xs text-muted-foreground">Verifying Cloud Status...</p>
               </div>
-            ) : cloudStatusError || !storeExistsInCloud ? (
+            ) : (cloudStatusError || !storeExistsInCloud) && !cachedQR ? (
               <div className="flex flex-col items-center justify-center p-6 space-y-4 border border-destructive/20 bg-destructive/5 rounded-3xl text-center">
                 <div className="w-12 h-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center text-xl">⚠️</div>
                 <div className="space-y-1">
@@ -1622,9 +1751,17 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
               </div>
             ) : (
               <>
-                {/* QR Canvas */}
+                {/* QR Image or Canvas */}
                 <div className="relative flex flex-col items-center justify-center p-5 bg-white rounded-3xl max-w-[200px] w-full mx-auto border border-border/30 shadow-md">
-                  <canvas ref={barcodeQrCanvasRef} className="w-40 h-40" />
+                  {cachedQR ? (
+                    <img 
+                      src={cachedQR.qrDataUrl} 
+                      alt="Store QR Code" 
+                      className="w-40 h-40 object-contain transition-all duration-300 hover:scale-105" 
+                    />
+                  ) : (
+                    <canvas ref={barcodeQrCanvasRef} className="w-40 h-40" />
+                  )}
                   
                   {/* Store ID Display below QR */}
                   <div className="mt-3.5 w-full flex flex-col items-center gap-1 select-all">
@@ -1750,6 +1887,96 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
               >
                 <Copy className="w-4 h-4" /> Copy Bar
               </button>
+            </div>
+          </div>
+
+          {/* Live Store Stats Grid */}
+          <div className="space-y-4 pt-4 border-t border-border/40">
+            <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2">
+              📊 Store Live Statistics
+            </h3>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {/* Total Products */}
+              <div className="p-4 bg-card border border-border/80 rounded-2xl flex flex-col justify-between shadow-sm hover:border-border transition-all duration-300">
+                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Products</div>
+                <div className="text-2xl font-black text-foreground mt-2 transition-all duration-500 animate-fade-in">
+                  {store.products.length}
+                </div>
+              </div>
+
+              {/* Available Products */}
+              <div className="p-4 bg-card border border-border/80 rounded-2xl flex flex-col justify-between shadow-sm hover:border-border transition-all duration-300">
+                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Available Items</div>
+                <div className="text-2xl font-black text-success mt-2 transition-all duration-500 animate-fade-in">
+                  {store.products.filter(p => p.quantity > 0).length}
+                </div>
+              </div>
+
+              {/* Out of Stock */}
+              <div className="p-4 bg-card border border-border/80 rounded-2xl flex flex-col justify-between shadow-sm hover:border-border transition-all duration-300">
+                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Out of Stock</div>
+                <div className="text-2xl font-black text-destructive mt-2 transition-all duration-500 animate-fade-in">
+                  {store.products.filter(p => p.quantity <= 0).length}
+                </div>
+              </div>
+
+              {/* Newly Added */}
+              <div className="p-4 bg-card border border-border/80 rounded-2xl flex flex-col justify-between shadow-sm hover:border-border transition-all duration-300">
+                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">New (Last 7d)</div>
+                <div className="text-2xl font-black text-primary mt-2 transition-all duration-500 animate-fade-in">
+                  {(() => {
+                    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                    return store.products.filter(p => p.addedAt && new Date(p.addedAt).getTime() >= sevenDaysAgo).length;
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Store Information Summary */}
+          <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-sm space-y-4">
+            <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2 border-b border-border/40 pb-3">
+              🏪 Store Profile & Metadata
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Left col */}
+              <div className="space-y-3">
+                <div>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Description</span>
+                  <p className="mt-1 text-foreground font-medium transition-all duration-500 animate-fade-in">
+                    {store.marketplaceSettings?.storeDescription || 'No description provided.'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Business Categories</span>
+                  <p className="mt-1 text-foreground font-semibold transition-all duration-500 animate-fade-in">
+                    {(() => {
+                      const cats = Array.from(new Set(store.products.map(p => p.category || 'General')));
+                      return cats.length > 0 ? cats.join(', ') : 'None';
+                    })()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Right col */}
+              <div className="space-y-3">
+                <div>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Business Hours</span>
+                  <p className="mt-1 text-foreground font-semibold transition-all duration-500 animate-fade-in">
+                    {store.profile?.openingTime && store.profile?.closingTime 
+                      ? `${store.profile.openingTime} - ${store.profile.closingTime}` 
+                      : 'Not Set'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Delivery Status</span>
+                  <p className="mt-1 text-foreground font-semibold transition-all duration-500 animate-fade-in">
+                    {store.marketplaceSettings?.deliveryEnabled ? '✅ Delivery Available' : '❌ Store Pickup Only'}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
