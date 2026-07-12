@@ -357,11 +357,11 @@ export default function Index() {
     }
   }, [store?.marketplaceSettings?.notificationSoundType]);
 
-  // Fetch store orders on mount and store change
+  // Fetch store orders and notifications on mount and store change
   useEffect(() => {
     if (!store?.id) return;
     let active = true;
-    const fetchOrders = async () => {
+    const fetchOrdersAndNotifications = async () => {
       try {
         const { data, error } = await supabase
           .from('orders')
@@ -377,11 +377,47 @@ export default function Index() {
           setOrders(normalized);
           console.log('[StoreFlow Orders] Loaded orders count:', normalized.length);
         }
+
+        // Fetch notifications from db
+        const { data: dbNotifs, error: notifsError } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('store_id', store.id)
+          .eq('is_read', false)
+          .order('created_at', { ascending: false });
+        
+        if (!notifsError && dbNotifs && dbNotifs.length > 0 && active) {
+          const newItems = dbNotifs.map(n => ({
+            id: n.id,
+            title: n.title || 'System Alert',
+            message: n.message || '',
+            date: n.created_at || new Date().toISOString(),
+            read: n.is_read || false,
+            tone: (n.type === 'new_order' ? 'info' : (n.type || 'info')) as any,
+            actionTab: n.type === 'new_order' ? 'orders' : undefined,
+            actionLabel: n.type === 'new_order' ? 'View Orders' : undefined,
+            icon: n.type === 'new_order' ? '🛒' : '🔔'
+          }));
+
+          setStore(prev => {
+            if (!prev) return prev;
+            const currentList = prev.flowNotifications || [];
+            const merged = [...currentList];
+            for (const item of newItems) {
+              if (!merged.some(m => m.id === item.id)) {
+                merged.unshift(item);
+              }
+            }
+            const updated = { ...prev, flowNotifications: merged };
+            saveStore(updated);
+            return updated;
+          });
+        }
       } catch (err) {
-        console.error('[StoreFlow Orders] Error fetching orders:', err);
+        console.error('[StoreFlow Orders/Notifs] Error fetching on startup:', err);
       }
     };
-    fetchOrders();
+    fetchOrdersAndNotifications();
     return () => {
       active = false;
     };
@@ -414,36 +450,6 @@ export default function Index() {
                 status: getNormalizedStatus(data.status)
               };
               setOrders(prev => [normalizedItem, ...prev]);
-              
-              // Sound alert if enabled in settings (default to enabled)
-              const isSoundEnabled = store.marketplaceSettings?.alertSound !== false && store.marketplaceSettings?.notifNewOrders !== false;
-              if (isSoundEnabled) {
-                playOrderAlertSound();
-              }
-
-              // Build flow alert notification
-              const newNotification = {
-                id: 'order-' + Date.now(),
-                title: 'New Storefront Order',
-                message: `Received order #${data.order_number} from ${data.customer_name} for ₦${data.total?.toLocaleString()}`,
-                time: 'Just now',
-                read: false,
-                category: 'alerts' as const,
-                tone: 'info' as const
-              };
-
-              setStore(prev => {
-                if (!prev) return prev;
-                const list = prev.flowNotifications || [];
-                const updated = {
-                  ...prev,
-                  flowNotifications: [newNotification, ...list]
-                };
-                saveStore(updated);
-                return updated;
-              });
-
-              showToast(`New Order #${data.order_number} from ${data.customer_name}! 🔔`, 'success');
             }
           } else if (payload.eventType === 'UPDATE') {
             setOrders(prev =>
@@ -459,7 +465,64 @@ export default function Index() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [store?.id, store?.marketplaceSettings?.alertSound, store?.marketplaceSettings?.notifNewOrders, playOrderAlertSound, getNormalizedStatus]);
+  }, [store?.id, getNormalizedStatus]);
+
+  // Set up Supabase Realtime channel listener on notifications table
+  useEffect(() => {
+    if (!store?.id) return;
+    const channel = supabase
+      .channel(`store-notifications-${store.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `store_id=eq.${store.id}`
+        },
+        async (payload) => {
+          console.log('[StoreFlow Realtime] Notification payload received:', payload);
+          const newNotif = payload.new;
+
+          // Sound alert if enabled in settings (default to enabled)
+          const isSoundEnabled = store.marketplaceSettings?.alertSound !== false && store.marketplaceSettings?.notifNewOrders !== false;
+          if (isSoundEnabled) {
+            playOrderAlertSound();
+          }
+
+          const newNotification = {
+            id: newNotif.id || 'notif-' + Date.now(),
+            title: newNotif.title || 'System Alert',
+            message: newNotif.message || '',
+            date: newNotif.created_at || new Date().toISOString(),
+            read: newNotif.is_read || false,
+            tone: (newNotif.type === 'new_order' ? 'info' : (newNotif.type || 'info')) as any,
+            actionTab: newNotif.type === 'new_order' ? 'orders' : undefined,
+            actionLabel: newNotif.type === 'new_order' ? 'View Orders' : undefined,
+            icon: newNotif.type === 'new_order' ? '🛒' : '🔔'
+          };
+
+          setStore(prev => {
+            if (!prev) return prev;
+            const list = prev.flowNotifications || [];
+            if (list.some(n => n.id === newNotification.id)) return prev;
+            const updated = {
+              ...prev,
+              flowNotifications: [newNotification, ...list]
+            };
+            saveStore(updated);
+            return updated;
+          });
+
+          showToast(`${newNotif.title}: ${newNotif.message}`, 'info');
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [store?.id, store?.marketplaceSettings?.alertSound, store?.marketplaceSettings?.notifNewOrders, playOrderAlertSound]);
 
   // Order status transition callback
   const handleUpdateOrderStatus = useCallback(async (orderId: string, newStatus: string, metadata?: any) => {
