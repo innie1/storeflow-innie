@@ -1,8 +1,13 @@
 /**
- * Flow Memory — shared device-level storage (NOT per store).
+ * Flow Memory — device-level storage (localStorage), with a best-effort
+ * background sync to the cloud (stores.data.flowMemory) so a merchant
+ * doesn't lose their coins/streak/suppliers if they clear their browser or
+ * switch devices. localStorage remains the fast synchronous source of truth
+ * for the many call sites throughout the app that expect instant values —
+ * the cloud copy is a backup/restore mechanism, not the primary read path.
  * Stores: suppliers, FLOW rewards, streak.
- * All data lives in localStorage under 'storeflow_flow_memory'.
  */
+import { supabase } from '@/integrations/supabase/client';
 
 export interface Supplier {
   id: string;
@@ -83,6 +88,52 @@ function save(m: FlowMemory) {
     m.coins = m.flowBalance; // keep coins synced
     localStorage.setItem(KEY, JSON.stringify(m));
   } catch { /* ignore */ }
+  scheduleCloudSync(m);
+}
+
+// ─── Background cloud sync (best-effort, non-blocking) ───────────────────────
+let syncStoreId: string | null = null;
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Call once when the merchant's store loads, so saves know where to sync to. */
+export function setFlowMemorySyncStore(storeId: string | null) {
+  syncStoreId = storeId;
+}
+
+function scheduleCloudSync(m: FlowMemory) {
+  if (!syncStoreId) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  // Debounce — coins/streak can update several times in quick succession;
+  // no need to hit the network on every single one.
+  syncTimer = setTimeout(() => {
+    supabase.rpc('merge_store_data_key', {
+      store_id_input: syncStoreId,
+      key_input: 'flowMemory',
+      value_input: m,
+    }).then(({ error }) => {
+      if (error) console.warn('[FlowMemory] Background cloud sync failed:', error.message);
+    });
+  }, 2000);
+}
+
+/**
+ * Call once when the merchant's store loads. If this device has never seen
+ * FLOW memory before (fresh install / cleared browser / new device), restore
+ * it from the cloud copy instead of starting back at zero coins/streak.
+ * Does nothing if this device already has local FLOW data, so it never
+ * overwrites more recent local activity with a stale cloud snapshot.
+ */
+export async function hydrateFlowMemoryFromCloud(storeId: string): Promise<void> {
+  setFlowMemorySyncStore(storeId);
+  try {
+    const alreadyHasLocalData = !!localStorage.getItem(KEY);
+    if (alreadyHasLocalData) return;
+    const { data, error } = await supabase.from('stores').select('data').eq('id', storeId).maybeSingle();
+    if (error || !data?.data?.flowMemory) return;
+    localStorage.setItem(KEY, JSON.stringify(data.data.flowMemory));
+  } catch (e) {
+    console.warn('[FlowMemory] Cloud hydration failed:', e);
+  }
 }
 
 export function getFlowMemory(): FlowMemory {

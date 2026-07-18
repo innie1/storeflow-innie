@@ -7,10 +7,10 @@ import {
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
   generateNotifications, ActivityRange, ActivityBucket, generateFlowReport,
-  getTopOpportunities, getProfitLeaks, getRepaymentInsights
+  getTopOpportunities, getProfitLeaks, getRepaymentInsights, getSeasonalPredictions, getWeatherInsights
 } from '@/lib/manager-intel';
 import { getLowStockThreshold } from '@/lib/settings';
-import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward } from '@/lib/flow-memory';
+import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward, hydrateFlowMemoryFromCloud } from '@/lib/flow-memory';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotBadge } from '@/components/Mascot';
 import { FlowIcon } from '@/components/FlowIcon';
@@ -553,6 +553,13 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
   });
 
   useEffect(() => {
+    const storeId = (store as any)?.id;
+    if (storeId) {
+      hydrateFlowMemoryFromCloud(storeId);
+    }
+  }, [(store as any)?.id]);
+
+  useEffect(() => {
     if (tab === 'advice') {
       const currentIds = generateAdvice(store).map(a => a.id);
       const updatedSet = new Set(currentIds);
@@ -883,6 +890,49 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
             );
           })()}
 
+          {/* Seasonal & Climate Insights Card — was built but never shown anywhere; now wired in */}
+          {(() => {
+            const seasonal = getSeasonalPredictions(store);
+            const weatherEnabled = store.managerSettings?.weatherImpactEnabled !== false;
+            const weather = weatherEnabled ? getWeatherInsights(store) : null;
+            if (seasonal.length === 0 && !weather) return null;
+            return (
+              <div className="p-4 rounded-2xl bg-card border border-primary/20 shadow-card space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">📅</span>
+                  <div>
+                    <h3 className="font-display font-bold text-sm">Seasonal &amp; Climate Insights</h3>
+                    <p className="text-[10px] text-slate-400 font-semibold">General patterns for this time of year — not personalized predictions</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {weather && (
+                    <div className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
+                      <p className="font-display font-bold text-xs text-foreground">{weather.weatherCondition}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{weather.effect}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1 leading-normal italic">{weather.impactDetails}</p>
+                      <p className="text-[10px] text-emerald-400 mt-1.5 bg-emerald-500/5 p-1.5 rounded border border-emerald-500/10">
+                        💡 {weather.suggestedAction}
+                      </p>
+                    </div>
+                  )}
+                  {seasonal.map((s, idx) => (
+                    <div key={idx} className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
+                      <p className="font-display font-bold text-xs text-foreground">{s.periodName}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{s.details}</p>
+                      {s.suggestedItems.length > 0 && (
+                        <p className="text-[10px] text-primary mt-1.5">
+                          {s.itemsFromYourCatalog ? 'From your catalog: ' : 'Example items (not in your catalog yet): '}
+                          {s.suggestedItems.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Smart Restocking Buy List */}
           {(() => {
             const threshold = store.managerSettings?.minStockThreshold ?? getLowStockThreshold();
@@ -1146,6 +1196,9 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
                       <div className="h-full bg-primary transition-all" style={{ width: `${f.confidencePct}%` }} />
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">Range: ₦{Math.round(f.expectedRevenue * 0.8).toLocaleString()} – ₦{Math.round(f.expectedRevenue * 1.2).toLocaleString()}</p>
+                    {f.caveat && (
+                      <p className="text-[10px] text-muted-foreground mt-1.5 italic bg-surface-3/50 p-1.5 rounded">ℹ️ {f.caveat}</p>
+                    )}
                   </div>
                 );
               })}
