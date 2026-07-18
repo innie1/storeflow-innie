@@ -179,12 +179,45 @@ export function healthScore(store: StoreData): HealthScore {
   const profDetail = rev7 > 0 ? `${((profit7 / rev7) * 100).toFixed(1)}% margin` : 'No sales data';
 
   // 15%: Inventory Health
-  const threshold = getLowStockThreshold();
+  // Previously: healthy = quantity > threshold, score = healthy/total. This
+  // treated a dead product sitting fully stocked the same as your best
+  // seller, and a store with 20 stocked-but-unsold SKUs could show ~100%
+  // "health" while its 2 actual best sellers were completely out of stock.
+  // Now: reuses the same velocity-aware urgency data as the restock
+  // suggestions (so the two features can't disagree), and weights each
+  // product by how much of your recent sales it actually represents —
+  // a fast seller going critical hurts the score much more than a slow
+  // mover being low, and a slow mover being low barely moves it at all.
   const activeProducts = store.products.filter(p => !p.discontinued);
-  const total = activeProducts.length || 1;
-  const healthy = activeProducts.filter(p => p.quantity > threshold).length;
-  const inventoryScore = Math.round((healthy / total) * 100);
-  const invDetail = `${healthy}/${total} products well-stocked`;
+  const total = activeProducts.length;
+  let inventoryScore = 100;
+  let invDetail = 'No products in catalog yet';
+  if (total > 0) {
+    const forecasts = computeStockForecasts(store);
+    const last30 = store.sales.filter(s => new Date(s.date) >= daysAgo(30));
+    const sold30ByProduct = new Map<string, number>();
+    last30.forEach(s => sold30ByProduct.set(s.productId, (sold30ByProduct.get(s.productId) || 0) + s.quantity));
+
+    // Additive smoothing so untested/new products still count a little,
+    // instead of being invisible to the score until they've sold something.
+    const SMOOTHING = 1;
+    const weighted = forecasts.map(f => {
+      const unitsSold30 = sold30ByProduct.get(f.product.id) || 0;
+      const weight = unitsSold30 * f.product.sellingPrice + SMOOTHING;
+      const points = f.product.quantity === 0 ? 0 : f.urgency === 'critical' ? 25 : f.urgency === 'soon' ? 65 : 100;
+      return { weight, points, urgency: f.urgency, isOut: f.product.quantity === 0 };
+    });
+    const totalWeight = weighted.reduce((s, w) => s + w.weight, 0) || 1;
+    inventoryScore = Math.round(weighted.reduce((s, w) => s + w.points * (w.weight / totalWeight), 0));
+
+    const outOfStock = weighted.filter(w => w.isOut).length;
+    const critical = forecasts.filter(f => f.urgency === 'critical' && f.product.quantity > 0).length;
+    const soon = forecasts.filter(f => f.urgency === 'soon').length;
+    if (outOfStock > 0) invDetail = `${outOfStock} product${outOfStock === 1 ? '' : 's'} out of stock right now`;
+    else if (critical > 0) invDetail = `${critical} fast-moving product${critical === 1 ? '' : 's'} about to run out`;
+    else if (soon > 0) invDetail = `${soon} product${soon === 1 ? '' : 's'} running low, none urgent yet`;
+    else invDetail = `All ${total} products well-stocked`;
+  }
 
   // 15%: Expense Control
   let expenseScore = 80;
@@ -308,7 +341,12 @@ export interface StockForecast {
   urgency: 'critical' | 'soon' | 'ok';
 }
 
-export function inventoryIntelligence(store: StoreData): StockForecast[] {
+// Shared by inventoryIntelligence() (restock suggestions) AND healthScore()
+// (inventory factor) so the two features are always computed from the same
+// numbers and can never disagree about whether a product's stock is fine.
+// Unlike inventoryIntelligence(), this does NOT filter out 'ok' products —
+// callers that need "what's low" should filter the result themselves.
+function computeStockForecasts(store: StoreData): StockForecast[] {
   const threshold = getLowStockThreshold();
   return store.products
     .filter(p => !p.discontinued)
@@ -331,7 +369,11 @@ export function inventoryIntelligence(store: StoreData): StockForecast[] {
       }
       
       return { product: p, perDay, daysLeft, restockQty, urgency };
-    })
+    });
+}
+
+export function inventoryIntelligence(store: StoreData): StockForecast[] {
+  return computeStockForecasts(store)
     .filter(f => f.urgency !== 'ok')
     .sort((a, b) => a.daysLeft - b.daysLeft);
 }
