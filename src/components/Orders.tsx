@@ -219,12 +219,16 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
             const normStatus = getNormalizedStatus(order.status);
             const styles = STATUS_STYLES[normStatus] || STATUS_STYLES['Pending'];
             const meta = parseNotes(order.notes);
+            const pricingMode = meta?.pricing_mode || 'retail';
             const isExpanded = expandedOrder === order.id;
 
             return (
               <div 
                 key={order.id} 
-                className="bg-card border border-border/40 rounded-[22px] p-4.5 shadow-sm hover:shadow-md transition-all text-left space-y-3"
+                onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                className={`bg-card border border-border/40 rounded-[22px] p-4.5 shadow-sm hover:shadow-md transition-all text-left space-y-3 cursor-pointer select-none ${
+                  isExpanded ? 'ring-1 ring-primary/20 border-primary/30' : ''
+                }`}
               >
                 {/* Header Row */}
                 <div className="flex justify-between items-start gap-4">
@@ -304,8 +308,11 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                 <div className="flex items-center justify-between gap-4 pt-1">
                   {/* Details Toggle */}
                   <button 
-                    onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
-                    className="flex items-center gap-0.5 text-xs font-display font-bold text-primary hover:text-primary-focus cursor-pointer transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedOrder(isExpanded ? null : order.id);
+                    }}
+                    className="flex items-center gap-0.5 text-xs font-display font-bold text-primary hover:text-primary-focus cursor-pointer transition-colors py-2"
                   >
                     <span>Details</span>
                     {isExpanded ? (
@@ -318,25 +325,29 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                   {/* Actions buttons */}
                   {normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (
                     <div className="flex items-center gap-3">
-                      {/* Reject button - circular red button, made larger (w-10 h-10) with w-5 icon */}
+                      {/* Reject button - circular red button, made w-11 h-11 for balanced touch target */}
                       {normStatus === 'Pending' && (
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setPromptType('reject');
                             setPromptOrderId(order.id);
                           }}
-                          className="w-10 h-10 rounded-full border border-red-500/60 bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition active:scale-90 cursor-pointer shrink-0"
+                          className="w-11 h-11 rounded-full border border-red-500/60 bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition active:scale-90 cursor-pointer shrink-0"
                           title="Reject Order"
                         >
                           <X className="w-5 h-5" />
                         </button>
                       )}
 
-                      {/* Accept / Next State button - made slightly smaller and more compact */}
+                      {/* Accept / Next State button - made h-11 to be equal in height to Reject button */}
                       {normStatus === 'Pending' && (
                         <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Accepted')}
-                          className="px-4.5 py-2.5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdateOrderStatus(order.id, 'Accepted');
+                          }}
+                          className="h-11 px-5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer flex items-center justify-center"
                         >
                           Accept Order
                         </button>
@@ -344,8 +355,11 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
 
                       {normStatus === 'Accepted' && (
                         <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Preparing')}
-                          className="px-4.5 py-2.5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdateOrderStatus(order.id, 'Preparing');
+                          }}
+                          className="h-11 px-5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer flex items-center justify-center"
                         >
                           Start Preparing
                         </button>
@@ -353,8 +367,11 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
 
                       {normStatus === 'Preparing' && (
                         <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Ready')}
-                          className="px-4.5 py-2.5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdateOrderStatus(order.id, 'Ready');
+                          }}
+                          className="h-11 px-5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer flex items-center justify-center"
                         >
                           {meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}
                         </button>
@@ -362,8 +379,11 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
 
                       {normStatus === 'Ready' && (
                         <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Completed')}
-                          className="px-4.5 py-2.5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdateOrderStatus(order.id, 'Completed');
+                          }}
+                          className="h-11 px-5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer flex items-center justify-center"
                         >
                           {meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}
                         </button>
@@ -372,8 +392,11 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                       {/* Cancel order button */}
                       {(normStatus === 'Accepted' || normStatus === 'Preparing' || normStatus === 'Ready') && (
                         <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Cancelled')}
-                          className="px-3.5 py-2 rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive text-xs font-display font-semibold transition active:scale-95 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdateOrderStatus(order.id, 'Cancelled');
+                          }}
+                          className="h-11 px-4.5 rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive text-xs font-display font-semibold transition active:scale-95 cursor-pointer flex items-center justify-center"
                         >
                           Cancel
                         </button>
@@ -382,24 +405,51 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                   )}
                 </div>
 
-                {/* Order Items expanded container */}
+                {/* Smooth Expandable Order Items & Pricing Breakdown container */}
                 {isExpanded && (
-                  <div className="mt-2 border-t border-border/20 pt-2 space-y-2 animate-slide-down">
-                    {(order.order_items || []).map((item: any, idx: number) => {
-                      const pName = store.products?.find((p: any) => p.id === item.product_id)?.name || 'Unknown Product';
-                      return (
-                        <div key={item.id || idx} className="flex justify-between items-center text-xs py-1">
-                          <div className="flex-1 pr-4">
-                            <p className="font-semibold text-foreground">{pName}</p>
-                            <p className="text-[10px] text-muted-foreground">₦{item.price?.toLocaleString()} each</p>
+                  <div className="mt-3 border-t border-border/20 pt-3 space-y-3 animate-slide-down">
+                    {/* Time, Date and Pricing Mode */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground font-semibold bg-surface-2/45 p-2 rounded-xl border border-border/20">
+                      <div className="flex items-center gap-1.5">
+                        <span>Created:</span>
+                        <span className="text-foreground">{new Date(order.created_at).toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span>Pricing:</span>
+                        <span className="uppercase text-primary font-bold">{pricingMode} Pricing</span>
+                      </div>
+                    </div>
+
+                    {/* Order Items List */}
+                    <div className="space-y-2">
+                      {(order.order_items || []).map((item: any, idx: number) => {
+                        const pName = store.products?.find((p: any) => p.id === item.product_id)?.name || 'Unknown Product';
+                        return (
+                          <div key={item.id || idx} className="flex justify-between items-center text-xs py-1.5 border-b border-border/10 last:border-b-0">
+                            <div className="flex-1 pr-4">
+                              <p className="font-semibold text-foreground">{pName}</p>
+                              <p className="text-[10px] text-muted-foreground">₦{item.price?.toLocaleString()} each</p>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-bold text-foreground">× {Number(item.quantity)}</span>
+                              <p className="text-[10px] text-muted-foreground font-bold">₦{item.subtotal?.toLocaleString()}</p>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <span className="font-bold text-foreground">× {Number(item.quantity)}</span>
-                            <p className="text-[10px] text-muted-foreground font-bold">₦{item.subtotal?.toLocaleString()}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+
+                    {/* Pricing Summary */}
+                    <div className="pt-2 border-t border-border/20 flex flex-col items-end text-xs space-y-1">
+                      <div className="flex justify-between w-full max-w-[200px] text-muted-foreground">
+                        <span>Subtotal:</span>
+                        <span>₦{order.subtotal?.toLocaleString() || '0.00'}</span>
+                      </div>
+                      <div className="flex justify-between w-full max-w-[200px] text-foreground font-bold">
+                        <span>Total Amount:</span>
+                        <span>₦{order.total?.toLocaleString() || '0.00'}</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
