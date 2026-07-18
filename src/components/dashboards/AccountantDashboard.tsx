@@ -47,7 +47,7 @@ export default function AccountantDashboard({ store, onNavigate }: AccountantDas
       </div>
 
       {/* Grid of Finance Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Revenue */}
         <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card">
           <div className="flex justify-between items-start text-foreground">
@@ -58,14 +58,24 @@ export default function AccountantDashboard({ store, onNavigate }: AccountantDas
           <p className="text-[10px] text-muted-foreground mt-1">Total receipts logged</p>
         </div>
 
-        {/* Expenses */}
+        {/* Operating Expenses */}
         <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card">
           <div className="flex justify-between items-start text-foreground">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold">Total Expenses</span>
+            <span className="text-[10px] text-muted-foreground uppercase font-bold">Operating Expenses</span>
             <Wallet className="w-4 h-4 text-destructive" />
           </div>
-          <p className="font-display font-bold text-xl mt-2 text-destructive">₦{stats.totalExpenses.toLocaleString()}</p>
-          <p className="text-[10px] text-muted-foreground mt-1">Inbound stock & operating costs</p>
+          <p className="font-display font-bold text-xl mt-2 text-destructive">₦{stats.operatingExpenses.toLocaleString()}</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Overheads & operating overhead</p>
+        </div>
+
+        {/* Inventory Investment */}
+        <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card">
+          <div className="flex justify-between items-start text-foreground">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold">Inventory Investment</span>
+            <Coins className="w-4 h-4 text-success" />
+          </div>
+          <p className="font-display font-bold text-xl mt-2 text-success">₦{stats.inventoryInvestment.toLocaleString()}</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Stock asset transfer value</p>
         </div>
 
         {/* Profit Margin */}

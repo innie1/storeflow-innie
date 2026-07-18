@@ -75,12 +75,20 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
   };
 
 
-  const { total, byCategory, filtered } = useMemo(() => {
-    const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const { totalOperating, totalRestock, byCategory, filtered } = useMemo(() => {
+    let totalOperating = 0;
+    let totalRestock = 0;
+    expenses.forEach(e => {
+      if (e.category === 'Restock' || e.source === 'restock') {
+        totalRestock += e.amount;
+      } else {
+        totalOperating += e.amount;
+      }
+    });
     const byCategory = new Map<ExpenseCategory, number>();
     expenses.forEach(e => byCategory.set(e.category, (byCategory.get(e.category) || 0) + e.amount));
     const filtered = filter === 'all' ? expenses : expenses.filter(e => e.category === filter);
-    return { total, byCategory, filtered };
+    return { totalOperating, totalRestock, byCategory, filtered };
   }, [expenses, filter]);
 
   const handleAdd = () => {
@@ -116,9 +124,19 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
     <div className="animate-fade-in space-y-4">
       {/* Summary */}
       <div className="p-4 rounded-xl bg-card border border-border">
-        <p className="text-xs text-muted-foreground mb-1">Total Expenses</p>
-        <p className="font-display font-bold text-2xl text-destructive">₦{total.toLocaleString()}</p>
-        <div className="grid grid-cols-3 gap-1.5 mt-3">
+        <div className="grid grid-cols-2 gap-4 divide-x divide-border">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Operating Expenses</p>
+            <p className="font-display font-bold text-xl text-destructive">₦{totalOperating.toLocaleString()}</p>
+            <p className="text-[9px] text-muted-foreground">Reduces health & profit</p>
+          </div>
+          <div className="pl-4">
+            <p className="text-xs text-muted-foreground mb-1">Inventory Investment</p>
+            <p className="font-display font-bold text-xl text-success">₦{totalRestock.toLocaleString()}</p>
+            <p className="text-[9px] text-muted-foreground">Asset transfer (adds inventory)</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-border/60">
           {EXPENSE_CATEGORIES.map(cat => {
             const v = byCategory.get(cat) || 0;
             return (

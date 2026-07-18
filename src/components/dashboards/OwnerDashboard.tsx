@@ -514,11 +514,38 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expenses</p>
-                <p className="font-display font-semibold text-sm text-destructive">₦{stats.totalExpenses.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Operating Expenses</p>
+                <p className="font-display font-semibold text-sm text-destructive">₦{stats.operatingExpenses.toLocaleString()}</p>
               </div>
             </div>
           </button>
+
+          {/* Redesigned Financial Classification Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card text-left">
+              <p className="text-xs text-muted-foreground font-display">Available Cash</p>
+              <p className="font-display font-bold text-xl text-primary mt-1">₦{stats.availableCash.toLocaleString()}</p>
+              <p className="text-[9px] text-muted-foreground mt-1">Cash + Bank + Wallet</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card text-left">
+              <p className="text-xs text-muted-foreground font-display">Business Assets</p>
+              <p className="font-display font-bold text-xl text-success mt-1">₦{stats.businessAssets.toLocaleString()}</p>
+              <p className="text-[9px] text-muted-foreground mt-1">Net worth of store</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card text-left">
+              <p className="text-xs text-muted-foreground font-display">Operating Expenses</p>
+              <p className="font-display font-bold text-xl text-destructive mt-1">₦{stats.operatingExpenses.toLocaleString()}</p>
+              <p className="text-[9px] text-muted-foreground mt-1">Overhead overheads</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card text-left">
+              <p className="text-xs text-muted-foreground font-display">Inventory Investment</p>
+              <p className="font-display font-bold text-xl text-success mt-1">₦{stats.inventoryInvestment.toLocaleString()}</p>
+              <p className="text-[9px] text-muted-foreground mt-1">Asset conversion</p>
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -530,31 +557,16 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
               <p className="text-xs text-muted-foreground font-display">Sales</p>
               <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalSales}</p>
             </button>
-            <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card text-left">
-              <p className="text-xs text-muted-foreground font-display">Products</p>
-              <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
-            </div>
+            <button
+              onClick={() => toggleBreakdown('inventory')}
+              className={`p-4 rounded-2xl bg-card border shadow-card text-left transition-all cursor-pointer ${
+                activeBreakdown === 'inventory' ? 'border-primary/80 ring-1 ring-primary/40 bg-surface-2/40' : 'border-border/40 hover:bg-surface-2/40'
+              }`}
+            >
+              <p className="text-xs text-muted-foreground font-display">Inventory Value</p>
+              <p className="font-display font-bold text-xl text-success mt-1">₦{stats.inventoryValue.toLocaleString()}</p>
+            </button>
           </div>
-
-          <button
-            onClick={() => toggleBreakdown('inventory')}
-            className={`w-full p-4 rounded-2xl bg-card border shadow-card text-left transition-all cursor-pointer ${
-              activeBreakdown === 'inventory' ? 'border-primary/80 ring-1 ring-primary/40 bg-surface-2/40' : 'border-border/40 hover:bg-surface-2/40'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs text-muted-foreground font-display">Inventory</p>
-                <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-display font-bold text-xl text-success">₦{stats.inventoryValue.toLocaleString()}</p>
-                <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-display font-bold uppercase tracking-wide">
-                  Now
-                </span>
-              </div>
-            </div>
-          </button>
 
           {stats.lowStockProducts.length > 0 && (
             <button

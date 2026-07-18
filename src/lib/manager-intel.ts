@@ -38,6 +38,7 @@ export function dailySeries(store: StoreData, days: number): DailyPoint[] {
     if (b) { b.revenue += s.total; b.profit += s.profit; b.salesCount += 1; }
   });
   (store.expenses || []).forEach(e => {
+    if (e.category === 'Restock' || e.source === 'restock') return;
     const d = startOfDay(new Date(e.date)).getTime();
     if (d < minTs) return;
     const b = buckets.find(x => x.ts === d);
@@ -126,41 +127,83 @@ export function healthScore(store: StoreData): HealthScore {
   const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
   const revPrev = prev7.reduce((s, d) => s + d.revenue, 0);
   const profit7 = last7.reduce((s, d) => s + d.profit, 0);
-  const exp7 = last7.reduce((s, d) => s + d.expenses, 0);
+  const exp7 = last7.reduce((s, d) => s + d.expenses, 0); // Operating expenses only (restock excluded)
 
   // 25%: Revenue Performance
   let revenueScore = 50;
   if (revPrev > 0) {
     const growth = (rev7 - revPrev) / revPrev;
-    revenueScore = Math.max(0, Math.min(100, 60 + growth * 150));
-  } else if (rev7 > 0) revenueScore = 65;
+    revenueScore = Math.max(0, Math.min(100, 70 + growth * 150));
+  } else if (rev7 > 0) revenueScore = 75;
   const revDetail = revPrev > 0
     ? `Revenue ${rev7 >= revPrev ? '↑' : '↓'} ${Math.abs(((rev7 - revPrev) / revPrev) * 100).toFixed(1)}% vs last week`
     : rev7 > 0 ? `₦${rev7.toLocaleString()} this week` : 'No sales this week';
 
-  // 25%: Profit Performance
+  // 25%: Profit Performance (Net Profit = Gross Profit - Operating Expenses)
   let profitScore = 50;
-  if (rev7 > 0) { const margin = profit7 / rev7; profitScore = Math.max(0, Math.min(100, margin * 200)); }
-  const profDetail = rev7 > 0 ? `${((profit7 / rev7) * 100).toFixed(1)}% margin` : 'No sales data';
+  const netProfit7 = profit7 - exp7;
+  if (rev7 > 0) { 
+    const margin = netProfit7 / rev7; 
+    profitScore = Math.max(0, Math.min(100, margin * 250)); 
+  } else {
+    profitScore = 70;
+  }
+  const profDetail = rev7 > 0 ? `${((netProfit7 / rev7) * 100).toFixed(1)}% net margin` : 'No sales data';
 
-  // 15%: Inventory Health
+  // 15%: Inventory Health (well-stocked products, growth bonus, and physical losses deduction)
   const threshold = getLowStockThreshold();
   const activeProducts = store.products.filter(p => !p.discontinued);
   const total = activeProducts.length || 1;
   const healthy = activeProducts.filter(p => p.quantity > threshold).length;
-  const inventoryScore = Math.round((healthy / total) * 100);
-  const invDetail = `${healthy}/${total} products well-stocked`;
+  const invStockScore = (healthy / total) * 100;
 
-  // 15%: Expense Control
+  // Inventory value & growth
+  const inventoryValue = activeProducts.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
+  const restocks = store.restocks || [];
+  const recentlyRestocked = restocks.filter(r => Date.now() - new Date(r.date).getTime() < 14 * 86400000).length;
+  const growthBonus = recentlyRestocked > 0 ? 10 : 0;
+
+  // Inventory audit losses
+  const auditLosses = (store.stockCountAudits || [])
+    .filter(a => a.variance < 0 && Date.now() - new Date(a.date).getTime() < 30 * 86400000)
+    .reduce((sum, a) => {
+      const p = store.products.find(x => x.name === a.product);
+      return sum + Math.abs(a.variance) * (p ? p.costPrice : 1000);
+    }, 0);
+  const lossDeduction = inventoryValue > 0 ? Math.min(30, (auditLosses / inventoryValue) * 100) : 0;
+
+  const inventoryScore = Math.max(0, Math.min(100, Math.round(invStockScore + growthBonus - lossDeduction)));
+  const invDetail = `${healthy}/${total} well-stocked · ₦${inventoryValue.toLocaleString()} value`;
+
+  // 15%: Expense Control (Operating expenses relative to sales)
   let expenseScore = 80;
-  if (rev7 > 0) { const ratio = exp7 / rev7; expenseScore = Math.max(0, Math.min(100, 100 - ratio * 60)); }
-  const expDetail = rev7 > 0 ? `Expenses = ${((exp7 / rev7) * 100).toFixed(0)}% of revenue` : exp7 > 0 ? `₦${exp7.toLocaleString()} expenses this week` : 'No expenses recorded';
+  if (rev7 > 0) { 
+    const ratio = exp7 / rev7; 
+    expenseScore = Math.max(0, Math.min(100, 100 - ratio * 80)); 
+  } else if (exp7 > 0) {
+    expenseScore = Math.max(0, 100 - (exp7 / 50000) * 50);
+  } else {
+    expenseScore = 100;
+  }
+  const expDetail = rev7 > 0 ? `Operating Expenses = ${((exp7 / rev7) * 100).toFixed(0)}% of revenue` : exp7 > 0 ? `₦${exp7.toLocaleString()} operating costs this week` : 'No operating expenses';
 
-  // 10%: Savings Progress
+  // 10%: Savings & Capital Health (Savings progress + Available Cash cushion vs Liabilities)
+  const cashBalance = store.cashBalance || 0;
+  const bankBalance = store.bankBalance || 0;
+  const walletBalance = store.walletBalance || 0;
+  const totalCash = cashBalance + bankBalance + walletBalance;
+  const liabilities = store.liabilities || 0;
+  
+  let cashBufferScore = 100;
+  if (liabilities > 0) {
+    cashBufferScore = Math.min(100, Math.max(0, (totalCash / liabilities) * 100));
+  }
+
   let savingsScore = 50;
   const sg = store.savingsGoal;
-  if (sg && sg.amount > 0) { savingsScore = Math.min(100, Math.round((sg.saved / sg.amount) * 100)); }
-  const savDetail = sg ? `₦${sg.saved.toLocaleString()} / ₦${sg.amount.toLocaleString()} saved` : 'No savings goal set';
+  const sgScore = sg && sg.amount > 0 ? Math.min(100, Math.round((sg.saved / sg.amount) * 100)) : 70;
+  savingsScore = Math.round(sgScore * 0.5 + cashBufferScore * 0.5);
+  const savDetail = `Cash: ₦${totalCash.toLocaleString()} · Savings: ${sg ? Math.round((sg.saved / sg.amount) * 100) : 0}%`;
 
   // 10%: Customer Debt Management
   let debtScore = 80;
@@ -312,8 +355,9 @@ export interface ExpenseAnalysis {
 
 export function expenseAnalysis(store: StoreData): ExpenseAnalysis {
   const now = Date.now();
-  const last30 = (store.expenses || []).filter(e => now - new Date(e.date).getTime() < 30 * 86400000);
-  const prev30 = (store.expenses || []).filter(e => {
+  const nonRestockExpenses = (store.expenses || []).filter(e => e.category !== 'Restock' && e.source !== 'restock');
+  const last30 = nonRestockExpenses.filter(e => now - new Date(e.date).getTime() < 30 * 86400000);
+  const prev30 = nonRestockExpenses.filter(e => {
     const t = now - new Date(e.date).getTime();
     return t >= 30 * 86400000 && t < 60 * 86400000;
   });
@@ -420,6 +464,14 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
   const series7 = dailySeries(store, 7);
   const rev7 = series7.reduce((s, d) => s + d.revenue, 0);
 
+  const cashBalance = store.cashBalance || 0;
+  const bankBalance = store.bankBalance || 0;
+  const walletBalance = store.walletBalance || 0;
+  const totalCash = cashBalance + bankBalance + walletBalance;
+  
+  const activeProducts = store.products.filter(p => !p.discontinued);
+  const inventoryValue = activeProducts.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
+
   // Critical: running out of fast sellers or completely out of stock
   if (!isStoreOnboarding(store)) {
     stock.filter(f => f.urgency === 'critical').slice(0, 3).forEach(f => {
@@ -441,12 +493,44 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
     advice.push({ id: 'no-sales', icon: '⚠️', title: 'No sales recorded this week', detail: 'Record sales to unlock predictions and keep your store health score accurate.', priority: 'critical' });
   }
 
+  // Critical: High physical stock losses from audits
+  const auditLosses = (store.stockCountAudits || [])
+    .filter(a => a.variance < 0 && Date.now() - new Date(a.date).getTime() < 30 * 86400000)
+    .reduce((sum, a) => {
+      const p = store.products.find(x => x.name === a.product);
+      return sum + Math.abs(a.variance) * (p ? p.costPrice : 500);
+    }, 0);
+  if (auditLosses > 10000) {
+    advice.push({
+      id: 'losses-high',
+      icon: '🚨',
+      title: 'High Inventory Losses Detected',
+      detail: `Your inventory shrinkage from audits totals ₦${auditLosses.toLocaleString()} this month. Inspect for theft or damage immediately.`,
+      priority: 'critical'
+    });
+  }
+
+  // Critical: Cash low and poor inventory turnover
+  const last30Sales = store.sales.filter(s => new Date(s.date) >= daysAgo(30));
+  const salesVal = last30Sales.reduce((s, x) => s + x.total, 0);
+  const turnoverRatio = inventoryValue > 0 ? (salesVal / inventoryValue) : 1;
+
+  if (totalCash < 10000 && turnoverRatio < 0.2 && inventoryValue > 0) {
+    advice.push({
+      id: 'cash-low-turnover-poor',
+      icon: '⚠️',
+      title: 'Cash Low & Turnover Poor',
+      detail: `Available cash is critically low (₦${totalCash.toLocaleString()}) and inventory turnover is poor. Sell existing stock or run promotions before restocking.`,
+      priority: 'critical'
+    });
+  }
+
   // High: large outstanding debts
   if (pending.totalOwed > rev7 * 0.3) {
     advice.push({ id: 'debt', icon: '💳', title: 'Chase outstanding payments', detail: `₦${pending.totalOwed.toLocaleString()} owed. ${pending.overdue.length} customers are overdue. Collect this to improve cash flow.`, priority: 'high' });
   }
 
-  // High: soaring expenses
+  // High: soaring expenses (Operating expenses only)
   if (ea.trendPct > 20 && ea.totalLast30 > 0) {
     advice.push({ id: 'exp-rise', icon: '🧾', title: `${ea.largestCategory} spending up ${ea.trendPct.toFixed(0)}%`, detail: `Your ${ea.largestCategory.toLowerCase()} expenses grew significantly this month. Review and cut where possible.`, priority: 'high' });
   }
@@ -476,6 +560,17 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
     advice.push({ id: 'dead-stock', icon: '😴', title: `${analysis.neverSold.length} products never sold`, detail: `${analysis.neverSold.slice(0, 2).map(p => p.name).join(', ')} and others have never sold. Consider discounting or replacing with faster movers.`, priority: 'medium' });
   }
 
+  // Medium: Cash low, inventory high
+  if (totalCash < 20000 && inventoryValue > totalCash * 2.5 && inventoryValue > 0) {
+    advice.push({
+      id: 'cash-low-inv-high',
+      icon: '💡',
+      title: 'Cash low, Inventory high',
+      detail: 'Your available cash is temporarily low because it has been converted into inventory. Focus on selling existing stock before making another large restock.',
+      priority: 'medium'
+    });
+  }
+
   // Low: health is great
   if (h.overall >= 80) {
     advice.push({ id: 'great', icon: '🌟', title: 'Your store is thriving', detail: `Health score: ${h.overall}/100. Keep maintaining stock levels and expense control.`, priority: 'low' });
@@ -484,6 +579,18 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
   // Low: set a savings goal
   if (!store.savingsGoal) {
     advice.push({ id: 'save', icon: '💰', title: 'Set a savings goal', detail: 'Saving even 5% of revenue weekly builds a safety net for rent, restocking, and emergencies.', priority: 'low' });
+  }
+
+  // Low: Inventory Assets Growing
+  const recentlyRestocked = (store.restocks || []).filter(r => Date.now() - new Date(r.date).getTime() < 30 * 86400000).length;
+  if (recentlyRestocked > 0) {
+    advice.push({
+      id: 'inv-growth',
+      icon: '📈',
+      title: 'Inventory Assets Growing',
+      detail: 'Your inventory value has grown this month. Your business assets are increasing.',
+      priority: 'low'
+    });
   }
 
   return advice.sort((a, b) => {
@@ -662,6 +769,32 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
   } else if (curRev > 0) {
     out.push({ id: 'rev', icon: '📈', text: `Revenue is growing — keep going!`, tone: 'success' });
   }
+
+  // Restocking investment insights
+  const last7Restock = (store.expenses || [])
+    .filter(e => (e.category === 'Restock' || e.source === 'restock') && (Date.now() - new Date(e.date).getTime() < 7 * 86400000))
+    .reduce((s, e) => s + e.amount, 0);
+  if (last7Restock > 0) {
+    out.push({
+      id: 'restock-investment',
+      icon: '✅',
+      text: `You invested ₦${last7Restock.toLocaleString()} into inventory. Your inventory assets increased while cash decreased. This is a healthy business investment.`,
+      tone: 'success'
+    });
+  }
+
+  const restocksTotalMonth = (store.expenses || [])
+    .filter(e => (e.category === 'Restock' || e.source === 'restock') && (Date.now() - new Date(e.date).getTime() < 30 * 86400000))
+    .reduce((s, e) => s + e.amount, 0);
+  if (restocksTotalMonth > 50000) {
+    out.push({
+      id: 'inventory-growth-insight',
+      icon: '📈',
+      text: 'Your inventory value has grown this month. Your business assets are increasing.',
+      tone: 'success'
+    });
+  }
+
   const threshold = getLowStockThreshold();
   const low = store.products.filter(p => !p.discontinued && p.quantity > 0 && p.quantity <= threshold);
   if (!isStoreOnboarding(store) && low.length > 0) {
@@ -884,21 +1017,21 @@ export function generateFlowReport(store: StoreData): string {
   // 3. Expense Control
   text += `### 🧾 Expense Audit\n`;
   if (exp7 > 0) {
-    text += `Your recorded expenses total **₦${exp7.toLocaleString()}** this week. `;
+    text += `Your recorded operating expenses total **₦${exp7.toLocaleString()}** this week. `;
     if (rev7 > 0) {
       const expRatio = (exp7 / rev7) * 100;
       if (expRatio > 40) {
-        text += `This represents **${expRatio.toFixed(0)}% of your weekly revenue**, which is dangerously high. `;
+        text += `This represents **${expRatio.toFixed(0)}% of your weekly revenue**, which is high for operating overhead. `;
         if (ea.trendPct > 10) {
-          text += `Your monthly spending spike is driven by the **${ea.largestCategory}** category. Audit this category immediately to plug financial leaks. `;
+          text += `Your monthly operating spending spike is driven by the **${ea.largestCategory}** category. Review this category immediately to plug financial leaks. `;
         }
       } else {
-        text += `Expenses are well-controlled, taking up only ${expRatio.toFixed(0)}% of your revenue. `;
+        text += `Operating expenses are well-controlled, taking up only ${expRatio.toFixed(0)}% of your revenue. `;
       }
     }
     text += `\n\n`;
   } else {
-    text += `You have **no expenses recorded** this week. Keeping accurate expense logs is crucial for knowing your true net profit. \n\n`;
+    text += `You have **no operating expenses recorded** this week. Keeping accurate expense logs is crucial for knowing your true net profit. \n\n`;
   }
 
   // 4. Debt & Cash Flow
