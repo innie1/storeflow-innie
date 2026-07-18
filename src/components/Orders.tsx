@@ -1,14 +1,16 @@
 import { useState, useMemo, useCallback } from 'react';
 import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
+import { saveStore } from '@/lib/store-data';
 
 interface OrdersProps {
   store: StoreData;
   orders: any[];
   onUpdateOrderStatus: (orderId: string, status: string, metadata?: any) => void;
+  onUpdate: (store: StoreData) => void;
 }
 
-export default function Orders({ store, orders, onUpdateOrderStatus }: OrdersProps) {
+export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }: OrdersProps) {
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Accepted' | 'Preparing' | 'Ready' | 'Completed' | 'Rejected' | 'Cancelled'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -105,6 +107,34 @@ export default function Orders({ store, orders, onUpdateOrderStatus }: OrdersPro
           <h2 className="font-display font-black text-2xl text-foreground tracking-tight">QR Customer Orders</h2>
           <p className="text-xs text-muted-foreground mt-1">Receive, prepare and track online storefront orders in real-time.</p>
         </div>
+        {/* Open to Market toggle — controls whether customers can see & order from your store */}
+        <button
+          onClick={() => {
+            const wasOpen = store.marketplaceSettings?.storeOpen !== false;
+            const updatedStore = {
+              ...store,
+              marketplaceSettings: {
+                ...(store.marketplaceSettings || {}),
+                storeOpen: !wasOpen,
+              },
+            };
+            onUpdate(updatedStore);
+            saveStore(updatedStore);
+            showToast(
+              wasOpen ? 'Store is now closed to customers' : 'Store is now open to the marketplace',
+              wasOpen ? 'info' : 'success'
+            );
+          }}
+          className={`px-4 py-2.5 rounded-xl border text-sm font-display font-bold flex items-center gap-2 self-start md:self-auto transition-all active:scale-95 cursor-pointer ${
+            store.marketplaceSettings?.storeOpen !== false
+              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-500'
+              : 'bg-destructive/10 border-destructive/25 text-destructive'
+          }`}
+          title="Toggle whether customers can see and order from your store"
+        >
+          <span className={`w-2.5 h-2.5 rounded-full ${store.marketplaceSettings?.storeOpen !== false ? 'bg-emerald-500' : 'bg-destructive'}`} />
+          {store.marketplaceSettings?.storeOpen !== false ? 'Open to Market' : 'Closed to Market — tap to open'}
+        </button>
         {maxDailyOrders && (
           <div className={`px-4 py-2 rounded-xl border text-xs font-semibold flex items-center gap-2 self-start md:self-auto ${
             isLimitReached ? 'bg-red-500/10 border-red-500/25 text-red-500' : 'bg-surface-2 border-border text-muted-foreground'

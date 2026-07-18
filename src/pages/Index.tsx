@@ -1332,7 +1332,7 @@ export default function Index() {
               <Dashboard store={store} onNavigate={handleNavigate} currentUser={currentUser} />
             </div>
             <div className={tab === 'orders' ? 'block' : 'hidden'}>
-              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} />
+              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} />
             </div>
             <div className={tab === 'inventory' ? 'block' : 'hidden'}>
               <Inventory
