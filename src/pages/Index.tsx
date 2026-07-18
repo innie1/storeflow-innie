@@ -281,6 +281,25 @@ export default function Index() {
   const [tab, setTabState] = useState<TabId>('dashboard');
   const [orders, setOrders] = useState<any[]>([]);
 
+  // Resolve the real Supabase row id for this store. StoreData (local/cached)
+  // has no "id" field — only storeId (short code) and accessCode — but every
+  // orders/notifications query and realtime subscription in this file filters
+  // by store.id. Without this, those queries silently never run.
+  useEffect(() => {
+    if (!store?.accessCode || (store as any).id) return;
+    let active = true;
+    supabase
+      .from('stores')
+      .select('id')
+      .eq('access_code', store.accessCode)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active || error || !data?.id) return;
+        setStore(prev => (prev ? { ...prev, id: data.id } as any : prev));
+      });
+    return () => { active = false; };
+  }, [store?.accessCode]);
+
   // Synchronize browser back/forward buttons with active tab
   useEffect(() => {
     const hash = window.location.hash.replace('#', '') as TabId;
