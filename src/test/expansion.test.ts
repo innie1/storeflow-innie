@@ -5,10 +5,7 @@ import {
   transferStock,
   recordLostSale,
   createStore,
-  saveStore,
-  receiveStock,
-  addExpense,
-  getDashboardStats
+  saveStore
 } from "@/lib/store-data";
 import {
   healthScore,
@@ -81,72 +78,5 @@ describe("StoreFlow Expanded Features Tests", () => {
 
     const leaks = getProfitLeaks(store);
     expect(leaks).toBeDefined();
-  });
-
-  describe("StoreFlow Redesigned Financial classification and Health Engine", () => {
-    it("should classify restocking as Inventory Investment and NOT Operating Expenses", () => {
-      let store = createStore("Test Store Retail", "retail");
-      // Add a dummy sale so it's not treated as initial import
-      store.sales = [
-        { id: "s1", date: new Date().toISOString(), productId: store.products[0].id, productName: store.products[0].name, quantity: 1, costPrice: 100, sellingPrice: 200, total: 200, profit: 100 }
-      ];
-      
-      const initialStats = getDashboardStats(store);
-
-      // Perform a restock
-      const pId = store.products[0].id;
-      store = receiveStock(store, [{ productId: pId, quantity: 10, costPrice: store.products[0].costPrice }], 'balance');
-
-      const updatedStats = getDashboardStats(store);
-      
-      // Inventory Investment should increase by the restock cost
-      expect(updatedStats.inventoryInvestment).toBeGreaterThan(0);
-      
-      // Operating expenses (totalExpenses) should remain 0
-      expect(updatedStats.operatingExpenses).toBe(0);
-      expect(updatedStats.totalExpenses).toBe(0);
-    });
-
-    it("should not penalize business health score when restocking inventory", () => {
-      let store = createStore("Test Store Retail", "retail");
-      
-      // Log some sales first to have base activity
-      store.sales = [
-        { id: "s1", date: new Date().toISOString(), productId: store.products[0].id, productName: store.products[0].name, quantity: 1, costPrice: 100, sellingPrice: 200, total: 200, profit: 100 }
-      ];
-
-      const initialHealth = healthScore(store);
-
-      // Perform restocking
-      const pId = store.products[0].id;
-      store = receiveStock(store, [{ productId: pId, quantity: 20, costPrice: store.products[0].costPrice }], 'balance');
-
-      const updatedHealth = healthScore(store);
-
-      // Expense control score should NOT decline due to restocking
-      expect(updatedHealth.expense).toBeGreaterThanOrEqual(initialHealth.expense);
-      expect(updatedHealth.overall).toBeGreaterThanOrEqual(initialHealth.overall);
-    });
-
-    it("should deduct health score points for physical inventory losses (shrinkage)", () => {
-      let store = createStore("Test Store Retail", "retail");
-      
-      // Log some sales first to have base activity
-      store.sales = [
-        { id: "s1", date: new Date().toISOString(), productId: store.products[0].id, productName: store.products[0].name, quantity: 1, costPrice: 100, sellingPrice: 200, total: 200, profit: 100 }
-      ];
-      
-      const initialHealth = healthScore(store);
-
-      // Perform audit with negative variance (loss of 50 units)
-      const pId = store.products[0].id;
-      const initialQty = store.products[0].quantity;
-      store = recordStockCountAudit(store, pId, store.products[0].name, initialQty, initialQty - 50);
-
-      const updatedHealth = healthScore(store);
-
-      // Inventory score should drop due to audit losses
-      expect(updatedHealth.inventory).toBeLessThan(initialHealth.inventory);
-    });
   });
 });

@@ -1344,48 +1344,10 @@ export function getDashboardStats(store: StoreData) {
   const lowStockProducts = activeProducts.filter(p => p.quantity <= threshold);
   const totalSales = store.sales.length;
   const inventoryValue = activeProducts.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
-  
-  // Distinguish restocking from operating expenses
-  const inventoryInvestment = (store.expenses || [])
-    .filter(e => e.category === 'Restock' || e.source === 'restock')
-    .reduce((sum, e) => sum + e.amount, 0);
-  
-  const operatingExpenses = (store.expenses || [])
-    .filter(e => e.category !== 'Restock' && e.source !== 'restock')
-    .reduce((sum, e) => sum + e.amount, 0);
-  
-  // For legacy support: totalExpenses represents operating expenses
-  const totalExpenses = operatingExpenses;
+  const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
   const savingsSaved = store.savingsGoal?.saved || 0;
-  const netIncome = totalRevenue - operatingExpenses - savingsSaved;
-
-  // Available Cash
-  const cashBalance = store.cashBalance || 0;
-  const bankBalance = store.bankBalance || 0;
-  const walletBalance = store.walletBalance || 0;
-  const availableCash = cashBalance + bankBalance + walletBalance;
-
-  // Business Assets
-  const customerDebt = (store.pendingPayments || []).filter(p => p.status === 'pending').reduce((sum, p) => sum + p.balance, 0);
-  const accountsReceivable = Math.max((store.customers || []).reduce((sum, c) => sum + (c.outstandingDebt || 0), 0), customerDebt);
-  const otherAssets = store.otherAssets || 0;
-  const liabilities = store.liabilities || 0;
-  const businessAssets = availableCash + inventoryValue + accountsReceivable + otherAssets - liabilities;
-
-  return { 
-    totalRevenue, 
-    totalProfit, 
-    totalProducts, 
-    lowStockProducts, 
-    totalSales, 
-    inventoryValue, 
-    totalExpenses, 
-    netIncome,
-    operatingExpenses,
-    inventoryInvestment,
-    availableCash,
-    businessAssets
-  };
+  const netIncome = totalRevenue - totalExpenses - savingsSaved;
+  return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue, totalExpenses, netIncome };
 }
 
 // ---------- Investments ----------
