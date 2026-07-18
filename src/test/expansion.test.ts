@@ -71,7 +71,15 @@ describe("StoreFlow Expanded Features Tests", () => {
   });
 
   it("should generate top opportunities and profit leaks", () => {
-    const store = createStore("Test Store Retail", "retail");
+    let store = createStore("Test Store Retail", "retail");
+    
+    // Make a product dead stock by setting addedAt to 10 days ago
+    if (store.products.length > 0) {
+      const tenDaysAgo = new Date();
+      tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+      store.products[0].addedAt = tenDaysAgo.toISOString();
+    }
+
     const opportunities = getTopOpportunities(store);
     expect(opportunities.length).toBeGreaterThan(0);
     expect(opportunities[0].title).toBeDefined();

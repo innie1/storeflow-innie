@@ -79,6 +79,7 @@ export interface Forecast {
   expectedExpenses: number;
   confidencePct: number;
   confidence: 'High' | 'Medium' | 'Low';
+  caveat?: string; // shown for long horizons where the estimate is necessarily rougher
 }
 
 export function forecastHorizon(store: StoreData, horizonDays: number): Forecast {
@@ -86,20 +87,54 @@ export function forecastHorizon(store: StoreData, horizonDays: number): Forecast
   const rev = linReg(series.map(s => s.revenue));
   const prof = linReg(series.map(s => s.profit));
   const exp = linReg(series.map(s => s.expenses));
+
+  // Straight-line trend extrapolation gets unreliable the further out you go —
+  // 30 days of data doesn't justify a full year of unbroken linear growth or
+  // decline. Beyond the observed 30-day window, we exponentially dampen the
+  // trend's influence so the projection settles toward the recent daily
+  // average instead of running away in a straight line. Near-term forecasts
+  // (tomorrow, 7 days) are barely affected; only 90d/180d/365d are pulled in.
+  const DAMPING_DAYS = 45;
+  const avgRevPerDay = series.reduce((s, d) => s + d.revenue, 0) / series.length;
+  const avgProfPerDay = series.reduce((s, d) => s + d.profit, 0) / series.length;
+  const avgExpPerDay = series.reduce((s, d) => s + d.expenses, 0) / series.length;
+
   let expectedRevenue = 0, expectedProfit = 0, expectedExpenses = 0;
   for (let i = 30; i < 30 + horizonDays; i++) {
-    expectedRevenue += Math.max(0, rev.slope * i + rev.intercept);
-    expectedProfit += Math.max(0, prof.slope * i + prof.intercept);
-    expectedExpenses += Math.max(0, exp.slope * i + exp.intercept);
+    const daysPastWindow = i - 29;
+    const damp = Math.exp(-daysPastWindow / DAMPING_DAYS);
+    const rawRev = rev.slope * i + rev.intercept;
+    const rawProf = prof.slope * i + prof.intercept;
+    const rawExp = exp.slope * i + exp.intercept;
+    expectedRevenue += Math.max(0, avgRevPerDay + (rawRev - avgRevPerDay) * damp);
+    expectedProfit += Math.max(0, avgProfPerDay + (rawProf - avgProfPerDay) * damp);
+    expectedExpenses += Math.max(0, avgExpPerDay + (rawExp - avgExpPerDay) * damp);
   }
+
   const avgR2 = (rev.r2 + prof.r2 + exp.r2) / 3;
   const totalSales = store.sales.length;
   let confidence: Forecast['confidence'] = 'Low';
   let confidencePct = 55;
   if (totalSales >= 30 && avgR2 > 0.5) { confidence = 'High'; confidencePct = 80 + Math.round(avgR2 * 15); }
   else if (totalSales >= 10 && avgR2 > 0.25) { confidence = 'Medium'; confidencePct = 65 + Math.round(avgR2 * 20); }
+  // Long horizons are inherently less certain, however the trend looks —
+  // reflect that honestly rather than showing 80%+ confidence for a 1-year call.
+  if (horizonDays >= 180) confidencePct = Math.min(confidencePct, 60);
+  else if (horizonDays >= 90) confidencePct = Math.min(confidencePct, 70);
+  if (horizonDays >= 180 && confidence === 'High') confidence = 'Medium';
+
   const horizonLabel: Record<number, string> = { 1: 'Tomorrow', 7: '7 Days', 14: '14 Days', 30: '1 Month', 90: '3 Months', 180: '6 Months', 365: '1 Year' };
-  return { horizonDays, label: horizonLabel[horizonDays] ?? `${horizonDays}d`, expectedRevenue, expectedProfit, expectedExpenses, confidencePct: Math.min(95, confidencePct), confidence };
+  const caveat = horizonDays >= 90
+    ? `Based on your last 30 days of activity. Long-range estimates like this settle toward your recent average rather than assuming today's trend continues in a straight line — treat this as a rough planning number, not a guarantee.`
+    : undefined;
+  return {
+    horizonDays,
+    label: horizonLabel[horizonDays] ?? `${horizonDays}d`,
+    expectedRevenue, expectedProfit, expectedExpenses,
+    confidencePct: Math.min(95, confidencePct),
+    confidence,
+    caveat,
+  };
 }
 
 /** Legacy compat */
@@ -144,12 +179,45 @@ export function healthScore(store: StoreData): HealthScore {
   const profDetail = rev7 > 0 ? `${((profit7 / rev7) * 100).toFixed(1)}% margin` : 'No sales data';
 
   // 15%: Inventory Health
-  const threshold = getLowStockThreshold();
+  // Previously: healthy = quantity > threshold, score = healthy/total. This
+  // treated a dead product sitting fully stocked the same as your best
+  // seller, and a store with 20 stocked-but-unsold SKUs could show ~100%
+  // "health" while its 2 actual best sellers were completely out of stock.
+  // Now: reuses the same velocity-aware urgency data as the restock
+  // suggestions (so the two features can't disagree), and weights each
+  // product by how much of your recent sales it actually represents —
+  // a fast seller going critical hurts the score much more than a slow
+  // mover being low, and a slow mover being low barely moves it at all.
   const activeProducts = store.products.filter(p => !p.discontinued);
-  const total = activeProducts.length || 1;
-  const healthy = activeProducts.filter(p => p.quantity > threshold).length;
-  const inventoryScore = Math.round((healthy / total) * 100);
-  const invDetail = `${healthy}/${total} products well-stocked`;
+  const total = activeProducts.length;
+  let inventoryScore = 100;
+  let invDetail = 'No products in catalog yet';
+  if (total > 0) {
+    const forecasts = computeStockForecasts(store);
+    const last30 = store.sales.filter(s => new Date(s.date) >= daysAgo(30));
+    const sold30ByProduct = new Map<string, number>();
+    last30.forEach(s => sold30ByProduct.set(s.productId, (sold30ByProduct.get(s.productId) || 0) + s.quantity));
+
+    // Additive smoothing so untested/new products still count a little,
+    // instead of being invisible to the score until they've sold something.
+    const SMOOTHING = 1;
+    const weighted = forecasts.map(f => {
+      const unitsSold30 = sold30ByProduct.get(f.product.id) || 0;
+      const weight = unitsSold30 * f.product.sellingPrice + SMOOTHING;
+      const points = f.product.quantity === 0 ? 0 : f.urgency === 'critical' ? 25 : f.urgency === 'soon' ? 65 : 100;
+      return { weight, points, urgency: f.urgency, isOut: f.product.quantity === 0 };
+    });
+    const totalWeight = weighted.reduce((s, w) => s + w.weight, 0) || 1;
+    inventoryScore = Math.round(weighted.reduce((s, w) => s + w.points * (w.weight / totalWeight), 0));
+
+    const outOfStock = weighted.filter(w => w.isOut).length;
+    const critical = forecasts.filter(f => f.urgency === 'critical' && f.product.quantity > 0).length;
+    const soon = forecasts.filter(f => f.urgency === 'soon').length;
+    if (outOfStock > 0) invDetail = `${outOfStock} product${outOfStock === 1 ? '' : 's'} out of stock right now`;
+    else if (critical > 0) invDetail = `${critical} fast-moving product${critical === 1 ? '' : 's'} about to run out`;
+    else if (soon > 0) invDetail = `${soon} product${soon === 1 ? '' : 's'} running low, none urgent yet`;
+    else invDetail = `All ${total} products well-stocked`;
+  }
 
   // 15%: Expense Control
   let expenseScore = 80;
@@ -273,7 +341,12 @@ export interface StockForecast {
   urgency: 'critical' | 'soon' | 'ok';
 }
 
-export function inventoryIntelligence(store: StoreData): StockForecast[] {
+// Shared by inventoryIntelligence() (restock suggestions) AND healthScore()
+// (inventory factor) so the two features are always computed from the same
+// numbers and can never disagree about whether a product's stock is fine.
+// Unlike inventoryIntelligence(), this does NOT filter out 'ok' products —
+// callers that need "what's low" should filter the result themselves.
+function computeStockForecasts(store: StoreData): StockForecast[] {
   const threshold = getLowStockThreshold();
   return store.products
     .filter(p => !p.discontinued)
@@ -296,7 +369,11 @@ export function inventoryIntelligence(store: StoreData): StockForecast[] {
       }
       
       return { product: p, perDay, daysLeft, restockQty, urgency };
-    })
+    });
+}
+
+export function inventoryIntelligence(store: StoreData): StockForecast[] {
+  return computeStockForecasts(store)
     .filter(f => f.urgency !== 'ok')
     .sort((a, b) => a.daysLeft - b.daysLeft);
 }
@@ -987,21 +1064,11 @@ export function getTopOpportunities(store: StoreData): OpportunityCard[] {
     });
   }
 
-  // 4. Default opportunities if list is short
-  if (opps.length < 3) {
-    opps.push({
-      title: "Set Up Branded Receipts",
-      description: "Customize receipt headers, footer messages, and QR codes to drive customer loyalty and brand retention.",
-      impact: "Brand Equity Grow",
-      actionLabel: "Customize Receipts"
-    });
-    opps.push({
-      title: "Expand to Game Services",
-      description: "Launch snooker, PlayStation, or table tennis sessions during slow retail periods to optimize space utility.",
-      impact: "₦15,000+ Extra Profit/wk",
-      actionLabel: "Enable Game Services"
-    });
-  }
+  // NOTE: This used to pad the list with generic, non-personalized suggestions
+  // ("Set Up Branded Receipts", "Expand to Game Services") whenever there
+  // weren't enough real opportunities — the same filler for every merchant
+  // regardless of what they actually sell. Removed: better to show fewer,
+  // honest cards than to dilute real insights with boilerplate.
 
   return opps.slice(0, 4);
 }
@@ -1050,20 +1117,31 @@ export function getProfitLeaks(store: StoreData): ProfitLeak[] {
     });
   }
 
-  // 3. Poor profit margins
+  // 3. Poor profit margins — estimate REAL foregone profit (not a flat guess).
+  // For each thin-margin product, compare its actual profit-per-unit against a
+  // healthy 25% margin, multiplied by how many units it actually sold in the
+  // last 30 days. Products with no recent sales don't inflate the number.
   let thinMarginCount = 0;
+  let thinMarginLeak = 0;
+  const targetMargin = 0.25;
   store.products.filter(p => !p.discontinued).forEach(p => {
     if (p.costPrice > 0) {
       const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
-      if (margin < 0.15) thinMarginCount++;
+      if (margin < 0.15) {
+        thinMarginCount++;
+        const healthyPrice = p.costPrice * (1 + targetMargin);
+        const perUnitGap = Math.max(0, healthyPrice - p.sellingPrice);
+        const sold30 = last30.filter(s => s.productId === p.id).reduce((s, sale) => s + sale.quantity, 0);
+        thinMarginLeak += perUnitGap * sold30;
+      }
     }
   });
   if (thinMarginCount > 0) {
     leaks.push({
       category: 'poor_margin',
       title: `${thinMarginCount} Products with Low Margin`,
-      description: 'Multiple items are priced too close to cost, eroding potential profits after overhead expenses.',
-      amountLeak: thinMarginCount * 500, // estimated leak index
+      description: `Multiple items are priced too close to cost. Based on last 30 days' sales volume, pricing them at a healthy 25% margin would have earned ₦${Math.round(thinMarginLeak).toLocaleString()} more.`,
+      amountLeak: Math.round(thinMarginLeak),
       recommendation: 'Review item price margins and adjust target margin markup to at least 25%.'
     });
   }
@@ -1082,17 +1160,28 @@ export function getProfitLeaks(store: StoreData): ProfitLeak[] {
     });
   }
 
-  // 5. Stock losses from Audits
+  // 5. Stock losses from Audits — value lost at each product's REAL cost
+  // price, not a flat per-unit guess. Falls back to a store-wide average
+  // cost price only for audit entries whose product can no longer be
+  // matched (e.g. since renamed or deleted).
   const audits = store.stockCountAudits || [];
-  const negativeVarianceTotal = audits
-    .filter(a => a.variance < 0)
-    .reduce((sum, a) => sum + Math.abs(a.variance), 0);
+  const negativeAudits = audits.filter(a => a.variance < 0);
+  const negativeVarianceTotal = negativeAudits.reduce((sum, a) => sum + Math.abs(a.variance), 0);
   if (negativeVarianceTotal > 0) {
+    const activeProducts = store.products.filter(p => !p.discontinued && p.costPrice > 0);
+    const avgCostPrice = activeProducts.length
+      ? activeProducts.reduce((s, p) => s + p.costPrice, 0) / activeProducts.length
+      : 0;
+    const stockLossValue = negativeAudits.reduce((sum, a) => {
+      const match = store.products.find(p => p.name === a.product);
+      const unitCost = match?.costPrice || avgCostPrice;
+      return sum + Math.abs(a.variance) * unitCost;
+    }, 0);
     leaks.push({
       category: 'stock_loss',
       title: 'Recurring Physical Inventory Shrinkage',
-      description: `${negativeVarianceTotal} units have been recorded as lost during stock counts.`,
-      amountLeak: negativeVarianceTotal * 1000, // estimated cost
+      description: `${negativeVarianceTotal} units have been recorded as lost during stock counts, worth approximately ₦${Math.round(stockLossValue).toLocaleString()} at cost price.`,
+      amountLeak: Math.round(stockLossValue),
       recommendation: 'Audit cash registers regularly and limit staff edit permissions on products.'
     });
   }
@@ -1106,6 +1195,25 @@ export interface SeasonalPrediction {
   expectedTrend: 'increase' | 'decrease' | 'stable';
   details: string;
   suggestedItems: string[];
+  itemsFromYourCatalog: boolean; // true if these are real products you sell; false if they're generic regional examples because nothing in your catalog matched
+}
+
+// Find products this store actually sells that match a season's typical
+// demand categories, instead of always suggesting the same hardcoded product
+// names regardless of what this merchant actually stocks.
+function matchStoreProducts(store: StoreData, keywords: string[], limit = 3): string[] {
+  const active = store.products.filter(p => !p.discontinued);
+  const matches = active.filter(p => {
+    const haystack = `${p.name} ${p.category || ''}`.toLowerCase();
+    return keywords.some(k => haystack.includes(k));
+  });
+  // Prefer the store's own fast movers among the matches, when we have sales history
+  const salesQty = new Map<string, number>();
+  store.sales.filter(s => new Date(s.date) >= daysAgo(30)).forEach(s => {
+    salesQty.set(s.productId, (salesQty.get(s.productId) || 0) + s.quantity);
+  });
+  matches.sort((a, b) => (salesQty.get(b.id) || 0) - (salesQty.get(a.id) || 0));
+  return matches.slice(0, limit).map(p => p.name);
 }
 
 export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
@@ -1116,46 +1224,71 @@ export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
 
   // 1. Back to School (August - September)
   if (currentMonth === 7 || currentMonth === 8) {
+    const genericFallback = ['Milk Sachet Roll', 'Biscuit Packs', 'Sugar Packet'];
+    const fromCatalog = matchStoreProducts(store, ['book', 'pen', 'pencil', 'biscuit', 'milk', 'sugar', 'snack', 'sweet']);
     predictions.push({
       periodName: 'Back-to-School Season',
       expectedTrend: 'increase',
-      details: 'Stationery, notebooks, snacks, and beverage rolls experience higher local demand as school terms resume.',
-      suggestedItems: ['Peak Milk Sachet Roll', 'Cabin Biscuit', 'Sugar Packet']
+      details: fromCatalog.length
+        ? 'Stationery, snacks, and beverage items in your catalog tend to see higher demand as school terms resume.'
+        : "Stationery, notebooks, snacks, and beverage rolls typically see higher local demand as school terms resume — you don't currently stock items matching this pattern, so these are general regional examples.",
+      suggestedItems: fromCatalog.length ? fromCatalog : genericFallback,
+      itemsFromYourCatalog: fromCatalog.length > 0,
     });
   }
 
   // 2. Holiday Festive (November - December)
   if (currentMonth === 10 || currentMonth === 11) {
+    const genericFallback = ['Macaroni', 'Soft Drinks', 'Stout/Malt Drinks'];
+    const fromCatalog = matchStoreProducts(store, ['macaroni', 'rice', 'stout', 'malt', 'wine', 'pepsi', 'drink', 'provision', 'spaghetti']);
     predictions.push({
       periodName: 'Christmas Festive Period',
       expectedTrend: 'increase',
-      details: 'Heavy demand on provisions, soft drinks (Minerals), alcoholic drinks, and bulk ingredients for celebrations.',
-      suggestedItems: ['Macaroni', 'Rice Mango', 'Guinness Stout', 'Pepsi']
+      details: fromCatalog.length
+        ? 'Provisions and drinks in your catalog typically see heavy demand as customers stock up for celebrations.'
+        : "Provisions, soft drinks, and alcoholic drinks typically see heavy demand for celebrations — you don't currently stock items matching this pattern, so these are general regional examples.",
+      suggestedItems: fromCatalog.length ? fromCatalog : genericFallback,
+      itemsFromYourCatalog: fromCatalog.length > 0,
     });
   }
 
   // 3. Easter/Spring (March - April)
   if (currentMonth === 2 || currentMonth === 3) {
+    const genericFallback = ['Bottled/Sachet Water', 'Soft Drinks', 'Packaged Snacks'];
+    const fromCatalog = matchStoreProducts(store, ['mineral', 'water', 'juice', 'pack', 'drink', 'snack']);
     predictions.push({
       periodName: 'Easter Festive Season',
       expectedTrend: 'increase',
-      details: 'Higher local retail traffic for groceries, soft drinks, and packaged items during public holiday weekends.',
-      suggestedItems: ['Mineral', 'Super Pack Carton', 'Viju Baked']
+      details: fromCatalog.length
+        ? 'Groceries and drinks in your catalog typically see higher traffic during this holiday weekend period.'
+        : "Groceries, soft drinks, and packaged items typically see higher traffic during holiday weekends — you don't currently stock items matching this pattern, so these are general regional examples.",
+      suggestedItems: fromCatalog.length ? fromCatalog : genericFallback,
+      itemsFromYourCatalog: fromCatalog.length > 0,
     });
   }
 
-  // Fallback default predictions
-  predictions.push({
-    periodName: 'Mid-Year Supplier Adjustments',
-    expectedTrend: 'stable',
-    details: 'General wholesale prices tend to shift. Focus on locked-in supplier contracts for stable margins.',
-    suggestedItems: ['Garri Mix', 'Palm Oil', 'Egg Crate']
-  });
+  // Fallback default predictions — outside of any specific season window
+  if (predictions.length === 0) {
+    predictions.push({
+      periodName: 'No Specific Seasonal Pattern Right Now',
+      expectedTrend: 'stable',
+      details: 'General wholesale prices tend to shift through the year. Focus on locked-in supplier contracts for stable margins.',
+      suggestedItems: [],
+      itemsFromYourCatalog: false,
+    });
+  }
 
   return predictions;
 }
 
-// ─── Weather Impact Insights ──────────────────────────────────────────────────
+// ─── Seasonal Climate Insights ─────────────────────────────────────────────
+// NOTE: There is no live weather API integrated into StoreFlow. This used to
+// take a manually-picked "hot/rainy/cold" condition and return fabricated
+// precise percentages (e.g. "25-30% increase") that were never actually
+// measured from any data. Instead, this now derives a general seasonal
+// expectation from Nigeria's known climate calendar (dry/Harmattan roughly
+// Nov-Feb, hot dry season Mar-Apr, rainy season May-Oct) and is honest about
+// being a general seasonal pattern rather than a live weather reading.
 export interface WeatherInsight {
   weatherCondition: string;
   effect: string;
@@ -1163,27 +1296,32 @@ export interface WeatherInsight {
   suggestedAction: string;
 }
 
-export function getWeatherInsights(store: StoreData, activeCondition: 'hot' | 'rainy' | 'cold'): WeatherInsight {
-  if (activeCondition === 'hot') {
+export function getWeatherInsights(store: StoreData): WeatherInsight {
+  const month = new Date().getMonth(); // 0-11
+
+  if (month === 10 || month === 11 || month === 0 || month === 1) {
+    // Nov–Feb: Harmattan / cool dry season
     return {
-      weatherCondition: 'Sunny / Hot Weather ☀️',
-      effect: 'Beverages and cold liquids demand increases by estimated 25-30%.',
-      impactDetails: 'High temperature drives foot traffic to coolers. Sachet water, carbonated cans, and bottled juices turn over faster.',
-      suggestedAction: 'Ensure drink coolers are active, restocked, and ice levels are maintained.'
+      weatherCondition: 'Harmattan Season (Nov–Feb)',
+      effect: 'Cold mornings and dusty, dry air typically increase demand for hot drinks and skincare.',
+      impactDetails: 'This is a general seasonal pattern for this time of year in Nigeria, not a live weather reading — check your own sales trend to confirm it applies to your customers.',
+      suggestedAction: 'Consider stocking more hot Milo/Nescafé, tea, and moisturizing products through this period.'
     };
-  } else if (activeCondition === 'rainy') {
+  } else if (month === 2 || month === 3) {
+    // Mar–Apr: hot dry season
     return {
-      weatherCondition: 'Rainy Weather 🌧️',
-      effect: 'Local store drop-ins decrease; indoor grocery items dominate.',
-      impactDetails: 'Rain limits walking customers. Delivery, WhatsApp ordering, or bulk food purchases (rice, garri) rise relative to single cold drinks.',
-      suggestedAction: 'Offer WhatsApp order deliveries and promote home-cooking pantry essentials.'
+      weatherCondition: 'Hot Dry Season (Mar–Apr)',
+      effect: 'Rising temperatures typically increase demand for cold beverages.',
+      impactDetails: 'This is a general seasonal pattern for this time of year in Nigeria, not a live weather reading — check your own sales trend to confirm it applies to your customers.',
+      suggestedAction: 'Keep drink coolers stocked and ensure ice supply is reliable.'
     };
   } else {
+    // May–Oct: rainy season
     return {
-      weatherCondition: 'Cold / Harmattan Weather 🍃',
-      effect: 'Hot beverages, tea packs, and moisturizers demand spikes.',
-      impactDetails: 'Harmattan winds drive demand for hot Milo/Nescafé, butter rolls, and skincare products.',
-      suggestedAction: 'Increase stock of powdered tea, coffee, and dry skin protection items.'
+      weatherCondition: 'Rainy Season (May–Oct)',
+      effect: 'Rain can reduce walk-in foot traffic, while demand for pantry staples and indoor items tends to hold steady or rise.',
+      impactDetails: 'This is a general seasonal pattern for this time of year in Nigeria, not a live weather reading — check your own sales trend to confirm it applies to your customers.',
+      suggestedAction: 'Consider offering WhatsApp/phone ordering with delivery for rainy days.'
     };
   }
 }
@@ -1196,7 +1334,7 @@ export interface DiscountRecommendation {
   costPrice: number;
   sellingPrice: number;
   suggestedDiscountPct: number;
-  expectedLiftPct: number;
+  daysDeadStock: number;
   marginImpact: string;
 }
 
@@ -1212,15 +1350,21 @@ export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
     if (!soldIds.has(p.id) && p.quantity > 5 && p.costPrice > 0) {
       const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
       if (margin > 0.15) {
+        // Discount depth scales with how much margin room is actually available —
+        // never suggest cutting into cost price, and never suggest a token 10%
+        // regardless of the product. Deeper margin = room for a deeper discount.
+        const maxSafeDiscountPct = Math.floor(margin * 100 * 0.5); // use up to half the available margin
+        const suggestedDiscountPct = Math.max(5, Math.min(25, maxSafeDiscountPct));
+        const daysDeadStock = p.addedAt ? Math.floor((now.getTime() - new Date(p.addedAt).getTime()) / 86400000) : 14;
         recs.push({
           productName: p.name,
           productId: p.id,
           stockQty: p.quantity,
           costPrice: p.costPrice,
           sellingPrice: p.sellingPrice,
-          suggestedDiscountPct: 10,
-          expectedLiftPct: 40,
-          marginImpact: `Reduces markup margin from ${Math.round(margin * 100)}% to ${Math.round((margin - 0.10) * 100)}%.`
+          suggestedDiscountPct,
+          daysDeadStock,
+          marginImpact: `Reduces markup margin from ${Math.round(margin * 100)}% to ${Math.round((margin * 100) - suggestedDiscountPct)}%, while staying above cost price.`
         });
       }
     }
