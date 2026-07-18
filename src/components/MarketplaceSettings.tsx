@@ -26,6 +26,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       inStoreScanEnabled: true,
       temporarilyHidden: false,
       storeOpen: true,
+      showLimitedStock: false,
 
       // 2. Preview settings
       description: store.profile?.address || 'Premium Nigerian marketplace store',
@@ -385,6 +386,12 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                   description="Manually toggle if the store is open for ordering right now."
                   checked={form.storeOpen}
                   onChange={v => handleChange('storeOpen', v)}
+                />
+                <ToggleRow
+                  label="Show Low-Stock Warnings to Customers"
+                  description="When on, customers see a 'Limited' badge on products with 5 or fewer left — useful for urgency, but reveals your stock levels. Off by default."
+                  checked={!!form.showLimitedStock}
+                  onChange={v => handleChange('showLimitedStock', v)}
                 />
               </div>
             </div>
