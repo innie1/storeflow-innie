@@ -66,10 +66,11 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
       Completed: 0
     };
     orders.forEach(o => {
-      const status = getNormalizedStatus(o.status) as keyof typeof res;
-      if (res[status] !== undefined) {
-        res[status]++;
-      }
+      const status = getNormalizedStatus(o.status);
+      if (status === 'Pending') res.Pending++;
+      else if (status === 'Accepted') res.Accepted++;
+      else if (status === 'Preparing' || status === 'Ready') res.Preparing++;
+      else if (status === 'Completed') res.Completed++;
     });
     return res;
   }, [orders, getNormalizedStatus]);
@@ -79,9 +80,6 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
     return orders.filter(o => {
       const normStatus = getNormalizedStatus(o.status);
       
-      // If order has status 'Ready', we categorize it as 'Preparing' (or whichever makes sense) 
-      // but let's map 'Ready' to 'Preparing' or 'Completed' for filtering tab support.
-      // Wait, let's look at the mapping:
       let matchesTab = false;
       if (activeTab === 'All') {
         matchesTab = true;
@@ -179,14 +177,14 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 rounded-full text-xs font-display font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 border ${
+            className={`px-3.5 py-1.5 rounded-full text-xs font-display font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-2 border ${
               activeTab === tab 
                 ? 'border-primary bg-primary/10 text-primary' 
                 : 'border-border/40 bg-surface-2/40 text-foreground hover:bg-surface-2'
             }`}
           >
             <span>{tab}</span>
-            <span className={activeTab === tab ? 'text-primary/90' : 'text-muted-foreground'}>
+            <span className={activeTab === tab ? 'text-primary/95' : 'text-muted-foreground font-medium'}>
               {counts[tab as keyof typeof counts] ?? 0}
             </span>
           </button>
@@ -194,15 +192,20 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
       </div>
 
       {/* Search Input below filter tabs */}
-      <div className="relative w-full h-9 bg-surface-2/45 rounded-xl flex items-center px-3 border border-border/40 focus-within:border-primary/45 transition-colors">
-        <span className="material-symbols-outlined text-muted-foreground text-xs mr-2">search</span>
-        <input
-          type="text"
-          placeholder="Search by order ID, customer name or phone..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className="bg-transparent border-none text-xs focus:ring-0 focus:outline-none w-full text-foreground placeholder:text-muted-foreground"
-        />
+      <div className="flex gap-2">
+        <div className="relative flex-1 h-9 bg-surface-2/45 rounded-xl flex items-center px-3 border border-border/40 focus-within:border-primary/45 transition-colors">
+          <span className="material-symbols-outlined text-muted-foreground text-xs mr-2 select-none">search</span>
+          <input
+            type="text"
+            placeholder="Search by order ID, customer or item..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="bg-transparent border-none text-xs focus:ring-0 focus:outline-none w-full text-foreground placeholder:text-muted-foreground"
+          />
+        </div>
+        <button className="w-9 h-9 rounded-xl border border-border/40 bg-surface-2/45 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer">
+          <span className="material-symbols-outlined text-sm select-none">tune</span>
+        </button>
       </div>
 
       {/* Orders List */}
@@ -232,16 +235,14 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                         {normStatus}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-semibold">
-                      <span>
-                        {new Date(order.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) === new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })
-                          ? `Today, ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                          : new Date(order.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' as any })}
-                      </span>
-                    </div>
                   </div>
                   <div className="text-right">
                     <span className="font-display font-black text-sm text-foreground">₦{order.total?.toLocaleString() || '0.00'}</span>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {new Date(order.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) === new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })
+                        ? `Today, ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        : new Date(order.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' as any })}
+                    </p>
                   </div>
                 </div>
 
@@ -249,29 +250,29 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                 <div className="space-y-1.5 text-xs text-foreground/90 pl-0.5">
                   <div className="flex items-center gap-2">
                     <User className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                    <span className="font-medium text-foreground">{order.customer_name}</span>
+                    <span className="text-[13px] text-foreground font-medium">{order.customer_name}</span>
                   </div>
                   {order.customer_phone && (
                     <div className="flex items-center gap-2">
                       <Phone className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                      <span className="text-muted-foreground">{order.customer_phone}</span>
+                      <span className="text-[13px] text-muted-foreground">{order.customer_phone}</span>
                     </div>
                   )}
                   {meta?.address && (
                     <div className="flex items-start gap-2">
                       <MapPin className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0 mt-0.5" />
-                      <span className="text-muted-foreground leading-normal">{meta.address}</span>
+                      <span className="text-[13px] text-muted-foreground leading-normal">{meta.address}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Items & Payment Method Info */}
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-2 pb-2 border-t border-b border-border/20 pl-0.5">
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-3 border-t border-border/10 pl-0.5">
                   <div className="flex items-center gap-1">
                     <Package className="w-3.5 h-3.5 text-muted-foreground/50" />
                     <span>{order.order_items?.length || 0} item{(order.order_items?.length || 0) === 1 ? '' : 's'}</span>
                   </div>
-                  <div className="h-3 w-px bg-border/40" />
+                  <div className="h-3 w-px bg-border/20" />
                   <div className="flex items-center gap-1">
                     {meta?.payment_method?.toLowerCase().includes('cash') || meta?.paymentMethod?.toLowerCase().includes('cash') ? (
                       <Banknote className="w-3.5 h-3.5 text-muted-foreground/50" />
@@ -316,26 +317,26 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
 
                   {/* Actions buttons */}
                   {normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (
-                    <div className="flex items-center gap-1.5">
-                      {/* Reject button - Small circular red button */}
+                    <div className="flex items-center gap-3">
+                      {/* Reject button - circular red button, made larger (w-10 h-10) with w-5 icon */}
                       {normStatus === 'Pending' && (
                         <button
                           onClick={() => {
                             setPromptType('reject');
                             setPromptOrderId(order.id);
                           }}
-                          className="w-7 h-7 rounded-full border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition active:scale-90 cursor-pointer"
+                          className="w-10 h-10 rounded-full border border-red-500/60 bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition active:scale-90 cursor-pointer shrink-0"
                           title="Reject Order"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <X className="w-5 h-5" />
                         </button>
                       )}
 
-                      {/* Accept / Next State button */}
+                      {/* Accept / Next State button - made slightly smaller and more compact */}
                       {normStatus === 'Pending' && (
                         <button
                           onClick={() => onUpdateOrderStatus(order.id, 'Accepted')}
-                          className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                          className="px-4.5 py-2.5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
                         >
                           Accept Order
                         </button>
@@ -344,7 +345,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                       {normStatus === 'Accepted' && (
                         <button
                           onClick={() => onUpdateOrderStatus(order.id, 'Preparing')}
-                          className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                          className="px-4.5 py-2.5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
                         >
                           Start Preparing
                         </button>
@@ -353,7 +354,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                       {normStatus === 'Preparing' && (
                         <button
                           onClick={() => onUpdateOrderStatus(order.id, 'Ready')}
-                          className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                          className="px-4.5 py-2.5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
                         >
                           {meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}
                         </button>
@@ -362,7 +363,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                       {normStatus === 'Ready' && (
                         <button
                           onClick={() => onUpdateOrderStatus(order.id, 'Completed')}
-                          className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                          className="px-4.5 py-2.5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
                         >
                           {meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}
                         </button>
@@ -372,7 +373,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                       {(normStatus === 'Accepted' || normStatus === 'Preparing' || normStatus === 'Ready') && (
                         <button
                           onClick={() => onUpdateOrderStatus(order.id, 'Cancelled')}
-                          className="px-3 py-1.5 rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive text-xs font-display font-semibold transition active:scale-95 cursor-pointer"
+                          className="px-3.5 py-2 rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive text-xs font-display font-semibold transition active:scale-95 cursor-pointer"
                         >
                           Cancel
                         </button>
