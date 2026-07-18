@@ -576,7 +576,7 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
 
 
 
-  // Record streak + FLOW on mount
+  // Record streak + FLOW on mount (once per day, rate-limited by recordStreak itself)
   useEffect(() => {
     if (!settings.enabled) return;
     const { isNew } = recordStreak();
@@ -590,7 +590,18 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
         // Cooldown or anti-cheat triggered
       }
     }
-    // Auto-generate and save notifications
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.enabled]);
+
+  // Auto-generate and save notifications. This previously shared an effect
+  // with the streak logic above, gated only on [settings.enabled] — meaning
+  // new critical issues (stock selling out, expenses spiking) only got
+  // checked once when Manager first mounted, not while the merchant was
+  // actively using the app during that session. This now reacts to the
+  // data that actually drives notifications. The dedup-by-id check below
+  // means this safely settles after one extra pass rather than looping.
+  useEffect(() => {
+    if (!settings.enabled) return;
     const newNotes = generateNotifications(store);
     if (newNotes.length > 0) {
       const existing = store.flowNotifications || [];
@@ -601,8 +612,7 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
         saveStore(updated); onUpdate(updated);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.enabled]);
+  }, [settings.enabled, store.sales.length, store.products, store.expenses?.length, store.customerRequests?.length]);
 
   const insights = generateInsights(store, '7d');
   const recs = generateRecommendations(store);
