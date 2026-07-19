@@ -1041,7 +1041,7 @@ export default function Index() {
 
       {/* Main Layout Area */}
       <div className="flex-1 flex flex-col md:pl-64">
-        <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-4 md:px-6 py-3.5 flex items-center justify-between">
+        <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-4 md:px-6 py-3.5 flex items-center justify-between" style={{ paddingLeft: 'max(1rem, env(safe-area-inset-left))', paddingRight: 'max(1rem, env(safe-area-inset-right))', paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}>
           <div className="flex flex-col text-left">
             <h1 className="font-display font-black text-xl text-foreground tracking-tight select-none">StoreFlow</h1>
             <button 
@@ -1340,7 +1340,7 @@ export default function Index() {
           </div>
         )}
 
-        <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 w-full max-w-5xl lg:max-w-6xl mx-auto space-y-6">
+        <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 w-full max-w-5xl lg:max-w-6xl mx-auto space-y-6" style={{ paddingLeft: 'max(1rem, env(safe-area-inset-left))', paddingRight: 'max(1rem, env(safe-area-inset-right))', paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))' }}>
           <Suspense fallback={
             <div className="flex flex-col items-center justify-center py-24 space-y-3">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -1442,7 +1442,7 @@ export default function Index() {
         </main>
 
         {/* Bottom Nav */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <div className="flex justify-around max-w-3xl mx-auto px-4">
             {allowedMainTabs.map(t => {
               const isActive = tab === t.id;

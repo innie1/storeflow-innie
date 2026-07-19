@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback } from 'react';
 import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
-import { Bell, User, Phone, MapPin, Package, Banknote, CreditCard, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface OrdersProps {
   store: StoreData;
@@ -12,7 +11,7 @@ interface OrdersProps {
 }
 
 export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }: OrdersProps) {
-  const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Accepted' | 'Preparing' | 'Completed'>('All');
+  const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Accepted' | 'Preparing' | 'Ready' | 'Completed' | 'Rejected' | 'Cancelled'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
@@ -41,20 +40,20 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
     if (s === 'preparing') return 'Preparing';
     if (s === 'ready' || s === 'ready for pickup' || s === 'ready for delivery') return 'Ready';
     if (s === 'completed') return 'Completed';
-    if (s === 'cancelled') return 'Cancelled';
     if (s === 'rejected') return 'Rejected';
-    return 'Pending';
+    if (s === 'cancelled') return 'Cancelled';
+    return status;
   }, []);
 
+  // Today's orders count for daily order limit calculations
   const todayOrders = useMemo(() => {
-    return orders.filter(o => {
-      const d = new Date(o.created_at);
-      return d.toDateString() === new Date().toDateString() && o.status !== 'Rejected' && o.status !== 'Cancelled';
-    });
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return orders.filter(o => new Date(o.created_at).getTime() >= today.getTime());
   }, [orders]);
 
-  const maxDailyOrders = store.marketplaceSettings?.maxDailyOrders || 0;
-  const isLimitReached = maxDailyOrders > 0 && todayOrders.length >= maxDailyOrders;
+  const maxDailyOrders = store.marketplaceSettings?.maxDailyOrders || null;
+  const isLimitReached = maxDailyOrders && todayOrders.length >= maxDailyOrders;
 
   // Get order count for each tab using normalized statuses
   const counts = useMemo(() => {
@@ -63,14 +62,16 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
       Pending: 0, 
       Accepted: 0,
       Preparing: 0, 
-      Completed: 0
+      Ready: 0, 
+      Completed: 0, 
+      Rejected: 0,
+      Cancelled: 0
     };
     orders.forEach(o => {
-      const status = getNormalizedStatus(o.status);
-      if (status === 'Pending') res.Pending++;
-      else if (status === 'Accepted') res.Accepted++;
-      else if (status === 'Preparing' || status === 'Ready') res.Preparing++;
-      else if (status === 'Completed') res.Completed++;
+      const status = getNormalizedStatus(o.status) as keyof typeof res;
+      if (res[status] !== undefined) {
+        res[status]++;
+      }
     });
     return res;
   }, [orders, getNormalizedStatus]);
@@ -79,16 +80,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
       const normStatus = getNormalizedStatus(o.status);
-      
-      let matchesTab = false;
-      if (activeTab === 'All') {
-        matchesTab = true;
-      } else if (activeTab === 'Preparing') {
-        matchesTab = (normStatus === 'Preparing' || normStatus === 'Ready');
-      } else {
-        matchesTab = (normStatus === activeTab);
-      }
-
+      const matchesTab = activeTab === 'All' || normStatus === activeTab;
       const matchesSearch = 
         o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -108,113 +100,113 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
   };
 
   return (
-    <div className="space-y-4">
-      {/* Compact App Bar */}
-      <div className="flex items-center justify-between py-2 border-b border-border/40 sticky top-0 bg-background/95 backdrop-blur-md z-20 -mx-4 px-4 md:-mx-0 md:px-0">
-        <div className="flex items-center gap-3">
-          <h2 className="font-display font-black text-lg text-foreground tracking-tight select-none">Customer Orders</h2>
+    <div className="space-y-6">
+      {/* Title & Limit Counter */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="text-left">
+          <h2 className="font-display font-black text-2xl text-foreground tracking-tight">QR Customer Orders</h2>
+          <p className="text-xs text-muted-foreground mt-1">Receive, prepare and track online storefront orders in real-time.</p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Open to Market toggle */}
-          <button
-            onClick={() => {
-              const wasOpen = store.marketplaceSettings?.storeOpen !== false;
-              const updatedStore = {
-                ...store,
-                marketplaceSettings: {
-                  ...(store.marketplaceSettings || {}),
-                  storeOpen: !wasOpen,
-                },
-              };
-              onUpdate(updatedStore);
-              saveStore(updatedStore);
-              showToast(
-                wasOpen ? 'Store is now closed to customers' : 'Store is now open to the marketplace',
-                wasOpen ? 'info' : 'success'
-              );
-            }}
-            className={`px-3 py-1.5 rounded-xl border text-[11px] font-display font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${
-              store.marketplaceSettings?.storeOpen !== false
-                ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-500'
-                : 'bg-destructive/10 border-destructive/25 text-destructive'
-            }`}
-            title="Toggle whether customers can see and order from your store"
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${store.marketplaceSettings?.storeOpen !== false ? 'bg-emerald-500' : 'bg-destructive'}`} />
-            {store.marketplaceSettings?.storeOpen !== false ? 'Open to Market' : 'Closed to Market'}
-          </button>
-
-          {/* Notification Icon */}
-          <button
-            className="relative w-8 h-8 rounded-full bg-surface-2 hover:bg-surface-3 border border-border/60 flex items-center justify-center text-sm transition-all active:scale-95 cursor-pointer"
-            title="Pending Orders Notification"
-          >
-            <Bell className="w-3.5 h-3.5 text-foreground" />
-            {counts.Pending > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 rounded-full bg-destructive text-[8px] font-bold font-mono text-destructive-foreground px-1 flex items-center justify-center">
-                {counts.Pending}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* Open to Market toggle — controls whether customers can see & order from your store */}
+        <button
+          onClick={() => {
+            const wasOpen = store.marketplaceSettings?.storeOpen !== false;
+            const updatedStore = {
+              ...store,
+              marketplaceSettings: {
+                ...(store.marketplaceSettings || {}),
+                storeOpen: !wasOpen,
+              },
+            };
+            onUpdate(updatedStore);
+            saveStore(updatedStore);
+            showToast(
+              wasOpen ? 'Store is now closed to customers' : 'Store is now open to the marketplace',
+              wasOpen ? 'info' : 'success'
+            );
+          }}
+          className={`px-4 py-2.5 rounded-xl border text-sm font-display font-bold flex items-center gap-2 self-start md:self-auto transition-all active:scale-95 cursor-pointer ${
+            store.marketplaceSettings?.storeOpen !== false
+              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-500'
+              : 'bg-destructive/10 border-destructive/25 text-destructive'
+          }`}
+          title="Toggle whether customers can see and order from your store"
+        >
+          <span className={`w-2.5 h-2.5 rounded-full ${store.marketplaceSettings?.storeOpen !== false ? 'bg-emerald-500' : 'bg-destructive'}`} />
+          {store.marketplaceSettings?.storeOpen !== false ? 'Open to Market' : 'Closed to Market — tap to open'}
+        </button>
+        {maxDailyOrders && (
+          <div className={`px-4 py-2 rounded-xl border text-xs font-semibold flex items-center gap-2 self-start md:self-auto ${
+            isLimitReached ? 'bg-red-500/10 border-red-500/25 text-red-500' : 'bg-surface-2 border-border text-muted-foreground'
+          }`}>
+            <span>Daily Capacity:</span>
+            <span className="font-mono font-bold">{todayOrders.length} / {maxDailyOrders}</span>
+            {isLimitReached && <span className="animate-pulse">⚠️ Reached</span>}
+          </div>
+        )}
       </div>
 
       {/* Warning banner if limit reached */}
       {isLimitReached && (
-        <div className="p-3.5 bg-red-500/10 border border-red-500/25 rounded-2xl text-red-500 text-[11px] font-medium space-y-1 text-left">
+        <div className="p-4 bg-red-500/10 border border-red-500/25 rounded-2xl text-red-500 text-xs font-medium space-y-1 text-left">
           <p className="font-bold flex items-center gap-1.5">
-            <span>⚠️ Daily Capacity Limit Reached</span>
+            <span>⚠️ Daily Limit Exceeded</span>
           </p>
-          <p className="text-red-500/80 leading-normal">
-            You have received {todayOrders.length} orders today, meeting your capacity of {maxDailyOrders}. Enable/disable ordering status as needed.
+          <p className="text-[11px] text-red-500/80 leading-normal">
+            You have received {todayOrders.length} orders today, which meets or exceeds your maximum capacity of {maxDailyOrders}. Consider disabling new online orders in Settings if you cannot fulfill more.
           </p>
         </div>
       )}
 
-      {/* Sticky Filter Tabs */}
-      <div className="sticky top-[49px] bg-background/95 backdrop-blur-md z-10 py-2 border-b border-border/40 -mx-4 px-4 md:-mx-0 md:px-0 flex gap-2 overflow-x-auto no-scrollbar">
-        {(['All', 'Pending', 'Accepted', 'Preparing', 'Completed'] as const).map(tab => (
+      {/* Tabs list with counts — pill style matching the reference design */}
+      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar -mx-4 px-4 md:-mx-0 md:px-0">
+        {(['All', 'Pending', 'Accepted', 'Preparing', 'Ready', 'Completed', 'Rejected', 'Cancelled'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-display font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-2 border ${
-              activeTab === tab 
-                ? 'border-primary bg-primary/10 text-primary' 
-                : 'border-border/40 bg-surface-2/40 text-foreground hover:bg-surface-2'
+            className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border text-xs font-display font-bold transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === tab
+                ? 'border-primary text-primary bg-primary/5'
+                : 'border-border/60 text-muted-foreground bg-surface-2 hover:text-foreground'
             }`}
           >
-            <span>{tab}</span>
-            <span className={activeTab === tab ? 'text-primary/95' : 'text-muted-foreground font-medium'}>
+            {tab}
+            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
+              activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-surface-3 text-muted-foreground'
+            }`}>
               {counts[tab as keyof typeof counts] ?? 0}
             </span>
           </button>
         ))}
       </div>
 
-      {/* Search Input below filter tabs */}
-      <div className="flex gap-2">
-        <div className="relative flex-1 h-9 bg-surface-2/45 rounded-xl flex items-center px-3 border border-border/40 focus-within:border-primary/45 transition-colors">
-          <span className="material-symbols-outlined text-muted-foreground text-xs mr-2 select-none">search</span>
+      {/* Search Input + Filter button */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 h-11 bg-surface-2 rounded-xl flex items-center px-4 border border-border/60 focus-within:border-primary/45 transition-colors min-w-0">
+          <span className="material-symbols-outlined text-muted-foreground text-sm mr-2.5 shrink-0">search</span>
           <input
             type="text"
             placeholder="Search by order ID, customer or item..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="bg-transparent border-none text-xs focus:ring-0 focus:outline-none w-full text-foreground placeholder:text-muted-foreground"
+            className="bg-transparent border-none text-xs focus:ring-0 focus:outline-none w-full min-w-0 text-foreground placeholder:text-muted-foreground"
           />
         </div>
-        <button className="w-9 h-9 rounded-xl border border-border/40 bg-surface-2/45 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer">
-          <span className="material-symbols-outlined text-sm select-none">tune</span>
+        <button
+          className="shrink-0 w-11 h-11 rounded-xl bg-surface-2 border border-border/60 flex items-center justify-center text-muted-foreground hover:text-foreground transition cursor-pointer"
+          title="Filter orders"
+        >
+          <span className="material-symbols-outlined text-lg">tune</span>
         </button>
       </div>
 
       {/* Orders List */}
       {filteredOrders.length === 0 ? (
-        <div className="bg-card border border-border/40 rounded-[22px] p-6 text-center text-xs text-muted-foreground shadow-sm">
+        <div className="bg-card border border-border rounded-2xl p-8 text-center text-sm text-muted-foreground shadow-sm">
           No orders found matching the filter criteria.
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {filteredOrders.map(order => {
             const normStatus = getNormalizedStatus(order.status);
             const styles = STATUS_STYLES[normStatus] || STATUS_STYLES['Pending'];
@@ -225,207 +217,118 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
             return (
               <div 
                 key={order.id} 
-                onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
-                className={`bg-card border border-border/40 rounded-[22px] p-4.5 shadow-sm hover:shadow-md transition-all text-left space-y-3 cursor-pointer select-none ${
-                  isExpanded ? 'ring-1 ring-primary/20 border-primary/30' : ''
-                }`}
+                className="bg-card border border-border/80 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all text-left space-y-4"
               >
                 {/* Header Row */}
                 <div className="flex justify-between items-start gap-4">
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-display font-black text-sm text-foreground">Order #{order.order_number}</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-bold font-display ${styles.bg} ${styles.text} ${styles.border}`}>
+                      <span className="font-display font-black text-base text-foreground">Order #{order.order_number}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold font-display ${styles.bg} ${styles.text} ${styles.border}`}>
                         {normStatus}
                       </span>
                     </div>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-semibold">
+                      <span>{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>•</span>
+                      <span>{new Date(order.created_at).toLocaleDateString()}</span>
+                      <span>•</span>
+                      <span className="uppercase text-primary font-bold">{pricingMode} PRICING</span>
+                    </div>
                   </div>
                   <div className="text-right">
-                    <span className="font-display font-black text-sm text-foreground">₦{order.total?.toLocaleString() || '0.00'}</span>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {new Date(order.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) === new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })
-                        ? `Today, ${new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                        : new Date(order.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' as any })}
-                    </p>
+                    <span className="font-display font-black text-base text-foreground">₦{order.total?.toLocaleString() || '0.00'}</span>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">Subtotal: ₦{order.subtotal?.toLocaleString() || '0.00'}</p>
                   </div>
                 </div>
 
-                {/* Customer Details Row */}
-                <div className="space-y-1.5 text-xs text-foreground/90 pl-0.5">
-                  <div className="flex items-center gap-2">
-                    <User className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                    <span className="text-[13px] text-foreground font-medium">{order.customer_name}</span>
+                {/* Customer Details — icon-prefixed rows matching the reference design */}
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center gap-2 text-foreground">
+                    <span className="material-symbols-outlined text-muted-foreground text-[16px] shrink-0">person</span>
+                    <span className="font-semibold truncate">{order.customer_name}</span>
                   </div>
                   {order.customer_phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                      <span className="text-[13px] text-muted-foreground">{order.customer_phone}</span>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span className="material-symbols-outlined text-muted-foreground text-[16px] shrink-0">call</span>
+                      <span className="truncate">{order.customer_phone}</span>
                     </div>
                   )}
-                  {meta?.address && (
-                    <div className="flex items-start gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0 mt-0.5" />
-                      <span className="text-[13px] text-muted-foreground leading-normal">{meta.address}</span>
+                  {meta?.delivery_type === 'delivery' && meta?.address && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span className="material-symbols-outlined text-muted-foreground text-[16px] shrink-0">location_on</span>
+                      <span className="truncate">{meta.address}</span>
                     </div>
                   )}
                 </div>
 
-                {/* Items & Payment Method Info */}
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-3 border-t border-border/10 pl-0.5">
-                  <div className="flex items-center gap-1">
-                    <Package className="w-3.5 h-3.5 text-muted-foreground/50" />
-                    <span>{order.order_items?.length || 0} item{(order.order_items?.length || 0) === 1 ? '' : 's'}</span>
-                  </div>
-                  <div className="h-3 w-px bg-border/20" />
-                  <div className="flex items-center gap-1">
-                    {meta?.payment_method?.toLowerCase().includes('cash') || meta?.paymentMethod?.toLowerCase().includes('cash') ? (
-                      <Banknote className="w-3.5 h-3.5 text-muted-foreground/50" />
-                    ) : (
-                      <CreditCard className="w-3.5 h-3.5 text-muted-foreground/50" />
-                    )}
-                    <span>{meta?.payment_method || meta?.paymentMethod || 'Cash on Delivery'}</span>
-                  </div>
+                <div className="border-t border-border/40" />
+
+                {/* Items + Payment — inline row matching the reference design */}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="material-symbols-outlined text-[16px] shrink-0">inventory_2</span>
+                  <span className="font-semibold text-foreground">{order.order_items?.length || 0} item{(order.order_items?.length || 0) === 1 ? '' : 's'}</span>
+                  <span className="text-border">|</span>
+                  <span className="material-symbols-outlined text-[16px] shrink-0">
+                    {(meta?.payment_method || meta?.paymentMethod || '').toLowerCase().includes('transfer') ? 'sync_alt' : 'payments'}
+                  </span>
+                  <span className="capitalize">{meta?.payment_method || meta?.paymentMethod || 'Not specified'}</span>
+                  <span className="ml-auto uppercase text-[9px] text-primary font-bold shrink-0">{pricingMode} pricing</span>
                 </div>
 
                 {/* Promoted / Warning Notes inside Order details */}
                 {meta?.rejection_reason && (
-                  <div className="p-2.5 bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] rounded-xl">
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-xs rounded-xl">
                     <span className="font-bold">Rejection Reason:</span> {meta.rejection_reason}
                   </div>
                 )}
 
                 {/* Order notes / customer instructions */}
                 {(meta?.instructions || meta?.notes || (typeof order.notes === 'string' && !order.notes.startsWith('{') && order.notes.trim() !== '')) && (
-                  <div className="p-2.5 bg-amber-500/5 border border-amber-500/10 text-[11px] rounded-xl text-left">
-                    <span className="text-[10px] text-amber-500 font-bold uppercase block mb-0.5">Instructions</span>
+                  <div className="p-3 bg-amber-500/5 border border-amber-500/10 text-xs rounded-xl text-left">
+                    <span className="text-[10px] text-amber-500 font-bold uppercase block mb-0.5">Order Notes / Instructions</span>
                     <p className="text-muted-foreground leading-relaxed font-medium">
                       {meta?.instructions || meta?.notes || order.notes}
                     </p>
                   </div>
                 )}
 
-                {/* Action Items & Expand trigger Row */}
-                <div className="flex items-center justify-between gap-4 pt-1">
-                  {/* Details Toggle */}
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpandedOrder(isExpanded ? null : order.id);
-                    }}
-                    className="flex items-center gap-0.5 text-xs font-display font-bold text-primary hover:text-primary-focus cursor-pointer transition-colors py-2"
-                  >
-                    <span>Details</span>
-                    {isExpanded ? (
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+                {/* Details toggle — merged into one row with Reject/Accept for Pending orders, matching the reference layout */}
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                      className="flex items-center gap-1 text-xs font-display font-bold text-primary hover:text-primary-focus cursor-pointer shrink-0"
+                    >
+                      <span>Details</span>
+                      <span className="material-symbols-outlined text-sm">{isExpanded ? 'expand_less' : 'expand_more'}</span>
+                    </button>
 
-                  {/* Actions buttons */}
-                  {normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (
-                    <div className="flex items-center gap-3">
-                      {/* Reject button - circular red button, made w-11 h-11 for balanced touch target */}
-                      {normStatus === 'Pending' && (
+                    {normStatus === 'Pending' && (
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPromptType('reject');
-                            setPromptOrderId(order.id);
-                          }}
-                          className="w-11 h-11 rounded-full border border-red-500/60 bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition active:scale-90 cursor-pointer shrink-0"
-                          title="Reject Order"
+                          onClick={() => { setPromptType('reject'); setPromptOrderId(order.id); }}
+                          className="w-9 h-9 rounded-full border border-destructive/30 text-destructive flex items-center justify-center hover:bg-destructive/10 transition active:scale-95 cursor-pointer"
+                          title="Reject order"
                         >
-                          <X className="w-5 h-5" />
+                          <span className="material-symbols-outlined text-lg">cancel</span>
                         </button>
-                      )}
-
-                      {/* Accept / Next State button - made h-11 to be equal in height to Reject button */}
-                      {normStatus === 'Pending' && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onUpdateOrderStatus(order.id, 'Accepted');
-                          }}
-                          className="h-11 px-5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer flex items-center justify-center"
+                          onClick={() => onUpdateOrderStatus(order.id, 'Accepted')}
+                          className="px-5 py-2 rounded-full bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer whitespace-nowrap"
                         >
                           Accept Order
                         </button>
-                      )}
-
-                      {normStatus === 'Accepted' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onUpdateOrderStatus(order.id, 'Preparing');
-                          }}
-                          className="h-11 px-5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer flex items-center justify-center"
-                        >
-                          Start Preparing
-                        </button>
-                      )}
-
-                      {normStatus === 'Preparing' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onUpdateOrderStatus(order.id, 'Ready');
-                          }}
-                          className="h-11 px-5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer flex items-center justify-center"
-                        >
-                          {meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}
-                        </button>
-                      )}
-
-                      {normStatus === 'Ready' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onUpdateOrderStatus(order.id, 'Completed');
-                          }}
-                          className="h-11 px-5 rounded-[12px] bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer flex items-center justify-center"
-                        >
-                          {meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}
-                        </button>
-                      )}
-
-                      {/* Cancel order button */}
-                      {(normStatus === 'Accepted' || normStatus === 'Preparing' || normStatus === 'Ready') && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onUpdateOrderStatus(order.id, 'Cancelled');
-                          }}
-                          className="h-11 px-4.5 rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive text-xs font-display font-semibold transition active:scale-95 cursor-pointer flex items-center justify-center"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Smooth Expandable Order Items & Pricing Breakdown container */}
-                {isExpanded && (
-                  <div className="mt-3 border-t border-border/20 pt-3 space-y-3 animate-slide-down">
-                    {/* Time, Date and Pricing Mode */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground font-semibold bg-surface-2/45 p-2 rounded-xl border border-border/20">
-                      <div className="flex items-center gap-1.5">
-                        <span>Created:</span>
-                        <span className="text-foreground">{new Date(order.created_at).toLocaleString()}</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <span>Pricing:</span>
-                        <span className="uppercase text-primary font-bold">{pricingMode} Pricing</span>
-                      </div>
-                    </div>
+                    )}
+                  </div>
 
-                    {/* Order Items List */}
-                    <div className="space-y-2">
+                  {isExpanded && (
+                    <div className="mt-3 border-t border-border/40 pt-3 space-y-2 animate-slide-down">
                       {(order.order_items || []).map((item: any, idx: number) => {
                         const pName = store.products?.find((p: any) => p.id === item.product_id)?.name || 'Unknown Product';
                         return (
-                          <div key={item.id || idx} className="flex justify-between items-center text-xs py-1.5 border-b border-border/10 last:border-b-0">
+                          <div key={item.id || idx} className="flex justify-between items-center text-xs py-1">
                             <div className="flex-1 pr-4">
                               <p className="font-semibold text-foreground">{pName}</p>
                               <p className="text-[10px] text-muted-foreground">₦{item.price?.toLocaleString()} each</p>
@@ -438,18 +341,51 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                         );
                       })}
                     </div>
+                  )}
+                </div>
 
-                    {/* Pricing Summary */}
-                    <div className="pt-2 border-t border-border/20 flex flex-col items-end text-xs space-y-1">
-                      <div className="flex justify-between w-full max-w-[200px] text-muted-foreground">
-                        <span>Subtotal:</span>
-                        <span>₦{order.subtotal?.toLocaleString() || '0.00'}</span>
-                      </div>
-                      <div className="flex justify-between w-full max-w-[200px] text-foreground font-bold">
-                        <span>Total Amount:</span>
-                        <span>₦{order.total?.toLocaleString() || '0.00'}</span>
-                      </div>
-                    </div>
+                {/* Actions row — remaining statuses besides Pending (which is merged above) */}
+                {normStatus !== 'Pending' && normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-border/30 justify-end">
+                    {/* Cancel action is available for Accepted, Preparing, and Ready */}
+                    {(normStatus === 'Accepted' || normStatus === 'Preparing' || normStatus === 'Ready') && (
+                      <button
+                        onClick={() => onUpdateOrderStatus(order.id, 'Cancelled')}
+                        className="px-3.5 py-1.5 rounded-xl border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive text-xs font-display font-semibold transition active:scale-95 cursor-pointer mr-auto"
+                      >
+                        Cancel Order
+                      </button>
+                    )}
+
+                    {/* Accepted Actions */}
+                    {normStatus === 'Accepted' && (
+                      <button
+                        onClick={() => onUpdateOrderStatus(order.id, 'Preparing')}
+                        className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                      >
+                        Start Preparing
+                      </button>
+                    )}
+
+                    {/* Preparing Actions */}
+                    {normStatus === 'Preparing' && (
+                      <button
+                        onClick={() => onUpdateOrderStatus(order.id, 'Ready')}
+                        className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                      >
+                        {meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}
+                      </button>
+                    )}
+
+                    {/* Ready Actions */}
+                    {normStatus === 'Ready' && (
+                      <button
+                        onClick={() => onUpdateOrderStatus(order.id, 'Completed')}
+                        className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
+                      >
+                        {meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
