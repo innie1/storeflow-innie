@@ -1127,24 +1127,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
               </div>
             )}
 
-            <div className="space-y-1">
-              <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Select Store Logo Concept</label>
-              <div className="grid grid-cols-5 gap-2">
-                {LOGO_STYLES.map(style => (
-                  <button
-                    key={style.id}
-                    type="button"
-                    onClick={() => setSelectedLogoStyle(style.id)}
-                    className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                      selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-3 border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} className="w-8 h-8" />
-                    <span className="text-[7px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+
 
             <div className="space-y-1">
               <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Owner Password (Optional)</label>
@@ -1233,24 +1216,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 </p>
               </div>
             )}
-            <div className="space-y-1">
-              <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Select Store Logo Concept</label>
-              <div className="grid grid-cols-5 gap-2">
-                {LOGO_STYLES.map(style => (
-                  <button
-                    key={style.id}
-                    type="button"
-                    onClick={() => setSelectedLogoStyle(style.id)}
-                    className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                      selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-2 border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} className="w-8 h-8" />
-                    <span className="text-[7.5px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+
             <button onClick={handleCreate} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Create Store
             </button>
