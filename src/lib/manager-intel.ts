@@ -298,19 +298,26 @@ export function analyzeSales(store: StoreData): SalesAnalysis {
     }
   });
 
-  // Co-purchases: find product pairs in same-day sales
-  const byDay = new Map<string, string[]>();
+  // Co-purchases: find product pairs actually bought together in the SAME
+  // checkout (transactionId), not just sold on the same calendar day. Day-
+  // level grouping meant that in any moderately busy store, nearly every
+  // product would eventually "co-purchase" with every other product just by
+  // both selling at some point that day — a meaningless signal once there's
+  // any real foot traffic. Sales without a transactionId (older records, or
+  // single standalone sales) are excluded rather than falsely grouped.
+  const byTransaction = new Map<string, string[]>();
   last30.forEach(s => {
-    const day = s.date.split('T')[0];
-    const arr = byDay.get(day) || [];
+    if (!s.transactionId) return;
+    const arr = byTransaction.get(s.transactionId) || [];
     arr.push(s.productName);
-    byDay.set(day, arr);
+    byTransaction.set(s.transactionId, arr);
   });
   const pairCount = new Map<string, number>();
-  byDay.forEach(names => {
-    for (let i = 0; i < names.length; i++)
-      for (let j = i + 1; j < names.length; j++) {
-        const key = [names[i], names[j]].sort().join('|||');
+  byTransaction.forEach(names => {
+    const uniqueNames = [...new Set(names)];
+    for (let i = 0; i < uniqueNames.length; i++)
+      for (let j = i + 1; j < uniqueNames.length; j++) {
+        const key = [uniqueNames[i], uniqueNames[j]].sort().join('|||');
         pairCount.set(key, (pairCount.get(key) || 0) + 1);
       }
   });
@@ -745,9 +752,11 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
     out.push({ id: 'low', icon: '⚠', text: `${low.length} product${low.length === 1 ? '' : 's'} need restocking`, tone: 'warning' });
   }
   const tally = new Map<string, number>();
-  store.sales.forEach(s => tally.set(s.productName, (tally.get(s.productName) || 0) + s.quantity));
+  store.sales
+    .filter(s => new Date(s.date) >= daysAgo(days - 1))
+    .forEach(s => tally.set(s.productName, (tally.get(s.productName) || 0) + s.quantity));
   const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (best) out.push({ id: 'best', icon: '⭐', text: `${best[0]} is your best seller`, tone: 'info' });
+  if (best) out.push({ id: 'best', icon: '⭐', text: `${best[0]} is your best seller ${range === '7d' ? 'this week' : range === '1m' ? 'this month' : 'overall'}`, tone: 'info' });
   if (curRev > 0) {
     const savable = Math.round(curRev * 0.05 / 100) * 100;
     if (savable >= 500) out.push({ id: 'save', icon: '💰', text: `Save ₦${savable.toLocaleString()} this ${range === '7d' ? 'week' : 'period'}`, tone: 'info' });
@@ -1004,7 +1013,8 @@ export function generateFlowReport(store: StoreData): string {
     recsAdded++;
   }
   if (pending.overdue.length > 0) {
-    text += `${recsAdded + 1}. **Collect Overdue Debts:** Call or message the overdue customer(s) to recover ₦${pending.totalOwed.toLocaleString()}.\n`;
+    const overdueAmount = pending.overdue.reduce((s, p) => s + p.balance, 0);
+    text += `${recsAdded + 1}. **Collect Overdue Debts:** Call or message the overdue customer(s) to recover ₦${overdueAmount.toLocaleString()}.\n`;
     recsAdded++;
   }
   if (exp7 > rev7 && rev7 > 0) {
@@ -1407,7 +1417,15 @@ export function getRepaymentInsights(store: StoreData): RepaymentInsightsSummary
   const all = store.pendingPayments || [];
   const groups = new Map<string, typeof all>();
   all.forEach(p => {
-    const key = (p.customerName || 'unknown').trim().toLowerCase();
+    // Group by phone number when available — it's a much more reliable
+    // unique identifier than name. Grouping by name alone (the previous
+    // behavior) meant two different customers who happen to share a common
+    // first name (e.g. two different "John"s) would have their debt
+    // histories silently merged into one — corrupting both people's
+    // reliability scores and payment predictions. Falls back to name only
+    // when no phone number was ever recorded for that debt.
+    const normalizedPhone = p.customerPhone?.replace(/[^0-9]/g, '');
+    const key = normalizedPhone || (p.customerName || 'unknown').trim().toLowerCase();
     if (!key) return;
     const arr = groups.get(key) || [];
     arr.push(p);
