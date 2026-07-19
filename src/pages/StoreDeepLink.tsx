@@ -114,7 +114,7 @@ export default function StoreDeepLink() {
           </div>
           <h1 className="font-display text-3xl font-bold">
             <span className="text-foreground">Store</span>
-            <span className="text-brand-flow">Flow</span>
+            <span className="text-primary">Flow</span>
           </h1>
         </div>
 
