@@ -30,6 +30,13 @@ if (isPreviewHost || isInIframe) {
   import("virtual:pwa-register").then(({ registerSW }) => {
     registerSW({ immediate: true });
   }).catch(() => {});
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

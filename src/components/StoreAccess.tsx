@@ -829,7 +829,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       <div className="w-full max-w-md animate-fade-in">
         <div className="flex flex-col items-center text-center mb-6">
           <Mascot size={80} mood={accessMood} className="mb-3" />
-          <h1 className="font-display text-4xl font-bold text-primary mb-2 select-none">StoreFlow</h1>
+          <img src="/logo.svg" className="h-16 object-contain mb-2 select-none" alt="StoreFlow" />
           <p className="text-muted-foreground text-sm">Offline-first store management</p>
         </div>
 
