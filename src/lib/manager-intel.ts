@@ -701,6 +701,64 @@ export function restockQualityNote(store: StoreData): FlowNotification | null {
   };
 }
 
+// ─── Restock Score (90-day) ─────────────────────────────────────────────────
+// Gives merchants one number for "am I restocking well?" — what % of the
+// money spent restocking over the last 90 days went into products that
+// actually sell, versus products that were already dead stock or slow
+// movers when they got restocked again. Reuses the same neverSold/slowMovers
+// classification as restockQualityNote() so the two stay consistent.
+export interface RestockScoreResult {
+  score: number; // 0-100, higher is better
+  label: 'Excellent' | 'Good' | 'Fair' | 'Needs Attention';
+  totalSpend90d: number;
+  wastedSpend90d: number;
+  goodSpend90d: number;
+  wastedItems: { name: string; spend: number }[];
+}
+
+export function restockScore(store: StoreData): RestockScoreResult {
+  const cutoff = Date.now() - 90 * 86400000;
+  const restocks = (store.restocks || []).filter(r => new Date(r.date).getTime() >= cutoff);
+
+  if (restocks.length === 0) {
+    return { score: 100, label: 'Excellent', totalSpend90d: 0, wastedSpend90d: 0, goodSpend90d: 0, wastedItems: [] };
+  }
+
+  const analysis = analyzeSales(store);
+  const neverSoldNames = new Set(analysis.neverSold.map(p => p.name));
+  const slowMoverNames = new Set(analysis.slowMovers.map(p => p.name));
+
+  let totalSpend = 0;
+  let wastedSpend = 0;
+  const wastedMap: Record<string, number> = {};
+
+  restocks.forEach(r => {
+    const spend = r.total ?? r.quantity * r.costPrice;
+    totalSpend += spend;
+    const isDead = neverSoldNames.has(r.productName);
+    const isSlow = !isDead && slowMoverNames.has(r.productName);
+    if (isDead || isSlow) {
+      // Dead stock counts as fully wasted spend; a slow mover is only
+      // half-weighted since it's still selling, just not quickly.
+      const weightedWaste = spend * (isDead ? 1 : 0.5);
+      wastedSpend += weightedWaste;
+      wastedMap[r.productName] = (wastedMap[r.productName] || 0) + spend;
+    }
+  });
+
+  const goodSpend = Math.max(0, totalSpend - wastedSpend);
+  const score = totalSpend > 0 ? Math.max(0, Math.min(100, Math.round(100 - (wastedSpend / totalSpend) * 100))) : 100;
+  const label: RestockScoreResult['label'] =
+    score >= 85 ? 'Excellent' : score >= 65 ? 'Good' : score >= 40 ? 'Fair' : 'Needs Attention';
+
+  const wastedItems = Object.entries(wastedMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, spend]) => ({ name, spend }));
+
+  return { score, label, totalSpend90d: totalSpend, wastedSpend90d: wastedSpend, goodSpend90d: goodSpend, wastedItems };
+}
+
 // ─── Notifications Generator ───────────────────────────────────────────────────
 export function generateNotifications(store: StoreData): FlowNotification[] {
   if (isStoreOnboarding(store)) {

@@ -77,16 +77,36 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
   }, [orders, getNormalizedStatus]);
 
   // Filtering orders
+  // Active orders (needing attention) always show first; Completed,
+  // Cancelled, and Rejected orders sink to the bottom since there's nothing
+  // left to do on them. Within each group, newest first.
+  const STATUS_SORT_PRIORITY: Record<string, number> = {
+    'Pending': 0,
+    'Accepted': 1,
+    'Preparing': 2,
+    'Ready': 3,
+    'Completed': 4,
+    'Cancelled': 5,
+    'Rejected': 5,
+  };
+
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
-      const normStatus = getNormalizedStatus(o.status);
-      const matchesTab = activeTab === 'All' || normStatus === activeTab;
-      const matchesSearch = 
-        o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer_phone?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesTab && matchesSearch;
-    });
+    return orders
+      .filter(o => {
+        const normStatus = getNormalizedStatus(o.status);
+        const matchesTab = activeTab === 'All' || normStatus === activeTab;
+        const matchesSearch = 
+          o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          o.customer_phone?.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesTab && matchesSearch;
+      })
+      .sort((a, b) => {
+        const pa = STATUS_SORT_PRIORITY[getNormalizedStatus(a.status)] ?? 3;
+        const pb = STATUS_SORT_PRIORITY[getNormalizedStatus(b.status)] ?? 3;
+        if (pa !== pb) return pa - pb;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
   }, [orders, activeTab, searchQuery, getNormalizedStatus]);
 
   // Decode metadata notes (e.g. delivery details, pricing mode, payment details)
