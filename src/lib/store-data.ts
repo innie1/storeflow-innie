@@ -2170,11 +2170,16 @@ export function repayLoan(store: StoreData, id: string, amount: number): StoreDa
   
   const loan = loans[loanIndex];
   const source = loan.source || 'Cash Drawer';
+  // Never let a repayment exceed what's actually still owed on this loan —
+  // without this, overpaying (e.g. a typo) would deduct the full typed
+  // amount from cash/bank/wallet and reduce total liabilities by more than
+  // this loan actually accounted for, silently corrupting both balances.
+  const effectiveAmount = Math.min(amount, loan.amount);
   
   const updatedLoans = [...loans];
   const updatedLoan = {
     ...loan,
-    amount: Math.max(0, Math.round((loan.amount - amount) * 100) / 100),
+    amount: Math.max(0, Math.round((loan.amount - effectiveAmount) * 100) / 100),
   };
   if (updatedLoan.amount <= 0) {
     updatedLoan.status = 'repaid';
@@ -2184,10 +2189,10 @@ export function repayLoan(store: StoreData, id: string, amount: number): StoreDa
   const updated = {
     ...store,
     loans: updatedLoans,
-    liabilities: Math.max(0, Math.round(((store.liabilities || 0) - amount) * 100) / 100),
-    cashBalance: source === 'Cash Drawer' ? Math.max(0, Math.round(((store.cashBalance || 0) - amount) * 100) / 100) : (store.cashBalance || 0),
-    bankBalance: source === 'Bank Account' ? Math.max(0, Math.round(((store.bankBalance || 0) - amount) * 100) / 100) : (store.bankBalance || 0),
-    walletBalance: source === 'Business Wallet' ? Math.max(0, Math.round(((store.walletBalance || 0) - amount) * 100) / 100) : (store.walletBalance || 0),
+    liabilities: Math.max(0, Math.round(((store.liabilities || 0) - effectiveAmount) * 100) / 100),
+    cashBalance: source === 'Cash Drawer' ? Math.max(0, Math.round(((store.cashBalance || 0) - effectiveAmount) * 100) / 100) : (store.cashBalance || 0),
+    bankBalance: source === 'Bank Account' ? Math.max(0, Math.round(((store.bankBalance || 0) - effectiveAmount) * 100) / 100) : (store.bankBalance || 0),
+    walletBalance: source === 'Business Wallet' ? Math.max(0, Math.round(((store.walletBalance || 0) - effectiveAmount) * 100) / 100) : (store.walletBalance || 0),
   };
   
   saveStore(updated);

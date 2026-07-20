@@ -4,6 +4,7 @@ import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { generateStoreUrl } from '@/lib/qr-code';
 import { saveStore } from '@/lib/store-data';
+import { getPushSubscriptionState, subscribeToOrderPush, unsubscribeFromOrderPush } from '@/lib/push-notifications';
 import { 
   Store, Eye, Percent, Clock, CreditCard, MapPin, 
   Calendar, Bell, UserCheck, ShieldAlert, Check, X,
@@ -1057,7 +1058,15 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
               </div>
 
               <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-primary">Alert Methods</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-primary">Push Notifications (works even when the app is closed)</h4>
+                <p className="text-[11px] text-muted-foreground -mt-2">
+                  The alert methods below only work while StoreFlow is open in a tab. Turn this on to get a real phone notification for new orders even when the app is closed or your screen is locked.
+                </p>
+                <PushNotificationToggle store={store} />
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-primary">Alert Methods (while the app is open)</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <ToggleRow label="Synthesized Sound Chime" checked={form.alertSound} onChange={v => handleChange('alertSound', v)} />
@@ -1157,5 +1166,52 @@ function ToggleRow({ label, description, checked, onChange }: { label: string; d
         }`} />
       </button>
     </div>
+  );
+}
+
+function PushNotificationToggle({ store }: { store: StoreData }) {
+  const [state, setState] = useState<'unsupported' | 'denied' | 'subscribed' | 'not-subscribed' | 'checking'>('checking');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getPushSubscriptionState().then(setState);
+  }, []);
+
+  const handleToggle = async (turnOn: boolean) => {
+    if (!store.id) {
+      showToast('Store isn\u2019t fully synced to the cloud yet \u2014 try again in a moment.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      if (turnOn) {
+        const result = await subscribeToOrderPush(store.id);
+        showToast(result.message, result.success ? 'success' : 'error');
+        setState(await getPushSubscriptionState());
+      } else {
+        const result = await unsubscribeFromOrderPush();
+        showToast(result.message, result.success ? 'success' : 'error');
+        setState(await getPushSubscriptionState());
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (state === 'unsupported') {
+    return <p className="text-[11px] text-muted-foreground italic">Not supported on this browser/device. Works on Chrome/Edge (Android or desktop) and Safari 16.4+ on iOS when the app is added to your home screen.</p>;
+  }
+
+  if (state === 'denied') {
+    return <p className="text-[11px] text-destructive">Notifications are blocked for this app in your browser/phone settings. Enable them there, then reload this page.</p>;
+  }
+
+  return (
+    <ToggleRow
+      label={busy ? 'Working…' : state === 'subscribed' ? 'On for this device' : 'Off for this device'}
+      description="Sends a real phone notification when a new order comes in, even if StoreFlow is closed."
+      checked={state === 'subscribed'}
+      onChange={handleToggle}
+    />
   );
 }

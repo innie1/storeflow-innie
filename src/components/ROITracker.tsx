@@ -88,7 +88,15 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
     return init ? init.amount : 0;
   }, [investments]);
 
-  const totalInvestedCapital = initialInvestment + totalManualInvestments + totalAutoInvestments - totalWithdrawals;
+  // NOTE: initialInvestment (the store's starting inventory value) is
+  // already a member of either manualInvestmentsList or
+  // autoInvestmentsList above (it always has type: 'initial', and its
+  // `source` field determines which bucket it lands in depending on how
+  // the store was set up) — so it must NOT be added again here. Adding it
+  // a second time overstated Total Invested Capital by the store's entire
+  // starting inventory value, which understated the ROI% shown to the
+  // owner for every store that started with any inventory.
+  const totalInvestedCapital = totalManualInvestments + totalAutoInvestments - totalWithdrawals;
 
   // Profit & ROI
   const currentProfit = businessValue - totalInvestedCapital;
@@ -246,6 +254,10 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
       showToast('Please enter a valid repayment amount', 'error');
       return;
     }
+    const loan = (store.loans || []).find(l => l.id === id);
+    if (loan && amt > loan.amount) {
+      showToast(`That's more than the ₦${loan.amount.toLocaleString()} still owed \u2014 only ₦${loan.amount.toLocaleString()} was applied.`, 'info');
+    }
     const updated = repayLoan(store, id, amt);
     onUpdate(updated);
     setRepayAmount(prev => ({ ...prev, [id]: '' }));
@@ -348,9 +360,10 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
             <div className="bg-card border border-border/40 rounded-2xl p-4 space-y-1">
               <span className="text-[10px] text-muted-foreground uppercase font-bold">Cash Balance</span>
               <p className="font-display font-bold text-xl text-success">₦{totalCash.toLocaleString()}</p>
-              <div className="flex gap-2 text-[9px] text-muted-foreground font-mono mt-1">
+              <div className="flex gap-2 text-[9px] text-muted-foreground font-mono mt-1 flex-wrap">
                 <span>D:{cashBalance.toLocaleString()}</span>
                 <span>B:{bankBalance.toLocaleString()}</span>
+                <span>W:{walletBalance.toLocaleString()}</span>
               </div>
             </div>
             <div className="bg-card border border-border/40 rounded-2xl p-4 space-y-1">
@@ -589,6 +602,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
                         <input 
                           type="number"
                           placeholder="Repay ₦"
+                          max={l.amount}
                           value={repayAmount[l.id] || ''}
                           onChange={e => setRepayAmount({ ...repayAmount, [l.id]: e.target.value })}
                           className="w-24 p-1.5 rounded bg-card border border-border text-center text-foreground font-mono focus:outline-none"
@@ -665,7 +679,10 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
                     <span className="font-bold text-primary">{e.roi.toFixed(1)}%</span>
                   </div>
                   <button 
-                    onClick={() => setConfirmDel({ id: e.id, type: e.type === 'Owner Withdrawal' ? 'withdrawal' : 'investment' })}
+                    onClick={() => setConfirmDel({
+                      id: e.id,
+                      type: e.type === 'Owner Withdrawal' ? 'withdrawal' : e.type === 'Loan Added' ? 'loan' : 'investment'
+                    })}
                     className="p-1 hover:bg-destructive/15 text-destructive rounded"
                     title="Remove record"
                   >
