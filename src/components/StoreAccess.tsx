@@ -385,11 +385,20 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         const selectedRow = remoteStores[0];
         if (selectedRow && selectedRow.data) {
           const remoteStore = selectedRow.data as StoreData;
-          // Rebuild local database and save
-          localStorage.setItem(`storeflow_store_${remoteStore.accessCode}`, JSON.stringify(remoteStore));
+          // Previously this wrote raw cloud data to a mismatched localStorage
+          // key (`storeflow_store_${code}` instead of the key loadStore()
+          // actually reads, `storeflow_${code}`), so it was never found on
+          // the next cold load — meaning cloud-loaded stores always bypassed
+          // the local cache-hit path (and its scheduled-savings check) and
+          // silently re-fetched from the cloud every time. saveStore() both
+          // writes to the correct key and runs the same
+          // runScheduledSavingsDeduction() check the local path gets, so a
+          // due savings deduction is never missed just because someone
+          // logged in via cloud recovery instead of the local cache.
+          saveStore(remoteStore);
           setAccessMood('happy' as any);
           showToast('Cloud backup loaded successfully!', 'success');
-          proceedWithStore(remoteStore);
+          proceedWithStore(loadStore(remoteStore.accessCode) || remoteStore);
           return;
         }
       }

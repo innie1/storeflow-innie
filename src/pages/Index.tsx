@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
-import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore } from '@/lib/store-data';
+import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction } from '@/lib/store-data';
 import StoreAccess from '@/components/StoreAccess';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import NotificationDrawer from '@/components/NotificationDrawer';
@@ -612,6 +612,56 @@ export default function Index() {
         saveStore(updatedStore); // Sync locally and trigger cloud backup
       }
 
+      // 3. Register as a Sale when an order is marked Completed. Stock was
+      // already deducted when the order was Accepted (see above), so this
+      // only records the revenue/profit — it must NOT touch product
+      // quantity again. Without this, orders placed through the storefront
+      // never showed up in Sales History, dashboard revenue, profit,
+      // expense-vs-revenue ratios, or the fast/slow/never-sold
+      // classification used by Smart Restock and the Restock Score —
+      // meaning a product could be selling well through Orders and still
+      // get flagged as "dead stock" because none of that revenue was ever
+      // recorded as a sale.
+      if (newStatus === 'Completed' && store) {
+        const items = targetOrder.order_items || [];
+        const newSales = items.map((item: any) => {
+          const product = store.products.find((p: any) => p.id === item.product_id);
+          const unitPrice = Number(item.price) || product?.sellingPrice || 0;
+          const qty = Number(item.quantity) || 0;
+          const costPrice = product?.costPrice || 0;
+          return {
+            id: `order-${targetOrder.id}-${item.id || item.product_id}`,
+            productId: item.product_id,
+            productName: product?.name || 'Unknown Product',
+            quantity: qty,
+            unitPrice: Math.round(unitPrice * 100) / 100,
+            total: Math.round(unitPrice * qty * 100) / 100,
+            profit: Math.round((unitPrice - costPrice) * qty * 100) / 100,
+            date: new Date().toISOString(),
+            paymentMethod: 'transfer' as const,
+          };
+        });
+
+        // Also bump each product's units_sold so per-product performance
+        // stats (fast/slow mover classification) reflect order sales.
+        const updatedProductsForSale = store.products.map((p: any) => {
+          const soldItem = items.find((oi: any) => oi.product_id === p.id);
+          if (!soldItem) return p;
+          return { ...p, units_sold: (p.units_sold || 0) + Number(soldItem.quantity) };
+        });
+
+        updatedStore = { ...store, products: updatedProductsForSale, sales: [...newSales, ...(store.sales || [])] };
+
+        const { error: storeErr } = await supabase
+          .from('stores')
+          .update({ data: updatedStore })
+          .eq('id', store.id);
+        if (storeErr) throw storeErr;
+
+        setStore(updatedStore);
+        saveStore(updatedStore);
+      }
+
       // Merge additional metadata (rejection reason or change request message)
       if (metadata) {
         Object.assign(parsedNotes, metadata);
@@ -744,6 +794,40 @@ export default function Index() {
       setTab(allowedMainTabs[0]?.id || 'dashboard');
     }
   }, [store?.accessCode, store?.category, currentUser, allowedMainTabs, allowedMoreItems, tab]);
+
+  // The scheduled savings deduction (see runScheduledSavingsDeduction) used
+  // to only ever run at the exact moment of a cold app load. If a merchant
+  // just keeps the PWA open/pinned across the scheduled day — very normal
+  // usage — nothing ever rechecked the schedule, so a due deduction could
+  // sit unapplied indefinitely even though the day/time had passed. This
+  // rechecks whenever the tab regains focus/visibility (covers reopening
+  // the app, switching back to it, or waking the phone) and on a periodic
+  // timer while it stays open and visible, so a due deduction is caught
+  // without requiring a full app restart.
+  useEffect(() => {
+    if (!store) return;
+    const check = () => {
+      if (document.visibilityState !== 'visible') return;
+      setStore(prev => {
+        if (!prev?.savingsGoal?.autoSaveEnabled) return prev;
+        const before = prev.savingsGoal.lastDeductionTime;
+        const clone: StoreData = { ...prev, savingsGoal: { ...prev.savingsGoal } };
+        const updated = runScheduledSavingsDeduction(clone);
+        if (updated.savingsGoal?.lastDeductionTime === before) return prev; // nothing was due
+        saveStore(updated);
+        return updated;
+      });
+    };
+    check();
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('focus', check);
+    const interval = setInterval(check, 5 * 60 * 1000); // also recheck every 5 min while open
+    return () => {
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('focus', check);
+      clearInterval(interval);
+    };
+  }, [store?.accessCode]);
 
   useEffect(() => {
     const code = getActiveSession();
