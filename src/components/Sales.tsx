@@ -5,7 +5,7 @@ import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import VoiceSell from '@/components/VoiceSell';
-import { printSystem } from '@/lib/print-engine';
+import { printReceipt } from '@/lib/print-engine';
 import { getSmartDiscounts } from '@/lib/manager-intel';
 import {
   Search,
@@ -428,7 +428,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           footerMessage: managerSettings.receiptFooterMessage || 'Thank you for your patronage! 🙏',
           receiptCurrency: managerSettings.receiptCurrency || '₦',
         };
-        printSystem(receiptData, managerSettings.receiptWidth || '58mm').catch(err => {
+        printReceipt(receiptData, managerSettings.receiptWidth || '58mm', managerSettings.printMethod || 'system').catch(err => {
           console.error("Auto print failed:", err);
         });
       }

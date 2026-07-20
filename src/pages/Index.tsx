@@ -1446,6 +1446,7 @@ export default function Index() {
           <div className="flex justify-around max-w-3xl mx-auto px-4">
             {allowedMainTabs.map(t => {
               const isActive = tab === t.id;
+              const pendingOrdersCount = t.id === 'orders' ? orders.filter(o => o.status === 'Pending').length : 0;
               return (
                 <button
                   key={t.id}
@@ -1458,6 +1459,11 @@ export default function Index() {
                     {renderTabIcon(t.id, isActive)}
                     {t.id === 'manager' && unreadCount > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                    )}
+                    {pendingOrdersCount > 0 && (
+                      <span className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center px-[3px] border border-background leading-none">
+                        {pendingOrdersCount > 9 ? '9+' : pendingOrdersCount}
+                      </span>
                     )}
                   </span>
                   <span className="font-display font-bold leading-tight">{t.label}</span>
