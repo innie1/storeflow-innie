@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 // new public key, and set VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY as Supabase
 // secrets to match. The public and private key must always be from the
 // same generated pair.
-const VAPID_PUBLIC_KEY = 'BEnmYSggm6gVfMWSLWXo_EJybECM-GutmdrJSnrpj9i6xYpLULD2WtAmqh1xbpAz-h87IPb51Ys2c_7ZJMWeSe4';
+const VAPID_PUBLIC_KEY = 'BPynrw1Xha05EzgzG_YEMdVyRGsuSlG62pPzLxprxWumTfVetPfAe5kyBM_yLbH_PDId9QjVwdoElfUDtljmGTQ';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
