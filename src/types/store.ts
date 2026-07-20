@@ -391,6 +391,8 @@ export interface BusinessChallenge {
 
 export interface ManagerSettings {
   enabled: boolean;
+  ownerPassword?: string;          // Owner login password, checked on role switch and backup export
+  emergencyRecoveryKey?: string;   // Used to encrypt/decrypt offline backup exports
   revenueForecasts: boolean;
   profitForecasts: boolean;
   inventoryForecasts: boolean;
@@ -582,6 +584,7 @@ export interface SimilarProductReview {
 }
 
 export interface StoreData {
+  id?: string;               // Supabase 'stores' table row id (UUID) — used for cloud sync, realtime channel scoping, and Edge Function calls. Not to be confused with storeId below.
   storeId?: string;          // Permanent immutable ID — never changes; generated once at store creation
   qrDesignVersion?: number;  // Permanent QR code design version
   learnedProducts?: LearnedProduct[];
