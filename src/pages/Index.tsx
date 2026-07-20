@@ -890,10 +890,9 @@ export default function Index() {
       <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-border bg-card">
         {/* Sidebar Header */}
         <div className="p-5 border-b border-border flex flex-col gap-2">
-          <h1 className="font-display font-bold text-2xl">
-            <span className="text-foreground">Store</span>
-            <span className="text-brand-flow">Flow</span>
-          </h1>
+          <div className="h-9 w-auto flex items-center justify-start">
+            <img src="/logo.svg" className="h-full object-contain -ml-3" alt="StoreFlow" />
+          </div>
           <div className="flex items-center gap-2 mt-1.5 p-2 rounded-xl bg-surface-2 border border-border">
             <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary/15 flex items-center justify-center text-lg shrink-0">
               {store.profile?.photo ? (
@@ -1043,9 +1042,9 @@ export default function Index() {
       <div className="flex-1 flex flex-col md:pl-64">
         <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-4 md:px-6 py-3.5 flex items-center justify-between" style={{ paddingLeft: 'max(1rem, env(safe-area-inset-left))', paddingRight: 'max(1rem, env(safe-area-inset-right))', paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}>
           <div className="flex flex-col text-left">
-            <h1 className="font-display font-black text-xl tracking-tight select-none">
-              <span className="text-foreground">Store</span><span className="text-brand-flow">Flow</span>
-            </h1>
+            <div className="h-6 flex items-center justify-start select-none">
+              <img src="/logo.svg" className="h-full object-contain -ml-1.5" alt="StoreFlow" />
+            </div>
             <button 
               onClick={() => setShowSwitcher(true)}
               className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors font-semibold mt-0.5"
