@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { getDashboardStats, getTopSellers } from '@/lib/store-data';
-import { healthScore, generateInsights, generateRecommendations } from '@/lib/manager-intel';
+import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import Mascot, { MascotBadge } from '@/components/Mascot';
 
@@ -364,6 +364,7 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
   const health = healthScore(store);
   const insights = managerEnabled ? generateInsights(store, '7d') : [];
   const recs = managerEnabled ? generateRecommendations(store) : [];
+  const restockScoreResult = useMemo(() => restockScore(store), [store]);
   const flowMood = useMemo(() => {
     if (!managerEnabled) return 'sleeping';
     const currentHour = new Date().getHours();
@@ -473,6 +474,47 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
               )}
             </div>
           </div>
+
+          {/* Restock Score */}
+          {restockScoreResult.totalSpend90d > 0 && (
+            <button
+              onClick={() => onNavigate('inventory')}
+              className="w-full p-4 rounded-2xl bg-card shadow-card border border-border/40 text-left cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-display font-bold text-xs uppercase tracking-wider text-muted-foreground">Restock Score (90 days)</h3>
+                <span className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full ${
+                  restockScoreResult.score >= 85 ? 'bg-success/15 text-success' :
+                  restockScoreResult.score >= 65 ? 'bg-primary/15 text-primary' :
+                  restockScoreResult.score >= 40 ? 'bg-warning/15 text-warning' : 'bg-destructive/15 text-destructive'
+                }`}>{restockScoreResult.label}</span>
+              </div>
+              <div className="flex items-end gap-3">
+                <span className="font-display font-bold text-3xl leading-none">{restockScoreResult.score}</span>
+                <span className="text-xs text-muted-foreground mb-0.5">/ 100</span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-muted mt-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    restockScoreResult.score >= 85 ? 'bg-success' :
+                    restockScoreResult.score >= 65 ? 'bg-primary' :
+                    restockScoreResult.score >= 40 ? 'bg-warning' : 'bg-destructive'
+                  }`}
+                  style={{ width: `${restockScoreResult.score}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                {restockScoreResult.wastedSpend90d > 0
+                  ? `₦${Math.round(restockScoreResult.wastedSpend90d).toLocaleString()} of your last 90 days of restocking went into products that aren't selling well.`
+                  : `All your restocking in the last 90 days went into products that sell. Nice work.`}
+              </p>
+              {restockScoreResult.wastedItems.length > 0 && (
+                <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                  Worth reviewing: {restockScoreResult.wastedItems.slice(0, 3).map(w => w.name).join(', ')}
+                </p>
+              )}
+            </button>
+          )}
 
           {/* Quick Actions Panel */}
           <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card space-y-2">

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product, CustomerRequest, PlannedRestock } from '@/types/store';
 import { receiveStock } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
@@ -66,8 +66,10 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       const isBelowMin = p.quantity < minStock;
       
       // Calculate sales velocity (last 30 days)
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
       const pSales = sales.filter(s => s.productId === p.id);
-      const totalQtySold = pSales.reduce((sum, s) => sum + s.quantity, 0);
+      const recentSales = pSales.filter(s => new Date(s.date).getTime() >= thirtyDaysAgo);
+      const totalQtySold = recentSales.reduce((sum, s) => sum + s.quantity, 0);
       const avgDailySales = totalQtySold / 30;
 
       // 1. Stock urgency (up to 40%)
@@ -393,9 +395,19 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     });
   };
 
-  // Sync recommendation engine list on load or settings change
+  // Sync recommendation engine list on load only. Previously this re-ran
+  // (and silently wiped any manual quantity/cost/selection edits the
+  // merchant had made) every time `store` changed identity — which happens
+  // on background realtime sync from another device, not just when the
+  // merchant themselves changes something. Now it only auto-populates once
+  // when the engine opens; use "Optimize Budget" to intentionally
+  // re-allocate after that.
+  const hasInitialized = useRef(false);
   useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
     setItemsList(allocateBudgetProportionally(generatedRecommendations, availableBudget));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generatedRecommendations, availableBudget]);
 
   // Calculations on selected Buy List items
@@ -527,6 +539,24 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       showToast('✓ Copied to clipboard! Share via WhatsApp or Messenger.', 'success');
     }
 
+    // Push approved items for existing products into Planned Restocks so
+    // they show up under Inventory > Planned Restocks and can be received
+    // in one tap once the goods arrive — instead of the approval just
+    // sharing a text list with no record kept in the app itself. Brand-new
+    // product opportunities and manually-typed items don't have a real
+    // product yet, so they're excluded here (add the product first, then
+    // it'll flow through this the next time).
+    const plannableItems = selectedItems.filter(it => !it.isNewProduct && !it.id.startsWith('manual-'));
+    const newPlannedRestocks = plannableItems.map(it => ({
+      id: Math.random().toString(36).substring(2, 9),
+      productId: it.id,
+      productName: it.name,
+      quantity: it.suggestedQty,
+      costPrice: it.costPrice,
+      funding: 'balance' as const,
+      date: new Date().toISOString()
+    }));
+
     // Log the approval and share action in the activity logs
     const logs = store.activityLogs || [];
     const newLog = {
@@ -539,8 +569,13 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
 
     onUpdate({
       ...store,
-      activityLogs: [newLog as any, ...logs]
+      activityLogs: [newLog as any, ...logs],
+      plannedRestocks: [...newPlannedRestocks, ...(store.plannedRestocks || [])]
     });
+
+    if (newPlannedRestocks.length > 0) {
+      showToast(`✓ ${newPlannedRestocks.length} item(s) added to Planned Restocks — receive them from Inventory once they arrive.`, 'success');
+    }
 
     onClose();
   };
