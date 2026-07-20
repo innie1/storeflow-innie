@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { StoreData, Sale } from '@/types/store';
-import { printSystem } from '@/lib/print-engine';
+import { printReceipt } from '@/lib/print-engine';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
 import { drawQRCode, encodeQRData } from '@/lib/qr-code';
@@ -101,9 +101,13 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
       footerMessage: settings.receiptFooterMessage || 'Thank you for your patronage! 🙏',
       receiptCurrency: settings.receiptCurrency || '₦',
     };
-    printSystem(receiptData, settings.receiptWidth || '58mm').catch(err => {
-      showToast('Printing failed: ' + err.message, 'error');
-    });
+    printReceipt(receiptData, settings.receiptWidth || '58mm', settings.printMethod || 'system')
+      .then(({ usedFallback }) => {
+        if (usedFallback) showToast('Bluetooth printer unavailable — sent to system print instead', 'info');
+      })
+      .catch(err => {
+        showToast('Printing failed: ' + err.message, 'error');
+      });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'qr') => {
@@ -407,6 +411,68 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
                     <option value="standard">Standard A4 / PDF</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase font-bold">Printer</label>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...store, managerSettings: { ...settings, printMethod: 'system' as const } };
+                      onUpdateStore?.(updated);
+                    }}
+                    className={`flex-1 p-2 rounded-lg border text-xs font-semibold ${(settings.printMethod || 'system') === 'system' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
+                  >
+                    🖨️ System / WiFi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...store, managerSettings: { ...settings, printMethod: 'bluetooth' as const } };
+                      onUpdateStore?.(updated);
+                    }}
+                    className={`flex-1 p-2 rounded-lg border text-xs font-semibold ${settings.printMethod === 'bluetooth' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
+                  >
+                    🔵 Bluetooth
+                  </button>
+                </div>
+                {settings.printMethod === 'bluetooth' && (
+                  <div className="mt-2 space-y-1.5">
+                    <p className="text-[10px] text-muted-foreground leading-snug">
+                      Works with most 58mm/80mm ESC/POS Bluetooth thermal printers on Chrome or Edge (Android or desktop). Not supported on iPhone/Safari — those devices will automatically fall back to System print.
+                    </p>
+                    {settings.savedBluetoothPrinterName && (
+                      <p className="text-[10px] text-success">Last connected: {settings.savedBluetoothPrinterName}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { printBluetooth } = await import('@/lib/print-engine');
+                          const name = await printBluetooth({
+                            storeName: store.storeName,
+                            receiptNumber: 'TEST-0001',
+                            date: new Date().toLocaleString(),
+                            items: [{ productName: 'Test Item', quantity: 1, unitPrice: 100, total: 100 }],
+                            subtotal: 100, discount: 0, total: 100, paid: 100, balance: 0,
+                            paymentMethod: 'cash',
+                            footerMessage: 'This is a test print from Flow ✅',
+                            receiptCurrency: settings.receiptCurrency || '₦',
+                          }, settings.receiptWidth === '80mm' ? '80mm' : '58mm');
+                          const updated = { ...store, managerSettings: { ...settings, savedBluetoothPrinterName: name } };
+                          onUpdateStore?.(updated);
+                          showToast(`Connected to ${name} — test receipt sent`);
+                        } catch (err: any) {
+                          showToast('Bluetooth pairing failed: ' + err.message, 'error');
+                        }
+                      }}
+                      className="w-full p-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold"
+                    >
+                      Pair Printer & Test Print
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>

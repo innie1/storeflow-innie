@@ -394,10 +394,13 @@ export interface ExpenseAnalysis {
   largestCategory: string;
 }
 
-export function expenseAnalysis(store: StoreData): ExpenseAnalysis {
+export function expenseAnalysis(store: StoreData, excludeCategories: string[] = []): ExpenseAnalysis {
   const now = Date.now();
-  const last30 = (store.expenses || []).filter(e => now - new Date(e.date).getTime() < 30 * 86400000);
-  const prev30 = (store.expenses || []).filter(e => {
+  const pool = excludeCategories.length > 0
+    ? (store.expenses || []).filter(e => !excludeCategories.includes(e.category))
+    : (store.expenses || []);
+  const last30 = pool.filter(e => now - new Date(e.date).getTime() < 30 * 86400000);
+  const prev30 = pool.filter(e => {
     const t = now - new Date(e.date).getTime();
     return t >= 30 * 86400000 && t < 60 * 86400000;
   });
@@ -498,7 +501,11 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
   const advice: AdviceCard[] = [];
   const h = healthScore(store);
   const stock = inventoryIntelligence(store);
-  const ea = expenseAnalysis(store);
+  // Restocking inventory is a healthy, expected cost of doing business (you're
+  // buying assets to resell for profit) — it should never itself count as
+  // "overspending". Exclude it here so this only flags genuine operating-cost
+  // creep (rent, utilities, salaries, etc.), not merchants restocking well.
+  const ea = expenseAnalysis(store, ['Restock']);
   const analysis = analyzeSales(store);
   const pending = getPendingSummary(store);
   const series7 = dailySeries(store, 7);
@@ -610,6 +617,90 @@ export function flowGreeting(store: StoreData): string {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+// ─── Restock Quality Check ──────────────────────────────────────────────────
+// Restocking is buying inventory to resell for profit — a healthy, expected
+// action, not overspending. It should only ever prompt caution when the
+// merchant is pouring money into a specific product that isn't actually
+// selling. This inspects the most recent restock batch and reacts to what
+// was actually restocked, instead of a blanket "spending is high" warning
+// that fires just because a restock created a big expense entry.
+function latestRestockBatch(store: StoreData): { productNames: string[]; total: number; date: string } | null {
+  const restocks = store.restocks || [];
+  if (restocks.length === 0) return null;
+  const latest = restocks[0]; // newest first
+  const batch = latest.batchId ? restocks.filter(r => r.batchId === latest.batchId) : [latest];
+  return {
+    productNames: [...new Set(batch.map(r => r.productName))],
+    total: batch.reduce((s, r) => s + r.total, 0),
+    date: latest.date,
+  };
+}
+
+export function restockQualityNote(store: StoreData): FlowNotification | null {
+  const batch = latestRestockBatch(store);
+  if (!batch) return null;
+  // Feedback on a restock should feel immediate — only react to what just
+  // happened, not a restock from days ago.
+  if (Date.now() - new Date(batch.date).getTime() > 2 * 86400000) return null;
+
+  const analysis = analyzeSales(store);
+  const neverSoldNames = new Set(analysis.neverSold.map(p => p.name));
+  const slowMoverNames = new Set(analysis.slowMovers.map(p => p.name));
+  const fastMoverNames = new Set(analysis.fastMovers.map(p => p.name));
+
+  const deadRestocked = batch.productNames.filter(n => neverSoldNames.has(n));
+  const slowRestocked = batch.productNames.filter(n => slowMoverNames.has(n) && !deadRestocked.includes(n));
+  const fastRestocked = batch.productNames.filter(n => fastMoverNames.has(n));
+
+  const now = new Date().toISOString();
+  const batchKey = new Date(batch.date).getTime();
+
+  if (deadRestocked.length > 0) {
+    return {
+      id: `restock-dead-${batchKey}`,
+      icon: '😴',
+      text: `You restocked ${deadRestocked[0]}${deadRestocked.length > 1 ? ` and ${deadRestocked.length - 1} other item(s)` : ''} that hasn't been selling. Consider holding off until demand picks up.`,
+      tone: 'warning',
+      date: now,
+      read: false,
+      title: 'Restock Check',
+      description: `${deadRestocked.join(', ')} ${deadRestocked.length > 1 ? "haven't" : "hasn't"} sold in a while. Restocking dead stock ties up cash — a discount to move it might work better than buying more.`,
+      actionLabel: 'View Inventory',
+      actionTab: 'inventory',
+    };
+  }
+
+  if (slowRestocked.length > 0 && fastRestocked.length === 0) {
+    return {
+      id: `restock-slow-${batchKey}`,
+      icon: '🤔',
+      text: `${slowRestocked[0]} has been moving slowly. Worth watching demand before restocking it again.`,
+      tone: 'info',
+      date: now,
+      read: false,
+      title: 'Restock Check',
+      description: `${slowRestocked.join(', ')} sold fewer than 3 units in the last 30 days.`,
+      actionLabel: 'View Inventory',
+      actionTab: 'inventory',
+    };
+  }
+
+  // Default (and the common case): this was a healthy restock of products
+  // that actually sell — this deserves a positive note, not a warning.
+  return {
+    id: `restock-good-${batchKey}`,
+    icon: '✅',
+    text: `Nice restocking! ₦${batch.total.toLocaleString()} in fresh stock ready to sell.`,
+    tone: 'success',
+    date: now,
+    read: false,
+    title: 'Restock Complete',
+    description: `You restocked ${batch.productNames.slice(0, 3).join(', ')}${batch.productNames.length > 3 ? ` +${batch.productNames.length - 3} more` : ''}. Buying stock to resell is good for business.`,
+    actionLabel: 'View Inventory',
+    actionTab: 'inventory',
+  };
+}
+
 // ─── Notifications Generator ───────────────────────────────────────────────────
 export function generateNotifications(store: StoreData): FlowNotification[] {
   if (isStoreOnboarding(store)) {
@@ -619,7 +710,9 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
   const now = new Date().toISOString();
   const stock = inventoryIntelligence(store);
   const analysis = analyzeSales(store);
-  const ea = expenseAnalysis(store);
+  // Restock cost is COGS, not overspending — keep it out of the "expenses
+  // spiking" trend so a healthy restock never fires an "Expense Alert".
+  const ea = expenseAnalysis(store, ['Restock']);
   const h = healthScore(store);
   const pending = getPendingSummary(store);
 
@@ -665,6 +758,12 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
       actionTab: 'expenses'
     });
   }
+  // Smart, per-batch restock feedback — praises healthy restocking of
+  // products that sell, and only cautions when the restock actually went
+  // toward dead/slow stock. Replaces the old blanket "spending is high"
+  // reaction that fired on every restock regardless of what was bought.
+  const restockNote = restockQualityNote(store);
+  if (restockNote) notes.push(restockNote);
   if (h.overall >= 80) {
     notes.push({
       id: 'health-great',
@@ -761,7 +860,7 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
     const savable = Math.round(curRev * 0.05 / 100) * 100;
     if (savable >= 500) out.push({ id: 'save', icon: '💰', text: `Save ₦${savable.toLocaleString()} this ${range === '7d' ? 'week' : 'period'}`, tone: 'info' });
   }
-  const ea = expenseAnalysis(store);
+  const ea = expenseAnalysis(store, ['Restock']);
   if (ea.trendPct > 20) {
     out.push({ id: 'exp', icon: '🧾', text: `Expenses rose ${ea.trendPct.toFixed(0)}% this month. Largest: ${ea.largestCategory}`, tone: 'warning' });
   }
@@ -901,13 +1000,19 @@ export function generateFlowReport(store: StoreData): string {
   const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
   const revPrev = prev7.reduce((s, d) => s + d.revenue, 0);
   const profit7 = last7.reduce((s, d) => s + d.profit, 0);
-  const exp7 = last7.reduce((s, d) => s + d.expenses, 0);
+  // "Expense Audit" below is about controllable operating costs (rent,
+  // utilities, salaries, etc.). Restock spend is money converted into
+  // resellable inventory, not a cost leak — exclude it so a big, healthy
+  // restock doesn't get flagged as "dangerously high" spending.
+  const exp7 = (store.expenses || [])
+    .filter(e => e.category !== 'Restock' && new Date(e.date) >= daysAgo(6))
+    .reduce((s, e) => s + e.amount, 0);
   
   const outOfStock = store.products.filter(p => !p.discontinued && p.quantity === 0);
   const threshold = getLowStockThreshold();
   const lowStock = store.products.filter(p => !p.discontinued && p.quantity > 0 && p.quantity <= threshold);
   
-  const ea = expenseAnalysis(store);
+  const ea = expenseAnalysis(store, ['Restock']);
   
   let text = `Hi, I'm Flow, your business assistant. Here is a tailored analysis for ${store.storeName}. \n\n`;
 
