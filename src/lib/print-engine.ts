@@ -520,3 +520,30 @@ export function printSystem(data: PrintReceiptData, paperWidth: '58mm' | '80mm' 
     }
   });
 }
+
+// ─── Unified Print Dispatcher ─────────────────────────────────────────────
+// Single entry point the UI should call. Routes to the merchant's preferred
+// printer transport, and if Bluetooth isn't available or the print fails
+// (e.g. printer off, out of range, iOS/Safari with no Web Bluetooth support),
+// falls back to the system print dialog automatically so a checkout is never
+// blocked by a printer hiccup.
+export async function printReceipt(
+  data: PrintReceiptData,
+  paperWidth: '58mm' | '80mm' | 'standard' = '58mm',
+  method: 'system' | 'bluetooth' = 'system'
+): Promise<{ printerName: string; usedFallback: boolean }> {
+  if (method === 'bluetooth') {
+    try {
+      const width = paperWidth === 'standard' ? '58mm' : paperWidth;
+      const printerName = await printBluetooth(data, width);
+      return { printerName, usedFallback: false };
+    } catch (err) {
+      // Fall back silently to system print so a failed/disconnected
+      // Bluetooth printer never blocks a sale.
+      await printSystem(data, paperWidth);
+      return { printerName: 'System Printer / PDF (Bluetooth unavailable)', usedFallback: true };
+    }
+  }
+  const printerName = await printSystem(data, paperWidth);
+  return { printerName, usedFallback: false };
+}

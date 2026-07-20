@@ -451,6 +451,12 @@ export interface ManagerSettings {
   receiptWebsite?: string;
   receiptQrCode?: string;
   receiptWhatsApp?: string;
+  // Receipt printing transport: 'system' opens the browser print dialog
+  // (works everywhere, good for A4/PDF/WiFi printers). 'bluetooth' sends
+  // ESC/POS bytes directly to a paired Bluetooth thermal printer (Chrome/
+  // Edge on Android or desktop only — not supported on iOS/Safari).
+  printMethod?: 'system' | 'bluetooth';
+  savedBluetoothPrinterName?: string;
   // Weather
   weatherImpactEnabled?: boolean;
   voiceGender?: 'male' | 'female' | 'young-male';
