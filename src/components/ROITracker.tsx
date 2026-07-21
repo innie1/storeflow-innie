@@ -39,6 +39,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
   const [loanAmount, setLoanAmount] = useState('');
   const [loanSource, setLoanSource] = useState('Cash Drawer');
   const [loanNote, setLoanNote] = useState('');
+  const [loanDueDate, setLoanDueDate] = useState('');
   const [repayAmount, setRepayAmount] = useState<{[key: string]: string}>({});
 
   // 1. Calculations
@@ -241,10 +242,12 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
     const amt = parseFloat(loanAmount);
     if (!amt || amt <= 0) return;
     const note = loanNote.trim() || `Loan from ${loanSource}`;
-    const updated = addLoan(store, amt, loanSource, note);
+    const dueDateIso = loanDueDate ? new Date(loanDueDate + 'T12:00:00').toISOString() : undefined;
+    const updated = addLoan(store, amt, loanSource, note, dueDateIso);
     onUpdate(updated);
     setLoanAmount('');
     setLoanNote('');
+    setLoanDueDate('');
     showToast('Loan registered successfully!');
   };
 
@@ -566,12 +569,23 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
                 </div>
 
                 <div>
+                  <label className="block text-[10px] text-muted-foreground uppercase font-bold mb-1">Repayment Due Date (optional)</label>
+                  <input 
+                    type="date"
+                    value={loanDueDate}
+                    onChange={e => setLoanDueDate(e.target.value)}
+                    className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">You'll get a reminder starting 3 days before this date.</p>
+                </div>
+
+                <div>
                   <label className="block text-[10px] text-muted-foreground uppercase font-bold mb-1">Notes</label>
                   <input 
                     type="text"
                     value={loanNote}
                     onChange={e => setLoanNote(e.target.value)}
-                    placeholder="Interest rate, repayment date..."
+                    placeholder="Interest rate, terms..."
                     className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
                   />
                 </div>
@@ -592,6 +606,14 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
                     <div className="space-y-1">
                       <p className="font-display font-bold text-sm text-foreground">{l.source}</p>
                       <p className="text-muted-foreground">{new Date(l.date).toLocaleDateString()} • {l.note || 'No notes'}</p>
+                      {l.dueDate && (() => {
+                        const d = Math.ceil((new Date(l.dueDate).getTime() - Date.now()) / 86400000);
+                        return (
+                          <p className={`text-[10px] font-semibold ${d < 0 ? 'text-destructive' : d <= 3 ? 'text-warning' : 'text-muted-foreground'}`}>
+                            Due {new Date(l.dueDate).toLocaleDateString()} {d < 0 ? `(overdue ${-d}d)` : d === 0 ? '(today)' : `(${d}d left)`}
+                          </p>
+                        );
+                      })()}
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">

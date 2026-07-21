@@ -1735,3 +1735,79 @@ export function getRepaymentInsights(store: StoreData): RepaymentInsightsSummary
 
   return { customers, overallAvgDaysToClear, overallAvgDebtSize, overallReliability, mostReliable, riskiest };
 }
+
+// ─── Debt & Recurring Bill Reminders ────────────────────────────────────────
+// Two independent sources feed into the same reminder stream:
+//  1. Recurring bills the merchant set up themselves (rent, subscriptions)
+//     with a nextDueDate that auto-advances once marked paid.
+//  2. Loans/debts already tracked in ROI Tracker that have a dueDate set.
+// Both start reminding 3 days before due, keep reminding at most once a
+// day if it slips past due (so it doesn't get buried and forgotten), and
+// go quiet again once paid/repaid.
+function daysUntil(dateStr: string): number {
+  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+}
+
+function dueLabel(days: number): string {
+  if (days > 0) return `due in ${days} day${days === 1 ? '' : 's'}`;
+  if (days === 0) return 'due today';
+  return `overdue by ${-days} day${-days === 1 ? '' : 's'}`;
+}
+
+export function checkDebtExpenseReminders(store: StoreData): StoreData | null {
+  let changed = false;
+  const newNotifications: FlowNotification[] = [];
+  const now = new Date().toISOString();
+
+  const remindedToday = (last?: string) => !!last && (Date.now() - new Date(last).getTime() < 86400000);
+
+  const bills = (store.recurringBills || []).map(bill => {
+    if (!bill.active) return bill;
+    const days = daysUntil(bill.nextDueDate);
+    if (days > 3 || remindedToday(bill.lastReminderDate)) return bill;
+    changed = true;
+    newNotifications.push({
+      id: `bill-${bill.id}-${bill.nextDueDate}`,
+      icon: '💸',
+      text: `${bill.label} is ${dueLabel(days)} — ₦${bill.amount.toLocaleString()}`,
+      tone: days < 0 ? 'danger' : days === 0 ? 'warning' : 'info',
+      date: now,
+      read: false,
+      title: 'Bill Reminder',
+      description: `${bill.label} (₦${bill.amount.toLocaleString()}) is ${dueLabel(days)}. Mark it paid from Expenses once settled.`,
+      actionLabel: 'View Expenses',
+      actionTab: 'expenses',
+    });
+    return { ...bill, lastReminderDate: now };
+  });
+
+  const loans = (store.loans || []).map(loan => {
+    if (loan.status !== 'active' || !loan.dueDate) return loan;
+    const days = daysUntil(loan.dueDate);
+    if (days > 3 || remindedToday(loan.lastReminderDate)) return loan;
+    changed = true;
+    newNotifications.push({
+      id: `loan-${loan.id}-${loan.dueDate}`,
+      icon: '🏦',
+      text: `Loan repayment to ${loan.source} is ${dueLabel(days)} — ₦${loan.amount.toLocaleString()} remaining`,
+      tone: days < 0 ? 'danger' : days === 0 ? 'warning' : 'info',
+      date: now,
+      read: false,
+      title: 'Loan Repayment Reminder',
+      description: `₦${loan.amount.toLocaleString()} owed to ${loan.source} is ${dueLabel(days)}.`,
+      actionLabel: 'View Loans',
+      actionTab: 'roi',
+    });
+    return { ...loan, lastReminderDate: now };
+  });
+
+  if (!changed) return null;
+
+  return {
+    ...store,
+    recurringBills: bills,
+    loans,
+    flowNotifications: [...newNotifications, ...(store.flowNotifications || [])],
+  };
+}
+
