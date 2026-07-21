@@ -301,7 +301,26 @@ export default function Index() {
     return () => { active = false; };
   }, [store?.accessCode]);
 
-  // Synchronize browser back/forward buttons with active tab
+  // Synchronize browser back/forward with the active tab.
+  //
+  // Previous design pushed a NEW history entry for every tab switch and,
+  // when returning to Dashboard from several taps deep, called
+  // history.go(-N) to jump back multiple entries at once. That's
+  // asynchronous — the browser unwinds it one entry at a time, firing a
+  // popstate (and a real re-render showing that intermediate tab) for each
+  // step before landing on the final one, which is exactly what looked like
+  // "flashing through random pages." It also meant swiping back followed
+  // your entire literal tap history one step at a time rather than a
+  // sensible hierarchy, so a long session of bouncing between tabs made
+  // back-swipe land somewhere that felt random.
+  //
+  // Bottom-nav tabs are peers, not a stack, so they now share a single
+  // history level: Dashboard is the "home" entry (index 0), and switching
+  // to any other tab pushes at most ONE entry on top of it (index 1).
+  // Switching between two non-dashboard tabs replaces that single entry
+  // instead of pushing another — so no matter how many tabs you've bounced
+  // through, one back-swipe always lands you cleanly on Dashboard, in a
+  // single synchronous step, never a multi-entry unwind.
   useEffect(() => {
     const hash = window.location.hash.replace('#', '') as TabId;
     if (hash && hash !== 'dashboard') {
@@ -312,11 +331,7 @@ export default function Index() {
     }
 
     const handlePopState = (e: PopStateEvent) => {
-      if (e.state && e.state.tab) {
-        setTabState(e.state.tab);
-      } else {
-        setTabState('dashboard');
-      }
+      setTabState(e.state?.tab || 'dashboard');
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -693,19 +708,23 @@ export default function Index() {
   const setTab = useCallback((targetTab: TabId) => {
     setTabState(targetTab);
 
-    const currentState = window.history.state;
-    const currentIndex = currentState?.index || 0;
-
     if (targetTab === 'dashboard') {
-      if (currentIndex > 0) {
-        window.history.go(-currentIndex);
-      } else {
-        window.history.replaceState({ tab: 'dashboard', index: 0 }, '', '#dashboard');
-      }
+      // Collapse straight back to the single home entry — one
+      // synchronous replace, never an async multi-step unwind.
+      window.history.replaceState({ tab: 'dashboard', index: 0 }, '', '#dashboard');
+      return;
+    }
+
+    const currentState = window.history.state;
+    if (!currentState || currentState.tab === 'dashboard' || currentState.index === 0) {
+      // Coming from Dashboard: push the one peer-level entry, so a single
+      // back-swipe from here returns straight to Dashboard.
+      window.history.pushState({ tab: targetTab, index: 1 }, '', '#' + targetTab);
     } else {
-      if (currentState?.tab !== targetTab) {
-        window.history.pushState({ tab: targetTab, index: currentIndex + 1 }, '', '#' + targetTab);
-      }
+      // Already one level deep on some other tab: swap in place rather
+      // than stacking another entry, so back-swipe still only ever needs
+      // one step to reach Dashboard no matter how many tabs were visited.
+      window.history.replaceState({ tab: targetTab, index: 1 }, '', '#' + targetTab);
     }
   }, []);
   const [filterLowStock, setFilterLowStock] = useState(false);
