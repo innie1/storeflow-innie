@@ -666,7 +666,50 @@ export default function Index() {
           return { ...p, units_sold: (p.units_sold || 0) + Number(soldItem.quantity) };
         });
 
-        updatedStore = { ...store, products: updatedProductsForSale, sales: [...newSales, ...(store.sales || [])] };
+        // Track online-order customers the same way walk-in customers are
+        // tracked at checkout, so the merchant can see who's ordering
+        // online, how often, and how much they've contributed — this
+        // previously only happened for in-store sales, so every online
+        // order was invisible in the Customers list no matter how many
+        // times the same person ordered.
+        const orderTotal = Number(targetOrder.total || 0);
+        let updatedCustomers = store.customers || [];
+        if (targetOrder.customer_phone || targetOrder.customer_name) {
+          const nowStr = new Date().toISOString();
+          const itemsSummary = items
+            .map((it: any) => `${store.products.find((p: any) => p.id === it.product_id)?.name || 'Item'} (x${it.quantity})`)
+            .join(', ');
+          const purchase = { date: nowStr, amount: orderTotal, items: itemsSummary };
+          const existing = updatedCustomers.find((c: any) =>
+            (targetOrder.customer_phone && c.phone === targetOrder.customer_phone) ||
+            (!targetOrder.customer_phone && c.name.toLowerCase() === (targetOrder.customer_name || '').toLowerCase())
+          );
+          if (existing) {
+            updatedCustomers = updatedCustomers.map((c: any) => c.id === existing.id ? {
+              ...c,
+              phone: targetOrder.customer_phone || c.phone,
+              totalPurchases: c.totalPurchases + orderTotal,
+              lastPurchaseDate: nowStr,
+              purchaseHistory: [purchase, ...(c.purchaseHistory || [])],
+              visitsCount: (c.visitsCount || 0) + 1,
+              loyaltyPoints: (c.loyaltyPoints || 0) + Math.floor(orderTotal / 1000),
+            } : c);
+          } else {
+            updatedCustomers = [{
+              id: `cust-order-${targetOrder.id}`,
+              name: targetOrder.customer_name || 'Online Customer',
+              phone: targetOrder.customer_phone || '',
+              totalPurchases: orderTotal,
+              outstandingDebt: 0,
+              lastPurchaseDate: nowStr,
+              purchaseHistory: [purchase],
+              visitsCount: 1,
+              loyaltyPoints: Math.floor(orderTotal / 1000),
+            }, ...updatedCustomers];
+          }
+        }
+
+        updatedStore = { ...store, products: updatedProductsForSale, sales: [...newSales, ...(store.sales || [])], customers: updatedCustomers };
 
         const { error: storeErr } = await supabase
           .from('stores')
