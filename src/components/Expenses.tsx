@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { StoreData, ExpenseCategory, Expense, Restock } from '@/types/store';
-import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding } from '@/lib/store-data';
+import { StoreData, ExpenseCategory, Expense, Restock, RecurringBill } from '@/types/store';
+import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 
@@ -31,6 +31,14 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
   const [restockFunding, setRestockFunding] = useState<RestockFunding>('balance');
   const [restockSearch, setRestockSearch] = useState('');
   const [selectedRestockBatch, setSelectedRestockBatch] = useState<{ expense: Expense; items: Restock[] } | null>(null);
+  const [showBills, setShowBills] = useState(false);
+  const [showAddBill, setShowAddBill] = useState(false);
+  const [billLabel, setBillLabel] = useState('');
+  const [billAmount, setBillAmount] = useState('');
+  const [billCategory, setBillCategory] = useState<ExpenseCategory>('Rent');
+  const [billFrequency, setBillFrequency] = useState<'weekly' | 'monthly'>('monthly');
+  const [billDueDate, setBillDueDate] = useState('');
+  const [confirmDelBill, setConfirmDelBill] = useState<RecurringBill | null>(null);
 
   const expenses = store.expenses || [];
 
@@ -110,6 +118,41 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
     showToast('Expense deleted');
   };
 
+  const recurringBills = store.recurringBills || [];
+
+  const handleAddBill = () => {
+    const amt = Number(billAmount);
+    if (!billLabel.trim()) return showToast('Give this bill a name', 'error');
+    if (!amt || amt <= 0) return showToast('Enter a valid amount', 'error');
+    if (!billDueDate) return showToast('Pick the next due date', 'error');
+    const nextDueDate = new Date(billDueDate + 'T12:00:00').toISOString();
+    const updated = addRecurringBill(store, { label: billLabel.trim(), amount: amt, category: billCategory, frequency: billFrequency, nextDueDate });
+    onUpdate(updated);
+    setBillLabel('');
+    setBillAmount('');
+    setBillCategory('Rent');
+    setBillFrequency('monthly');
+    setBillDueDate('');
+    setShowAddBill(false);
+    showToast('Recurring bill added — you\u2019ll get a reminder starting 3 days before it\u2019s due');
+  };
+
+  const handleMarkBillPaid = (bill: RecurringBill) => {
+    onUpdate(markRecurringBillPaid(store, bill.id));
+    showToast(`${bill.label} marked as paid — logged as an expense`);
+  };
+
+  const handleToggleBill = (bill: RecurringBill) => {
+    onUpdate(toggleRecurringBill(store, bill.id));
+  };
+
+  const handleDeleteBill = () => {
+    if (!confirmDelBill) return;
+    onUpdate(deleteRecurringBill(store, confirmDelBill.id));
+    setConfirmDelBill(null);
+    showToast('Recurring bill removed');
+  };
+
   const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm";
 
   return (
@@ -146,6 +189,134 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
           📦 Restock Items
         </button>
       </div>
+
+      {/* Recurring Bills */}
+      <div className="rounded-xl bg-card border border-border overflow-hidden">
+        <button
+          onClick={() => setShowBills(!showBills)}
+          className="w-full p-3.5 flex items-center justify-between text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🔁</span>
+            <div>
+              <p className="font-display font-bold text-sm">Recurring Bills</p>
+              <p className="text-[10px] text-muted-foreground">
+                {recurringBills.filter(b => b.active).length > 0
+                  ? `${recurringBills.filter(b => b.active).length} active — reminders 3 days before due`
+                  : 'Rent, subscriptions — get reminded before they\'re due'}
+              </p>
+            </div>
+          </div>
+          <span className="text-muted-foreground text-sm">{showBills ? '▲' : '▼'}</span>
+        </button>
+        {showBills && (
+          <div className="px-3.5 pb-3.5 space-y-2 border-t border-border/60 pt-3">
+            {recurringBills.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-2">No recurring bills yet.</p>
+            )}
+            {recurringBills.map(bill => {
+              const d = Math.ceil((new Date(bill.nextDueDate).getTime() - Date.now()) / 86400000);
+              return (
+                <div key={bill.id} className={`p-2.5 rounded-lg border ${bill.active ? 'bg-surface-2 border-border' : 'bg-surface-2/40 border-border/40 opacity-60'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-display font-semibold text-sm truncate">{CATEGORY_ICON[bill.category]} {bill.label}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        ₦{bill.amount.toLocaleString()} · {bill.frequency} ·{' '}
+                        {bill.active ? (
+                          <span className={d < 0 ? 'text-destructive font-semibold' : d <= 3 ? 'text-warning font-semibold' : ''}>
+                            {d < 0 ? `overdue ${-d}d` : d === 0 ? 'due today' : `due in ${d}d`}
+                          </span>
+                        ) : 'paused'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {bill.active && (
+                        <button
+                          onClick={() => handleMarkBillPaid(bill)}
+                          className="px-2 py-1 rounded bg-success/15 text-success text-[10px] font-display font-bold hover:bg-success/25"
+                        >
+                          ✓ Paid
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleToggleBill(bill)}
+                        className="px-2 py-1 rounded bg-surface-3 text-[10px] font-display font-semibold hover:bg-surface-2"
+                      >
+                        {bill.active ? 'Pause' : 'Resume'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelBill(bill)}
+                        className="p-1 rounded text-destructive hover:bg-destructive/10"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {!showAddBill ? (
+              <button
+                onClick={() => setShowAddBill(true)}
+                className="w-full p-2 rounded-lg bg-primary/10 text-primary text-xs font-display font-bold hover:bg-primary/20"
+              >
+                + Add Recurring Bill
+              </button>
+            ) : (
+              <div className="space-y-2 p-2.5 rounded-lg bg-surface-2 border border-border">
+                <input
+                  value={billLabel}
+                  onChange={e => setBillLabel(e.target.value)}
+                  placeholder="e.g. Shop Rent"
+                  className={inputClass}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    value={billAmount}
+                    onChange={e => setBillAmount(e.target.value)}
+                    placeholder="Amount ₦"
+                    className={inputClass}
+                  />
+                  <select value={billCategory} onChange={e => setBillCategory(e.target.value as ExpenseCategory)} className={inputClass}>
+                    {EXPENSE_CATEGORIES.filter(c => c !== 'Restock').map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select value={billFrequency} onChange={e => setBillFrequency(e.target.value as 'weekly' | 'monthly')} className={inputClass}>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                  <input
+                    type="date"
+                    value={billDueDate}
+                    onChange={e => setBillDueDate(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setShowAddBill(false)} className="p-2 rounded-lg bg-surface-3 text-xs font-display font-semibold">Cancel</button>
+                  <button onClick={handleAddBill} className="p-2 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold">Save Bill</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {confirmDelBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setConfirmDelBill(null)}>
+          <div className="w-full max-w-sm bg-card border border-border rounded-xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <p className="font-display font-bold text-sm">Remove "{confirmDelBill.label}"?</p>
+            <p className="text-xs text-muted-foreground">You won't get reminders for this bill anymore.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setConfirmDelBill(null)} className="p-2 rounded-lg bg-surface-2 text-xs font-display font-semibold">Cancel</button>
+              <button onClick={handleDeleteBill} className="p-2 rounded-lg bg-destructive text-destructive-foreground text-xs font-display font-bold">Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter chips */}
       <div className="flex flex-wrap gap-1.5">
