@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "autoUpdate",
       devOptions: { enabled: false },
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
@@ -33,27 +36,9 @@ export default defineConfig(({ mode }) => ({
           { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webp,jpg,jpeg}"],
         maximumFileSizeToCacheInBytes: 5000000,
-        navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/~oauth/, /^\/api\//],
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
-        runtimeCaching: [
-          {
-            urlPattern: ({ request }) => request.mode === "navigate",
-            handler: "NetworkFirst",
-            options: { cacheName: "html", networkTimeoutSeconds: 2 },
-          },
-          {
-            urlPattern: ({ request }) =>
-              ["style", "script", "worker", "image", "font"].includes(request.destination),
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "assets" },
-          },
-        ],
       },
     }),
   ].filter(Boolean),
