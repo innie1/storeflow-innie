@@ -1561,8 +1561,8 @@ export default function Index() {
         </main>
 
         {/* Bottom Nav */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-background/90 backdrop-blur-md border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <div className="flex justify-around max-w-3xl mx-auto px-4">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur-md border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="flex items-center justify-between w-full max-w-lg mx-auto px-1 py-1">
             {allowedMainTabs.map(t => {
               const isActive = tab === t.id;
               const pendingOrdersCount = t.id === 'orders' ? orders.filter(o => o.status === 'Pending').length : 0;
@@ -1570,11 +1570,11 @@ export default function Index() {
                 <button
                   key={t.id}
                   onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
-                  className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all relative cursor-pointer ${
-                    isActive ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
+                  className={`flex-1 flex flex-col items-center justify-center py-1.5 px-0.5 text-[10px] transition-all relative cursor-pointer min-w-0 ${
+                    isActive ? 'text-yellow-500 scale-105 font-bold' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <span className="mb-1 relative flex items-center justify-center h-5 w-5">
+                  <span className="relative flex items-center justify-center h-5 w-5 shrink-0">
                     {renderTabIcon(t.id, isActive)}
                     {t.id === 'manager' && unreadCount > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
@@ -1585,24 +1585,22 @@ export default function Index() {
                       </span>
                     )}
                   </span>
-                  <span className="font-display font-bold leading-tight">{t.label}</span>
+                  <span className="font-display font-bold leading-none mt-1 truncate w-full text-center text-[10px]">{t.label}</span>
                 </button>
               );
             })}
             {/* More button */}
-            <div className="relative">
-              <button
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
-                className={`flex flex-col items-center py-2.5 px-3 text-[10px] transition-all cursor-pointer ${
-                  allowedCategories.some(cat => cat.subItems.some(sub => sub.tabId === tab)) || ['settings', 'history', 'marketplace', 'communication-center', 'goals', 'staff'].includes(tab) ? 'text-yellow-500 scale-105' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <span className="mb-1 flex items-center justify-center h-5 w-5">
-                  <MoreHorizontal className="w-5 h-5" />
-                </span>
-                <span className="font-display font-bold leading-tight">More</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              className={`flex-1 flex flex-col items-center justify-center py-1.5 px-0.5 text-[10px] transition-all cursor-pointer min-w-0 ${
+                allowedCategories.some(cat => cat.subItems.some(sub => sub.tabId === tab)) || ['settings', 'history', 'marketplace', 'communication-center', 'goals', 'staff'].includes(tab) ? 'text-yellow-500 scale-105 font-bold' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span className="flex items-center justify-center h-5 w-5 shrink-0">
+                <MoreHorizontal className="w-5 h-5" />
+              </span>
+              <span className="font-display font-bold leading-none mt-1 truncate w-full text-center text-[10px]">More</span>
+            </button>
           </div>
         </nav>
       </div>
