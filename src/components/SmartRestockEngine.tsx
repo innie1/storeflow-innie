@@ -193,8 +193,22 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
 
   // Intelligent Proportionate Budget Distribution (AI Optimizer - Step 5 & 6)
   const allocateBudgetProportionally = (list: BuyListItem[], budget: number): BuyListItem[] => {
-    if (budget <= 0 || list.length === 0) {
-      return list.map(item => ({ ...item, suggestedQty: 0, selected: false }));
+    if (list.length === 0) return list;
+
+    if (budget <= 0) {
+      // No available cash doesn't mean no useful information. Instead of
+      // zeroing every item out (which used to leave the merchant with zero
+      // guidance exactly when they most need to know what's critical),
+      // show the full priority-ranked list with the quantity that would
+      // ideally be restocked — nothing is pre-selected since there's no
+      // balance to fund it automatically, but the merchant can still see
+      // what's most urgent and choose to fund specific items with new
+      // money (a loan, personal top-up, etc.) rather than getting nothing.
+      return list.map(item => ({
+        ...item,
+        suggestedQty: item.idealQty || 1,
+        selected: false,
+      }));
     }
 
     const updated = list.map(item => ({
@@ -432,14 +446,14 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
 
   // Intelligent Budget Distribution (AI Optimizer)
   const handleOptimizeBudget = () => {
-    if (availableBudget <= 0) {
-      showToast('No available budget to distribute.', 'error');
-      return;
-    }
-
     const optimized = allocateBudgetProportionally(itemsList, availableBudget);
     setItemsList(optimized);
-    showToast('Buy List optimized proportionately to fit your budget!', 'success');
+    showToast(
+      availableBudget <= 0
+        ? 'No cash available right now — showing what\u2019s most critical to restock when you can.'
+        : 'Buy List optimized proportionately to fit your budget!',
+      availableBudget <= 0 ? 'info' : 'success'
+    );
   };
 
   // Add manually created item
@@ -498,9 +512,13 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     const selectedItems = itemsList.filter(it => it.selected);
     if (selectedItems.length === 0) return;
 
+    // Selected cost exceeding available balance-funded budget is no longer
+    // a hard block: it usually means the merchant is knowingly funding
+    // critical restocks with new money (a loan, personal top-up) rather
+    // than balance, which is a legitimate real scenario — not an error.
+    // Just make sure they know before it goes out.
     if (totals.totalCost > availableBudget) {
-      showToast('Cannot share: total cost exceeds available budget!', 'error');
-      return;
+      showToast(`Heads up: this list costs ₦${(totals.totalCost - Math.max(0, availableBudget)).toLocaleString()} more than your available balance — you'll need new money to cover it.`, 'info');
     }
 
     // Format list details
@@ -652,14 +670,25 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           </div>
         </div>
 
+        {availableBudget <= 0 && (
+          <div className="p-3.5 bg-warning/10 border border-warning/25 rounded-xl flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-warning mt-0.5" />
+            <div className="text-xs text-foreground leading-snug">
+              <p className="font-display font-bold text-warning">No cash available to restock right now</p>
+              <p className="text-muted-foreground mt-0.5">
+                Net income is at or below zero, so nothing here can be funded from your balance yet. The list below still shows what's most critical, ranked by priority — select what you can fund with new money (a loan, personal top-up, etc.) if it can't wait.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Dashboard Metrics Grid */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="p-3 bg-surface-2/40 border border-border/40 rounded-xl">
             <span className="text-[10px] text-muted-foreground uppercase font-bold">Available Budget</span>
             <p className="font-display font-bold text-lg text-success mt-0.5">₦{availableBudget.toLocaleString()}</p>
             {availableBudget <= 0 && <span className="text-[9px] text-destructive font-semibold">No restocking cash available</span>}
-          </div>
-          <div className="p-3 bg-surface-2/40 border border-border/40 rounded-xl">
+          </div>          <div className="p-3 bg-surface-2/40 border border-border/40 rounded-xl">
             <span className="text-[10px] text-muted-foreground uppercase font-bold">Required Investment</span>
             <p className="font-display font-bold text-lg text-primary mt-0.5">₦{totals.totalCost.toLocaleString()}</p>
             <span className="text-[9px] text-muted-foreground">{totals.count} products selected</span>
@@ -903,7 +932,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
             </button>
             <button 
               onClick={handleShareBuyList}
-              disabled={totals.count === 0 || totals.totalCost > availableBudget}
+              disabled={totals.count === 0}
               className="flex-1 sm:flex-none px-5 py-2.5 bg-primary text-primary-foreground disabled:opacity-40 font-display font-bold text-xs rounded-xl shadow-md cursor-pointer hover:opacity-95"
             >
               📤 Approve & Share List
