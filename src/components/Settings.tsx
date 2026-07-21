@@ -101,7 +101,7 @@ type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
   | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
   | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount' | 'activity-log'
-  | 'wishlist' | 'barcode' | 'marketplace-settings';
+  | 'wishlist' | 'barcode' | 'marketplace-settings' | 'printer-settings';
 
 interface SettingsProps {
   store: StoreData;
@@ -2189,6 +2189,105 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     );
   }
 
+  if (view === 'printer-settings') {
+    const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
+    const printMethod = settings.printMethod || 'system';
+    const setPrintMethod = (method: 'system' | 'bluetooth') => {
+      const updated = { ...store, managerSettings: { ...settings, printMethod: method } };
+      onUpdate(updated);
+      saveStore(updated);
+    };
+    return (
+      <SubPage title="Printer Settings" onBack={() => setView('home')}>
+        <div className="space-y-4">
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <h3 className="font-display font-bold text-sm">Receipt Printer</h3>
+            <p className="text-xs text-muted-foreground leading-normal">
+              Choose how receipts print when you check out a sale or complete an order.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPrintMethod('system')}
+                className={`flex-1 p-3 rounded-xl border text-sm font-display font-semibold ${printMethod === 'system' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
+              >
+                🖨️ System / WiFi
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintMethod('bluetooth')}
+                className={`flex-1 p-3 rounded-xl border text-sm font-display font-semibold ${printMethod === 'bluetooth' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
+              >
+                🔵 Bluetooth
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-normal">
+              {printMethod === 'system'
+                ? 'Opens your device\'s normal print dialog — works with WiFi printers, saving as PDF, or any printer already set up on your phone/computer.'
+                : 'Sends receipts directly to a 58mm/80mm Bluetooth thermal printer. Only works in Chrome or Edge (Android or desktop) — not supported on iPhone/Safari, which will automatically fall back to System print.'}
+            </p>
+          </div>
+
+          {printMethod === 'bluetooth' && (
+            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+              <h3 className="font-display font-bold text-sm">Bluetooth Printer</h3>
+              {settings.savedBluetoothPrinterName && (
+                <p className="text-xs text-success">✓ Last connected: {settings.savedBluetoothPrinterName}</p>
+              )}
+              <p className="text-[11px] text-muted-foreground leading-normal">
+                Make sure your printer is turned on and already paired in your phone/computer's Bluetooth settings, then tap below to connect it to StoreFlow and print a test receipt.
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { printBluetooth } = await import('@/lib/print-engine');
+                    const name = await printBluetooth({
+                      storeName: store.storeName,
+                      receiptNumber: 'TEST-0001',
+                      date: new Date().toLocaleString(),
+                      items: [{ productName: 'Test Item', quantity: 1, unitPrice: 100, total: 100 }],
+                      subtotal: 100, discount: 0, total: 100, paid: 100, balance: 0,
+                      paymentMethod: 'cash',
+                      footerMessage: 'This is a test print from StoreFlow ✅',
+                      receiptCurrency: settings.receiptCurrency || '₦',
+                    }, settings.receiptWidth === '80mm' ? '80mm' : '58mm');
+                    const updated = { ...store, managerSettings: { ...settings, savedBluetoothPrinterName: name } };
+                    onUpdate(updated);
+                    saveStore(updated);
+                    showToast(`Connected to ${name} — test receipt sent`);
+                  } catch (err: any) {
+                    showToast('Bluetooth pairing failed: ' + err.message, 'error');
+                  }
+                }}
+                className="w-full p-3 rounded-xl bg-primary text-primary-foreground text-sm font-display font-bold"
+              >
+                Pair Printer & Test Print
+              </button>
+            </div>
+          )}
+
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <h3 className="font-display font-bold text-sm">Paper Size</h3>
+            <select
+              value={store.managerSettings?.receiptWidth || '58mm'}
+              onChange={e => {
+                const updated = { ...store, managerSettings: { ...settings, receiptWidth: e.target.value as any } };
+                onUpdate(updated);
+                saveStore(updated);
+              }}
+              className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+            >
+              <option value="58mm">Thermal (58mm)</option>
+              <option value="80mm">Thermal (80mm)</option>
+              <option value="standard">Standard A4 / PDF</option>
+            </select>
+          </div>
+        </div>
+      </SubPage>
+    );
+  }
+
   if (view === 'marketplace-settings') return (
     <SubPage title="Marketplace Settings" onBack={() => setView('home')}>
       <MarketplaceSettings store={store} onUpdate={onUpdate} />
@@ -3966,6 +4065,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           <SettingTile icon="📱" color="#FFC72C" title="QR & Barcodes" desc="Branded QR codes, analytics, and product tags." onClick={() => setView('barcode')} />
 
           <SettingTile icon="🛍️" color="#EC4899" title="Marketplace Settings" desc="Configure storefront visibility, pricing, delivery, and rewards." onClick={() => setView('marketplace-settings')} />
+
+          <SettingTile icon="🖨️" color="#22C55E" title="Printer Settings" desc="Choose System/WiFi or Bluetooth thermal printing for receipts."
+            right={<p className="text-[10px] font-display font-semibold" style={{color:'#22C55E'}}>{(store.managerSettings?.printMethod || 'system') === 'bluetooth' ? '🔵 Bluetooth' : '🖨️ System/WiFi'}</p>}
+            onClick={() => setView('printer-settings')} />
 
           <SettingTile icon="🗄️" color="#3B82F6" title="Data & Storage" desc="Import, export, backups, and store deletion." onClick={() => setView('data')}
             right={<div className="flex gap-1">
