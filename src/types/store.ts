@@ -174,6 +174,19 @@ export interface Loan {
   date: string;
   note?: string;
   status: 'active' | 'repaid';
+  dueDate?: string;          // optional expected repayment date, powers reminders
+  lastReminderDate?: string; // last time a due/overdue reminder was sent for this loan
+}
+
+export interface RecurringBill {
+  id: string;
+  label: string;
+  amount: number;
+  category: ExpenseCategory;
+  frequency: 'weekly' | 'monthly';
+  nextDueDate: string;       // ISO date of the next occurrence; auto-advances after a reminder cycle passes
+  lastReminderDate?: string; // last time a reminder was sent for the current nextDueDate
+  active: boolean;
 }
 
 export interface Withdrawal {
@@ -599,6 +612,7 @@ export interface StoreData {
   restocks?: Restock[];
   plannedRestocks?: PlannedRestock[];
   expenses?: Expense[];
+  recurringBills?: RecurringBill[];
   trash?: TrashItem[];
   investments?: Investment[];
   games?: GameService[];

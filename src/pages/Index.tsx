@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction } from '@/lib/store-data';
+import { checkDebtExpenseReminders } from '@/lib/manager-intel';
 import StoreAccess from '@/components/StoreAccess';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import NotificationDrawer from '@/components/NotificationDrawer';
@@ -809,13 +810,28 @@ export default function Index() {
     const check = () => {
       if (document.visibilityState !== 'visible') return;
       setStore(prev => {
-        if (!prev?.savingsGoal?.autoSaveEnabled) return prev;
-        const before = prev.savingsGoal.lastDeductionTime;
-        const clone: StoreData = { ...prev, savingsGoal: { ...prev.savingsGoal } };
-        const updated = runScheduledSavingsDeduction(clone);
-        if (updated.savingsGoal?.lastDeductionTime === before) return prev; // nothing was due
-        saveStore(updated);
-        return updated;
+        if (!prev) return prev;
+        let next = prev;
+
+        // 1. Savings deduction
+        if (prev.savingsGoal?.autoSaveEnabled) {
+          const before = prev.savingsGoal.lastDeductionTime;
+          const clone: StoreData = { ...prev, savingsGoal: { ...prev.savingsGoal } };
+          const updated = runScheduledSavingsDeduction(clone);
+          if (updated.savingsGoal?.lastDeductionTime !== before) {
+            next = updated;
+          }
+        }
+
+        // 2. Debt & Recurring Bill Reminders
+        const withReminders = checkDebtExpenseReminders(next);
+        if (withReminders) {
+          next = withReminders;
+        }
+
+        if (next === prev) return prev; // nothing changed, avoid a pointless re-render/save
+        saveStore(next);
+        return next;
       });
     };
     check();
