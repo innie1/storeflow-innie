@@ -64,7 +64,7 @@ export default function GamesSettings({ store, onUpdate }: Props) {
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" checked={g.enabled} onChange={e => handleToggle(g.id, e.target.checked)} />
-                <div className="w-10 h-5 bg-surface-2 border border-border rounded-full peer-checked:bg-primary transition-colors relative">
+                <div className="w-10 h-5 bg-surface-2 border border-border rounded-full peer-checked:bg-success transition-colors relative">
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-background transition-transform ${g.enabled ? 'translate-x-5' : ''}`} />
                 </div>
               </label>

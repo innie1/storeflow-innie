@@ -307,33 +307,39 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
   return (
     <div className="flex flex-col gap-6 md:grid md:grid-cols-12 md:gap-6 items-start pb-20">
       {/* Save Button for Cloud Sync */}
-      <div className="w-full md:col-span-12 flex justify-between items-center bg-card p-4 rounded-2xl shadow-card">
+      <div className="w-full md:col-span-12 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-card p-4 rounded-2xl border border-border/80 shadow-sm text-left">
         <div>
-          <h2 className="font-display font-bold text-lg">Marketplace Control Center</h2>
-          <p className="text-xs text-muted-foreground">Sync controls instantly with the customer web application.</p>
+          <div className="flex items-center gap-2">
+            <h2 className="font-display font-black text-lg text-foreground">Marketplace Control Center</h2>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-success/10 border border-success/20 text-success flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+              Live Sync
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">Sync controls instantly with your customer web application storefront.</p>
         </div>
         <button
           onClick={handleSaveToCloud}
           disabled={saving}
-          className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-display font-semibold hover:opacity-90 transition-opacity flex items-center gap-2 cursor-pointer disabled:opacity-50"
+          className="px-4 py-2.5 rounded-xl bg-success text-white font-display font-bold text-xs hover:opacity-90 transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 self-end sm:self-auto"
         >
-          {saving ? 'Publishing...' : 'Publish Live Settings'}
+          {saving ? 'Publishing...' : 'Publish Live Settings ⚡'}
         </button>
       </div>
 
       {/* Navigation list */}
-      <div className="w-full md:col-span-4 flex md:flex-col gap-2 overflow-x-auto no-scrollbar md:overflow-x-visible pb-2 md:pb-0">
+      <div className="w-full md:col-span-4 flex md:flex-col gap-1.5 overflow-x-auto no-scrollbar md:overflow-x-visible pb-2 md:pb-0">
         {sections.map(sec => (
           <button
             key={sec.id}
             onClick={() => setActiveSection(sec.id)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all shrink-0 md:shrink ${
+            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-display font-bold transition-all shrink-0 md:shrink cursor-pointer ${
               activeSection === sec.id 
-                ? 'bg-primary text-primary-foreground shadow-md' 
-                : 'bg-card text-foreground hover:bg-surface-2 hover:ring-1 hover:ring-primary/20'
+                ? 'bg-success/10 border border-success/30 text-success shadow-sm' 
+                : 'bg-card border border-border/50 text-muted-foreground hover:text-foreground hover:bg-surface-2'
             }`}
           >
-            {sec.icon}
+            <span className={activeSection === sec.id ? 'text-success' : 'text-muted-foreground'}>{sec.icon}</span>
             <span>{sec.label}</span>
           </button>
         ))}
@@ -1158,7 +1164,7 @@ function ToggleRow({ label, description, checked, onChange }: { label: string; d
       <button
         onClick={() => onChange(!checked)}
         className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer outline-none shrink-0 ${
-          checked ? 'bg-primary' : 'bg-surface-3 border border-border'
+          checked ? 'bg-success' : 'bg-surface-3 border border-border'
         }`}
       >
         <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-all shadow ${

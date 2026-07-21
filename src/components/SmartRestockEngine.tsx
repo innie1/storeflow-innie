@@ -646,8 +646,8 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
             <span className="text-muted-foreground font-semibold">Buy Only to Minimum Stock</span>
             <button
               onClick={() => setBuyOnlyToMin(!buyOnlyToMin)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                buyOnlyToMin ? 'bg-primary' : 'bg-surface-3 border-border'
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-outline-none ${
+                buyOnlyToMin ? 'bg-success' : 'bg-surface-3 border-border'
               }`}
             >
               <span
