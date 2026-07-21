@@ -701,12 +701,6 @@ export function restockQualityNote(store: StoreData): FlowNotification | null {
   };
 }
 
-// ─── Restock Score (90-day) ─────────────────────────────────────────────────
-// Gives merchants one number for "am I restocking well?" — what % of the
-// money spent restocking over the last 90 days went into products that
-// actually sell, versus products that were already dead stock or slow
-// movers when they got restocked again. Reuses the same neverSold/slowMovers
-// classification as restockQualityNote() so the two stay consistent.
 export interface RestockScoreResult {
   score: number; // 0-100, higher is better
   label: 'Excellent' | 'Good' | 'Fair' | 'Needs Attention';
@@ -716,6 +710,59 @@ export interface RestockScoreResult {
   wastedItems: { name: string; spend: number }[];
 }
 
+// ─── Weekly Auto Restock Draft ──────────────────────────────────────────────
+// Instead of requiring a merchant to remember to open Smart Restock every
+// week, this generates a notification once every 7 days (if there's
+// actually anything worth restocking) pointing them straight at a fresh
+// draft. Tapping it opens Smart Restock Engine directly (see actionParam
+// 'openRestock', handled in Index.tsx/Inventory.tsx) rather than just the
+// Inventory tab, so there's nothing extra to remember or click through.
+export function checkWeeklyRestockDraft(store: StoreData): StoreData | null {
+  const settings = store.managerSettings;
+  if (!settings?.enabled) return null; // respect the manager/AI features toggle
+
+  const last = settings.lastAutoRestockDraftDate ? new Date(settings.lastAutoRestockDraftDate).getTime() : 0;
+  const sevenDays = 7 * 86400000;
+  if (Date.now() - last < sevenDays) return null;
+
+  const needsRestock = inventoryIntelligence(store);
+  if (needsRestock.length === 0) {
+    // Nothing to restock right now — don't nag, but still push the clock
+    // forward so we check again in another 7 days rather than every load.
+    return {
+      ...store,
+      managerSettings: { ...settings, lastAutoRestockDraftDate: new Date().toISOString() },
+    };
+  }
+
+  const topNames = needsRestock.slice(0, 3).map(f => f.product.name).join(', ');
+  const notification: FlowNotification = {
+    id: `weekly-restock-${Date.now()}`,
+    icon: '📦',
+    text: `Your weekly restock draft is ready — ${needsRestock.length} product${needsRestock.length > 1 ? 's' : ''} could use restocking.`,
+    tone: 'info',
+    date: new Date().toISOString(),
+    read: false,
+    title: 'Weekly Restock Draft',
+    description: `Including ${topNames}${needsRestock.length > 3 ? ` and ${needsRestock.length - 3} more` : ''}. Tap to review and approve a buy list.`,
+    actionLabel: 'Review Draft',
+    actionTab: 'inventory',
+    actionParam: 'openRestock',
+  };
+
+  return {
+    ...store,
+    managerSettings: { ...settings, lastAutoRestockDraftDate: new Date().toISOString() },
+    flowNotifications: [notification, ...(store.flowNotifications || [])],
+  };
+}
+
+// ─── Restock Score (90-day) ─────────────────────────────────────────────────
+// Gives merchants one number for "am I restocking well?" — what % of the
+// money spent restocking over the last 90 days went into products that
+// actually sell, versus products that were already dead stock or slow
+// movers when they got restocked again. Reuses the same neverSold/slowMovers
+// classification as restockQualityNote() so the two stay consistent.
 export function restockScore(store: StoreData): RestockScoreResult {
   const cutoff = Date.now() - 90 * 86400000;
   const restocks = (store.restocks || []).filter(r => new Date(r.date).getTime() >= cutoff);

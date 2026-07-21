@@ -47,6 +47,8 @@ interface InventoryProps {
   filterLowStock?: boolean;
   onClearFilter?: () => void;
   currentUser?: any;
+  autoOpenRestock?: boolean;
+  onAutoOpenRestockHandled?: () => void;
 }
 
 interface ShoppingListItem {
@@ -72,7 +74,7 @@ export interface MassEditItem {
   showMore?: boolean;
 }
 
-export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter, currentUser }: InventoryProps) {
+export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter, currentUser, autoOpenRestock, onAutoOpenRestockHandled }: InventoryProps) {
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
   const [performancePeriod, setPerformancePeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -688,6 +690,13 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenRestock) {
+      setShowShoppingList(true);
+      onAutoOpenRestockHandled?.();
+    }
+  }, [autoOpenRestock, onAutoOpenRestockHandled]);
   const [receiveMode, setReceiveMode] = useState(false);
   const [receiveData, setReceiveData] = useState<Record<string, { qty: string; cost: string }>>({});
 

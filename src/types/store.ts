@@ -236,6 +236,7 @@ export interface FlowNotification {
   description?: string;
   actionLabel?: string;
   actionTab?: string;
+  actionParam?: string; // optional extra signal for the destination tab, e.g. 'openRestock' to auto-open Smart Restock Engine
 }
 
 export interface MemoryEntry {
@@ -406,6 +407,7 @@ export interface ManagerSettings {
   enabled: boolean;
   ownerPassword?: string;          // Owner login password, checked on role switch and backup export
   emergencyRecoveryKey?: string;   // Used to encrypt/decrypt offline backup exports
+  lastAutoRestockDraftDate?: string; // Last time the weekly auto restock draft notification was generated
   revenueForecasts: boolean;
   profitForecasts: boolean;
   inventoryForecasts: boolean;

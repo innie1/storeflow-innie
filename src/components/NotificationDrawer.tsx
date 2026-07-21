@@ -5,7 +5,7 @@ interface NotificationDrawerProps {
   store: StoreData;
   onClose: () => void;
   onUpdate: (s: StoreData) => void;
-  onNavigate?: (tab: string) => void;
+  onNavigate?: (tab: string, param?: string) => void;
 }
 
 export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate }: NotificationDrawerProps) {
@@ -77,7 +77,7 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
                     {n.actionTab && onNavigate && (
                       <button
                         onClick={() => {
-                          if (onNavigate) onNavigate(n.actionTab!);
+                          if (onNavigate) onNavigate(n.actionTab!, n.actionParam);
                           handleClose();
                         }}
                         className="px-2.5 py-1 rounded bg-primary text-primary-foreground text-[9px] font-display font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"

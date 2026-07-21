@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction } from '@/lib/store-data';
-import { checkDebtExpenseReminders } from '@/lib/manager-intel';
+import { checkDebtExpenseReminders, checkWeeklyRestockDraft } from '@/lib/manager-intel';
 import StoreAccess from '@/components/StoreAccess';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import NotificationDrawer from '@/components/NotificationDrawer';
@@ -278,6 +278,7 @@ const isTabAllowed = (tabId: TabId, user: any) => {
 
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
+  const [autoOpenRestock, setAutoOpenRestock] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [tab, setTabState] = useState<TabId>('dashboard');
   const [orders, setOrders] = useState<any[]>([]);
@@ -889,6 +890,12 @@ export default function Index() {
         const withReminders = checkDebtExpenseReminders(next);
         if (withReminders) {
           next = withReminders;
+        }
+
+        // 3. Weekly Auto Restock Draft
+        const withDraft = checkWeeklyRestockDraft(next);
+        if (withDraft) {
+          next = withDraft;
         }
 
         if (next === prev) return prev; // nothing changed, avoid a pointless re-render/save
@@ -1522,6 +1529,8 @@ export default function Index() {
                 filterLowStock={filterLowStock}
                 onClearFilter={() => setFilterLowStock(false)}
                 currentUser={currentUser}
+                autoOpenRestock={autoOpenRestock}
+                onAutoOpenRestockHandled={() => setAutoOpenRestock(false)}
               />
             </div>
             <div className={tab === 'sales' ? 'block' : 'hidden'}>
@@ -1868,8 +1877,9 @@ export default function Index() {
           store={store}
           onClose={() => setShowNotifications(false)}
           onUpdate={setStore}
-          onNavigate={(targetTab) => {
+          onNavigate={(targetTab, param) => {
             setTab(targetTab as TabId);
+            if (param === 'openRestock') setAutoOpenRestock(true);
             setShowNotifications(false);
           }}
         />
