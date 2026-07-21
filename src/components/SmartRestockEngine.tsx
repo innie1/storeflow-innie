@@ -332,7 +332,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     }
 
     // Map labels and clean up
-    return updated.map(item => {
+    const finalList = updated.map(item => {
       if (item.suggestedQty <= 0) {
         return {
           ...item,
@@ -351,6 +351,20 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       
       return item;
     });
+
+    // A positive budget can still be too small to afford even ONE unit of
+    // the cheapest priority item — every item would silently end up at 0
+    // quantity above with no real explanation, which looks identical to
+    // "the engine is broken" from the merchant's side. If literally
+    // nothing could be afforded, fall back to the same triage treatment
+    // used when there's no budget at all: show what's needed, unselected,
+    // so there's always a visible, honest answer instead of a wall of
+    // zeros.
+    if (finalList.every(item => item.suggestedQty <= 0)) {
+      return list.map(item => ({ ...item, suggestedQty: item.idealQty || 1, selected: false }));
+    }
+
+    return finalList;
   };
 
   // Helper for single category fallback
@@ -380,6 +394,12 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           };
         }
       });
+      // Budget too small to afford even the single cheapest item: same
+      // triage fallback as the two-pool allocator above, rather than a
+      // silent wall of zeros that looks like the engine is broken.
+      if (allocated.every(item => item.suggestedQty <= 0)) {
+        return list.map(item => ({ ...item, suggestedQty: item.idealQty || 1, selected: false }));
+      }
       return allocated.sort((a, b) => b.priorityScore - a.priorityScore);
     }
 
@@ -670,13 +690,18 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           </div>
         </div>
 
-        {availableBudget <= 0 && (
+        {(availableBudget <= 0 || (itemsList.length > 0 && itemsList.every(it => !it.selected && it.suggestedQty === (it.idealQty || 1)))) && (
           <div className="p-3.5 bg-warning/10 border border-warning/25 rounded-xl flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 shrink-0 text-warning mt-0.5" />
             <div className="text-xs text-foreground leading-snug">
-              <p className="font-display font-bold text-warning">No cash available to restock right now</p>
+              <p className="font-display font-bold text-warning">
+                {availableBudget <= 0 ? 'No cash available to restock right now' : 'Available cash can\'t cover even one item yet'}
+              </p>
               <p className="text-muted-foreground mt-0.5">
-                Net income is at or below zero, so nothing here can be funded from your balance yet. The list below still shows what's most critical, ranked by priority — select what you can fund with new money (a loan, personal top-up, etc.) if it can't wait.
+                {availableBudget <= 0
+                  ? 'Net income is at or below zero, so nothing here can be funded from your balance yet.'
+                  : `Your available budget (₦${availableBudget.toLocaleString()}) is smaller than the cheapest item that needs restocking.`}
+                {' '}The list below still shows what's most critical, ranked by priority — select what you can fund with new money (a loan, personal top-up, etc.) if it can't wait.
               </p>
             </div>
           </div>
