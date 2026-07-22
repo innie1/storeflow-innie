@@ -938,6 +938,7 @@ export function recordSale(
     profit: Math.round((unitPrice - costPrice) * quantity * 100) / 100,
     date: new Date().toISOString(),
     transactionId,
+    channel: 'in_store',
   };
 
   const newQty = Math.round((product.quantity - qtyDeduction) * 100) / 100;

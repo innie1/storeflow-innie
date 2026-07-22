@@ -113,17 +113,20 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         const total = group.reduce((sum, s) => sum + s.total, 0);
         const totalQty = group.reduce((sum, s) => sum + s.quantity, 0);
         const firstSale = group[0];
+        const isOnlineOrder = firstSale.channel === 'online_order';
         items.push({
           id: txId,
           type: 'sale',
           date: firstSale.date,
-          title: group.length === 1 ? firstSale.productName : `Sale — ${group.length} items`,
+          title: group.length === 1
+            ? firstSale.productName
+            : `${isOnlineOrder ? 'Online Order' : 'Sale'} — ${group.length} items`,
           subtitle: group.length === 1 
             ? `${firstSale.quantity} × ₦${firstSale.unitPrice.toLocaleString()}` 
-            : `${totalQty} items`,
+            : `${totalQty} items${isOnlineOrder ? ' · Online Order' : ''}`,
           amount: total,
           amountColor: 'text-primary',
-          icon: '💰',
+          icon: isOnlineOrder ? '📦' : '💰',
           raw: group,
         });
       });
@@ -245,8 +248,39 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
     { key: 'expenses', label: 'Expenses', icon: '🧾' },
   ];
 
+  const channelSplit = useMemo(() => {
+    let onlineRevenue = 0;
+    let inStoreRevenue = 0;
+    let unlabeled = 0;
+    store.sales.forEach(s => {
+      if (s.channel === 'online_order') onlineRevenue += s.total;
+      else if (s.channel === 'in_store') inStoreRevenue += s.total;
+      else unlabeled += s.total;
+    });
+    const total = onlineRevenue + inStoreRevenue + unlabeled;
+    return {
+      onlineRevenue, inStoreRevenue, unlabeled, total,
+      onlinePct: total > 0 ? Math.round((onlineRevenue / total) * 100) : 0,
+      inStorePct: total > 0 ? Math.round((inStoreRevenue / total) * 100) : 0,
+    };
+  }, [store.sales]);
+
   return (
     <div className="animate-fade-in space-y-3">
+      {channelSplit.total > 0 && (channelSplit.onlineRevenue > 0 || channelSplit.inStoreRevenue > 0) && (
+        <div className="p-3.5 rounded-xl bg-card border border-border">
+          <p className="text-[10px] text-muted-foreground uppercase font-bold mb-2">Where Your Sales Come From</p>
+          <div className="w-full h-2 rounded-full bg-surface-3 overflow-hidden flex">
+            <div className="h-full bg-primary" style={{ width: `${channelSplit.inStorePct}%` }} />
+            <div className="h-full bg-success" style={{ width: `${channelSplit.onlinePct}%` }} />
+          </div>
+          <div className="flex justify-between mt-1.5 text-[11px]">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary inline-block" /> In-Store {channelSplit.inStorePct}% (₦{channelSplit.inStoreRevenue.toLocaleString()})</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success inline-block" /> Online {channelSplit.onlinePct}% (₦{channelSplit.onlineRevenue.toLocaleString()})</span>
+          </div>
+        </div>
+      )}
+
       {/* Search + actions */}
       <div className="flex flex-wrap gap-2">
         <input

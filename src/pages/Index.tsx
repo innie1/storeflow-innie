@@ -641,6 +641,14 @@ export default function Index() {
       // recorded as a sale.
       if (newStatus === 'Completed' && store) {
         const items = targetOrder.order_items || [];
+        // Every item in this order shares one transactionId, the same way
+        // a multi-item in-store checkout does (see recordCheckout) -- this
+        // is what makes Sales History group them into a single receipt
+        // instead of one row per product. Also tagged with channel:
+        // 'online_order' so the receipt is labeled distinctly from
+        // in-store sales, and so Sales History can show what percentage
+        // of revenue comes from online orders vs walk-in/in-store sales.
+        const orderTransactionId = `order-${targetOrder.id}`;
         const newSales = items.map((item: any) => {
           const product = store.products.find((p: any) => p.id === item.product_id);
           const unitPrice = Number(item.price) || product?.sellingPrice || 0;
@@ -656,6 +664,8 @@ export default function Index() {
             profit: Math.round((unitPrice - costPrice) * qty * 100) / 100,
             date: new Date().toISOString(),
             paymentMethod: 'transfer' as const,
+            transactionId: orderTransactionId,
+            channel: 'online_order' as const,
           };
         });
 

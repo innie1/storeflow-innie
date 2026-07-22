@@ -65,6 +65,7 @@ export interface Sale {
   pendingPaymentId?: string;
   paymentMethod?: PaymentMethod;
   transactionId?: string;
+  channel?: 'in_store' | 'online_order'; // where the sale came from — powers the Online vs In-Store split in Sales History
 }
 
 export interface PendingPaymentItem {
