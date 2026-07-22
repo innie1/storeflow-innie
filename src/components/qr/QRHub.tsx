@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Camera, QrCode, Sparkles, AlertCircle, ShoppingCart, Users, Tag, CreditCard, Receipt, Database, LayoutGrid } from 'lucide-react';
 import { StoreData, Product } from '@/types/store';
 import { encodeQRData, decodeQRData, QRData, parseScannedQRText } from '@/lib/qr-code';
+import { logScanEvent } from '@/lib/store-data';
 import QRDisplayCard from './QRDisplayCard';
 import QRScannerPage from './QRScannerPage';
 import { showToast } from '@/components/Toast';
@@ -15,7 +16,7 @@ interface QRHubProps {
 type QRType = 'store' | 'product' | 'shelf' | 'customer' | 'staff' | 'payment' | 'receipt' | 'inventory' | 'promotion';
 
 export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
-  const [activeMode, setActiveMode] = useState<'scan' | 'generate'>('generate');
+  const [activeMode, setActiveMode] = useState<'scan' | 'generate' | 'analytics'>('generate');
   const [qrType, setQrType] = useState<QRType>('store');
 
   // Generator State
@@ -111,6 +112,13 @@ export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
     const parsed = decodeQRData(decodedText);
     if (parsed) {
       setScannedResult(parsed);
+      onUpdate(logScanEvent(store, {
+        kind: 'qr',
+        purpose: parsed.type || 'unknown',
+        productId: parsed.payload?.id,
+        productName: parsed.payload?.name,
+        matched: true,
+      }));
       return;
     }
 
@@ -132,12 +140,19 @@ export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
       };
       setScannedResult(syntheticResult);
       showToast(`StoreFlow ${urlParsed.productId ? 'product' : 'store'} QR identified!`, 'success');
+      onUpdate(logScanEvent(store, {
+        kind: 'qr',
+        purpose: urlParsed.productId ? 'product' : 'store',
+        productId: urlParsed.productId,
+        matched: true,
+      }));
       return;
     }
 
     // 3. Not recognizable
     setScannedResult(null);
     showToast('Decoded QR is not a valid StoreFlow token or URL', 'warning');
+    onUpdate(logScanEvent(store, { kind: 'qr', purpose: 'unrecognized', matched: false }));
   };
 
   return (
@@ -175,6 +190,14 @@ export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
             }`}
           >
             <Camera className="w-3.5 h-3.5" /> Scan Code
+          </button>
+          <button
+            onClick={() => setActiveMode('analytics')}
+            className={`px-4 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${
+              activeMode === 'analytics' ? 'bg-surface-1 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" /> Analytics
           </button>
         </div>
       </div>
@@ -460,6 +483,89 @@ export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {activeMode === 'analytics' && (
+        <div className="space-y-4">
+          {(() => {
+            const events = store.scanEvents || [];
+            const sevenDaysAgo = Date.now() - 7 * 86400000;
+            const last7 = events.filter(e => new Date(e.date).getTime() >= sevenDaysAgo);
+            const qrCount = events.filter(e => e.kind === 'qr').length;
+            const barcodeCount = events.filter(e => e.kind === 'barcode').length;
+            const matchedCount = events.filter(e => e.matched).length;
+            const matchRate = events.length > 0 ? Math.round((matchedCount / events.length) * 100) : 0;
+
+            const productCounts = new Map<string, { name: string; count: number }>();
+            events.filter(e => e.productId).forEach(e => {
+              const existing = productCounts.get(e.productId!) || { name: e.productName || 'Unknown', count: 0 };
+              existing.count++;
+              productCounts.set(e.productId!, existing);
+            });
+            const topScanned = Array.from(productCounts.values()).sort((a, b) => b.count - a.count).slice(0, 5);
+
+            if (events.length === 0) {
+              return (
+                <div className="p-8 rounded-2xl bg-surface-2/40 border border-border/40 text-center">
+                  <Database className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="font-display font-bold text-sm">No scans recorded yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Once you or your customers start scanning QR codes or barcodes, activity will show up here.</p>
+                </div>
+              );
+            }
+
+            return (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-xl bg-card border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Scans (7 days)</p>
+                    <p className="font-display font-bold text-xl mt-0.5">{last7.length}</p>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-card border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Total Scans</p>
+                    <p className="font-display font-bold text-xl mt-0.5">{events.length}</p>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-card border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">QR vs Barcode</p>
+                    <p className="font-display font-bold text-sm mt-0.5">{qrCount} / {barcodeCount}</p>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-card border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Match Rate</p>
+                    <p className={`font-display font-bold text-xl mt-0.5 ${matchRate < 70 ? 'text-warning' : 'text-success'}`}>{matchRate}%</p>
+                  </div>
+                </div>
+
+                {topScanned.length > 0 && (
+                  <div className="p-4 rounded-xl bg-card border border-border">
+                    <h3 className="font-display font-bold text-sm mb-2">Most Scanned Products</h3>
+                    <div className="space-y-1.5">
+                      {topScanned.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-foreground">{i + 1}. {p.name}</span>
+                          <span className="text-muted-foreground font-mono">{p.count} scans</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-4 rounded-xl bg-card border border-border">
+                  <h3 className="font-display font-bold text-sm mb-2">Recent Activity</h3>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {events.slice(0, 20).map(e => (
+                      <div key={e.id} className="flex items-center justify-between text-xs py-1 border-b border-border/40 last:border-0">
+                        <span className="text-foreground">
+                          {e.kind === 'qr' ? '📱' : '📊'} {e.productName || e.purpose} {!e.matched && <span className="text-muted-foreground">(not recognized)</span>}
+                        </span>
+                        <span className="text-muted-foreground shrink-0 ml-2">{new Date(e.date).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 

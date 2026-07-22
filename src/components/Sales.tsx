@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { StoreData, Sale, PaymentMethod, ManagerSettings, Product } from '@/types/store';
-import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale } from '@/lib/store-data';
+import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale, logScanEvent } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
@@ -448,6 +448,13 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     }
 
     const product = store.products.find(p => p.barcode === targetId || p.id === targetId);
+    onUpdate(logScanEvent(store, {
+      kind: 'barcode',
+      purpose: 'checkout',
+      productId: product?.id,
+      productName: product?.name,
+      matched: !!product,
+    }));
     if (!product) {
       setNotFoundBarcode(targetId);
       return;

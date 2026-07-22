@@ -225,6 +225,16 @@ export interface CustomerRequest {
   fulfilled?: boolean;
 }
 
+export interface ScanEvent {
+  id: string;
+  kind: 'qr' | 'barcode';
+  purpose: string;       // e.g. 'product', 'store', 'checkout-lookup', 'inventory-lookup'
+  productId?: string;
+  productName?: string;
+  matched: boolean;      // whether the scan resolved to something recognizable
+  date: string;
+}
+
 export interface FlowNotification {
   id: string;
   text: string;
@@ -615,6 +625,7 @@ export interface StoreData {
   plannedRestocks?: PlannedRestock[];
   expenses?: Expense[];
   recurringBills?: RecurringBill[];
+  scanEvents?: ScanEvent[];
   trash?: TrashItem[];
   investments?: Investment[];
   games?: GameService[];

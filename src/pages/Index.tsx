@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
-import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction } from '@/lib/store-data';
+import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { checkDebtExpenseReminders, checkWeeklyRestockDraft } from '@/lib/manager-intel';
 import StoreAccess from '@/components/StoreAccess';
 import StoreSwitcher from '@/components/StoreSwitcher';
@@ -981,6 +981,14 @@ export default function Index() {
       targetId = parts[parts.length - 1];
     }
     const existing = store.products.find(p => p.barcode === targetId || p.id === targetId);
+    let workingStore = logScanEvent(store, {
+      kind: 'barcode',
+      purpose: 'quick-scan',
+      productId: existing?.id,
+      productName: existing?.name,
+      matched: !!existing,
+    });
+    setStore(workingStore);
     if (existing) {
       // Sell mode: add to scan cart
       if (existing.quantity <= 0) {
