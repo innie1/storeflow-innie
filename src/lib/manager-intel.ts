@@ -542,8 +542,26 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
     advice.push({ id: 'exp-rise', icon: '🧾', title: `${ea.largestCategory} spending up ${ea.trendPct.toFixed(0)}%`, detail: `Your ${ea.largestCategory.toLowerCase()} expenses grew significantly this month. Review and cut where possible.`, priority: 'high' });
   }
 
-  // High: underpriced products
+  // Critical: selling at zero or negative margin — losing money per unit sold.
+  // This previously only appeared in the separate Pricing panel and never
+  // reached the main Advice feed, so a merchant could be losing money on
+  // every sale of an item without ever seeing a headline alert about it.
   const alerts = pricingAlerts(store);
+  const lossMaking = alerts.filter(a => a.type === 'zero_margin').slice(0, 2);
+  lossMaking.forEach(a => {
+    const isLoss = a.currentMargin < 0;
+    advice.push({
+      id: `loss-${a.product.id}`,
+      icon: '🔻',
+      title: isLoss ? `Losing money on ${a.product.name}` : `${a.product.name} has zero margin`,
+      detail: isLoss
+        ? `Selling below cost (${(a.currentMargin * 100).toFixed(0)}% margin). Raise to at least ₦${a.suggestedPrice.toLocaleString()} to stop the loss.`
+        : `Selling at cost price — no profit per unit. Suggest ₦${a.suggestedPrice.toLocaleString()}.`,
+      priority: 'critical'
+    });
+  });
+
+  // High: underpriced products (positive margin, but below a healthy target)
   const underpriced = alerts.filter(a => a.type === 'underpriced').slice(0, 1);
   underpriced.forEach(a => {
     advice.push({ id: `price-${a.product.id}`, icon: '📈', title: `Raise price on ${a.product.name}`, detail: `Current margin: ${(a.currentMargin * 100).toFixed(0)}%. Suggest ₦${a.suggestedPrice.toLocaleString()} — adds ₦${a.expectedLift.toLocaleString()} per unit.`, priority: 'high' });
@@ -1619,6 +1637,11 @@ export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
         const maxSafeDiscountPct = Math.floor(margin * 100 * 0.5); // use up to half the available margin
         const suggestedDiscountPct = Math.max(5, Math.min(25, maxSafeDiscountPct));
         const daysDeadStock = p.addedAt ? Math.floor((now.getTime() - new Date(p.addedAt).getTime()) / 86400000) : 14;
+        // Margin is % over cost price; the discount is % off selling price --
+        // different bases, so the resulting margin isn't a simple subtraction.
+        // Compute the actual post-discount price and margin instead.
+        const discountedPrice = p.sellingPrice * (1 - suggestedDiscountPct / 100);
+        const newMargin = (discountedPrice - p.costPrice) / p.costPrice;
         recs.push({
           productName: p.name,
           productId: p.id,
@@ -1627,7 +1650,7 @@ export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
           sellingPrice: p.sellingPrice,
           suggestedDiscountPct,
           daysDeadStock,
-          marginImpact: `Reduces markup margin from ${Math.round(margin * 100)}% to ${Math.round((margin * 100) - suggestedDiscountPct)}%, while staying above cost price.`
+          marginImpact: `Reduces markup margin from ${Math.round(margin * 100)}% to ${Math.round(newMargin * 100)}% (₦${discountedPrice.toLocaleString()}), while staying above cost price.`
         });
       }
     }
