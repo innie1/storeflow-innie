@@ -7,6 +7,7 @@ import {
   saveStore 
 } from '@/lib/store-data';
 import { exportROICSV, exportROIPDF } from '@/lib/export-data';
+import { cashBalanceBreakdown } from '@/lib/manager-intel';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import { 
@@ -40,6 +41,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
   const [loanSource, setLoanSource] = useState('Cash Drawer');
   const [loanNote, setLoanNote] = useState('');
   const [loanDueDate, setLoanDueDate] = useState('');
+  const [showCashBreakdown, setShowCashBreakdown] = useState(false);
   const [repayAmount, setRepayAmount] = useState<{[key: string]: string}>({});
 
   // 1. Calculations
@@ -361,7 +363,16 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
               <p className="font-display font-bold text-xl text-foreground">₦{inventoryValue.toLocaleString()}</p>
             </div>
             <div className="bg-card border border-border/40 rounded-2xl p-4 space-y-1">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold">Cash Balance</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-muted-foreground uppercase font-bold">Cash Balance</span>
+                <button
+                  onClick={() => setShowCashBreakdown(true)}
+                  className="w-3.5 h-3.5 rounded-full bg-surface-3 text-muted-foreground text-[9px] font-bold flex items-center justify-center hover:bg-primary/20 hover:text-primary transition cursor-pointer"
+                  title="What makes up this number?"
+                >
+                  i
+                </button>
+              </div>
               <p className="font-display font-bold text-xl text-success">₦{totalCash.toLocaleString()}</p>
               <div className="flex gap-2 text-[9px] text-muted-foreground font-mono mt-1 flex-wrap">
                 <span>D:{cashBalance.toLocaleString()}</span>
@@ -732,6 +743,55 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
           onCancel={() => setConfirmDel(null)}
         />
       )}
+
+      {showCashBreakdown && (() => {
+        const b = cashBalanceBreakdown(store);
+        const inflow = b.cashSales + b.bankSales + b.loansReceived + b.investmentsAdded;
+        const outflow = b.expensesPaid + b.restockSpend + b.withdrawals;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setShowCashBreakdown(false)}>
+            <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div>
+                <p className="font-display font-bold text-base">What makes up your Cash Balance</p>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  This isn't one event — it's a running total of every sale payment, expense, restock, loan, investment, and withdrawal you've ever recorded, all added and subtracted together since the store started. Here's the breakdown, all-time:
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase font-bold text-success">Added</p>
+                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Cash sales received</span><span className="font-mono text-success">+₦{b.cashSales.toLocaleString()}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Transfer/POS sales received</span><span className="font-mono text-success">+₦{b.bankSales.toLocaleString()}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Loans received</span><span className="font-mono text-success">+₦{b.loansReceived.toLocaleString()}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Capital / investments added</span><span className="font-mono text-success">+₦{b.investmentsAdded.toLocaleString()}</span></div>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-border/60">
+                <p className="text-[10px] uppercase font-bold text-destructive">Subtracted</p>
+                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Expenses paid</span><span className="font-mono text-destructive">-₦{b.expensesPaid.toLocaleString()}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Spent restocking</span><span className="font-mono text-destructive">-₦{b.restockSpend.toLocaleString()}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Owner withdrawals</span><span className="font-mono text-destructive">-₦{b.withdrawals.toLocaleString()}</span></div>
+              </div>
+
+              <div className="pt-2 border-t border-border/60 flex justify-between text-sm">
+                <span className="font-display font-bold">Net</span>
+                <span className="font-display font-bold">₦{(inflow - outflow).toLocaleString()}</span>
+              </div>
+
+              <p className="text-[10px] text-muted-foreground leading-relaxed bg-surface-2/50 rounded-lg p-2.5">
+                Two things not shown above: loan repayments (they reduce cash but aren't kept as a separate historical record, only the loan's remaining balance is tracked) and restocks paid with "new money" (they currently still draw from existing cash/bank/wallet first if there's enough available, same as a normal restock, rather than being kept separate). Both are reflected in the running balance already — they just can't be broken out as a clean line item with the data currently recorded.
+              </p>
+
+              <button
+                onClick={() => setShowCashBreakdown(false)}
+                className="w-full p-2.5 rounded-xl bg-surface-2 border border-border text-sm font-display font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

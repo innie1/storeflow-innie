@@ -757,6 +757,49 @@ export function checkWeeklyRestockDraft(store: StoreData): StoreData | null {
   };
 }
 
+// ─── Cash Balance Breakdown ─────────────────────────────────────────────────
+// Cash/Bank/Wallet balances are a running ledger, not one single event, so
+// "why is it this number" has no single answer — it's built from every sale
+// payment, expense, restock, loan, investment, and withdrawal ever
+// recorded. This reconstructs the contributing totals directly from the
+// same source records the app's own balance math reads, so it's an honest,
+// independently-checkable answer rather than a vague description.
+//
+// Two known limits, called out in the UI rather than hidden: loan
+// repayments aren't logged as discrete historical events (only the
+// loan's remaining balance is tracked), so they can't be totaled after
+// the fact; and restocking funded with "new money" currently still draws
+// from existing cash/bank/wallet first if there's enough there, so it
+// shows up under Restocking like any other restock rather than being kept
+// separate.
+export interface CashBalanceBreakdown {
+  cashSales: number;
+  bankSales: number;
+  loansReceived: number;
+  investmentsAdded: number;
+  expensesPaid: number;
+  restockSpend: number;
+  withdrawals: number;
+}
+
+export function cashBalanceBreakdown(store: StoreData): CashBalanceBreakdown {
+  let cashSales = 0;
+  let bankSales = 0;
+  (store.sales || []).forEach(s => {
+    if (s.paymentMethod === 'cash' || !s.paymentMethod) cashSales += s.total;
+    else if (s.paymentMethod === 'pos' || s.paymentMethod === 'transfer') bankSales += s.total;
+    else if (s.paymentMethod === 'mixed') { cashSales += s.total / 2; bankSales += s.total / 2; }
+  });
+
+  const loansReceived = (store.loans || []).reduce((sum, l) => sum + l.amount, 0);
+  const investmentsAdded = (store.investments || []).reduce((sum, i) => sum + i.amount, 0);
+  const expensesPaid = (store.expenses || []).filter(e => e.source !== 'restock').reduce((sum, e) => sum + e.amount, 0);
+  const restockSpend = (store.restocks || []).reduce((sum, r) => sum + r.total, 0);
+  const withdrawals = (store.withdrawals || []).reduce((sum, w) => sum + w.amount, 0);
+
+  return { cashSales, bankSales, loansReceived, investmentsAdded, expensesPaid, restockSpend, withdrawals };
+}
+
 // ─── Restock Score (90-day) ─────────────────────────────────────────────────
 // Gives merchants one number for "am I restocking well?" — what % of the
 // money spent restocking over the last 90 days went into products that
