@@ -1,11 +1,28 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { loadStore } from '@/lib/store-data';
+import { loadStore, logScanEvent } from '@/lib/store-data';
 import { supabase } from '@/integrations/supabase/client';
 import { showToast } from '@/components/Toast';
 import { saveSession } from '@/components/Settings';
 import { StoreData } from '@/types/store';
 import { Loader2, QrCode, Store, AlertCircle } from 'lucide-react';
+
+// Log at most once per browser session per store. This is a real, previously
+// missing signal (customers opening the storefront via QR was invisible to
+// analytics), but scan events live inside the same `stores.data` JSONB blob
+// that's expensive to rewrite on every mutation (see Orders performance
+// fix) -- so this intentionally does NOT log on every open/refresh, only
+// once per unique visit.
+function shouldLogStorefrontScan(storeKey: string): boolean {
+  try {
+    const flag = `sf_storefront_scan_${storeKey}`;
+    if (sessionStorage.getItem(flag)) return false;
+    sessionStorage.setItem(flag, '1');
+    return true;
+  } catch {
+    return true; // if sessionStorage is unavailable, don't block the scan from logging
+  }
+}
 
 /**
  * Deep-link page: handles /s/:storeId routes.
@@ -96,6 +113,14 @@ export default function StoreDeepLink() {
   const activateStore = (store: StoreData) => {
     // Save the session so the main app picks it up
     saveSession(store.accessCode);
+
+    // Record that a customer opened the storefront via QR -- throttled to
+    // once per session so it doesn't add a full-store cloud write on every
+    // page open.
+    if (shouldLogStorefrontScan(store.accessCode)) {
+      logScanEvent(store, { kind: 'qr', purpose: 'storefront_visit', matched: true });
+    }
+
     showToast(`Opening ${store.storeName}...`, 'success');
 
     // Navigate to the main page — the Index component will pick up the session

@@ -1609,7 +1609,7 @@ export default function Index() {
               <CommunicationCenter store={store} onUpdate={setStore} currentUser={currentUser} />
             </div>
             <div className={tab === 'qr-hub' ? 'block' : 'hidden'}>
-              <QRHub store={store} onUpdate={setStore} currentUser={currentUser} />
+              <QRHub store={store} onUpdate={setStore} currentUser={currentUser} orders={orders} />
             </div>
             {isGames && (
               <>

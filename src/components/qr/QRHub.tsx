@@ -11,11 +11,12 @@ interface QRHubProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
   currentUser?: any;
+  orders?: any[];
 }
 
 type QRType = 'store' | 'product' | 'shelf' | 'customer' | 'staff' | 'payment' | 'receipt' | 'inventory' | 'promotion';
 
-export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
+export default function QRHub({ store, onUpdate, currentUser, orders = [] }: QRHubProps) {
   const [activeMode, setActiveMode] = useState<'scan' | 'generate' | 'analytics'>('generate');
   const [qrType, setQrType] = useState<QRType>('store');
 
@@ -505,18 +506,71 @@ export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
             });
             const topScanned = Array.from(productCounts.values()).sort((a, b) => b.count - a.count).slice(0, 5);
 
-            if (events.length === 0) {
+            // Online order activity -- this was previously computed nowhere
+            // near this screen, even though it's exactly the kind of "what's
+            // happening with my QR storefront" data this page promises.
+            const normalizeOrderStatus = (s?: string) => (s || 'Pending').trim();
+            const completedOrders = orders.filter(o => normalizeOrderStatus(o.status) === 'Completed');
+            const cancelledOrRejected = orders.filter(o => ['Cancelled', 'Rejected'].includes(normalizeOrderStatus(o.status)));
+            const activeOrders = orders.length - completedOrders.length - cancelledOrRejected.length;
+            const uniqueCustomers = new Set(
+              orders.map(o => (o.customer_phone || o.customer_name || '').toLowerCase().trim()).filter(Boolean)
+            ).size;
+            const completedRevenue = completedOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+            const currency = store.currency || '₦';
+
+            const hasOrderData = orders.length > 0;
+            const hasScanData = events.length > 0;
+
+            if (!hasOrderData && !hasScanData) {
               return (
                 <div className="p-8 rounded-2xl bg-surface-2/40 border border-border/40 text-center">
                   <Database className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="font-display font-bold text-sm">No scans recorded yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Once you or your customers start scanning QR codes or barcodes, activity will show up here.</p>
+                  <p className="font-display font-bold text-sm">No activity recorded yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Once customers scan your storefront QR, place orders, or you scan QR/barcodes, activity will show up here.</p>
                 </div>
               );
             }
 
             return (
               <>
+                {hasOrderData && (
+                  <div className="p-4 rounded-xl bg-card border border-border">
+                    <h3 className="font-display font-bold text-sm mb-3">Online Storefront Activity</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="p-3.5 rounded-xl bg-surface-2/40 border border-border/40">
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold">Total Orders</p>
+                        <p className="font-display font-bold text-xl mt-0.5">{orders.length}</p>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-surface-2/40 border border-border/40">
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold">Completed</p>
+                        <p className="font-display font-bold text-xl mt-0.5 text-success">{completedOrders.length}</p>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-surface-2/40 border border-border/40">
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold">In Progress</p>
+                        <p className="font-display font-bold text-xl mt-0.5">{activeOrders}</p>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-surface-2/40 border border-border/40">
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold">Online Customers</p>
+                        <p className="font-display font-bold text-xl mt-0.5">{uniqueCustomers}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      {currency}{completedRevenue.toLocaleString()} in completed online orders
+                      {cancelledOrRejected.length > 0 ? ` · ${cancelledOrRejected.length} cancelled/rejected` : ''}
+                    </p>
+                  </div>
+                )}
+
+                {!hasScanData && (
+                  <div className="p-6 rounded-2xl bg-surface-2/40 border border-border/40 text-center">
+                    <Database className="w-6 h-6 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-xs text-muted-foreground">No QR/barcode scans logged yet. Customers opening your storefront QR will start showing up here.</p>
+                  </div>
+                )}
+
+                {hasScanData && (
+                <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="p-3.5 rounded-xl bg-card border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase font-bold">Scans (7 days)</p>
@@ -556,13 +610,15 @@ export default function QRHub({ store, onUpdate, currentUser }: QRHubProps) {
                     {events.slice(0, 20).map(e => (
                       <div key={e.id} className="flex items-center justify-between text-xs py-1 border-b border-border/40 last:border-0">
                         <span className="text-foreground">
-                          {e.kind === 'qr' ? '📱' : '📊'} {e.productName || e.purpose} {!e.matched && <span className="text-muted-foreground">(not recognized)</span>}
+                          {e.kind === 'qr' ? '📱' : '📊'} {e.productName || (e.purpose === 'storefront_visit' ? 'Customer opened storefront' : e.purpose)} {!e.matched && <span className="text-muted-foreground">(not recognized)</span>}
                         </span>
                         <span className="text-muted-foreground shrink-0 ml-2">{new Date(e.date).toLocaleString()}</span>
                       </div>
                     ))}
                   </div>
                 </div>
+                </>
+                )}
               </>
             );
           })()}
