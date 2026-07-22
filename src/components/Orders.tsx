@@ -133,16 +133,6 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
   };
 
   // Filtering orders
-  const STATUS_SORT_PRIORITY: Record<string, number> = {
-    'Pending': 0,
-    'Accepted': 1,
-    'Preparing': 2,
-    'Ready': 3,
-    'Completed': 4,
-    'Cancelled': 5,
-    'Rejected': 5,
-  };
-
   const filteredOrders = useMemo(() => {
     const now = Date.now();
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -152,12 +142,21 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
     return orders
       .filter(o => {
         const normStatus = getNormalizedStatus(o.status);
-        const matchesTab = activeTab === 'All' || normStatus === activeTab;
+        const isFinished = normStatus === 'Completed' || normStatus === 'Cancelled' || normStatus === 'Rejected';
         const matchesSearch = 
           !searchQuery ||
           o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           o.customer_phone?.toLowerCase().includes(searchQuery.toLowerCase());
+
+        // On the "All" tab, finished orders (Completed/Cancelled/Rejected) stay
+        // out of the default view so the active queue doesn't get cluttered.
+        // They're still reachable via their own tab, and a search query always
+        // overrides the hide so a finished order can still be found by number,
+        // name, or phone even while on "All".
+        const matchesTab = activeTab === 'All'
+          ? (!isFinished || (searchQuery.length > 0 && matchesSearch))
+          : normStatus === activeTab;
 
         // Date & Time filtering
         const orderTime = new Date(o.created_at).getTime();
@@ -184,12 +183,10 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
 
         return matchesTab && matchesSearch && matchesDate;
       })
-      .sort((a, b) => {
-        const pa = STATUS_SORT_PRIORITY[getNormalizedStatus(a.status)] ?? 3;
-        const pb = STATUS_SORT_PRIORITY[getNormalizedStatus(b.status)] ?? 3;
-        if (pa !== pb) return pa - pb;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      });
+      // Newest first, and status changes (Pending -> Accepted -> Preparing -> Ready)
+      // no longer move an order's position in the list. It only leaves the
+      // default "All" view once it's Completed/Cancelled/Rejected (see filter above).
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [orders, activeTab, searchQuery, getNormalizedStatus, datePreset, startDate, endDate, startTime, endTime]);
 
   // Decode metadata notes (e.g. delivery details, pricing mode, payment details)
