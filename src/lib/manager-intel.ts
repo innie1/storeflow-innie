@@ -495,6 +495,9 @@ export interface AdviceCard {
   detail: string;
   priority: 'critical' | 'high' | 'medium' | 'low';
   action?: string;
+  // When set (2+ entries), the UI renders one card with a compact list
+  // instead of a separate full-size card per item.
+  items?: { name: string; note: string }[];
 }
 
 export function generateAdvice(store: StoreData): AdviceCard[] {
@@ -513,18 +516,32 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
 
   // Critical: running out of fast sellers or completely out of stock
   if (!isStoreOnboarding(store)) {
-    stock.filter(f => f.urgency === 'critical').slice(0, 3).forEach(f => {
+    const criticalStock = stock.filter(f => f.urgency === 'critical').slice(0, 5);
+    if (criticalStock.length === 1) {
+      const f = criticalStock[0];
       const isOut = f.product.quantity === 0;
-      advice.push({ 
-        id: `cr-${f.product.id}`, 
-        icon: '🚨', 
-        title: isOut ? `Restock ${f.product.name} (Sold Out)` : `Restock ${f.product.name} NOW`, 
+      advice.push({
+        id: `cr-${f.product.id}`,
+        icon: '🚨',
+        title: isOut ? `Restock ${f.product.name} (Sold Out)` : `Restock ${f.product.name} NOW`,
         detail: isOut
           ? `Out of Stock: ${f.product.name} is completely sold out. Restock at least ${f.restockQty} units immediately to recover lost revenue.`
-          : `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`, 
-        priority: 'critical' 
+          : `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`,
+        priority: 'critical'
       });
-    });
+    } else if (criticalStock.length > 1) {
+      advice.push({
+        id: 'cr-group',
+        icon: '🚨',
+        title: `${criticalStock.length} products need restocking now`,
+        detail: 'These are critically low or sold out. Restock soon to avoid losing sales.',
+        priority: 'critical',
+        items: criticalStock.map(f => ({
+          name: f.product.name,
+          note: f.product.quantity === 0 ? 'Sold out' : `${f.daysLeft}d left · order ${f.restockQty}`
+        }))
+      });
+    }
   }
 
   // Critical: no sales this week
@@ -542,26 +559,8 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
     advice.push({ id: 'exp-rise', icon: '🧾', title: `${ea.largestCategory} spending up ${ea.trendPct.toFixed(0)}%`, detail: `Your ${ea.largestCategory.toLowerCase()} expenses grew significantly this month. Review and cut where possible.`, priority: 'high' });
   }
 
-  // Critical: selling at zero or negative margin — losing money per unit sold.
-  // This previously only appeared in the separate Pricing panel and never
-  // reached the main Advice feed, so a merchant could be losing money on
-  // every sale of an item without ever seeing a headline alert about it.
+  // High: underpriced products
   const alerts = pricingAlerts(store);
-  const lossMaking = alerts.filter(a => a.type === 'zero_margin').slice(0, 2);
-  lossMaking.forEach(a => {
-    const isLoss = a.currentMargin < 0;
-    advice.push({
-      id: `loss-${a.product.id}`,
-      icon: '🔻',
-      title: isLoss ? `Losing money on ${a.product.name}` : `${a.product.name} has zero margin`,
-      detail: isLoss
-        ? `Selling below cost (${(a.currentMargin * 100).toFixed(0)}% margin). Raise to at least ₦${a.suggestedPrice.toLocaleString()} to stop the loss.`
-        : `Selling at cost price — no profit per unit. Suggest ₦${a.suggestedPrice.toLocaleString()}.`,
-      priority: 'critical'
-    });
-  });
-
-  // High: underpriced products (positive margin, but below a healthy target)
   const underpriced = alerts.filter(a => a.type === 'underpriced').slice(0, 1);
   underpriced.forEach(a => {
     advice.push({ id: `price-${a.product.id}`, icon: '📈', title: `Raise price on ${a.product.name}`, detail: `Current margin: ${(a.currentMargin * 100).toFixed(0)}%. Suggest ₦${a.suggestedPrice.toLocaleString()} — adds ₦${a.expectedLift.toLocaleString()} per unit.`, priority: 'high' });
@@ -569,9 +568,20 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
 
   // Medium: restock soon
   if (!isStoreOnboarding(store)) {
-    stock.filter(f => f.urgency === 'soon').slice(0, 2).forEach(f => {
+    const soonStock = stock.filter(f => f.urgency === 'soon').slice(0, 5);
+    if (soonStock.length === 1) {
+      const f = soonStock[0];
       advice.push({ id: `soon-${f.product.id}`, icon: '📦', title: `Order ${f.product.name} this week`, detail: `About ${f.daysLeft} days of stock left. Restock ${f.restockQty} units to avoid a gap.`, priority: 'medium' });
-    });
+    } else if (soonStock.length > 1) {
+      advice.push({
+        id: 'soon-group',
+        icon: '📦',
+        title: `${soonStock.length} products to order this week`,
+        detail: 'Running low but not urgent yet — plan a restock order soon.',
+        priority: 'medium',
+        items: soonStock.map(f => ({ name: f.product.name, note: `${f.daysLeft}d left · order ${f.restockQty}` }))
+      });
+    }
   }
 
   // Medium: co-purchase opportunity
@@ -1637,11 +1647,6 @@ export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
         const maxSafeDiscountPct = Math.floor(margin * 100 * 0.5); // use up to half the available margin
         const suggestedDiscountPct = Math.max(5, Math.min(25, maxSafeDiscountPct));
         const daysDeadStock = p.addedAt ? Math.floor((now.getTime() - new Date(p.addedAt).getTime()) / 86400000) : 14;
-        // Margin is % over cost price; the discount is % off selling price --
-        // different bases, so the resulting margin isn't a simple subtraction.
-        // Compute the actual post-discount price and margin instead.
-        const discountedPrice = p.sellingPrice * (1 - suggestedDiscountPct / 100);
-        const newMargin = (discountedPrice - p.costPrice) / p.costPrice;
         recs.push({
           productName: p.name,
           productId: p.id,
@@ -1650,7 +1655,7 @@ export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
           sellingPrice: p.sellingPrice,
           suggestedDiscountPct,
           daysDeadStock,
-          marginImpact: `Reduces markup margin from ${Math.round(margin * 100)}% to ${Math.round(newMargin * 100)}% (₦${discountedPrice.toLocaleString()}), while staying above cost price.`
+          marginImpact: `Reduces markup margin from ${Math.round(margin * 100)}% to ${Math.round((margin * 100) - suggestedDiscountPct)}%, while staying above cost price.`
         });
       }
     }

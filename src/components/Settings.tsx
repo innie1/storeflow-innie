@@ -3550,7 +3550,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           🏪
         </div>
         <div>
-          <h2 className="font-display font-bold text-2xl"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h2>
+          <h2 className="wordmark font-bold text-2xl"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h2>
           <p className="text-xs text-muted-foreground mt-0.5">Version 1.0 · Innie Group</p>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">

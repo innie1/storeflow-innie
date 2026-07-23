@@ -199,6 +199,13 @@
   .font-display {
     font-family: var(--font-display);
   }
+  /* The StoreFlow logo itself -- always Inter, regardless of theme.
+     Theme display fonts (Syne vs Inter) render very differently at the
+     same size/weight, which made the logo look inconsistently large
+     across themes. Everything else still follows the theme font. */
+  .wordmark {
+    font-family: 'Inter', sans-serif;
+  }
   .font-mono {
     font-family: var(--font-body);
   }

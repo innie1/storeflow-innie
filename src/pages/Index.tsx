@@ -1234,7 +1234,7 @@ export default function Index() {
       <div className="flex-1 flex flex-col md:pl-64">
         <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-4 md:px-6 py-3.5 flex items-center justify-between" style={{ paddingLeft: 'max(1rem, env(safe-area-inset-left))', paddingRight: 'max(1rem, env(safe-area-inset-right))', paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}>
           <div className="flex flex-col text-left">
-            <h1 className="font-display font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
+            <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
             <button 
               onClick={() => setShowSwitcher(true)}
               className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors font-semibold mt-0.5"

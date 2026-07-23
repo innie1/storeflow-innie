@@ -1467,15 +1467,25 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
           {advice.length > 0 ? (
             <div className="space-y-2">
               {advice.map(a => (
-                <div key={a.id} className={`p-4 rounded-2xl border shadow-card ${advicePriorityColor[a.priority]}`}>
-                  <div className="flex items-start gap-3">
-                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0 ${adviceIconBg[a.priority]}`}>{a.icon}</div>
+                <div key={a.id} className={`p-3.5 rounded-xl border shadow-card ${advicePriorityColor[a.priority]}`}>
+                  <div className="flex items-start gap-2.5">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${adviceIconBg[a.priority]}`}>{a.icon}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-display font-bold text-sm text-foreground">{a.title}</p>
                         <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-display font-bold flex-shrink-0 ${a.priority === 'critical' ? 'bg-destructive text-white' : a.priority === 'high' ? 'bg-warning text-white' : a.priority === 'medium' ? 'bg-primary/20 text-primary' : 'bg-surface-3 text-muted-foreground'}`}>{a.priority.toUpperCase()}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{a.detail}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{a.detail}</p>
+                      {a.items && a.items.length > 0 && (
+                        <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
+                          {a.items.map((it, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs gap-2">
+                              <span className="text-foreground truncate">{it.name}</span>
+                              <span className="text-muted-foreground flex-shrink-0">{it.note}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
