@@ -210,6 +210,23 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     onStoreLoaded(updatedStore);
   };
 
+  // Let a new merchant into the app without filling the full security form now.
+  // The store still works fine without it -- login-select just won't be gated
+  // by a password until they set one, same as any store mid-setup.
+  const handleSkipSecurity = () => {
+    if (!loadedStore) return;
+    saveStore(loadedStore);
+    showToast('You can secure your store anytime from Settings');
+
+    const ownerUser = {
+      name: 'Owner',
+      role: 'owner',
+      permissions: { sales: true, inventory: true, reports: true, settings: true }
+    };
+    localStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
+    onStoreLoaded(loadedStore);
+  };
+
   const proceedWithStore = (store: StoreData) => {
     setLoadedStore(store);
 
@@ -838,7 +855,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       <div className="w-full max-w-md animate-fade-in">
         <div className="flex flex-col items-center text-center mb-6">
           <Mascot size={80} mood={accessMood} className="mb-3" />
-          <h1 className="font-display text-4xl font-bold text-primary mb-2 select-none">StoreFlow</h1>
+          <h1 className="font-display text-4xl font-bold mb-2 select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
           <p className="text-muted-foreground text-sm">Offline-first store management</p>
         </div>
 
@@ -850,12 +867,28 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
             >
               Create New Store
             </button>
+            <p className="text-[10px] text-muted-foreground text-center -mt-1.5">Quick setup on this device, using a store access code</p>
+
             <button
               onClick={() => setMode('access')}
               className="w-full p-4 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-lg hover:bg-surface-3 transition-colors border border-border cursor-pointer active:scale-95 transition-all"
             >
               Access Existing Store
             </button>
+
+            <div className="flex items-center gap-3 py-1">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[10px] text-muted-foreground uppercase font-bold">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            <button
+              onClick={() => setMode('auth-login')}
+              className="w-full p-4 rounded-lg bg-surface-2 border border-primary/40 text-foreground font-display font-semibold text-lg hover:border-primary transition-colors cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <Cloud className="w-5 h-5 text-primary" /> Sign In / Sign Up with Email
+            </button>
+            <p className="text-[10px] text-muted-foreground text-center -mt-1.5">Recommended — backs up your store to the cloud and works across devices</p>
           </div>
         )}
 
@@ -1406,6 +1439,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
             <button type="submit" className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Save Security & Enter Store
+            </button>
+            <button
+              type="button"
+              onClick={handleSkipSecurity}
+              className="w-full p-2 text-muted-foreground text-xs hover:text-foreground text-center cursor-pointer"
+            >
+              Skip for now — I'll set this up later
             </button>
           </form>
         )}
