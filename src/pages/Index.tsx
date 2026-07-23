@@ -591,15 +591,16 @@ export default function Index() {
         
         updatedStore = { ...store, products: updatedProducts };
         
-        // Update stores table in cloud DB
+        // Update stores table in cloud DB -- only the products field changed,
+        // so only send that, not the entire store record (sales, customers,
+        // expenses, settings, history all stay exactly as they already are
+        // in the cloud row).
         const { error: storeErr } = await supabase
-          .from('stores')
-          .update({ data: updatedStore })
-          .eq('id', store.id);
+          .rpc('merge_store_data', { p_store_id: store.id, p_patch: { products: updatedProducts } });
         if (storeErr) throw storeErr;
         
         setStore(updatedStore);
-        saveStore(updatedStore); // Sync locally and trigger cloud backup
+        saveStore(updatedStore, { skipCloudSync: true }); // Local persistence only -- cloud already synced above
       }
 
       // 2. Release Stock if previously accepted (Accepted/Preparing/Ready) but now rejected/cancelled
@@ -618,15 +619,13 @@ export default function Index() {
 
         updatedStore = { ...store, products: updatedProducts };
 
-        // Update stores table in cloud DB
+        // Update stores table in cloud DB -- targeted patch, same reasoning as Accept above.
         const { error: storeErr } = await supabase
-          .from('stores')
-          .update({ data: updatedStore })
-          .eq('id', store.id);
+          .rpc('merge_store_data', { p_store_id: store.id, p_patch: { products: updatedProducts } });
         if (storeErr) throw storeErr;
         
         setStore(updatedStore);
-        saveStore(updatedStore); // Sync locally and trigger cloud backup
+        saveStore(updatedStore, { skipCloudSync: true }); // Local persistence only -- cloud already synced above
       }
 
       // 3. Register as a Sale when an order is marked Completed. Stock was
@@ -722,14 +721,19 @@ export default function Index() {
 
         updatedStore = { ...store, products: updatedProductsForSale, sales: [...newSales, ...(store.sales || [])], customers: updatedCustomers };
 
+        // Update stores table in cloud DB -- only these 3 fields changed
+        // (products, sales, customers). Everything else in the store record
+        // (expenses, staff, settings, notifications, history, etc.) is left
+        // untouched in the cloud row rather than being re-uploaded.
         const { error: storeErr } = await supabase
-          .from('stores')
-          .update({ data: updatedStore })
-          .eq('id', store.id);
+          .rpc('merge_store_data', {
+            p_store_id: store.id,
+            p_patch: { products: updatedStore.products, sales: updatedStore.sales, customers: updatedStore.customers }
+          });
         if (storeErr) throw storeErr;
 
         setStore(updatedStore);
-        saveStore(updatedStore);
+        saveStore(updatedStore, { skipCloudSync: true }); // Local persistence only -- cloud already synced above
       }
 
       // Merge additional metadata (rejection reason or change request message)

@@ -547,7 +547,7 @@ export function loadStore(code: string): StoreData | null {
   return store;
 }
 
-export function saveStore(store: StoreData): void {
+export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean }): void {
   const synced = syncStoreData(store);
   const scheduled = runScheduledSavingsDeduction(synced);
   Object.assign(store, scheduled);
@@ -565,7 +565,11 @@ export function saveStore(store: StoreData): void {
   
   // Always sync to cloud if the store has a storeId (QR code) — customers need the row
   // to exist in Supabase when they scan. Also sync if multiDeviceSync is explicitly on.
-  if (store.storeId || store.managerSettings?.multiDeviceSync) {
+  // Skipped when the caller already pushed a smaller, targeted patch to the
+  // cloud itself (see merge_store_data usage in Index.tsx) -- doing both
+  // would silently re-upload the entire store record right after a
+  // deliberately small update, defeating the point.
+  if (!options?.skipCloudSync && (store.storeId || store.managerSettings?.multiDeviceSync)) {
     import('@/integrations/supabase/client').then(async ({ supabase }) => {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
