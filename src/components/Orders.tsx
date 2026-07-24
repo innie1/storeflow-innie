@@ -489,6 +489,20 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                   </div>
                 )}
 
+                {/* Customer Cancellation Notice — surfaces the reason the customer
+                    selected when cancelling (stored as customer_cancel_reason in
+                    notes by the customer_cancel_order RPC). Previously this flag
+                    and reason were saved to the database but never rendered here,
+                    so merchants only ever saw "Cancelled" with no context. */}
+                {meta?.customer_cancelled && (
+                  <div className="p-2.5 bg-red-500/10 border border-red-500/20 text-red-500 text-xs rounded-xl">
+                    <span className="font-bold">Cancelled by customer</span>
+                    {meta?.customer_cancel_reason && (
+                      <>: {meta.customer_cancel_reason}</>
+                    )}
+                  </div>
+                )}
+
                 {/* Order Notes / Instructions */}
                 {(meta?.instructions || meta?.notes || (typeof order.notes === 'string' && !order.notes.startsWith('{') && order.notes.trim() !== '')) && (
                   <div className="p-2.5 bg-amber-500/5 border border-amber-500/10 text-xs rounded-xl text-left">
