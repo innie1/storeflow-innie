@@ -18,6 +18,7 @@ import NotificationDrawer from '@/components/NotificationDrawer';
 
 interface ManagerProps {
   store: StoreData;
+  orders?: any[];
   onUpdate: (s: StoreData) => void;
   onEnable?: () => void;
   onNavigate?: (tab: TabId) => void;
@@ -531,7 +532,7 @@ export function useCountUp(target: number, durationMs = 1500) {
 }
 
 // ─── Main Manager ─────────────────────────────────────────────────────────────
-export default function Manager({ store, onUpdate, onEnable, onNavigate }: ManagerProps) {
+export default function Manager({ store, orders = [], onUpdate, onEnable, onNavigate }: ManagerProps) {
   const [tab, setTab] = useState<ManagerTab>('overview');
   const [requestText, setRequestText] = useState('');
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -561,7 +562,7 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
 
   useEffect(() => {
     if (tab === 'advice') {
-      const currentIds = generateAdvice(store).map(a => a.id);
+      const currentIds = generateAdvice(store, orders).map(a => a.id);
       const updatedSet = new Set(currentIds);
       setSeenAdviceIds(updatedSet);
       localStorage.setItem('storeflow_seen_advice_ids', JSON.stringify(Array.from(updatedSet)));
@@ -688,10 +689,10 @@ export default function Manager({ store, onUpdate, onEnable, onNavigate }: Manag
     { id: 'overview', label: 'Overview' },
     { id: 'predictions', label: 'Forecasts' },
     { id: 'analysis', label: 'Analysis' },
-    { id: 'advice', label: 'Advice', badge: generateAdvice(store).filter(a => (a.priority === 'critical' || a.priority === 'high') && !seenAdviceIds.has(a.id)).length || undefined },
+    { id: 'advice', label: 'Advice', badge: generateAdvice(store, orders).filter(a => (a.priority === 'critical' || a.priority === 'high') && !seenAdviceIds.has(a.id)).length || undefined },
   ];
 
-  const advice = generateAdvice(store);
+  const advice = generateAdvice(store, orders);
   const advicePriorityColor: Record<string, string> = { critical: 'border-destructive/40 bg-destructive/5', high: 'border-warning/40 bg-warning/5', medium: 'border-primary/20 bg-surface-2', low: 'border-border bg-surface-2' };
   const adviceIconBg: Record<string, string> = { critical: 'bg-destructive/10', high: 'bg-warning/10', medium: 'bg-primary/10', low: 'bg-surface-3' };
 

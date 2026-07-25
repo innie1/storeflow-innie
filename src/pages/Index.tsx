@@ -1562,7 +1562,7 @@ export default function Index() {
               <Expenses store={store} onUpdate={setStore} />
             </div>
             <div className={tab === 'manager' ? 'block' : 'hidden'}>
-              <Manager store={store} onUpdate={setStore} onNavigate={handleNavigate} />
+              <Manager store={store} orders={orders} onUpdate={setStore} onNavigate={handleNavigate} />
             </div>
             <div className={tab === 'pending' ? 'block' : 'hidden'}>
               <PendingPayments store={store} onUpdate={setStore} />

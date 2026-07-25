@@ -500,7 +500,20 @@ export interface AdviceCard {
   items?: { name: string; note: string }[];
 }
 
-export function generateAdvice(store: StoreData): AdviceCard[] {
+// Reads the customer-supplied cancellation reason off a marketplace order's
+// notes JSON. Notes are stored as a JSON string (see customer_cancel_order
+// RPC / Orders.tsx), so this defensively no-ops on anything else.
+function getCancelReason(order: any): string | null {
+  if (!order?.notes || typeof order.notes !== 'string') return null;
+  try {
+    const meta = JSON.parse(order.notes);
+    return meta?.customer_cancel_reason || null;
+  } catch {
+    return null;
+  }
+}
+
+export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard[] {
   const advice: AdviceCard[] = [];
   const h = healthScore(store);
   const stock = inventoryIntelligence(store);
@@ -552,6 +565,34 @@ export function generateAdvice(store: StoreData): AdviceCard[] {
   // High: large outstanding debts
   if (pending.totalOwed > rev7 * 0.3) {
     advice.push({ id: 'debt', icon: '💳', title: 'Chase outstanding payments', detail: `₦${pending.totalOwed.toLocaleString()} owed. ${pending.overdue.length} customers are overdue. Collect this to improve cash flow.`, priority: 'high' });
+  }
+
+  // Medium/High: customers cancelling orders — surface the count and, when
+  // available, the most common reason so the store owner can act on it
+  // rather than just seeing "Cancelled" with no context.
+  if (!isStoreOnboarding(store) && orders.length > 0) {
+    const sevenDaysAgo = Date.now() - 7 * 86400000;
+    const recentCancellations = orders.filter(o =>
+      (o.status || '').trim().toLowerCase() === 'cancelled' &&
+      new Date(o.created_at || o.updated_at || 0).getTime() >= sevenDaysAgo
+    );
+    if (recentCancellations.length >= 2) {
+      const reasonCounts = new Map<string, number>();
+      recentCancellations.forEach(o => {
+        const reason = getCancelReason(o);
+        if (reason) reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
+      });
+      const topReason = [...reasonCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+      advice.push({
+        id: 'order-cancellations',
+        icon: '❌',
+        title: `${recentCancellations.length} order${recentCancellations.length === 1 ? '' : 's'} cancelled this week`,
+        detail: topReason
+          ? `Most common reason: "${topReason[0]}" (${topReason[1]} of ${recentCancellations.length}). Worth looking into.`
+          : `Check the Orders tab for details — no reasons were given for these cancellations.`,
+        priority: recentCancellations.length >= 5 ? 'high' : 'medium'
+      });
+    }
   }
 
   // High: soaring expenses
