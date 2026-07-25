@@ -134,6 +134,24 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
     setEndTime('');
   };
 
+  // Per-customer order history (by phone) — lets a merchant see this
+  // customer's track record (completed vs cancelled) right on each order,
+  // without having to dig through the full order list themselves.
+  const customerHistory = useMemo(() => {
+    const map = new Map<string, { completed: number; cancelled: number }>();
+    orders.forEach(o => {
+      const phone = (o.customer_phone || '').trim();
+      if (!phone) return;
+      const normStatus = getNormalizedStatus(o.status);
+      if (normStatus !== 'Completed' && normStatus !== 'Cancelled') return;
+      const entry = map.get(phone) || { completed: 0, cancelled: 0 };
+      if (normStatus === 'Completed') entry.completed++;
+      else entry.cancelled++;
+      map.set(phone, entry);
+    });
+    return map;
+  }, [orders, getNormalizedStatus]);
+
   // Filtering orders
   const filteredOrders = useMemo(() => {
     const now = Date.now();
@@ -448,6 +466,23 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                     <span className="material-symbols-outlined text-muted-foreground text-sm shrink-0">person</span>
                     <span className="font-semibold truncate">{order.customer_name || 'Walk-in Customer'}</span>
                   </div>
+
+                  {(() => {
+                    const hist = order.customer_phone ? customerHistory.get(order.customer_phone.trim()) : undefined;
+                    if (!hist || (hist.completed === 0 && hist.cancelled === 0)) return null;
+                    const isRisky = hist.cancelled >= 2 && hist.cancelled >= hist.completed;
+                    return (
+                      <div
+                        className={`flex items-center gap-1.5 text-[10px] font-semibold ${isRisky ? 'text-red-500' : 'text-muted-foreground'}`}
+                        title="This customer's order history with your store"
+                      >
+                        <span>✅ {hist.completed} completed</span>
+                        <span>·</span>
+                        <span>❌ {hist.cancelled} cancelled</span>
+                        {isRisky && <span className="ml-1">⚠️ Frequent canceller</span>}
+                      </div>
+                    );
+                  })()}
 
                   {order.customer_phone && (
                     <div className="flex items-center justify-between gap-2 text-muted-foreground pt-1 border-t border-border/30">
