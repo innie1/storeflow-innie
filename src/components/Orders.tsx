@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
+import OrderReceipt from '@/components/OrderReceipt';
 
 interface OrdersProps {
   store: StoreData;
@@ -52,6 +53,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Accepted' | 'Preparing' | 'Ready' | 'Completed' | 'Rejected' | 'Cancelled'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [receiptOrder, setReceiptOrder] = useState<any | null>(null);
 
   // Date & Time Filter states
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -422,6 +424,13 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-3 text-right">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setReceiptOrder(order); }}
+                      className="shrink-0 px-2.5 py-1 rounded-full bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-bold flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                      title="View receipt"
+                    >
+                      🧾 Receipt
+                    </button>
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium">
                       <span>{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       <span>•</span>
@@ -646,6 +655,10 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
             </div>
           </div>
         </div>
+      )}
+
+      {receiptOrder && (
+        <OrderReceipt store={store} order={receiptOrder} onClose={() => setReceiptOrder(null)} />
       )}
     </div>
   );
