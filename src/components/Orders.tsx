@@ -142,20 +142,17 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
     return orders
       .filter(o => {
         const normStatus = getNormalizedStatus(o.status);
-        const isFinished = normStatus === 'Completed' || normStatus === 'Cancelled' || normStatus === 'Rejected';
         const matchesSearch = 
           !searchQuery ||
           o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           o.customer_phone?.toLowerCase().includes(searchQuery.toLowerCase());
 
-        // On the "All" tab, finished orders (Completed/Cancelled/Rejected) stay
-        // out of the default view so the active queue doesn't get cluttered.
-        // They're still reachable via their own tab, and a search query always
-        // overrides the hide so a finished order can still be found by number,
-        // name, or phone even while on "All".
+        // "All" now genuinely means all: active orders plus finished ones
+        // (Completed/Cancelled/Rejected) are all shown and viewable. Finished
+        // orders are still reachable individually via their own status tab too.
         const matchesTab = activeTab === 'All'
-          ? (!isFinished || (searchQuery.length > 0 && matchesSearch))
+          ? true
           : normStatus === activeTab;
 
         // Date & Time filtering
