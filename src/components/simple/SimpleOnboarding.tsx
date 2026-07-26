@@ -124,7 +124,7 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
     const updated: StoreData = {
       ...store,
       products: [...store.products, ...newProducts],
-      simpleOnboarding: { complete: true, shopType: shopType || 'others' },
+      simpleOnboarding: { complete: true, shopType: shopType || 'others', topProductIds: newProducts.map(p => p.id) },
     };
     saveStore(updated);
     setStore(updated);

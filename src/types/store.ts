@@ -622,6 +622,7 @@ export interface StoreData {
   simpleOnboarding?: {
     complete: boolean;
     shopType?: 'provision' | 'clothing' | 'food' | 'electronics' | 'others';
+    topProductIds?: string[]; // products the owner named during Top 5 Products Setup
   };
   simpleModeSettings?: {
     skipCostPricePrompt?: boolean; // "Don't ask again" from the Cost Price Prompt (Simple Mode)

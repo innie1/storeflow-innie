@@ -6,6 +6,7 @@ import SimpleVoiceSell from './SimpleVoiceSell';
 import SimpleOnboarding from './SimpleOnboarding';
 import OfflineQueueBanner, { markSaleQueuedIfOffline } from './OfflineQueueBanner';
 import CostPricePrompt from './CostPricePrompt';
+import QuickSellGrid from './QuickSellGrid';
 import { History } from 'lucide-react';
 
 interface SimpleModeHomeProps {
@@ -81,6 +82,9 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       >
         <History className="w-3.5 h-3.5" /> View Sales History
       </button>
+
+      {/* Nine-tile quick-tap grid — onboarding top products first, then best-sellers */}
+      <QuickSellGrid store={store} onSell={handleConfirmSale} />
 
       {promptProduct && (
         <CostPricePrompt
