@@ -3,7 +3,7 @@ import { Product } from '@/types/store';
 import { Mic, Check, X } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────
-type Stage = 'idle' | 'listening' | 'processing' | 'confirm' | 'no-match' | 'correct' | 'saved';
+type Stage = 'idle' | 'listening' | 'processing' | 'confirm' | 'add-product' | 'saved';
 
 interface Match {
   product: Product;
@@ -13,8 +13,12 @@ interface Match {
 interface SimpleVoiceSellProps {
   products: Product[];
   onConfirmSale: (productId: string, quantity: number) => void;
-  onCreateProduct: (name: string, sellingPrice: number) => Product;
+  onCreateProduct: (name: string, sellingPrice: number, costPrice: number, quantity: number) => Product;
   onSaveAlias: (productId: string, alias: string) => void;
+}
+
+function titleCase(s: string) {
+  return s.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1));
 }
 
 // ─── Word-number map (kept small on purpose — Simple Mode is for quick, common counts) ──
@@ -84,7 +88,9 @@ function findBestMatches(nameTokens: string[], products: Product[]): { product: 
     if (pn === spanN) return { product: p, score: 0 };
     if (pp === spanP) return { product: p, score: 0.3 };
     if (pn.includes(spanN) && spanN.length >= 3) return { product: p, score: 1 };
+    if (spanN.includes(pn) && pn.length >= 3) return { product: p, score: 1.1 };
     if (pp.includes(spanP) && spanP.length >= 3) return { product: p, score: 1.3 };
+    if (spanP.includes(pp) && pp.length >= 3) return { product: p, score: 1.4 };
 
     // Fuzzy fallback — tolerance scales a bit more generously with word length
     // than a strict 1/3 ratio, since short local product names (garri, indomie,
@@ -110,8 +116,10 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
   const [processingStep, setProcessingStep] = useState(0);
   const [spokenQuery, setSpokenQuery] = useState(''); // the product-name portion of what was heard, minus quantity
   const [spokenQty, setSpokenQty] = useState(1);
-  const [correctText, setCorrectText] = useState('');
-  const [newPrice, setNewPrice] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newSellingPrice, setNewSellingPrice] = useState('');
+  const [newCostPrice, setNewCostPrice] = useState('');
+  const [newQty, setNewQty] = useState('');
   const recogRef = useRef<any>(null);
   const stepTimerRef = useRef<any>(null);
   const supported = !!SR;
@@ -138,9 +146,11 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
       setSpokenQuery(spokenSpan);
       setSpokenQty(qty);
       if (matches.length === 0) {
-        setCorrectText(spokenSpan);
-        setNewPrice('');
-        setStage('no-match');
+        setNewName(titleCase(spokenSpan));
+        setNewSellingPrice('');
+        setNewCostPrice('');
+        setNewQty(String(qty));
+        setStage('add-product');
         return;
       }
       const top = { product: matches[0].product, quantity: qty };
@@ -152,7 +162,6 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
 
   const startListening = useCallback(() => {
     if (!supported) {
-      setStage('no-match');
       setHeardText('Voice input is not supported on this device/browser.');
       return;
     }
@@ -208,13 +217,16 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     setCandidates([]);
     setHeardText('');
     setSpokenQuery('');
-    setCorrectText('');
-    setNewPrice('');
+    setNewName('');
+    setNewSellingPrice('');
+    setNewCostPrice('');
+    setNewQty('');
   }, []);
 
-  // Live suggestions while typing a correction — same matching logic as voice
-  const correctionSuggestions = correctText.trim()
-    ? findBestMatches(correctText.trim().toLowerCase().split(/\s+/), products).filter(m => m.score < 3)
+  // Live suggestions while editing the name in the add-product popup — catches
+  // cases where the owner's correction actually matches something that exists
+  const nameSuggestions = newName.trim()
+    ? findBestMatches(newName.trim().toLowerCase().split(/\s+/), products).filter(m => m.score < 3)
     : [];
 
   const useSuggestion = (product: Product) => {
@@ -226,10 +238,12 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
   };
 
   const addNewAndSell = () => {
-    const name = correctText.trim();
-    const price = Number(newPrice);
+    const name = newName.trim();
+    const price = Number(newSellingPrice);
+    const cost = Number(newCostPrice) || 0;
+    const qty = Number(newQty) || spokenQty;
     if (!name || !(price > 0)) return;
-    const created = onCreateProduct(name, price);
+    const created = onCreateProduct(name, price, cost, qty);
     if (spokenQuery) onSaveAlias(created.id, spokenQuery);
     const match = { product: created, quantity: spokenQty };
     setSelected(match);
@@ -309,47 +323,29 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     );
   }
 
-  // ── No match ──
-  if (stage === 'no-match') {
-    return (
-      <div className="flex flex-col items-center gap-3 py-6 animate-fade-in">
-        <p className="text-sm text-muted-foreground text-center">
-          {heardText ? `Didn't catch a product in "${heardText}"` : "Didn't catch a product for that. Try again?"}
-        </p>
-        <div className="flex gap-3">
-          <button
-            onClick={reset}
-            className="px-5 py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm"
-          >
-            Try Again
-          </button>
-          <button
-            onClick={() => setStage('correct')}
-            className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm"
-          >
-            Type It
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Correct / type it in ──
-  if (stage === 'correct') {
+  // ── Didn't recognize it — auto-offer to add it as a new product, mic stays one tap away ──
+  if (stage === 'add-product') {
     return (
       <div className="w-full max-w-sm mx-auto flex flex-col gap-3 animate-fade-in">
-        <p className="text-center text-xs text-muted-foreground">What did you sell?</p>
-        <input
-          value={correctText}
-          onChange={e => setCorrectText(e.target.value)}
-          placeholder="Type product name"
-          autoFocus
-          className="w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-        />
+        <p className="text-center text-sm text-foreground font-display font-semibold">
+          {heardText ? `Didn't find "${heardText}" — add it?` : "Didn't catch that — add a product?"}
+        </p>
 
-        {correctionSuggestions.length > 0 && (
+        <div className="space-y-1">
+          <label className="block text-[11px] text-muted-foreground uppercase font-bold">Product Name</label>
+          <input
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            placeholder="Product name"
+            autoFocus
+            className="w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        {nameSuggestions.length > 0 && (
           <div className="space-y-2">
-            {correctionSuggestions.map(m => (
+            <p className="text-[11px] text-muted-foreground">Did you mean one of these instead?</p>
+            {nameSuggestions.map(m => (
               <button
                 key={m.product.id}
                 onClick={() => useSuggestion(m.product)}
@@ -362,32 +358,64 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
           </div>
         )}
 
-        <div className="pt-2 border-t border-border">
-          <p className="text-xs text-muted-foreground mb-2">Not one of these? Add it as a new product</p>
-          <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <label className="block text-[11px] text-muted-foreground uppercase font-bold">Selling Price</label>
             <input
-              value={newPrice}
-              onChange={e => setNewPrice(e.target.value.replace(/[^0-9]/g, ''))}
-              placeholder="₦ price"
+              value={newSellingPrice}
+              onChange={e => setNewSellingPrice(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="₦"
               inputMode="numeric"
-              className="w-28 px-3 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+              className="w-full px-3 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary"
             />
-            <button
-              onClick={addNewAndSell}
-              disabled={!correctText.trim() || !(Number(newPrice) > 0)}
-              className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm disabled:opacity-40"
-            >
-              Add & Sell
-            </button>
+          </div>
+          <div className="space-y-1">
+            <label className="block text-[11px] text-muted-foreground uppercase font-bold">Cost Price</label>
+            <input
+              value={newCostPrice}
+              onChange={e => setNewCostPrice(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="₦ (optional)"
+              inputMode="numeric"
+              className="w-full px-3 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+            />
           </div>
         </div>
 
+        <div className="space-y-1">
+          <label className="block text-[11px] text-muted-foreground uppercase font-bold">Quantity In Stock</label>
+          <input
+            value={newQty}
+            onChange={e => setNewQty(e.target.value.replace(/[^0-9]/g, ''))}
+            placeholder="How many do you have?"
+            inputMode="numeric"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+          />
+        </div>
+
         <button
-          onClick={reset}
-          className="text-xs text-muted-foreground font-display font-semibold text-center mt-1"
+          onClick={addNewAndSell}
+          disabled={!newName.trim() || !(Number(newSellingPrice) > 0)}
+          className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm disabled:opacity-40"
         >
-          Cancel
+          Add Product & Record Sale
         </button>
+
+        {/* Mic stays reachable — retrying re-opens listening immediately instead of dumping back to a bare idle screen */}
+        <div className="flex gap-3">
+          <button
+            onClick={startListening}
+            disabled={!supported}
+            className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
+          >
+            <Mic className="w-4 h-4" /> Retry With Mic
+          </button>
+          <button
+            onClick={reset}
+            className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     );
   }

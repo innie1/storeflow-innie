@@ -42,13 +42,13 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     }
   };
 
-  const handleCreateProduct = (name: string, sellingPrice: number): Product => {
+  const handleCreateProduct = (name: string, sellingPrice: number, costPrice: number, quantity: number): Product => {
     const newProduct: Product = {
       id: generateId(),
       name,
-      costPrice: 0,
+      costPrice: costPrice || 0,
       sellingPrice,
-      quantity: 0,
+      quantity: Math.max(0, quantity || 0),
       category: store.simpleOnboarding?.shopType || 'others',
       addedAt: new Date().toISOString(),
     };
