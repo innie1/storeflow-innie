@@ -1220,6 +1220,18 @@ export default function Index() {
 
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-border space-y-2">
+          <div className="border border-border/80 rounded-xl bg-surface-2/40 px-3">
+            <ToggleRow
+              checked={store.uiMode === 'simple'}
+              onChange={(v) => {
+                const updated = { ...store, uiMode: (v ? 'simple' : 'full') as 'simple' | 'full' };
+                saveStore(updated);
+                setStore(updated);
+              }}
+              label="Simple Mode"
+              description="One big mic button for quick voice sales."
+            />
+          </div>
           <button
             onClick={() => setShowLockConfirm(true)}
             className="w-full py-2.5 px-3 rounded-xl bg-destructive/10 text-destructive border border-destructive/20 text-xs font-display font-semibold hover:bg-destructive/20 transition-colors flex items-center justify-center gap-2"
