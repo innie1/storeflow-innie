@@ -41,8 +41,12 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     }
   };
 
-  // First-time-only setup — Screens 2, 3, 4
-  if (!store.simpleOnboarding?.complete) {
+  // First-time-only setup — Screens 2, 3, 4.
+  // Only new stores get a `simpleOnboarding` object at creation time (see createStore()).
+  // Existing/legacy stores never had this field set, so they must NOT be routed
+  // through onboarding just because the field is missing — that would incorrectly
+  // interrupt shops that are already up and running.
+  if (store.simpleOnboarding && !store.simpleOnboarding.complete) {
     return (
       <SimpleOnboarding
         store={store}

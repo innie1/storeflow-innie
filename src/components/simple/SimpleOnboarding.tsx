@@ -27,6 +27,18 @@ interface DraftProduct {
 
 const emptyDraft = (): DraftProduct => ({ name: '', sellingPrice: '' });
 
+function ProgressBar({ step }: { step: 1 | 2 | 3 }) {
+  const pct = step === 1 ? 33 : step === 2 ? 66 : 100;
+  return (
+    <div className="w-full h-1.5 rounded-full bg-surface-2 overflow-hidden mb-8">
+      <div
+        className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 export default function SimpleOnboarding({ store, setStore, onComplete }: SimpleOnboardingProps) {
   // step 1 = Shop Type, step 2 = Confirm Shop Type, step 3 = Top 5 Products Setup
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -36,7 +48,8 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
   // ── Screen 2: Shop Type ──
   if (step === 1) {
     return (
-      <div className="flex flex-col px-5 pt-10 pb-10 max-w-sm mx-auto">
+      <div className="flex flex-col px-5 pt-6 pb-10 max-w-sm mx-auto">
+        <ProgressBar step={step} />
         <h1 className="font-display font-black text-2xl text-foreground text-center">What kind of shop is this?</h1>
         <p className="text-sm text-muted-foreground text-center mt-1.5">This helps us set things up right for you.</p>
         <div className="grid grid-cols-2 gap-3 mt-8">
@@ -60,7 +73,8 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
     const chosen = SHOP_TYPES.find(s => s.key === shopType)!;
     const Icon = chosen.icon;
     return (
-      <div className="flex flex-col items-center px-5 pt-14 pb-10 max-w-sm mx-auto text-center">
+      <div className="flex flex-col items-center px-5 pt-6 pb-10 max-w-sm mx-auto text-center">
+        <ProgressBar step={step} />
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
           <Icon className="w-8 h-8 text-primary" />
         </div>
@@ -121,7 +135,8 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
   };
 
   return (
-    <div className="flex flex-col px-5 pt-10 pb-10 max-w-sm mx-auto">
+    <div className="flex flex-col px-5 pt-6 pb-10 max-w-sm mx-auto">
+      <ProgressBar step={step} />
       <h1 className="font-display font-black text-2xl text-foreground text-center">What 5 products do you sell most?</h1>
       <p className="text-sm text-muted-foreground text-center mt-1.5">Add a few now — you can add more anytime. Prices only, no stress about stock yet.</p>
 
