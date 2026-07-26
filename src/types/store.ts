@@ -618,7 +618,14 @@ export interface StoreData {
   similarProductReviews?: SimilarProductReview[];
   storeName: string;
   accessCode: string;
-  uiMode?: 'simple' | 'full'; // Simple Mode: big-mic single-sale home. Defaults to 'full' when unset.
+  uiMode?: 'simple' | 'full'; // Simple Mode: big-mic single-sale home. Defaults to 'simple' for new stores.
+  simpleOnboarding?: {
+    complete: boolean;
+    shopType?: 'provision' | 'clothing' | 'food' | 'electronics' | 'others';
+  };
+  simpleModeSettings?: {
+    skipCostPricePrompt?: boolean; // "Don't ask again" from the Cost Price Prompt (Simple Mode)
+  };
   category?: StoreCategory;
   retailType?: string;
   products: Product[];

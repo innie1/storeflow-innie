@@ -1,8 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { StoreData } from '@/types/store';
 import { recordSale, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SimpleVoiceSell from './SimpleVoiceSell';
+import SimpleOnboarding from './SimpleOnboarding';
+import OfflineQueueBanner, { markSaleQueuedIfOffline } from './OfflineQueueBanner';
+import CostPricePrompt from './CostPricePrompt';
 import { History } from 'lucide-react';
 
 interface SimpleModeHomeProps {
@@ -18,6 +21,8 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
   const todayRevenue = todaySales.reduce((s, x) => s + x.total, 0);
   const todayCount = todaySales.length;
 
+  const [costPricePromptProductId, setCostPricePromptProductId] = useState<string | null>(null);
+
   const handleConfirmSale = (productId: string, quantity: number) => {
     const product = store.products.find(p => p.id === productId);
     if (!product) return;
@@ -28,10 +33,33 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     const updated = recordSale(store, productId, quantity, currentUser?.name, currentUser?.role);
     saveStore(updated);
     setStore(updated);
+    markSaleQueuedIfOffline(store.accessCode);
+
+    // Screen 11 — ask for cost price if this product doesn't have one yet, unless the owner opted out
+    if (!store.simpleModeSettings?.skipCostPricePrompt && (!product.costPrice || product.costPrice <= 0)) {
+      setCostPricePromptProductId(productId);
+    }
   };
+
+  // First-time-only setup — Screens 2, 3, 4
+  if (!store.simpleOnboarding?.complete) {
+    return (
+      <SimpleOnboarding
+        store={store}
+        setStore={setStore}
+        onComplete={() => { /* store already updated inside the onboarding flow */ }}
+      />
+    );
+  }
+
+  const promptProduct = costPricePromptProductId
+    ? store.products.find(p => p.id === costPricePromptProductId)
+    : null;
 
   return (
     <div className="flex flex-col items-center px-5 pt-8 pb-10 max-w-sm mx-auto">
+      <OfflineQueueBanner store={store} setStore={setStore} />
+
       {/* Today's total */}
       <div className="w-full text-center mb-10">
         <p className="text-xs text-muted-foreground font-display font-semibold uppercase tracking-wide">Today's Sales</p>
@@ -49,6 +77,15 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       >
         <History className="w-3.5 h-3.5" /> View Sales History
       </button>
+
+      {promptProduct && (
+        <CostPricePrompt
+          store={store}
+          setStore={setStore}
+          product={promptProduct}
+          onDone={() => setCostPricePromptProductId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -100,7 +100,7 @@ function generateCode(): string {
   return code;
 }
 
-function generateId(): string {
+export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
@@ -335,6 +335,8 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
     accessCode: code,
     category,
     retailType,
+    uiMode: 'simple',
+    simpleOnboarding: { complete: false },
     products,
     sales: [],
     restocks: [],

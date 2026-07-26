@@ -69,24 +69,38 @@ function findBestMatches(nameTokens: string[], products: Product[]): { product: 
 
 const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
+// Processing screen steps (spec section 5, screen 6) — purely cosmetic pacing
+// so the parse doesn't feel instantaneous/jarring on real devices.
+const PROCESSING_STEPS = ['Recognizing…', 'Finding your product…', 'Extracting quantity…', 'Almost done…'];
+
 export default function SimpleVoiceSell({ products, onConfirmSale }: SimpleVoiceSellProps) {
   const [stage, setStage] = useState<Stage>('idle');
   const [heardText, setHeardText] = useState('');
   const [candidates, setCandidates] = useState<Match[]>([]);
   const [selected, setSelected] = useState<Match | null>(null);
+  const [processingStep, setProcessingStep] = useState(0);
   const recogRef = useRef<any>(null);
+  const stepTimerRef = useRef<any>(null);
   const supported = !!SR;
 
   const runParse = useCallback((transcript: string) => {
     setStage('processing');
+    setProcessingStep(0);
     const tokens = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
     // Drop common filler words that don't carry product/quantity meaning
     const filtered = tokens.filter(t => !['sold', 'for', 'naira', 'just', 'i', 'a', 'an', 'the', 'of'].includes(t));
     const { qty, rest } = leadingQuantity(filtered);
     const matches = findBestMatches(rest, products);
 
-    // Small delay so the "processing" animation is visible — matches the designed flow (listening → processing → confirm)
+    // Step through recognizing -> finding -> extracting -> almost done (spec screen 6),
+    // then land on the result. Total pacing kept short so it never feels sluggish.
+    if (stepTimerRef.current) clearInterval(stepTimerRef.current);
+    stepTimerRef.current = setInterval(() => {
+      setProcessingStep(s => Math.min(s + 1, PROCESSING_STEPS.length - 1));
+    }, 220);
+
     setTimeout(() => {
+      clearInterval(stepTimerRef.current);
       if (matches.length === 0) {
         setStage('no-match');
         return;
@@ -95,7 +109,7 @@ export default function SimpleVoiceSell({ products, onConfirmSale }: SimpleVoice
       setSelected(top);
       setCandidates(matches.map(m => ({ product: m.product, quantity: qty })));
       setStage('confirm');
-    }, 500);
+    }, 900);
   }, [products]);
 
   const startListening = useCallback(() => {
@@ -264,9 +278,21 @@ export default function SimpleVoiceSell({ products, onConfirmSale }: SimpleVoice
       </button>
       <p className="text-sm text-muted-foreground text-center min-h-[1.25rem]">
         {stage === 'listening' && (heardText || 'Listening…')}
-        {stage === 'processing' && 'Finding your product…'}
+        {stage === 'processing' && PROCESSING_STEPS[processingStep]}
         {stage === 'idle' && 'Tap and say what you sold'}
       </p>
+      {stage === 'processing' && (
+        <div className="flex items-center gap-1.5">
+          {PROCESSING_STEPS.map((_, i) => (
+            <span
+              key={i}
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                i <= processingStep ? 'bg-primary' : 'bg-border'
+              }`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
