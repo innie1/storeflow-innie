@@ -20,6 +20,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
   const today = new Date().toISOString().split('T')[0];
   const todaySales = useMemo(() => store.sales.filter(s => s.date.startsWith(today)), [store.sales, today]);
   const todayRevenue = todaySales.reduce((s, x) => s + x.total, 0);
+  const todayProfit = todaySales.reduce((s, x) => s + x.profit, 0);
   const todayCount = todaySales.length;
 
   const [costPricePromptProductId, setCostPricePromptProductId] = useState<string | null>(null);
@@ -102,7 +103,15 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       <div className="w-full text-center mb-10">
         <p className="text-xs text-muted-foreground font-display font-semibold uppercase tracking-wide">Today's Sales</p>
         <h1 className="text-4xl font-display font-black text-foreground mt-1">₦{todayRevenue.toLocaleString()}</h1>
-        <p className="text-xs text-muted-foreground mt-1">{todayCount} sale{todayCount === 1 ? '' : 's'} recorded</p>
+        <div className="flex items-center justify-center gap-4 mt-2">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-display font-bold text-success">₦{todayProfit.toLocaleString()}</span> profit
+          </p>
+          <span className="w-1 h-1 rounded-full bg-border" />
+          <p className="text-xs text-muted-foreground">
+            <span className="font-display font-bold text-foreground">{todayCount}</span> sale{todayCount === 1 ? '' : 's'}
+          </p>
+        </div>
       </div>
 
       {/* Big mic — the whole point of Simple Mode */}
