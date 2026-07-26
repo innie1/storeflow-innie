@@ -26,6 +26,7 @@ export interface Product {
   total_profit?: number;
   first_sale_at?: string;
   last_sold_at?: string;
+  voiceAliases?: string[]; // alternate spoken names learned from Simple Mode voice corrections (e.g. "gary" -> Garri)
 }
 
 export interface InventoryMovement {

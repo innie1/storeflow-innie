@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { StoreData } from '@/types/store';
-import { recordSale, saveStore } from '@/lib/store-data';
+import { StoreData, Product } from '@/types/store';
+import { recordSale, saveStore, generateId } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SimpleVoiceSell from './SimpleVoiceSell';
 import SimpleOnboarding from './SimpleOnboarding';
@@ -42,6 +42,39 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     }
   };
 
+  const handleCreateProduct = (name: string, sellingPrice: number): Product => {
+    const newProduct: Product = {
+      id: generateId(),
+      name,
+      costPrice: 0,
+      sellingPrice,
+      quantity: 0,
+      category: store.simpleOnboarding?.shopType || 'others',
+      addedAt: new Date().toISOString(),
+    };
+    const updated: StoreData = { ...store, products: [...store.products, newProduct] };
+    saveStore(updated);
+    setStore(updated);
+    showToast(`${name} added`, 'success');
+    return newProduct;
+  };
+
+  const handleSaveAlias = (productId: string, alias: string) => {
+    const clean = alias.trim().toLowerCase();
+    if (!clean) return;
+    const updated: StoreData = {
+      ...store,
+      products: store.products.map(p => {
+        if (p.id !== productId) return p;
+        const existing = p.voiceAliases || [];
+        if (existing.some(a => a.toLowerCase() === clean)) return p;
+        return { ...p, voiceAliases: [...existing, clean] };
+      }),
+    };
+    saveStore(updated);
+    setStore(updated);
+  };
+
   // First-time-only setup — Screens 2, 3, 4.
   // Only new stores get a `simpleOnboarding` object at creation time (see createStore()).
   // Existing/legacy stores never had this field set, so they must NOT be routed
@@ -73,7 +106,12 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       </div>
 
       {/* Big mic — the whole point of Simple Mode */}
-      <SimpleVoiceSell products={store.products} onConfirmSale={handleConfirmSale} />
+      <SimpleVoiceSell
+        products={store.products}
+        onConfirmSale={handleConfirmSale}
+        onCreateProduct={handleCreateProduct}
+        onSaveAlias={handleSaveAlias}
+      />
 
       {/* Light secondary action — history only, nothing else competes for attention here */}
       <button
