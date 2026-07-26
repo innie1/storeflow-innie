@@ -6,6 +6,8 @@ import StoreAccess from '@/components/StoreAccess';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import NotificationDrawer from '@/components/NotificationDrawer';
 import Dashboard from '@/components/Dashboard';
+import SimpleModeHome from '@/components/simple/SimpleModeHome';
+import ToggleRow from '@/components/Toggle';
 import StoreLogo from '@/components/StoreLogo';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
@@ -1539,7 +1541,11 @@ export default function Index() {
             </div>
           }>
             <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
-              <Dashboard store={store} onNavigate={handleNavigate} currentUser={currentUser} />
+              {store.uiMode === 'simple' ? (
+                <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} />
+              ) : (
+                <Dashboard store={store} onNavigate={handleNavigate} currentUser={currentUser} />
+              )}
             </div>
             <div className={tab === 'orders' ? 'block' : 'hidden'}>
               <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} />
@@ -1889,6 +1895,20 @@ export default function Index() {
                   </div>
                 </button>
               )}
+
+              <div className="border border-border/80 rounded-xl bg-surface-2/40 px-3.5">
+                <ToggleRow
+                  checked={store.uiMode === 'simple'}
+                  onChange={(v) => {
+                    const updated = { ...store, uiMode: (v ? 'simple' : 'full') as 'simple' | 'full' };
+                    saveStore(updated);
+                    setStore(updated);
+                    setShowMoreMenu(false);
+                  }}
+                  label="Simple Mode"
+                  description="One big mic button for quick voice sales. Switch back here anytime."
+                />
+              </div>
             </div>
           </div>
         </div>

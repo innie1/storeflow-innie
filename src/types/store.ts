@@ -618,6 +618,7 @@ export interface StoreData {
   similarProductReviews?: SimilarProductReview[];
   storeName: string;
   accessCode: string;
+  uiMode?: 'simple' | 'full'; // Simple Mode: big-mic single-sale home. Defaults to 'full' when unset.
   category?: StoreCategory;
   retailType?: string;
   products: Product[];
