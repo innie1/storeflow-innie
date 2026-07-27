@@ -1171,6 +1171,15 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     bankName: '', frequency: 'weekly',
   });
 
+  // `savings` above only captures store.savingsGoal at mount time — React's
+  // useState initial value is ignored on re-renders. Without this, the saved
+  // amount here goes stale the moment it's updated anywhere else (most
+  // commonly the scheduled auto-save deduction running in the background),
+  // and this screen just shows whatever number it happened to load with.
+  useEffect(() => {
+    if (store.savingsGoal) setSavings(store.savingsGoal);
+  }, [store.savingsGoal]);
+
   const trashCount = getTrash(store).length;
   const insights = useMemo(() => generateInsights(store, '7d'), [store]);
   const latestInsight = insights[0];
