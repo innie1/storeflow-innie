@@ -378,6 +378,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     sellingPrice: '',
     quantity: '',
     category: '',
+    unit: 'pcs' as 'pcs' | 'kg' | 'liter' | 'load',
     isCartonSingleEnabled: false,
     singlesPerCarton: '12',
     singleSellingPrice: '',
@@ -850,6 +851,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       sellingPrice: Number(newProduct.sellingPrice),
       quantity: Number(newProduct.quantity),
       category: newProduct.category || 'General',
+      unit: newProduct.unit,
       isCartonSingleEnabled: newProduct.isCartonSingleEnabled,
       singlesPerCarton: singlesPerCartonVal,
       singleSellingPrice: singlePriceVal,
@@ -862,6 +864,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       sellingPrice: '',
       quantity: '',
       category: '',
+      unit: 'pcs',
       isCartonSingleEnabled: false,
       singlesPerCarton: '12',
       singleSellingPrice: '',
@@ -2037,6 +2040,25 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 placeholder="Product name"
                 className={inputClass}
               />
+              {store.storeType && store.storeType !== 'provision' && (
+                <div className="space-y-1">
+                  <label className="block text-[11px] text-muted-foreground uppercase font-bold">Sold By</label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(['pcs', 'kg', 'liter', 'load'] as const).map(u => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setNewProduct({ ...newProduct, unit: u })}
+                        className={`py-1.5 rounded-lg border text-xs font-display font-semibold capitalize ${
+                          newProduct.unit === u ? 'bg-primary/10 border-primary text-foreground' : 'bg-surface-2/40 border-border text-muted-foreground'
+                        }`}
+                      >
+                        {u === 'pcs' ? 'Piece' : u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <input value={newProduct.costPrice} onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value })} placeholder="Cost price (₦)" type="number" className={inputClass} />
                 <input

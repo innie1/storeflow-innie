@@ -329,6 +329,7 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
     accessCode: code,
     category,
     retailType,
+    storeType: 'provision',
     uiMode: 'simple',
     simpleOnboarding: { complete: false },
     products,

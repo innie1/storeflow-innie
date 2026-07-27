@@ -27,6 +27,7 @@ export interface Product {
   first_sale_at?: string;
   last_sold_at?: string;
   voiceAliases?: string[]; // alternate spoken names learned from Simple Mode voice corrections (e.g. "gary" -> Garri)
+  unit?: 'pcs' | 'kg' | 'liter' | 'load'; // how this item is sold — pcs (default) or by weight/volume/load for service-type stores
 }
 
 export interface InventoryMovement {
@@ -199,6 +200,10 @@ export interface Withdrawal {
 }
 
 export type StoreCategory = 'retail' | 'restaurant' | 'games' | 'other';
+// Broader, customer-facing store type — drives how the customer app presents intake
+// (product grid vs a service form) and how items are priced (per piece vs per kg/liter).
+// Distinct from StoreCategory and editable anytime from Settings, not just at signup.
+export type StoreType = 'provision' | 'laundry' | 'gas_filling' | 'restaurant' | 'games' | 'other';
 
 export interface GameService {
   id: string;
@@ -630,6 +635,7 @@ export interface StoreData {
   };
   category?: StoreCategory;
   retailType?: string;
+  storeType?: StoreType; // what kind of store this is for the customer app — provision, laundry, gas filling, etc. Editable anytime.
   products: Product[];
   sales: Sale[];
   restocks?: Restock[];

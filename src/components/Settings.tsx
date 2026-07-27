@@ -4050,6 +4050,37 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             </div>
           </button>
 
+          {/* Store Type — editable anytime, drives what customers see when they scan */}
+          <div className={`${card} w-full p-4 space-y-2.5`}>
+            <div>
+              <h3 className="font-display font-bold text-sm">Store Type</h3>
+              <p className="text-[11px] text-muted-foreground">What customers see when they scan your QR code</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { id: 'provision', label: 'Provision', icon: '🛒' },
+                { id: 'laundry', label: 'Laundry', icon: '👔' },
+                { id: 'gas_filling', label: 'Gas Filling', icon: '🔥' },
+                { id: 'restaurant', label: 'Restaurant', icon: '🍽️' },
+                { id: 'games', label: 'Games', icon: '🎮' },
+                { id: 'other', label: 'Other', icon: '🏪' },
+              ] as const).map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => persist({ storeType: t.id })}
+                  className={`p-2.5 rounded-xl border text-center transition-colors ${
+                    (store.storeType || 'provision') === t.id
+                      ? 'bg-primary/10 border-primary text-foreground'
+                      : 'bg-surface-2/40 border-border text-muted-foreground'
+                  }`}
+                >
+                  <span className="block text-lg">{t.icon}</span>
+                  <span className="block text-[10px] font-display font-semibold mt-0.5">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Flow Card */}
           <button onClick={() => setView('flow')} className={`${card} w-full p-4 text-left hover:ring-1 hover:ring-primary/30 transition-all border ${mgr.enabled ? 'border-success/30 bg-gradient-to-br from-success/10 to-transparent' : 'border-border'}`}>
             <div className="flex items-start gap-3">
