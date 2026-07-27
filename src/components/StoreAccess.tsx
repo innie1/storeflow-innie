@@ -27,8 +27,22 @@ const QUESTIONS = [
   'What was the name of your primary school?',
 ];
 
+// Shows progress across the 3 steps of the local "Create New Store" flow:
+// 1) Store details  2) Your access code  3) Secure the account
+function CreateFlowProgress({ step }: { step: 1 | 2 | 3 }) {
+  const pct = step === 1 ? 33 : step === 2 ? 66 : 100;
+  return (
+    <div className="w-full h-1.5 rounded-full bg-surface-2 overflow-hidden">
+      <div
+        className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
-  const [mode, setMode] = useState<'choose' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>('choose');
+  const [mode, setMode] = useState<'choose' | 'create-choice' | 'access-choice' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>('choose');
 
   // Supabase Auth States
   const [authEmail, setAuthEmail] = useState('');
@@ -862,33 +876,76 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         {mode === 'choose' && (
           <div className="space-y-3">
             <button
-              onClick={() => setMode('create')}
+              onClick={() => setMode('create-choice')}
               className="w-full p-4 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-lg hover:opacity-90 transition-opacity cursor-pointer active:scale-95 transition-all shadow-md"
             >
               Create New Store
             </button>
-            <p className="text-[10px] text-muted-foreground text-center -mt-1.5">Quick setup on this device, using a store access code</p>
 
             <button
-              onClick={() => setMode('access')}
+              onClick={() => setMode('access-choice')}
               className="w-full p-4 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-lg hover:bg-surface-3 transition-colors border border-border cursor-pointer active:scale-95 transition-all"
             >
               Access Existing Store
             </button>
+          </div>
+        )}
 
-            <div className="flex items-center gap-3 py-1">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-[10px] text-muted-foreground uppercase font-bold">or</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
+        {mode === 'create-choice' && (
+          <div className="space-y-3 text-center">
+            <h3 className="font-display font-bold text-lg text-foreground">How do you want to set this up?</h3>
+
+            <button
+              onClick={() => setMode('create')}
+              className="w-full p-4 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-lg hover:opacity-90 transition-opacity cursor-pointer active:scale-95 transition-all shadow-md text-left"
+            >
+              Quick Setup — Access Code
+              <span className="block text-xs font-normal opacity-80 mt-0.5">Fastest way in, works on this device</span>
+            </button>
+
+            <button
+              onClick={() => setMode('auth-signup')}
+              className="w-full p-4 rounded-lg bg-surface-2 border border-primary/40 text-foreground font-display font-semibold text-lg hover:border-primary transition-colors cursor-pointer active:scale-95 transition-all flex items-center gap-2 text-left"
+            >
+              <Cloud className="w-5 h-5 text-primary shrink-0" />
+              <span>
+                Cloud Account — Email
+                <span className="block text-xs font-normal text-muted-foreground mt-0.5">Backs up your store, works across devices</span>
+              </span>
+            </button>
+
+            <button onClick={() => setMode('choose')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground cursor-pointer">
+              ← Back
+            </button>
+          </div>
+        )}
+
+        {mode === 'access-choice' && (
+          <div className="space-y-3 text-center">
+            <h3 className="font-display font-bold text-lg text-foreground">How do you want to sign in?</h3>
+
+            <button
+              onClick={() => setMode('access')}
+              className="w-full p-4 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-lg hover:opacity-90 transition-opacity cursor-pointer active:scale-95 transition-all shadow-md text-left"
+            >
+              Access Code
+              <span className="block text-xs font-normal opacity-80 mt-0.5">The code your store was created with</span>
+            </button>
 
             <button
               onClick={() => setMode('auth-login')}
-              className="w-full p-4 rounded-lg bg-surface-2 border border-primary/40 text-foreground font-display font-semibold text-lg hover:border-primary transition-colors cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full p-4 rounded-lg bg-surface-2 border border-primary/40 text-foreground font-display font-semibold text-lg hover:border-primary transition-colors cursor-pointer active:scale-95 transition-all flex items-center gap-2 text-left"
             >
-              <Cloud className="w-5 h-5 text-primary" /> Sign In / Sign Up with Email
+              <Cloud className="w-5 h-5 text-primary shrink-0" />
+              <span>
+                Email Account
+                <span className="block text-xs font-normal text-muted-foreground mt-0.5">Sign in with the email you registered</span>
+              </span>
             </button>
-            <p className="text-[10px] text-muted-foreground text-center -mt-1.5">Recommended — backs up your store to the cloud and works across devices</p>
+
+            <button onClick={() => setMode('choose')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground cursor-pointer">
+              ← Back
+            </button>
           </div>
         )}
 
@@ -952,10 +1009,10 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
             
             <button
               type="button"
-              onClick={() => setMode('choose')}
+              onClick={() => setMode('access-choice')}
               className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2"
             >
-              ← Back to Workspace Options
+              ← Back to Sign In Options
             </button>
           </form>
         )}
@@ -1044,10 +1101,10 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
             <button
               type="button"
-              onClick={() => setMode('choose')}
+              onClick={() => setMode('create-choice')}
               className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2"
             >
-              ← Back to Workspace Options
+              ← Back to Setup Options
             </button>
           </form>
         )}
@@ -1218,6 +1275,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
         {mode === 'create' && !newCode && (
           <div className="space-y-4 text-left">
+            <CreateFlowProgress step={1} />
             <div>
               <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Store Name</label>
               <input
@@ -1294,7 +1352,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
             <button onClick={handleCreate} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Create Store
             </button>
-            <button onClick={() => setMode('choose')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground cursor-pointer">
+            <button onClick={() => setMode('create-choice')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground cursor-pointer">
               ← Back
             </button>
           </div>
@@ -1302,6 +1360,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
         {mode === 'create' && newCode && (
           <div className="space-y-4 text-center">
+            <CreateFlowProgress step={2} />
             <p className="text-success text-sm font-semibold">✓ Store created successfully!</p>
             <div>
               <p className="text-muted-foreground text-sm mb-2">Your access code:</p>
@@ -1318,6 +1377,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
         {mode === 'setup-security' && (
           <form onSubmit={handleSaveSecurity} className="space-y-4 text-left">
+            <CreateFlowProgress step={3} />
             <div className="p-3.5 rounded-xl bg-yellow-500/10 border border-yellow-500/25 flex gap-2.5 items-start">
               <Shield className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
               <div>
@@ -1483,7 +1543,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 <Cloud className="w-3.5 h-3.5" /> Or Login with Email
               </button>
             </div>
-            <button onClick={() => setMode('choose')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground text-center cursor-pointer">
+            <button onClick={() => setMode('access-choice')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground text-center cursor-pointer">
               ← Back
             </button>
           </div>
