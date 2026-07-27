@@ -1171,6 +1171,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     bankName: '', frequency: 'weekly',
   });
 
+  // Same class of bug as savings above — mgr only reflected store.managerSettings
+  // at mount. Safe to sync live here too: every edit to mgr goes through
+  // updateMgr, which always persists in the same action, so there's never an
+  // uncommitted local-only edit this could clobber.
+  useEffect(() => {
+    setMgr({ ...DEFAULT_MANAGER_SETTINGS, ...(store.managerSettings || {}) });
+  }, [store.managerSettings]);
+
   // `savings` above only captures store.savingsGoal at mount time — React's
   // useState initial value is ignored on re-renders. Without this, the saved
   // amount here goes stale the moment it's updated anywhere else (most
