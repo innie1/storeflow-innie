@@ -34,6 +34,21 @@ function getNormalizedStatus(status?: string): string {
   return status;
 }
 
+// Test helper — stores no longer auto-seed products (Simple Mode change), so
+// tests that need a product to exist add one explicitly.
+function withTestProduct(store: StoreData, overrides: Partial<Product> = {}): StoreData {
+  const product: Product = {
+    id: overrides.id || 'test-product-1',
+    name: overrides.name || 'Test Product',
+    costPrice: overrides.costPrice ?? 100,
+    sellingPrice: overrides.sellingPrice ?? 150,
+    quantity: overrides.quantity ?? 20,
+    category: overrides.category || 'retail',
+    ...overrides,
+  };
+  return { ...store, products: [...store.products, product] };
+}
+
 // Mock of status update stock logic
 function simulateOrderStatusUpdate(
   store: StoreData,
@@ -93,6 +108,7 @@ describe("Order Management System (OMS) Unit Tests", () => {
 
   it("should reserve stock when order is Accepted", () => {
     let store = createStore("Test Store Retail", "retail");
+    store = withTestProduct(store);
     // Ensure product exists
     const targetProduct = store.products[0];
     const initialQty = targetProduct.quantity;
@@ -111,6 +127,7 @@ describe("Order Management System (OMS) Unit Tests", () => {
 
   it("should release stock when accepted order is Cancelled", () => {
     let store = createStore("Test Store Retail", "retail");
+    store = withTestProduct(store);
     const targetProduct = store.products[0];
     const initialQty = targetProduct.quantity;
 
@@ -133,6 +150,7 @@ describe("Order Management System (OMS) Unit Tests", () => {
 
   it("should NOT release stock when pending order is Rejected", () => {
     let store = createStore("Test Store Retail", "retail");
+    store = withTestProduct(store);
     const targetProduct = store.products[0];
     const initialQty = targetProduct.quantity;
 

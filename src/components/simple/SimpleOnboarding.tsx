@@ -2,7 +2,21 @@ import { useState } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { generateId, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
-import { Check, ChevronLeft, Store, Shirt, UtensilsCrossed, Cpu, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, Store, Shirt, UtensilsCrossed, Cpu, MoreHorizontal, Plus, Trash2, Mic } from 'lucide-react';
+
+const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+// Parses something like "Indomie two hundred" or "Garri 500" into a name + optional price.
+// Trailing number word/digits (with optional "naira") is treated as the price.
+function parseVoiceProduct(transcript: string): { name: string; price?: string } {
+  const words = transcript.trim().replace(/naira/gi, '').trim().split(/\s+/);
+  const last = words[words.length - 1];
+  const digits = last?.replace(/[^0-9]/g, '');
+  if (digits && /^[0-9]+$/.test(digits) && digits.length >= 2) {
+    return { name: words.slice(0, -1).join(' ').trim(), price: digits };
+  }
+  return { name: transcript.trim() };
+}
 
 interface SimpleOnboardingProps {
   store: StoreData;
@@ -44,6 +58,38 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [shopType, setShopType] = useState<ShopType | null>(null);
   const [drafts, setDrafts] = useState<DraftProduct[]>([emptyDraft()]);
+  const [listening, setListening] = useState(false);
+
+  const startVoiceAdd = () => {
+    if (!SR) {
+      showToast('Voice input is not supported on this device', 'error');
+      return;
+    }
+    const r = new SR();
+    r.lang = 'en-US';
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    r.onstart = () => setListening(true);
+    r.onend = () => setListening(false);
+    r.onerror = () => setListening(false);
+    r.onresult = (e: any) => {
+      const transcript = e.results?.[0]?.[0]?.transcript || '';
+      if (!transcript.trim()) return;
+      const { name, price } = parseVoiceProduct(transcript);
+      if (!name) return;
+      setDrafts(d => {
+        const emptyIdx = d.findIndex(row => !row.name.trim());
+        if (emptyIdx >= 0) {
+          const next = [...d];
+          next[emptyIdx] = { name, sellingPrice: price || next[emptyIdx].sellingPrice };
+          return next;
+        }
+        if (d.length >= 5) return d;
+        return [...d, { name, sellingPrice: price || '' }];
+      });
+    };
+    r.start();
+  };
 
   // ── Screen 2: Shop Type ──
   if (step === 1) {
@@ -140,7 +186,16 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
       <h1 className="font-display font-black text-2xl text-foreground text-center">What 5 products do you sell most?</h1>
       <p className="text-sm text-muted-foreground text-center mt-1.5">Add a few now — you can add more anytime. Prices only, no stress about stock yet.</p>
 
-      <div className="flex flex-col gap-2.5 mt-6">
+      <button
+        onClick={startVoiceAdd}
+        className={`mt-5 self-center flex items-center gap-2 px-4 py-2.5 rounded-full border text-sm font-display font-semibold ${
+          listening ? 'bg-primary text-primary-foreground border-primary animate-pulse' : 'bg-surface-2/40 border-border text-foreground'
+        }`}
+      >
+        <Mic className="w-4 h-4" /> {listening ? 'Listening…' : 'Say a product'}
+      </button>
+
+      <div className="flex flex-col gap-2.5 mt-4">
         {drafts.map((row, idx) => (
           <div key={idx} className="flex items-center gap-2">
             <input

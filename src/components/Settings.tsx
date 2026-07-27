@@ -602,6 +602,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [revealCode, setRevealCode] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [currentPasswordConfirm, setCurrentPasswordConfirm] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -1354,6 +1356,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   };
 
   const handleUpdatePassword = () => {
+    const currentOwnerPassword = store.managerSettings?.ownerPassword || 'owner';
+    if (!currentPasswordConfirm.trim() || currentPasswordConfirm !== currentOwnerPassword) {
+      return showToast('Current password is incorrect', 'error');
+    }
     if (!newPassword || newPassword.length < 4) {
       return showToast('Password must be at least 4 characters', 'error');
     }
@@ -1361,6 +1367,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       return showToast('Passwords do not match', 'error');
     }
     updateMgr({ ownerPassword: newPassword.trim() });
+    setCurrentPasswordConfirm('');
     setNewPassword('');
     setConfirmPassword('');
     showToast('✓ Password reset successfully');
@@ -3097,9 +3104,36 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           <p className="text-[10px] text-muted-foreground">Unique identifier used to access this store. This code cannot be changed.</p>
         </div>
 
+        {store.managerSettings?.recoveryQuestion && (
+          <div className="space-y-1 text-left border-t border-border/40 pt-3">
+            <label className="text-xs text-muted-foreground uppercase font-bold">Recovery Question</label>
+            <div className="p-2.5 rounded-lg bg-surface-2/60 border border-border text-sm text-muted-foreground">
+              "{store.managerSettings.recoveryQuestion}"
+            </div>
+            <p className="text-[10px] text-muted-foreground">Your answer is kept private and can't be viewed or changed here.</p>
+          </div>
+        )}
+
         {/* Reset Owner Password */}
         <div className="border-t border-border/40 pt-3 space-y-3 text-left">
           <label className="text-xs text-muted-foreground uppercase font-bold">Reset Owner Password</label>
+          <div className="relative flex items-center">
+            <input
+              type={showCurrentPass ? "text" : "password"}
+              placeholder="Current Password"
+              value={currentPasswordConfirm}
+              onChange={e => setCurrentPasswordConfirm(e.target.value)}
+              className={`${inputClass} pr-10`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowCurrentPass(!showCurrentPass)}
+              className="absolute right-3 p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground transition cursor-pointer"
+              title={showCurrentPass ? "Hide Password" : "Show Password"}
+            >
+              {showCurrentPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="relative flex items-center">
               <input

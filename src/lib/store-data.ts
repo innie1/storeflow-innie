@@ -309,14 +309,8 @@ const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
 export function createStore(storeName: string, category: StoreCategory = 'retail', retailType?: string, logoStyle?: string): StoreData {
   const code = generateCode();
   const now = new Date().toISOString();
-  const isRetail = category === 'retail';
-  const shouldPreload = isRetail && (!retailType || retailType === 'provision_retail' || retailType === 'provision_wholesale');
-  const products = shouldPreload
-    ? DEFAULT_PRODUCTS.map(p => {
-        const qty = Math.max(6, p.quantity);
-        return { ...p, quantity: qty, id: generateId(), initialQuantity: qty, addedAt: now };
-      })
-    : [];
+  // New stores always start with an empty catalogue — no auto-imported starter products.
+  const products: Product[] = [];
   const inventoryValue = products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
   const investments: Investment[] = inventoryValue > 0 ? [{
     id: generateId(),

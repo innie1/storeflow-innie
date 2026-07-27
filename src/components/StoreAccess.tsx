@@ -58,7 +58,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [storeName, setStoreName] = useState('');
   const [category, setCategory] = useState<StoreCategory>('retail');
   const [retailType, setRetailType] = useState('provision_retail');
-  const [selectedLogoStyle, setSelectedLogoStyle] = useState('minimalist');
+  const [selectedLogoStyle, setSelectedLogoStyle] = useState(() => LOGO_STYLES[Math.floor(Math.random() * LOGO_STYLES.length)].id);
   const [accessCode, setAccessCode] = useState('');
   const [newCode, setNewCode] = useState('');
   const [accessMood, setAccessMood] = useState<MascotMood>('idle');
@@ -1371,6 +1371,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
             </div>
             <button onClick={() => setMode('setup-security')} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Continue to Secure Store →
+            </button>
+            <button onClick={handleSkipSecurity} className="w-full p-2 text-muted-foreground text-xs hover:text-foreground cursor-pointer">
+              Skip for now — go to my store
             </button>
           </div>
         )}

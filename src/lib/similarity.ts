@@ -66,13 +66,17 @@ export function getSimilarity(s1: string, s2: string): number {
     return 0; // Conflicting sizes -> must keep separate
   }
 
-  // 2. Clean and tokenise strings, dropping small stop words and sizes
+  // 2. Clean and tokenise strings, dropping small stop words and sizes,
+  // and normalizing simple plurals (Eggs -> Egg, Onions -> Onion) so common
+  // Nigerian retail naming (singular vs plural) doesn't cause a missed match.
+  const singularize = (w: string) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
   const clean = (s: string) => {
     return s.toLowerCase()
       .replace(/(\d+(?:\.\d+)?)\s*(?:cl|l|g|kg|ml|pcs|pack|sachet|s)/gi, '') // strip sizes
       .replace(/[^a-z0-9\s]/g, '')
       .split(/\s+/)
-      .filter(w => w.length > 1 && !['and', 'with', 'for', 'of', 'in', 'the'].includes(w));
+      .filter(w => w.length > 1 && !['and', 'with', 'for', 'of', 'in', 'the'].includes(w))
+      .map(singularize);
   };
 
   const w1 = clean(s1);

@@ -416,7 +416,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
     // STEP 2: Compare Core Product
     const nameSim = getSimilarity(c1Lower, c2Lower);
-    const isFamilyMatch = nameSim >= 0.75 || c1Lower.includes(c2Lower) || c2Lower.includes(c1Lower);
+    // The substring shortcut ("Milk" inside "Milk Powder Deluxe") is only safe
+    // when the shorter name is a substantial chunk of the longer one — otherwise
+    // short generic words (Milk, Pen, Bag) end up "matching" almost anything
+    // that happens to contain them.
+    const shorter = c1Lower.length <= c2Lower.length ? c1Lower : c2Lower;
+    const longer = c1Lower.length <= c2Lower.length ? c2Lower : c1Lower;
+    const substringMatch = shorter.length >= 4 && shorter.length / longer.length >= 0.5 && longer.includes(shorter);
+    const isFamilyMatch = nameSim >= 0.75 || substringMatch;
 
     if (!isFamilyMatch) {
       return 0; // STOP immediately - Different Core Products
@@ -428,6 +435,12 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
     // 1. Name match weight
     confidence += Math.round(nameSim * 15); // max +15 pts
+
+    // 2. Same category is a mild positive signal, different categories a mild
+    // negative one — real duplicates almost never live in different categories.
+    if (p1.category && p2.category) {
+      confidence += p1.category === p2.category ? 3 : -20;
+    }
 
     // 2. Compare Sizes
     if (a1.size && a2.size) {

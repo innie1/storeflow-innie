@@ -32,6 +32,21 @@ const localStorageMock = (() => {
 })();
 Object.defineProperty(global, 'localStorage', { value: localStorageMock });
 
+// Test helper — stores no longer auto-seed products (Simple Mode change), so
+// tests that need a product to exist add one explicitly.
+function withTestProduct(store: StoreData, overrides: Partial<Product> = {}): StoreData {
+  const product: Product = {
+    id: overrides.id || 'test-product-1',
+    name: overrides.name || 'Test Product',
+    costPrice: overrides.costPrice ?? 100,
+    sellingPrice: overrides.sellingPrice ?? 150,
+    quantity: overrides.quantity ?? 20,
+    category: overrides.category || 'retail',
+    ...overrides,
+  };
+  return { ...store, products: [...store.products, product] };
+}
+
 describe("StoreFlow Expanded Features Tests", () => {
   it("should record a lost sale correctly", () => {
     let store = createStore("Test Store Retail", "retail");
@@ -44,6 +59,7 @@ describe("StoreFlow Expanded Features Tests", () => {
 
   it("should perform stock count audit and adjust stock", () => {
     let store = createStore("Test Store Retail", "retail");
+    store = withTestProduct(store);
     
     // Add a test product
     const pId = store.products[0].id;
@@ -72,6 +88,7 @@ describe("StoreFlow Expanded Features Tests", () => {
 
   it("should generate top opportunities and profit leaks", () => {
     let store = createStore("Test Store Retail", "retail");
+    store = withTestProduct(store);
     
     // Make a product dead stock by setting addedAt to 10 days ago
     if (store.products.length > 0) {
