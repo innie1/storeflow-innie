@@ -126,6 +126,26 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       setAccessMood('worried');
       return showToast('Enter a store name', 'error');
     }
+
+    // If a store was already created this session (user hit Back to change
+    // something and is now resubmitting), update it in place — otherwise
+    // this would silently create a second, orphaned store with a different
+    // access code every time someone goes back and forward again.
+    if (loadedStore) {
+      const updated: StoreData = {
+        ...loadedStore,
+        storeName: storeName.trim(),
+        category,
+        retailType: category === 'retail' ? retailType : undefined,
+        profile: { ...(loadedStore.profile || {}), logoStyle: selectedLogoStyle },
+      };
+      saveStore(updated);
+      setLoadedStore(updated);
+      setNewCode(updated.accessCode); // restore step 2's code display (Back may have cleared it)
+      setAccessMood('celebrating');
+      return;
+    }
+
     const store = createStore(storeName.trim(), category, category === 'retail' ? retailType : undefined, selectedLogoStyle);
     setNewCode(store.accessCode);
     setLoadedStore(store);
@@ -1375,6 +1395,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
             <button onClick={handleSkipSecurity} className="w-full p-2 text-muted-foreground text-xs hover:text-foreground cursor-pointer">
               Skip for now — go to my store
             </button>
+            <button onClick={() => setNewCode('')} className="w-full p-2 text-muted-foreground text-xs hover:text-foreground text-center cursor-pointer">
+              ← Back to change store details
+            </button>
           </div>
         )}
 
@@ -1509,6 +1532,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
               className="w-full p-2 text-muted-foreground text-xs hover:text-foreground text-center cursor-pointer"
             >
               Skip for now — I'll set this up later
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('create')}
+              className="w-full p-2 text-muted-foreground text-xs hover:text-foreground text-center cursor-pointer"
+            >
+              ← Back to my code
             </button>
           </form>
         )}
