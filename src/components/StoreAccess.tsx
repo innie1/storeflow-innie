@@ -232,6 +232,21 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
     saveStore(updatedStore);
     setLoadedStore(updatedStore);
+
+    // Fire-and-forget — never blocks store creation. Silently no-ops until
+    // RESEND_API_KEY is configured as a Supabase Edge Function secret.
+    fetch('https://jawfalghkftldvkopuaw.supabase.co/functions/v1/send-account-recovery-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: recoveryEmail.trim(),
+        storeName: updatedStore.storeName,
+        accessCode: updatedStore.accessCode,
+        emergencyRecoveryKey: generatedRecoveryKey,
+        recoveryQuestion,
+      }),
+    }).catch(() => { /* best-effort — recovery details still visible in Settings either way */ });
+
     showToast('Store secured successfully!');
 
     // Log in session as Owner
