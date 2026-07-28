@@ -22,6 +22,11 @@ function sanitizePhoneForWhatsApp(phone: string): string {
   return digits;
 }
 
+// Granular sub-steps within the "Preparing" status, specific to laundry orders.
+// Stored as metadata.processingStage on the order — the overall order status
+// stays 'Preparing' throughout, this is just a more detailed note on top.
+const LAUNDRY_PROCESSING_STAGES = ['Received', 'Counting Clothes', 'Washing', 'Drying', 'Ironing', 'Folding', 'Quality Check'];
+
 function buildOrderWhatsAppMessage(order: any, store: StoreData, status: string): string {
   const items = (order.order_items || []).map((item: any) => {
     const pName = store.products?.find((p: any) => p.id === item.product_id)?.name || 'Item';
@@ -602,6 +607,30 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {/* Laundry processing sub-stages — piggybacks on the existing metadata/notes
+                      mechanism already used for rejection reasons, so no schema change needed.
+                      Overall status stays 'Preparing'; this is just a more granular note on top. */}
+                  {normStatus === 'Preparing' && store.storeType === 'laundry' && (
+                    <div className="pt-2 border-t border-border/30">
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold mb-1.5">Processing Stage</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {LAUNDRY_PROCESSING_STAGES.map(stage => (
+                          <button
+                            key={stage}
+                            onClick={() => onUpdateOrderStatus(order.id, 'Preparing', { processingStage: stage })}
+                            className={`px-2.5 py-1 rounded-full border text-[11px] font-semibold transition cursor-pointer ${
+                              meta?.processingStage === stage
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-surface-2/40 border-border text-muted-foreground hover:border-primary/40'
+                            }`}
+                          >
+                            {stage}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
 
