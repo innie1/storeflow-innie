@@ -28,6 +28,8 @@ export interface Product {
   last_sold_at?: string;
   voiceAliases?: string[]; // alternate spoken names learned from Simple Mode voice corrections (e.g. "gary" -> Garri)
   unit?: 'pcs' | 'kg' | 'liter' | 'load'; // how this item is sold — pcs (default) or by weight/volume/load for service-type stores
+  isService?: boolean; // true for laundry-style named services (Wash & Iron, Express Service) — no stock tracking, has a turnaround time instead
+  turnaround?: string; // e.g. "Same day", "24 hours", "48 hours", "3 days", "1 week" — only meaningful when isService is true
 }
 
 export interface InventoryMovement {
@@ -203,7 +205,7 @@ export type StoreCategory = 'retail' | 'restaurant' | 'games' | 'other';
 // Broader, customer-facing store type — drives how the customer app presents intake
 // (product grid vs a service form) and how items are priced (per piece vs per kg/liter).
 // Distinct from StoreCategory and editable anytime from Settings, not just at signup.
-export type StoreType = 'provision' | 'laundry' | 'gas_filling' | 'restaurant' | 'games' | 'other';
+export type StoreType = 'provision' | 'clothing' | 'food' | 'electronics' | 'laundry' | 'gas_filling' | 'restaurant' | 'games' | 'other';
 
 export interface GameService {
   id: string;
@@ -627,7 +629,6 @@ export interface StoreData {
   uiMode?: 'simple' | 'full'; // Simple Mode: big-mic single-sale home. Defaults to 'simple' for new stores.
   simpleOnboarding?: {
     complete: boolean;
-    shopType?: 'provision' | 'clothing' | 'food' | 'electronics' | 'others';
     topProductIds?: string[]; // products the owner named during Top 5 Products Setup
   };
   simpleModeSettings?: {

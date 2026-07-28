@@ -1,6 +1,6 @@
 import { 
   Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, 
-  Investment, StoreCategory, GameService, GameSession,
+  Investment, StoreCategory, StoreType, GameService, GameSession,
   Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift, 
   CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
   DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent
@@ -306,7 +306,7 @@ const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
   { name: 'VR Games', icon: '🥽', price: 2000, enabled: false, order: 6 },
 ];
 
-export function createStore(storeName: string, category: StoreCategory = 'retail', retailType?: string, logoStyle?: string): StoreData {
+export function createStore(storeName: string, category: StoreCategory = 'retail', retailType?: string, logoStyle?: string, storeTypeOverride?: StoreType): StoreData {
   const code = generateCode();
   const now = new Date().toISOString();
   // New stores always start with an empty catalogue — no auto-imported starter products.
@@ -329,7 +329,7 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
     accessCode: code,
     category,
     retailType,
-    storeType: 'provision',
+    storeType: storeTypeOverride || (category === 'restaurant' ? 'restaurant' : category === 'games' ? 'games' : category === 'other' ? 'other' : 'provision'),
     uiMode: 'simple',
     simpleOnboarding: { complete: false },
     products,

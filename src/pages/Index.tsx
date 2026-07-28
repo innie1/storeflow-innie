@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { saveSession, clearSession, getActiveSession } from '@/components/Settings';
 
 import Inventory from '@/components/Inventory';
+import Services from '@/components/Services';
 import Sales from '@/components/Sales';
 import SalesHistory from '@/components/SalesHistory';
 import ReceiptScanner from '@/components/ReceiptScanner';
@@ -815,10 +816,15 @@ export default function Index() {
   };
 
   const isGames = store?.category === 'games';
+  const isLaundry = store?.storeType === 'laundry';
 
   const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;
 
-  const mainTabs = isGames ? GAMES_MAIN_TABS : RETAIL_MAIN_TABS;
+  const mainTabs = isGames
+    ? GAMES_MAIN_TABS
+    : isLaundry
+    ? RETAIL_MAIN_TABS.map(t => (t.id === 'inventory' ? { ...t, label: 'Services', icon: '🧺' } : t))
+    : RETAIL_MAIN_TABS;
   const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;
 
   const allowedMainTabs = useMemo(() => {
@@ -1563,15 +1569,19 @@ export default function Index() {
               <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} />
             </div>
             <div className={tab === 'inventory' ? 'block' : 'hidden'}>
-              <Inventory
-                store={store}
-                onUpdate={setStore}
-                filterLowStock={filterLowStock}
-                onClearFilter={() => setFilterLowStock(false)}
-                currentUser={currentUser}
-                autoOpenRestock={autoOpenRestock}
-                onAutoOpenRestockHandled={() => setAutoOpenRestock(false)}
-              />
+              {store.storeType === 'laundry' ? (
+                <Services store={store} onUpdate={setStore} currentUser={currentUser} />
+              ) : (
+                <Inventory
+                  store={store}
+                  onUpdate={setStore}
+                  filterLowStock={filterLowStock}
+                  onClearFilter={() => setFilterLowStock(false)}
+                  currentUser={currentUser}
+                  autoOpenRestock={autoOpenRestock}
+                  onAutoOpenRestockHandled={() => setAutoOpenRestock(false)}
+                />
+              )}
             </div>
             <div className={tab === 'sales' ? 'block' : 'hidden'}>
               <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} isActive={tab === 'sales'} currentUser={currentUser} />
