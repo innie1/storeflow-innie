@@ -4076,6 +4076,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             <div className="grid grid-cols-3 gap-2">
               {([
                 { id: 'provision', label: 'Provision', icon: '🛒' },
+                { id: 'clothing', label: 'Clothing', icon: '👕' },
+                { id: 'food', label: 'Food', icon: '🍲' },
+                { id: 'electronics', label: 'Electronics', icon: '💻' },
                 { id: 'laundry', label: 'Laundry', icon: '👔' },
                 { id: 'gas_filling', label: 'Gas Filling', icon: '🔥' },
                 { id: 'restaurant', label: 'Restaurant', icon: '🍽️' },

@@ -50,7 +50,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       costPrice: costPrice || 0,
       sellingPrice,
       quantity: Math.max(0, quantity || 0),
-      category: store.simpleOnboarding?.shopType || 'others',
+      category: store.storeType || 'others',
       addedAt: new Date().toISOString(),
     };
     const updated: StoreData = { ...store, products: [...store.products, newProduct] };

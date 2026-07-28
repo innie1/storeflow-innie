@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { generateId, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
-import { Check, ChevronLeft, Store, Shirt, UtensilsCrossed, Cpu, MoreHorizontal, Plus, Trash2, Mic } from 'lucide-react';
+import { Plus, Trash2, Mic } from 'lucide-react';
 
 const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -24,16 +24,6 @@ interface SimpleOnboardingProps {
   onComplete: () => void;
 }
 
-type ShopType = 'provision' | 'clothing' | 'food' | 'electronics' | 'others';
-
-const SHOP_TYPES: { key: ShopType; label: string; icon: any }[] = [
-  { key: 'provision', label: 'Provision', icon: Store },
-  { key: 'clothing', label: 'Clothing', icon: Shirt },
-  { key: 'food', label: 'Food', icon: UtensilsCrossed },
-  { key: 'electronics', label: 'Electronics', icon: Cpu },
-  { key: 'others', label: 'Others', icon: MoreHorizontal },
-];
-
 interface DraftProduct {
   name: string;
   sellingPrice: string;
@@ -41,22 +31,10 @@ interface DraftProduct {
 
 const emptyDraft = (): DraftProduct => ({ name: '', sellingPrice: '' });
 
-function ProgressBar({ step }: { step: 1 | 2 | 3 }) {
-  const pct = step === 1 ? 33 : step === 2 ? 66 : 100;
-  return (
-    <div className="w-full h-1.5 rounded-full bg-surface-2 overflow-hidden mb-8">
-      <div
-        className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
-        style={{ width: `${pct}%` }}
-      />
-    </div>
-  );
-}
-
+// One screen: Top 5 Products Setup. Shop type is no longer asked here —
+// it's already set at account creation and adjustable anytime in Settings,
+// so re-asking it here was the same question three times in two minutes.
 export default function SimpleOnboarding({ store, setStore, onComplete }: SimpleOnboardingProps) {
-  // step 1 = Shop Type, step 2 = Confirm Shop Type, step 3 = Top 5 Products Setup
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [shopType, setShopType] = useState<ShopType | null>(null);
   const [drafts, setDrafts] = useState<DraftProduct[]>([emptyDraft()]);
   const [listening, setListening] = useState(false);
 
@@ -91,60 +69,6 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
     r.start();
   };
 
-  // ── Screen 2: Shop Type ──
-  if (step === 1) {
-    return (
-      <div className="flex flex-col px-5 pt-6 pb-10 max-w-sm mx-auto">
-        <ProgressBar step={step} />
-        <h1 className="font-display font-black text-2xl text-foreground text-center">What kind of shop is this?</h1>
-        <p className="text-sm text-muted-foreground text-center mt-1.5">This helps us set things up right for you.</p>
-        <div className="grid grid-cols-2 gap-3 mt-8">
-          {SHOP_TYPES.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => { setShopType(key); setStep(2); }}
-              className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border border-border bg-surface-2/40 active:scale-95 transition-transform"
-            >
-              <Icon className="w-7 h-7 text-primary" />
-              <span className="font-display font-semibold text-sm text-foreground">{label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Screen 3: Confirm Shop Type ──
-  if (step === 2 && shopType) {
-    const chosen = SHOP_TYPES.find(s => s.key === shopType)!;
-    const Icon = chosen.icon;
-    return (
-      <div className="flex flex-col items-center px-5 pt-6 pb-10 max-w-sm mx-auto text-center">
-        <ProgressBar step={step} />
-        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-          <Icon className="w-8 h-8 text-primary" />
-        </div>
-        <h1 className="font-display font-black text-2xl text-foreground">A {chosen.label.toLowerCase()} shop, right?</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">You can change this later in Settings.</p>
-        <div className="flex gap-3 w-full mt-8">
-          <button
-            onClick={() => setStep(1)}
-            className="flex-1 py-3 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm flex items-center justify-center gap-1.5"
-          >
-            <ChevronLeft className="w-4 h-4" /> Change
-          </button>
-          <button
-            onClick={() => setStep(3)}
-            className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm flex items-center justify-center gap-1.5"
-          >
-            <Check className="w-4 h-4" /> Yes, Continue
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Screen 4: Top 5 Products Setup ──
   const updateDraft = (idx: number, patch: Partial<DraftProduct>) => {
     setDrafts(d => d.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
   };
@@ -163,14 +87,14 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
       costPrice: 0, // Unknown at this point — Cost Price Prompt fills this in later, skippable
       sellingPrice: Number(d.sellingPrice),
       quantity: 0,
-      category: shopType || 'others',
+      category: store.storeType || 'others',
       addedAt: now,
     }));
 
     const updated: StoreData = {
       ...store,
       products: [...store.products, ...newProducts],
-      simpleOnboarding: { complete: true, shopType: shopType || 'others', topProductIds: newProducts.map(p => p.id) },
+      simpleOnboarding: { complete: true, topProductIds: newProducts.map(p => p.id) },
     };
     saveStore(updated);
     setStore(updated);
@@ -181,8 +105,7 @@ export default function SimpleOnboarding({ store, setStore, onComplete }: Simple
   };
 
   return (
-    <div className="flex flex-col px-5 pt-6 pb-10 max-w-sm mx-auto">
-      <ProgressBar step={step} />
+    <div className="flex flex-col px-5 pt-10 pb-10 max-w-sm mx-auto">
       <h1 className="font-display font-black text-2xl text-foreground text-center">What 5 products do you sell most?</h1>
       <p className="text-sm text-muted-foreground text-center mt-1.5">Add a few now — you can add more anytime. Prices only, no stress about stock yet.</p>
 
