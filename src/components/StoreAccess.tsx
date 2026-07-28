@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createStore, loadStore, saveStore } from '@/lib/store-data';
-import { StoreData, StoreCategory, StaffMember } from '@/types/store';
+import { StoreData, StoreCategory, StoreType, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotMood } from '@/components/Mascot';
 import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
@@ -121,6 +121,24 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     return () => clearTimeout(t);
   }, [storeName, accessCode]);
 
+  // Maps the "Select Retail Type" dropdown to the customer-facing StoreType,
+  // so the store actually gets created as what it is (laundry, gas filling,
+  // etc.) instead of always defaulting to provision until someone remembers
+  // to change it in Settings afterward.
+  const retailTypeToStoreType = (rt: string): StoreType => {
+    switch (rt) {
+      case 'clothing': return 'clothing';
+      case 'food': return 'food';
+      case 'electronics': return 'electronics';
+      case 'laundry': return 'laundry';
+      case 'gasoline': return 'gas_filling';
+      case 'provision_retail':
+      case 'provision_wholesale':
+        return 'provision';
+      default: return 'provision';
+    }
+  };
+
   const handleCreate = () => {
     if (!storeName.trim()) {
       setAccessMood('worried');
@@ -137,6 +155,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         storeName: storeName.trim(),
         category,
         retailType: category === 'retail' ? retailType : undefined,
+        storeType: category === 'retail' ? retailTypeToStoreType(retailType) : category,
         profile: { ...(loadedStore.profile || {}), logoStyle: selectedLogoStyle },
       };
       saveStore(updated);
@@ -146,7 +165,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       return;
     }
 
-    const store = createStore(storeName.trim(), category, category === 'retail' ? retailType : undefined, selectedLogoStyle);
+    const store = createStore(
+      storeName.trim(),
+      category,
+      category === 'retail' ? retailType : undefined,
+      selectedLogoStyle,
+      category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)
+    );
     setNewCode(store.accessCode);
     setLoadedStore(store);
     
@@ -795,7 +820,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     setAccessMood('thinking');
 
     try {
-      const store = createStore(storeName.trim(), category, category === 'retail' ? retailType : undefined, selectedLogoStyle);
+      const store = createStore(
+        storeName.trim(),
+        category,
+        category === 'retail' ? retailType : undefined,
+        selectedLogoStyle,
+        category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)
+      );
       
       if (store.managerSettings) {
         store.managerSettings.multiDeviceSync = true;
@@ -1253,6 +1284,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                   <option value="provision_wholesale">Wholesale for Provision</option>
                   <option value="pharmacy">Pharmacy / Chemist</option>
                   <option value="electronics">Electronics Store</option>
+                  <option value="clothing">Clothing / Fashion</option>
+                  <option value="food">Food / Provisions Supplier</option>
+                  <option value="laundry">Laundry / Dry Cleaning</option>
                   <option value="gasoline">Gasoline / Gas Filling Station</option>
                   <option value="other">Other / General Retail</option>
                 </select>
@@ -1358,6 +1392,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                   <option value="provision_wholesale">Wholesale for Provision</option>
                   <option value="pharmacy">Pharmacy / Chemist</option>
                   <option value="electronics">Electronics Store</option>
+                  <option value="clothing">Clothing / Fashion</option>
+                  <option value="food">Food / Provisions Supplier</option>
+                  <option value="laundry">Laundry / Dry Cleaning</option>
                   <option value="gasoline">Gasoline / Gas Filling Station</option>
                   <option value="other">Other / General Retail</option>
                 </select>
