@@ -7,7 +7,6 @@ interface CloudAuthModalProps {
   onClose: () => void;
   onAuthSuccess: (profile: any) => void;
   initialEmail?: string;
-  initialPassword?: string;
   initialFullName?: string;
 }
 
@@ -15,14 +14,13 @@ export default function CloudAuthModal({
   onClose, 
   onAuthSuccess, 
   initialEmail, 
-  initialPassword, 
   initialFullName 
 }: CloudAuthModalProps) {
   const [tab, setTab] = useState<'login' | 'signup'>('signup');
   const [email, setEmail] = useState(initialEmail || '');
-  const [password, setPassword] = useState(initialPassword || '');
+  const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState(initialFullName || '');
-  const [confirmPassword, setConfirmPassword] = useState(initialPassword || '');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 

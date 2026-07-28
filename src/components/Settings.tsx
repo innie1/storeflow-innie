@@ -3245,7 +3245,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
             });
           }}
           initialEmail={store.profile?.email || ''}
-          initialPassword={store.managerSettings?.ownerPassword || ''}
           initialFullName={store.profile?.ownerName || store.storeName || ''}
         />
       )}
@@ -3658,7 +3657,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
           onAuthSuccess={handleCloudAuthSuccess}
           onClose={() => setShowCloudAuthModal(false)}
           initialEmail={store.profile?.email || ''}
-          initialPassword={store.managerSettings?.ownerPassword || ''}
           initialFullName={store.profile?.ownerName || store.storeName || ''}
         />
       )}
