@@ -47,6 +47,24 @@ function buildOrderWhatsAppMessage(order: any, store: StoreData, status: string)
   return `${name}${statusLine}\n\n${orderRef}\n${items}\n\nTotal: ${total}`;
 }
 
+function buildQuickWhatsAppMessage(order: any, store: StoreData, template: string): string {
+  const orderRef = order.order_number ? `Order #${order.order_number}` : 'your order';
+  const name = order.customer_name ? `Hi ${order.customer_name}, ` : 'Hi, ';
+  const messages: Record<string, string> = {
+    delayed: `${name}quick update — ${orderRef} from ${store.storeName} is running a little behind schedule. We appreciate your patience and will have it ready soon.`,
+    clarify: `${name}we need a bit more information about ${orderRef} from ${store.storeName} before we can continue. Could you get back to us when you have a moment?`,
+    contact: `${name}could you please give us a call or reply here about ${orderRef} from ${store.storeName}? Thanks!`,
+  };
+  return messages[template] || '';
+}
+
+function openQuickWhatsApp(order: any, store: StoreData, template: string) {
+  if (!order.customer_phone) return;
+  const phone = sanitizePhoneForWhatsApp(order.customer_phone);
+  const message = buildQuickWhatsAppMessage(order, store, template);
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+}
+
 function openOrderWhatsApp(order: any, store: StoreData, status: string) {
   if (!order.customer_phone) return;
   const phone = sanitizePhoneForWhatsApp(order.customer_phone);
@@ -58,6 +76,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Accepted' | 'Preparing' | 'Ready' | 'Completed' | 'Rejected' | 'Cancelled'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [quickMsgMenuFor, setQuickMsgMenuFor] = useState<string | null>(null);
   const [receiptOrder, setReceiptOrder] = useState<any | null>(null);
 
   // Date & Time Filter states
@@ -503,6 +522,35 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.13a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.19-.31a8.22 8.22 0 0 1-1.27-4.36c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.18 8.18 0 0 1 2.41 5.83c0 4.55-3.7 8.21-8.25 8.21zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.78.97-.14.16-.29.18-.53.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.39-1.72-.14-.24-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.42h-.48c-.16 0-.42.06-.65.31s-.85.83-.85 2.03.87 2.36 1 2.52c.12.16 1.7 2.6 4.13 3.64.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.09.47-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.15-1.18-.06-.1-.23-.16-.48-.28z"/></svg>
                         <span>WhatsApp</span>
                       </button>
+                      <div className="relative shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setQuickMsgMenuFor(quickMsgMenuFor === order.id ? null : order.id); }}
+                          className="w-6 h-6 rounded-full bg-surface-2 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition cursor-pointer"
+                          title="Quick message"
+                        >
+                          <span className="text-xs font-black">⋯</span>
+                        </button>
+                        {quickMsgMenuFor === order.id && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-0 top-7 z-20 w-44 bg-background border border-border rounded-xl shadow-lg py-1.5"
+                          >
+                            {[
+                              { key: 'delayed', label: "It's running delayed" },
+                              { key: 'clarify', label: 'Need clarification' },
+                              { key: 'contact', label: 'Please contact us' },
+                            ].map(t => (
+                              <button
+                                key={t.key}
+                                onClick={() => { openQuickWhatsApp(order, store, t.key); setQuickMsgMenuFor(null); }}
+                                className="w-full text-left px-3 py-2 text-xs font-display font-medium text-foreground hover:bg-surface-2 transition cursor-pointer"
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
