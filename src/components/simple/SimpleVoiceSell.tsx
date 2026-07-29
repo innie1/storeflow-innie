@@ -3,7 +3,7 @@ import { Product } from '@/types/store';
 import { Mic, Check, X } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────
-type Stage = 'idle' | 'listening' | 'processing' | 'confirm' | 'add-product' | 'saved';
+type Stage = 'idle' | 'listening' | 'processing' | 'confirm' | 'add-product' | 'saved' | 'item-added';
 
 interface Match {
   product: Product;
@@ -19,6 +19,31 @@ interface SimpleVoiceSellProps {
 
 function titleCase(s: string) {
   return s.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1));
+}
+
+// Parses "Indomie 500 600" style speech into a name + cost/selling prices.
+// Two numbers spoken -> the smaller is assumed to be cost price, the larger
+// selling price (matches how people naturally say it, in either order).
+// One number spoken -> treated as selling price only, cost left blank.
+function parseVoiceAddItem(transcript: string): { name: string; costPrice: string; sellingPrice: string } {
+  const cleaned = transcript.replace(/naira/gi, '').trim();
+  const rawWords = cleaned.split(/\s+/).filter(Boolean);
+  const skipWords = ['and', 'for', 'is', 'costs', 'cost', 'sells', 'sell', 'at', 'to', 'it', 'a', 'an', 'the'];
+  const numbers: number[] = [];
+  const nameWords: string[] = [];
+  for (const w of rawWords) {
+    if (/^\d+$/.test(w)) {
+      numbers.push(Number(w));
+    } else if (!skipWords.includes(w.toLowerCase())) {
+      nameWords.push(w);
+    }
+  }
+  const sorted = [...numbers].sort((a, b) => a - b);
+  return {
+    name: nameWords.join(' ').trim(),
+    costPrice: sorted.length > 1 ? String(sorted[0]) : '',
+    sellingPrice: sorted.length > 1 ? String(sorted[1]) : sorted.length === 1 ? String(sorted[0]) : '',
+  };
 }
 
 // ─── Word-number map (kept small on purpose — Simple Mode is for quick, common counts) ──
@@ -110,6 +135,8 @@ const PROCESSING_STEPS = ['Recognizing…', 'Finding your product…', 'Extracti
 
 export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProduct, onSaveAlias }: SimpleVoiceSellProps) {
   const [stage, setStage] = useState<Stage>('idle');
+  const [voiceMode, setVoiceMode] = useState<'sell' | 'add'>('sell');
+  const [justAdded, setJustAdded] = useState<Product | null>(null);
   const [heardText, setHeardText] = useState('');
   const [candidates, setCandidates] = useState<Match[]>([]);
   const [selected, setSelected] = useState<Match | null>(null);
@@ -160,6 +187,29 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     }, 900);
   }, [products]);
 
+  // Add Item mode — "Indomie 500 600" -> name + cost/selling prices, straight
+  // to the same add-product form (no matching against existing products,
+  // since the whole point here is creating a new one).
+  const runAddItemParse = useCallback((transcript: string) => {
+    setStage('processing');
+    setProcessingStep(0);
+    if (stepTimerRef.current) clearInterval(stepTimerRef.current);
+    stepTimerRef.current = setInterval(() => {
+      setProcessingStep(s => Math.min(s + 1, PROCESSING_STEPS.length - 1));
+    }, 220);
+
+    setTimeout(() => {
+      clearInterval(stepTimerRef.current);
+      const { name, costPrice, sellingPrice } = parseVoiceAddItem(transcript);
+      setSpokenQuery('');
+      setNewName(titleCase(name));
+      setNewCostPrice(costPrice);
+      setNewSellingPrice(sellingPrice);
+      setNewQty('');
+      setStage('add-product');
+    }, 900);
+  }, []);
+
   const startListening = useCallback(() => {
     if (!supported) {
       setHeardText('Voice input is not supported on this device/browser.');
@@ -181,7 +231,11 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
       setHeardText(text.trim());
       if (e.results[e.results.length - 1].isFinal) {
         r.stop();
-        runParse(text.trim());
+        if (voiceMode === 'add') {
+          runAddItemParse(text.trim());
+        } else {
+          runParse(text.trim());
+        }
       }
     };
     r.onerror = () => setStage('idle');
@@ -192,7 +246,7 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
 
     recogRef.current = r;
     r.start();
-  }, [supported, runParse]);
+  }, [supported, runParse, runAddItemParse, voiceMode]);
 
   const cancelListening = useCallback(() => {
     try { recogRef.current?.abort(); } catch { /* ok */ }
@@ -230,6 +284,11 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     : [];
 
   const useSuggestion = (product: Product) => {
+    if (voiceMode === 'add') {
+      // Already exists — nothing to add, just let them know and reset.
+      reset();
+      return;
+    }
     if (spokenQuery) onSaveAlias(product.id, spokenQuery);
     const match = { product, quantity: spokenQty };
     setSelected(match);
@@ -241,8 +300,21 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     const name = newName.trim();
     const price = Number(newSellingPrice);
     const cost = Number(newCostPrice) || 0;
-    const qty = Number(newQty) || spokenQty;
     if (!name || !(price > 0)) return;
+
+    if (voiceMode === 'add') {
+      const qty = Number(newQty) || 0;
+      const created = onCreateProduct(name, price, cost, qty);
+      setJustAdded(created);
+      setStage('item-added');
+      setTimeout(() => {
+        setJustAdded(null);
+        reset();
+      }, 1600);
+      return;
+    }
+
+    const qty = Number(newQty) || spokenQty;
     const created = onCreateProduct(name, price, cost, qty);
     if (spokenQuery) onSaveAlias(created.id, spokenQuery);
     const match = { product: created, quantity: spokenQty };
@@ -260,6 +332,22 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
         </div>
         <p className="font-display font-bold text-foreground text-base">Sale Saved</p>
         <p className="text-sm text-muted-foreground">{selected.product.name} × {selected.quantity}</p>
+      </div>
+    );
+  }
+
+  // ── Item added (Add Item voice mode) ──
+  if (stage === 'item-added' && justAdded) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-10 animate-fade-in">
+        <div className="w-16 h-16 rounded-full bg-success/15 flex items-center justify-center">
+          <Check className="w-9 h-9 text-success" />
+        </div>
+        <p className="font-display font-bold text-foreground text-base">Item Added</p>
+        <p className="text-sm text-muted-foreground">
+          {justAdded.name} — ₦{justAdded.sellingPrice.toLocaleString()}
+          {justAdded.costPrice > 0 ? ` (cost ₦${justAdded.costPrice.toLocaleString()})` : ''}
+        </p>
       </div>
     );
   }
@@ -328,7 +416,11 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     return (
       <div className="w-full max-w-sm mx-auto flex flex-col gap-3 animate-fade-in">
         <p className="text-center text-sm text-foreground font-display font-semibold">
-          {heardText ? `Didn't find "${heardText}" — add it?` : "Didn't catch that — add a product?"}
+          {voiceMode === 'add'
+            ? 'New Item'
+            : heardText
+            ? `Didn't find "${heardText}" — add it?`
+            : "Didn't catch that — add a product?"}
         </p>
 
         <div className="space-y-1">
@@ -397,7 +489,7 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
           disabled={!newName.trim() || !(Number(newSellingPrice) > 0)}
           className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm disabled:opacity-40"
         >
-          Add Product & Record Sale
+          {voiceMode === 'add' ? 'Add Item' : 'Add Product & Record Sale'}
         </button>
 
         {/* Mic stays reachable — retrying re-opens listening immediately instead of dumping back to a bare idle screen */}
@@ -423,6 +515,26 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
   // ── Listening / processing / idle: the big mic button ──
   return (
     <div className="flex flex-col items-center gap-4">
+      {stage === 'idle' && (
+        <div className="flex bg-surface-2 rounded-full p-1 border border-border">
+          <button
+            onClick={() => setVoiceMode('sell')}
+            className={`px-4 py-1.5 rounded-full text-xs font-display font-bold transition ${
+              voiceMode === 'sell' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+            }`}
+          >
+            Sell
+          </button>
+          <button
+            onClick={() => setVoiceMode('add')}
+            className={`px-4 py-1.5 rounded-full text-xs font-display font-bold transition ${
+              voiceMode === 'add' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+            }`}
+          >
+            Add Item
+          </button>
+        </div>
+      )}
       <button
         onClick={stage === 'listening' ? cancelListening : startListening}
         disabled={stage === 'processing'}
@@ -439,7 +551,8 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
       <p className="text-sm text-muted-foreground text-center min-h-[1.25rem]">
         {stage === 'listening' && (heardText || 'Listening…')}
         {stage === 'processing' && PROCESSING_STEPS[processingStep]}
-        {stage === 'idle' && 'Tap and say what you sold'}
+        {stage === 'idle' && voiceMode === 'add' && 'Say the item and price — e.g. "Indomie 500 600"'}
+        {stage === 'idle' && voiceMode === 'sell' && 'Tap and say what you sold'}
       </p>
       {stage === 'processing' && (
         <div className="flex items-center gap-1.5">
