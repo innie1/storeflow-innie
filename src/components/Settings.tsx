@@ -1166,6 +1166,18 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [payment, setPayment] = useState<PaymentInfo>(store.profile?.payment || {});
   const [rent, setRent] = useState<RentInfo>(store.profile?.rent || { isRented: false });
   const [mgr, setMgr] = useState<ManagerSettings>({ ...DEFAULT_MANAGER_SETTINGS, ...(store.managerSettings || {}) });
+  const [loyalty, setLoyalty] = useState(store.loyaltySettings || {
+    enabled: false, earnPerHundred: 1, redeemThreshold: 100, redeemValueNaira: 500,
+  });
+  useEffect(() => {
+    if (store.loyaltySettings) setLoyalty(store.loyaltySettings);
+  }, [store.loyaltySettings]);
+  const updateLoyalty = (patch: Partial<typeof loyalty>) => {
+    const next = { ...loyalty, ...patch };
+    setLoyalty(next);
+    persist({ loyaltySettings: next });
+  };
+
   const [savings, setSavings] = useState<SavingsGoal>(store.savingsGoal || {
     amount: 500000, label: 'Emergency Fund', source: 'profit', percentage: 10, saved: 0,
     bankName: '', frequency: 'weekly',
@@ -4097,6 +4109,62 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Loyalty Program — merchant sets the rate and redemption threshold */}
+          <div className={`${card} w-full p-4 space-y-3`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-display font-bold text-sm">Loyalty Program</h3>
+                <p className="text-[11px] text-muted-foreground">Customers earn points on completed orders, redeemable for a discount</p>
+              </div>
+              <button
+                onClick={() => updateLoyalty({ enabled: !loyalty.enabled })}
+                className={`shrink-0 w-11 h-6 rounded-full transition-colors relative ${loyalty.enabled ? 'bg-primary' : 'bg-surface-2 border border-border'}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${loyalty.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            {loyalty.enabled && (
+              <div className="space-y-3 pt-1">
+                <div className="space-y-1">
+                  <label className="block text-[11px] text-muted-foreground uppercase font-bold">Points earned per ₦100 spent</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={loyalty.earnPerHundred}
+                    onChange={e => updateLoyalty({ earnPerHundred: Math.max(0, Number(e.target.value) || 0) })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] text-muted-foreground uppercase font-bold">Points to redeem</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={loyalty.redeemThreshold}
+                      onChange={e => updateLoyalty({ redeemThreshold: Math.max(1, Number(e.target.value) || 1) })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] text-muted-foreground uppercase font-bold">Discount (₦)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={loyalty.redeemValueNaira}
+                      onChange={e => updateLoyalty({ redeemValueNaira: Math.max(0, Number(e.target.value) || 0) })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Example: a customer spending ₦{(loyalty.redeemThreshold * 100 / Math.max(1, loyalty.earnPerHundred)).toLocaleString()} total earns enough points for ₦{loyalty.redeemValueNaira.toLocaleString()} off.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Flow Card */}

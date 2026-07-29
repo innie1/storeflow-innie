@@ -637,6 +637,12 @@ export interface StoreData {
   category?: StoreCategory;
   retailType?: string;
   storeType?: StoreType; // what kind of store this is for the customer app — provision, laundry, gas filling, etc. Editable anytime.
+  loyaltySettings?: {
+    enabled: boolean;
+    earnPerHundred: number; // points earned per ₦100 spent on a Completed order, default 1
+    redeemThreshold: number; // points needed to redeem, default 100
+    redeemValueNaira: number; // ₦ discount for redeeming redeemThreshold points, default 500
+  };
   products: Product[];
   sales: Sale[];
   restocks?: Restock[];
