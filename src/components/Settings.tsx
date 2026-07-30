@@ -10,6 +10,7 @@ import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromI
 import { generatePerformanceSummary, generateFullTextReport, generateFullCSV } from '@/lib/reports';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
+import DayNightToggle from '@/components/DayNightToggle';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
 import Wishlist from '@/components/Wishlist';
 import StoreSwitcher from '@/components/StoreSwitcher';
@@ -109,6 +110,7 @@ interface SettingsProps {
   onUpdate: (store: StoreData) => void;
   onLock: () => void;
   currentUser?: any;
+  isActive?: boolean; // true only while the Settings tab is the visible one — the component itself is kept mounted (CSS-hidden) when other tabs are active, so this is how it knows to reset itself
 }
 
 const card = "bg-card shadow-card rounded-2xl";
@@ -533,7 +535,7 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
 }
 
 // ============ MAIN ============
-export default function Settings({ store, onUpdate, onLock, currentUser }: SettingsProps) {
+export default function Settings({ store, onUpdate, onLock, currentUser, isActive = true }: SettingsProps) {
   const [view, setViewState] = useState<View>('home');
   const [viewStack, setViewStack] = useState<View[]>(['home']);
   const barcodeQrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -566,7 +568,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         }
         return prev;
       } else {
-        window.history.pushState({ settingsView: newView }, '', '');
+        // tab:'settings' has to be here too — Index.tsx's own popstate
+        // listener reads e.state.tab independently of this component, and
+        // defaults to 'dashboard' when it's missing. Without it, going back
+        // from any sub-view (Discount, Savings, etc.) jumped straight past
+        // the Settings menu to the Dashboard tab instead of landing here.
+        window.history.pushState({ tab: 'settings', settingsView: newView }, '', '');
         setViewState(newView);
         return [...prev, newView];
       }
@@ -589,6 +596,18 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
+
+  // Settings is kept mounted (just CSS-hidden) when another tab is active,
+  // so its `view` state doesn't naturally reset on its own the way a real
+  // unmount would. Without this, switching to another tab and then back to
+  // Settings via the bottom nav resumed at whatever sub-view was open
+  // before, instead of showing the Settings menu.
+  useEffect(() => {
+    if (!isActive && view !== 'home') {
+      setViewState('home');
+      setViewStack(['home']);
+    }
+  }, [isActive]);
   const [searchQuery, setSearchQuery] = useState('');
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
   const [theme, setTheme] = useState<ThemeId>(getTheme());
@@ -650,7 +669,22 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
     showToast(backorderPwPendingValue ? 'Backorder selling turned on' : 'Backorder selling turned off');
   };
 
-  // Cloud Sync Auth Modal State
+  // Store Type change — requires typing the store's access code to confirm,
+  // so it can't be flipped by an accidental tap. Not locked permanently —
+  // just gated, since the owner may genuinely need to change it later.
+  const [pendingStoreType, setPendingStoreType] = useState<string | null>(null);
+  const [storeTypeCodeInput, setStoreTypeCodeInput] = useState('');
+
+  const confirmStoreTypeChange = () => {
+    if (storeTypeCodeInput.trim().toUpperCase() !== store.accessCode.toUpperCase()) {
+      showToast('That store code is incorrect', 'error');
+      return;
+    }
+    persist({ storeType: pendingStoreType as any });
+    showToast('Store type updated');
+    setPendingStoreType(null);
+    setStoreTypeCodeInput('');
+  };
   const [showCloudAuthModal, setShowCloudAuthModal] = useState(false);
 
   const handleCloudAuthSuccess = async (profile: any) => {
@@ -3008,13 +3042,22 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   if (view === 'savings') return (
     <SubPage title="Savings Plan" onBack={() => setView('home')}>
       <div className={`${card} p-5 space-y-4`}>
-        <div className="flex items-center gap-4">
-          <ProgressRing pct={savingsPct} size={72} color="hsl(var(--primary))" />
-          <div className="flex-1">
-            <p className="text-xs text-muted-foreground">Goal</p>
-            <p className="font-display font-bold text-xl text-primary">₦{savings.amount.toLocaleString()}</p>
-            <p className="text-[11px] text-muted-foreground">Saved ₦{savings.saved.toLocaleString()}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <ProgressRing pct={savingsPct} size={72} color="hsl(var(--primary))" />
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground">Goal</p>
+              <p className="font-display font-bold text-xl text-primary">₦{savings.amount.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground">Saved ₦{savings.saved.toLocaleString()}</p>
+            </div>
           </div>
+          {store.savingsGoal && store.savingsGoal.amount > 0 ? (
+            <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-display font-bold px-2 py-1 rounded-full bg-success/10 text-success border border-success/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> Active
+            </span>
+          ) : (
+            <span className="flex-shrink-0 text-[10px] font-display font-bold px-2 py-1 rounded-full bg-surface-2 text-muted-foreground border border-border">Not Set Up</span>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-3 text-xs">
           <Stat label="Source" value={`${savings.percentage}% of ${savings.source}`} />
@@ -3032,6 +3075,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
 
   if (view === 'appearance') return (
     <SubPage title="Appearance" onBack={() => setView('home')}>
+      <div className={`${card} p-4 space-y-3`}>
+        <h3 className="font-display font-bold text-sm text-center">Display Mode</h3>
+        <DayNightToggle />
+      </div>
       <div className={`${card} p-4 space-y-3`}>
         <h3 className="font-display font-bold text-sm">Theme</h3>
         <div className="grid grid-cols-3 gap-2">
@@ -4205,7 +4252,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
               ] as const).map(t => (
                 <button
                   key={t.id}
-                  onClick={() => persist({ storeType: t.id })}
+                  onClick={() => {
+                    if ((store.storeType || 'provision') === t.id) return;
+                    setPendingStoreType(t.id);
+                    setStoreTypeCodeInput('');
+                  }}
                   className={`p-2.5 rounded-xl border text-center transition-colors ${
                     (store.storeType || 'provision') === t.id
                       ? 'bg-primary/10 border-primary text-foreground'
@@ -4217,6 +4268,36 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                 </button>
               ))}
             </div>
+            {pendingStoreType && (
+              <div className="p-3 rounded-xl bg-warning/5 border border-warning/30 space-y-2">
+                <p className="text-xs font-display font-bold">⚠️ Confirm store type change</p>
+                <p className="text-[11px] text-muted-foreground">
+                  This changes what customers see when they scan your QR code. Enter your store code to confirm — this isn't permanent, you can always change it again the same way.
+                </p>
+                <input
+                  type="text"
+                  value={storeTypeCodeInput}
+                  onChange={e => setStoreTypeCodeInput(e.target.value)}
+                  placeholder="Store code"
+                  className={inputClass}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setPendingStoreType(null); setStoreTypeCodeInput(''); }}
+                    className="flex-1 py-2 rounded-lg text-xs font-display font-bold border border-border text-muted-foreground"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmStoreTypeChange}
+                    className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-warning text-black"
+                  >
+                    Confirm Change
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Loyalty Program — merchant sets the rate and redemption threshold */}

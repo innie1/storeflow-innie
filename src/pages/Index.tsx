@@ -1602,7 +1602,7 @@ export default function Index() {
               <ROITracker store={store} onUpdate={setStore} />
             </div>
             <div className={tab === 'settings' ? 'block' : 'hidden'}>
-              <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} />
+              <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} isActive={tab === 'settings'} />
             </div>
             <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
               <Marketplace store={store} onUpdate={setStore} />
