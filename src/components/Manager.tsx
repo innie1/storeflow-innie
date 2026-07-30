@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId } from '@/types/store';
-import { saveStore, getPendingSummary } from '@/lib/store-data';
+import { saveStore, getPendingSummary, updateProduct } from '@/lib/store-data';
+import PerformanceCalendar from '@/components/PerformanceCalendar';
 import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
@@ -536,6 +537,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   const [tab, setTab] = useState<ManagerTab>('overview');
   const [requestText, setRequestText] = useState('');
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showPerformanceCalendar, setShowPerformanceCalendar] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [hasPatted, setHasPatted] = useState(() => localStorage.getItem('storeflow_flow_patted') === new Date().toISOString().split('T')[0]);
@@ -693,6 +695,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   ];
 
   const advice = settings.businessAdvice ? generateAdvice(store, orders) : [];
+  const [pendingPriceAccept, setPendingPriceAccept] = useState<string | null>(null);
   const advicePriorityColor: Record<string, string> = { critical: 'border-destructive/40 bg-destructive/5', high: 'border-warning/40 bg-warning/5', medium: 'border-primary/20 bg-surface-2', low: 'border-border bg-surface-2' };
   const adviceIconBg: Record<string, string> = { critical: 'bg-destructive/10', high: 'bg-warning/10', medium: 'bg-primary/10', low: 'bg-surface-3' };
 
@@ -847,6 +850,21 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               </div>
             );
           })()}
+
+          {/* Performance Calendar entry point */}
+          <button
+            onClick={() => setShowPerformanceCalendar(true)}
+            className="w-full flex items-center justify-between p-4 rounded-2xl bg-card border border-border/40 shadow-card text-left"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📅</span>
+              <div>
+                <p className="font-display font-bold text-sm">Performance Calendar</p>
+                <p className="text-[11px] text-muted-foreground">See your consistency at a glance</p>
+              </div>
+            </div>
+            <span className="text-muted-foreground">›</span>
+          </button>
 
           {/* Next Best Action */}
           {advice.length > 0 && (
@@ -1379,15 +1397,52 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
                 <h3 className="font-display font-bold text-sm">📊 Pricing Alerts</h3>
+                <p className="text-[11px] text-muted-foreground -mt-1">Suggestions only — nothing changes until you tap Accept.</p>
                 <div className="space-y-2">
-                  {alerts.slice(0, 4).map(a => (
+                  {alerts.slice(0, 4).map(a => {
+                    const isPendingConfirm = pendingPriceAccept === a.product.id;
+                    return (
                     <div key={a.product.id} className={`p-3 rounded-xl border ${a.type === 'zero_margin' ? 'bg-destructive/5 border-destructive/30' : a.type === 'underpriced' ? 'bg-warning/5 border-warning/30' : 'bg-surface-2 border-border'}`}>
-                      <p className="font-display font-semibold text-sm">{a.product.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.type === 'zero_margin' ? 'Selling at zero or negative margin!' : a.type === 'underpriced' ? `Margin only ${(a.currentMargin * 100).toFixed(0)}% — suggest ₦${a.suggestedPrice.toLocaleString()}` : `Very high margin (${(a.currentMargin * 100).toFixed(0)}%)`}
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-display font-semibold text-sm truncate">{a.product.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {a.type === 'zero_margin' ? 'Selling at zero or negative margin!' : a.type === 'underpriced' ? `Margin only ${(a.currentMargin * 100).toFixed(0)}%` : `Very high margin (${(a.currentMargin * 100).toFixed(0)}%)`}
+                            {' '}· Currently ₦{a.product.sellingPrice.toLocaleString()} → suggest ₦{a.suggestedPrice.toLocaleString()}
+                          </p>
+                        </div>
+                        {!isPendingConfirm ? (
+                          <button
+                            onClick={() => setPendingPriceAccept(a.product.id)}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-display font-bold bg-primary/10 text-primary border border-primary/30"
+                          >
+                            Accept
+                          </button>
+                        ) : (
+                          <div className="flex-shrink-0 flex gap-1.5">
+                            <button
+                              onClick={() => setPendingPriceAccept(null)}
+                              className="px-2.5 py-1.5 rounded-lg text-[11px] font-display font-bold border border-border text-muted-foreground"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => {
+                                const updated = updateProduct(store, a.product.id, { sellingPrice: a.suggestedPrice });
+                                saveStore(updated);
+                                onUpdate(updated);
+                                setPendingPriceAccept(null);
+                                showToast(`${a.product.name} price set to ₦${a.suggestedPrice.toLocaleString()}`);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg text-[11px] font-display font-bold bg-success text-white"
+                            >
+                              Confirm ₦{a.suggestedPrice.toLocaleString()}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               </div>
             );
@@ -1585,6 +1640,10 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
       {/* Modals */}
       {showBreakdown && createPortal(
         <HealthBreakdownModal store={store} onClose={() => setShowBreakdown(false)} />,
+        document.body
+      )}
+      {showPerformanceCalendar && createPortal(
+        <PerformanceCalendar store={store} onClose={() => setShowPerformanceCalendar(false)} />,
         document.body
       )}
       {showNotifications && createPortal(

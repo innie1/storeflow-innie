@@ -28,3 +28,4 @@
 [2026-07-30] v1.1.0 — Zero-Setup Smart Inventory: backorder-selling toggle (password-gated), voice match length-ratio fix, qty/price parsing for spoken amounts, auto-alias learning, Pending Inventory badge — severity fixed: Medium
 [2026-07-30] v1.2.0 — Sales Target counter: auto daily/weekly detection + manual override, shown in Simple Mode and Owner Dashboard — severity: Low (new feature)
 [2026-07-30] v1.3.0 — Wired 10 dead Flow settings toggles to real features, built Weekly Recap, added tiered sales-milestone celebrations (Simple Mode + POS), fixed backorder stock-guard bug in Simple Mode — severity: Medium
+[2026-07-30] v1.4.0 — New Performance Calendar (daily/weekly/monthly target consistency, streaks, achievements, drill-down insights) + proper click-to-accept flow for suggested prices (never auto-applies) — severity: Low (new features)
