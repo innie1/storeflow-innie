@@ -1765,6 +1765,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   {p.needsStockSetup && (
                     <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 border border-yellow-500/30 font-bold">🟡 Pending Inventory</span>
                   )}
+                  {store.autoPriceLog?.some(e => !e.undone && e.productId === p.id && e.newPrice === p.sellingPrice) && (
+                    <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30 font-bold">🤖 Auto-Priced</span>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground truncate font-medium mt-0.5">{p.category}</p>
                 <p className="text-yellow-500 font-display font-bold text-sm mt-1">₦{p.sellingPrice.toLocaleString()}</p>

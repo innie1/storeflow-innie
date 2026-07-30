@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId } from '@/types/store';
-import { saveStore, getPendingSummary, updateProduct } from '@/lib/store-data';
+import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId, AutoPriceEvent } from '@/types/store';
+import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId } from '@/lib/store-data';
 import PerformanceCalendar from '@/components/PerformanceCalendar';
 import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
@@ -709,9 +709,20 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     if (toApply.length === 0) return;
 
     let updated = store;
+    const events: AutoPriceEvent[] = [];
     toApply.forEach(a => {
+      events.push({
+        id: generateId(),
+        productId: a.product.id,
+        productName: a.product.name,
+        oldPrice: a.product.sellingPrice,
+        newPrice: a.suggestedPrice,
+        costPrice: a.product.costPrice,
+        date: new Date().toISOString(),
+      });
       updated = updateProduct(updated, a.product.id, { sellingPrice: a.suggestedPrice });
     });
+    updated = { ...updated, autoPriceLog: [...events, ...(updated.autoPriceLog || [])].slice(0, 50) };
     saveStore(updated);
     onUpdate(updated);
     showToast(`Auto-applied ${toApply.length} price update${toApply.length > 1 ? 's' : ''} (within your ₦${maxChange} limit)`);
@@ -1407,6 +1418,54 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                   </div>
                 </div>
                 {rent.affordabilityPct > 30 && <p className="text-xs text-warning p-2 rounded-lg bg-warning/10 border border-warning/20">Rent is high relative to revenue. Consider growing sales to reduce this ratio.</p>}
+              </div>
+            );
+          })()}
+
+          {/* Auto-Applied Price History */}
+          {settings.autoApplyPrices && (() => {
+            const recentEvents = (store.autoPriceLog || []).filter(e => !e.undone).slice(0, 5);
+            if (recentEvents.length === 0) return null;
+            return (
+              <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
+                <h3 className="font-display font-bold text-sm">🤖 Auto-Applied Prices</h3>
+                <p className="text-[11px] text-muted-foreground -mt-1">Changes your Auto-Apply setting made on its own. Undo any of them any time.</p>
+                <div className="space-y-2">
+                  {recentEvents.map(e => {
+                    const oldProfit = e.oldPrice - e.costPrice;
+                    const newProfit = e.newPrice - e.costPrice;
+                    const profitDelta = newProfit - oldProfit;
+                    const stillCurrent = store.products.find(p => p.id === e.productId)?.sellingPrice === e.newPrice;
+                    return (
+                      <div key={e.id} className="p-3 rounded-xl bg-surface-2 border border-border space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <p className="font-display font-semibold text-sm truncate">{e.productName}</p>
+                          <span className="text-[10px] text-muted-foreground">{new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          ₦{e.oldPrice.toLocaleString()} → ₦{e.newPrice.toLocaleString()}
+                        </p>
+                        <p className={`text-xs font-display font-bold ${profitDelta >= 0 ? 'text-success' : 'text-warning'}`}>
+                          Profit per unit: ₦{oldProfit.toLocaleString()} → ₦{newProfit.toLocaleString()} ({profitDelta >= 0 ? '+' : ''}₦{profitDelta.toLocaleString()})
+                        </p>
+                        {stillCurrent ? (
+                          <button
+                            onClick={() => {
+                              const updated = undoAutoPrice(store, e.id);
+                              onUpdate(updated);
+                              showToast(`${e.productName} reverted to ₦${e.oldPrice.toLocaleString()}`);
+                            }}
+                            className="mt-1 px-3 py-1.5 rounded-lg text-[11px] font-display font-bold bg-destructive/10 text-destructive border border-destructive/30"
+                          >
+                            ↩ Undo
+                          </button>
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground italic">Price has changed again since — undo unavailable.</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })()}

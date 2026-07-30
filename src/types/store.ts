@@ -276,6 +276,17 @@ export interface SalesTarget {
   amount?: number;               // only meaningful when mode is 'manual' — owner's chosen ₦ amount
 }
 
+export interface AutoPriceEvent {
+  id: string;
+  productId: string;
+  productName: string;
+  oldPrice: number;
+  newPrice: number;
+  costPrice: number;
+  date: string;
+  undone?: boolean;
+}
+
 export interface SavingsGoal {
   amount: number;
   label?: string;
@@ -671,6 +682,7 @@ export interface StoreData {
   savingsGoal?: SavingsGoal;
   salesTarget?: SalesTarget;
   milestonesReached?: string[]; // ids from SALES_MILESTONES already celebrated, so the popup never repeats
+  autoPriceLog?: AutoPriceEvent[]; // history of Auto-Apply price changes, so the owner can see and undo them
   managerSettings?: ManagerSettings;
   pendingPayments?: PendingPayment[];
   flowNotifications?: FlowNotification[];
