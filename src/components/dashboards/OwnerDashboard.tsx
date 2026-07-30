@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
-import { getDashboardStats, getTopSellers } from '@/lib/store-data';
+import { getDashboardStats, getTopSellers, getSalesTargetStatus } from '@/lib/store-data';
 import { generatePerformanceSummary } from '@/lib/reports';
 import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
@@ -298,6 +298,7 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
 
   const managerEnabled = (store.managerSettings ?? DEFAULT_MANAGER_SETTINGS).enabled;
   const health = healthScore(store);
+  const target = useMemo(() => getSalesTargetStatus(store), [store]);
   const insights = managerEnabled ? generateInsights(store, '7d') : [];
   const recs = managerEnabled ? generateRecommendations(store) : [];
   const restockScoreResult = useMemo(() => restockScore(store), [store]);
@@ -497,6 +498,22 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
               </div>
             </div>
           </button>
+
+          <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5">
+              <span className="uppercase font-bold tracking-wide font-display">
+                {target.period === 'daily' ? "Today's Target" : "This Week's Target"}
+                {target.mode === 'auto' ? ' (Auto)' : ''}
+              </span>
+              <span className="font-bold text-foreground">₦{target.progressAmount.toLocaleString()} / ₦{target.targetAmount.toLocaleString()}</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-surface-2 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${target.progressPercent >= 100 ? 'bg-success' : 'bg-primary'}`}
+                style={{ width: `${target.progressPercent}%` }}
+              />
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <button

@@ -612,6 +612,26 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [backorderPwInput, setBackorderPwInput] = useState('');
   const [backorderPwPendingValue, setBackorderPwPendingValue] = useState(false);
 
+  // Sales Target — Auto by default; owner can pin a manual amount + period
+  const [targetMode, setTargetMode] = useState<'auto' | 'manual'>(store.salesTarget?.mode || 'auto');
+  const [targetPeriod, setTargetPeriod] = useState<'daily' | 'weekly'>(store.salesTarget?.period || 'daily');
+  const [targetAmountInput, setTargetAmountInput] = useState(store.salesTarget?.amount ? String(store.salesTarget.amount) : '');
+
+  const saveTarget = (patch: Partial<{ mode: 'auto' | 'manual'; period: 'daily' | 'weekly'; amount: string }>) => {
+    const nextMode = patch.mode ?? targetMode;
+    const nextPeriod = patch.period ?? targetPeriod;
+    const nextAmountInput = patch.amount ?? targetAmountInput;
+    setTargetMode(nextMode);
+    setTargetPeriod(nextPeriod);
+    setTargetAmountInput(nextAmountInput);
+    if (nextMode === 'auto') {
+      persist({ salesTarget: { mode: 'auto' } });
+    } else {
+      const amt = Number(nextAmountInput);
+      persist({ salesTarget: { mode: 'manual', period: nextPeriod, amount: amt > 0 ? amt : undefined } });
+    }
+  };
+
   const requestBackorderToggle = (nextValue: boolean) => {
     setBackorderPwPendingValue(nextValue);
     setBackorderPwInput('');
@@ -4227,6 +4247,53 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
                 <p className="text-[10px] text-muted-foreground">
                   Example: a customer spending ₦{(loyalty.redeemThreshold * 100 / Math.max(1, loyalty.earnPerHundred)).toLocaleString()} total earns enough points for ₦{loyalty.redeemValueNaira.toLocaleString()} off.
                 </p>
+              </div>
+            )}
+          </div>
+
+          {/* Sales Target Card */}
+          <div className={`${card} w-full p-4 space-y-3`}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-bold text-sm">Sales Target</h3>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold">{targetMode === 'auto' ? 'Auto' : 'Manual'}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Auto sets a daily or weekly goal based on how often this store actually sells — busy stores get a daily target, slower stores get a weekly one. Switch to Manual to set your own.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => saveTarget({ mode: 'auto' })}
+                className={`flex-1 py-2 rounded-lg text-xs font-display font-bold border ${targetMode === 'auto' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
+              >
+                Auto
+              </button>
+              <button
+                onClick={() => saveTarget({ mode: 'manual' })}
+                className={`flex-1 py-2 rounded-lg text-xs font-display font-bold border ${targetMode === 'manual' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
+              >
+                Manual
+              </button>
+            </div>
+            {targetMode === 'manual' && (
+              <div className="space-y-2 pt-1">
+                <div className="flex gap-2">
+                  {(['daily', 'weekly'] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => saveTarget({ period: p })}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-display font-bold border capitalize ${targetPeriod === p ? 'bg-primary/15 border-primary text-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  value={targetAmountInput}
+                  onChange={e => saveTarget({ amount: e.target.value })}
+                  placeholder={`₦ target per ${targetPeriod === 'daily' ? 'day' : 'week'}`}
+                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none focus:border-primary"
+                />
               </div>
             )}
           </div>

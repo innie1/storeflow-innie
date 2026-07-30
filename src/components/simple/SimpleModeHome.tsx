@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { recordSale, saveStore, generateId } from '@/lib/store-data';
+import { recordSale, saveStore, generateId, getSalesTargetStatus } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SimpleVoiceSell from './SimpleVoiceSell';
 import SimpleOnboarding from './SimpleOnboarding';
@@ -22,6 +22,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
   const todayRevenue = todaySales.reduce((s, x) => s + x.total, 0);
   const todayProfit = todaySales.reduce((s, x) => s + x.profit, 0);
   const todayCount = todaySales.length;
+  const target = useMemo(() => getSalesTargetStatus(store), [store]);
 
   const [costPricePromptProductId, setCostPricePromptProductId] = useState<string | null>(null);
 
@@ -116,6 +117,23 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
           <p className="text-xs text-muted-foreground">
             <span className="font-display font-bold text-foreground">{todayCount}</span> sale{todayCount === 1 ? '' : 's'}
           </p>
+        </div>
+
+        {/* Sales target — auto (daily/weekly, based on how often this store sells) unless the owner set one manually */}
+        <div className="mt-3 max-w-[220px] mx-auto">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+            <span className="uppercase font-bold tracking-wide">
+              {target.period === 'daily' ? "Today's Target" : "This Week's Target"}
+              {target.mode === 'auto' ? ' (Auto)' : ''}
+            </span>
+            <span className="font-bold text-foreground">₦{target.progressAmount.toLocaleString()} / ₦{target.targetAmount.toLocaleString()}</span>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-surface-2 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${target.progressPercent >= 100 ? 'bg-success' : 'bg-primary'}`}
+              style={{ width: `${target.progressPercent}%` }}
+            />
+          </div>
         </div>
       </div>
 

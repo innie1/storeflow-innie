@@ -270,6 +270,12 @@ export interface MemoryEntry {
 
 export type SavingsFrequency = 'daily' | 'weekly' | 'monthly';
 
+export interface SalesTarget {
+  mode: 'auto' | 'manual';       // auto = app decides cadence + amount from selling history; manual = owner set it
+  period?: 'daily' | 'weekly';   // only meaningful when mode is 'manual' — owner's chosen cadence
+  amount?: number;               // only meaningful when mode is 'manual' — owner's chosen ₦ amount
+}
+
 export interface SavingsGoal {
   amount: number;
   label?: string;
@@ -661,6 +667,7 @@ export interface StoreData {
   gameSessions?: GameSession[];
   customerRequests?: CustomerRequest[];
   savingsGoal?: SavingsGoal;
+  salesTarget?: SalesTarget;
   managerSettings?: ManagerSettings;
   pendingPayments?: PendingPayment[];
   flowNotifications?: FlowNotification[];
