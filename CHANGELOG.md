@@ -29,3 +29,4 @@
 [2026-07-30] v1.2.0 — Sales Target counter: auto daily/weekly detection + manual override, shown in Simple Mode and Owner Dashboard — severity: Low (new feature)
 [2026-07-30] v1.3.0 — Wired 10 dead Flow settings toggles to real features, built Weekly Recap, added tiered sales-milestone celebrations (Simple Mode + POS), fixed backorder stock-guard bug in Simple Mode — severity: Medium
 [2026-07-30] v1.4.0 — New Performance Calendar (daily/weekly/monthly target consistency, streaks, achievements, drill-down insights) + proper click-to-accept flow for suggested prices (never auto-applies) — severity: Low (new features)
+[2026-07-30] v1.5.0 — Auto-Apply Prices now functional: applies within owner-set margin % and ₦ change cap, else falls back to manual Accept. Fixed pricingAlerts ignoring the Default Profit Margin setting — severity: Medium

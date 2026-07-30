@@ -455,6 +455,7 @@ export interface ManagerSettings {
   defaultMargin: number;
   autoSuggestPrices: boolean;
   autoApplyPrices: boolean;
+  autoApplyMaxChangeAmount?: number; // ₦ safety cap — a suggested price change bigger than this always needs a manual Accept instead of auto-applying
   showProductProfit: boolean;
   // Inventory
   criticalStockThreshold: number;
@@ -537,6 +538,7 @@ export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   defaultMargin: 30,
   autoSuggestPrices: true,
   autoApplyPrices: false,
+  autoApplyMaxChangeAmount: 200,
   showProductProfit: true,
   criticalStockThreshold: 2,
   restockSuggestions: true,

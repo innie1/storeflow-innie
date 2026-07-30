@@ -696,6 +696,27 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
   const advice = settings.businessAdvice ? generateAdvice(store, orders) : [];
   const [pendingPriceAccept, setPendingPriceAccept] = useState<string | null>(null);
+
+  // Auto-Apply Prices — only runs when the toggle is on, and only touches
+  // suggestions within the owner's configured ₦ safety cap. Anything bigger
+  // always falls through to the manual Accept flow below instead.
+  useEffect(() => {
+    if (!settings.autoApplyPrices) return;
+    const targetMarginPct = (settings.defaultMargin || 25) / 100;
+    const maxChange = settings.autoApplyMaxChangeAmount ?? 200;
+    const alerts = pricingAlerts(store, targetMarginPct);
+    const toApply = alerts.filter(a => Math.abs(a.suggestedPrice - a.product.sellingPrice) <= maxChange);
+    if (toApply.length === 0) return;
+
+    let updated = store;
+    toApply.forEach(a => {
+      updated = updateProduct(updated, a.product.id, { sellingPrice: a.suggestedPrice });
+    });
+    saveStore(updated);
+    onUpdate(updated);
+    showToast(`Auto-applied ${toApply.length} price update${toApply.length > 1 ? 's' : ''} (within your ₦${maxChange} limit)`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.autoApplyPrices, settings.defaultMargin, settings.autoApplyMaxChangeAmount, store.products]);
   const advicePriorityColor: Record<string, string> = { critical: 'border-destructive/40 bg-destructive/5', high: 'border-warning/40 bg-warning/5', medium: 'border-primary/20 bg-surface-2', low: 'border-border bg-surface-2' };
   const adviceIconBg: Record<string, string> = { critical: 'bg-destructive/10', high: 'bg-warning/10', medium: 'bg-primary/10', low: 'bg-surface-3' };
 
@@ -1392,7 +1413,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
           {/* Pricing alerts */}
           {settings.autoSuggestPrices && (() => {
-            const alerts = pricingAlerts(store);
+            const alerts = pricingAlerts(store, (settings.defaultMargin || 25) / 100);
             if (alerts.length === 0) return null;
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">

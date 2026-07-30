@@ -2761,10 +2761,34 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
       </div>
       <div className={`${card} px-4 divide-y divide-border`}>
         <ToggleRow label="Auto-Suggest Selling Prices" checked={mgr.autoSuggestPrices} onChange={v => updateMgr({ autoSuggestPrices: v })} />
-        <ToggleRow label="Auto-Apply Suggested Prices" checked={mgr.autoApplyPrices} onChange={v => updateMgr({ autoApplyPrices: v })} />
+        <ToggleRow
+          label="Auto-Apply Suggested Prices"
+          description="Applies a suggestion automatically — but only when it's within the limits below. Anything bigger always waits for you to tap Accept."
+          checked={mgr.autoApplyPrices}
+          onChange={v => updateMgr({ autoApplyPrices: v })}
+        />
         <ToggleRow label="Show Product Profit" checked={mgr.showProductProfit} onChange={v => updateMgr({ showProductProfit: v })} />
         <ToggleRow label="Smart Pricing Enabled" checked={mgr.smartPricing} onChange={v => updateMgr({ smartPricing: v })} />
       </div>
+      {mgr.autoApplyPrices && (
+        <div className={`${card} p-4 space-y-3`}>
+          <p className="text-xs text-muted-foreground leading-snug">
+            Auto-Apply uses your Default Profit Margin above as the target percentage. A suggestion only applies automatically if it changes the price by no more than the amount below — bigger changes always show up as a normal suggestion for you to review.
+          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-display font-semibold">Max Auto-Apply Change</p>
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-primary font-bold">₦</span>
+              <input
+                type="number"
+                value={mgr.autoApplyMaxChangeAmount ?? 200}
+                onChange={e => updateMgr({ autoApplyMaxChangeAmount: Math.max(0, Number(e.target.value) || 0) })}
+                className="w-20 p-2 rounded-lg bg-surface-2 border border-border text-sm text-right focus:outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </SubPage>
   );
 
