@@ -668,6 +668,7 @@ export interface StoreData {
   customerRequests?: CustomerRequest[];
   savingsGoal?: SavingsGoal;
   salesTarget?: SalesTarget;
+  milestonesReached?: string[]; // ids from SALES_MILESTONES already celebrated, so the popup never repeats
   managerSettings?: ManagerSettings;
   pendingPayments?: PendingPayment[];
   flowNotifications?: FlowNotification[];

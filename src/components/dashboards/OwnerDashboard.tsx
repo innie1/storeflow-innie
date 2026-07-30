@@ -297,10 +297,11 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
   const profitAbs = Math.abs(stats.totalProfit);
 
   const managerEnabled = (store.managerSettings ?? DEFAULT_MANAGER_SETTINGS).enabled;
+  const mgrSettings = store.managerSettings ?? DEFAULT_MANAGER_SETTINGS;
   const health = healthScore(store);
   const target = useMemo(() => getSalesTargetStatus(store), [store]);
   const insights = managerEnabled ? generateInsights(store, '7d') : [];
-  const recs = managerEnabled ? generateRecommendations(store) : [];
+  const recs = (managerEnabled ? generateRecommendations(store) : []).filter(r => r.action !== 'restock' || mgrSettings.restockSuggestions);
   const restockScoreResult = useMemo(() => restockScore(store), [store]);
   const flowMood = useMemo(() => {
     if (!managerEnabled) return 'sleeping';

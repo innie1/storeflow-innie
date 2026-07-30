@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect } from 'react';
 import { StoreData, Sale, PaymentMethod, ManagerSettings, Product } from '@/types/store';
 import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale, logScanEvent } from '@/lib/store-data';
+import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
+import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
@@ -44,6 +46,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [voiceListening, setVoiceListening] = useState(false);
   const [category, setCategory] = useState<string>('All');
   const [lastSales, setLastSales] = useState<Sale[] | null>(null);
+  const [activeMilestone, setActiveMilestone] = useState<MilestoneDef | null>(null);
   const [scanning, setScanning] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [globalSaleMode, setGlobalSaleMode] = useState<'wholesale' | 'retail'>(() => (localStorage.getItem('storeflow_sale_mode') as 'wholesale' | 'retail') || 'retail');
@@ -401,6 +404,8 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       });
     onUpdate(result.store);
     if (result.sales.length > 0) {
+      const newMilestone = checkNewMilestone(result.store);
+      if (newMilestone) setActiveMilestone(newMilestone);
       setLastSales(result.sales);
       if (managerSettings?.autoPrintReceipt) {
         const totalSum = result.sales.reduce((sum, s) => sum + s.total, 0);
@@ -1253,6 +1258,16 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           </div>
         );
       })()}
+
+      {activeMilestone && (
+        <MilestoneCelebration
+          milestone={activeMilestone}
+          onDismiss={() => {
+            onUpdate(markMilestoneReached(store, activeMilestone.id));
+            setActiveMilestone(null);
+          }}
+        />
+      )}
     </div>
   );
 }

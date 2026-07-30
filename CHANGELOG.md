@@ -27,3 +27,4 @@
 [2026-07-26] v0.4.1 — Simple Mode voice: added Sell/Add Item toggle. Add Item mode parses two spoken prices (smaller = cost, larger = selling, order-independent) or one price (selling only), then shows the same editable confirm form as before for the merchant to check/adjust before saving — feature
 [2026-07-30] v1.1.0 — Zero-Setup Smart Inventory: backorder-selling toggle (password-gated), voice match length-ratio fix, qty/price parsing for spoken amounts, auto-alias learning, Pending Inventory badge — severity fixed: Medium
 [2026-07-30] v1.2.0 — Sales Target counter: auto daily/weekly detection + manual override, shown in Simple Mode and Owner Dashboard — severity: Low (new feature)
+[2026-07-30] v1.3.0 — Wired 10 dead Flow settings toggles to real features, built Weekly Recap, added tiered sales-milestone celebrations (Simple Mode + POS), fixed backorder stock-guard bug in Simple Mode — severity: Medium

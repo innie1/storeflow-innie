@@ -7,7 +7,7 @@ import {
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
   generateNotifications, ActivityRange, ActivityBucket, generateFlowReport,
-  getTopOpportunities, getProfitLeaks, getRepaymentInsights, getSeasonalPredictions, getWeatherInsights
+  getTopOpportunities, getProfitLeaks, getRepaymentInsights, getSeasonalPredictions, getWeatherInsights, generateWeeklyRecap
 } from '@/lib/manager-intel';
 import { getLowStockThreshold } from '@/lib/settings';
 import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward, hydrateFlowMemoryFromCloud } from '@/lib/flow-memory';
@@ -616,7 +616,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   }, [settings.enabled, store.sales.length, store.products, store.expenses?.length, store.customerRequests?.length]);
 
   const insights = generateInsights(store, '7d');
-  const recs = generateRecommendations(store);
+  const recs = generateRecommendations(store).filter(r => r.action !== 'restock' || settings.restockSuggestions);
   const requests = topCustomerRequests(store, 6);
   const savings = store.savingsGoal;
   const unreadCount = (store.flowNotifications || []).filter(n => !n.read).length;
@@ -689,10 +689,10 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     { id: 'overview', label: 'Overview' },
     { id: 'predictions', label: 'Forecasts' },
     { id: 'analysis', label: 'Analysis' },
-    { id: 'advice', label: 'Advice', badge: generateAdvice(store, orders).filter(a => (a.priority === 'critical' || a.priority === 'high') && !seenAdviceIds.has(a.id)).length || undefined },
+    { id: 'advice', label: 'Advice', badge: settings.businessAdvice ? (generateAdvice(store, orders).filter(a => (a.priority === 'critical' || a.priority === 'high') && !seenAdviceIds.has(a.id)).length || undefined) : undefined },
   ];
 
-  const advice = generateAdvice(store, orders);
+  const advice = settings.businessAdvice ? generateAdvice(store, orders) : [];
   const advicePriorityColor: Record<string, string> = { critical: 'border-destructive/40 bg-destructive/5', high: 'border-warning/40 bg-warning/5', medium: 'border-primary/20 bg-surface-2', low: 'border-border bg-surface-2' };
   const adviceIconBg: Record<string, string> = { critical: 'bg-destructive/10', high: 'bg-warning/10', medium: 'bg-primary/10', low: 'bg-surface-3' };
 
@@ -812,6 +812,42 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
         <div className="space-y-4 animate-fade-in text-left">
           <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} animate={settings.numericAnimations !== false} />
 
+          {/* Weekly Recap */}
+          {settings.weeklyRecap && (() => {
+            const recap = generateWeeklyRecap(store);
+            if (!recap) return null;
+            return (
+              <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-bold text-sm">📅 Last Week's Recap</h3>
+                  <span className="text-[10px] text-muted-foreground">{recap.weekLabel}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 rounded-xl bg-surface-2">
+                    <p className="text-[10px] text-muted-foreground">Revenue</p>
+                    <p className="font-display font-bold text-sm text-yellow-500">₦{recap.revenue.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2 rounded-xl bg-surface-2">
+                    <p className="text-[10px] text-muted-foreground">Profit</p>
+                    <p className="font-display font-bold text-sm text-success">₦{recap.profit.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2 rounded-xl bg-surface-2">
+                    <p className="text-[10px] text-muted-foreground">Sales</p>
+                    <p className="font-display font-bold text-sm">{recap.salesCount}</p>
+                  </div>
+                </div>
+                {recap.revenuePctVsPrevWeek !== null && (
+                  <p className={`text-xs ${recap.revenuePctVsPrevWeek >= 0 ? 'text-success' : 'text-warning'}`}>
+                    {recap.revenuePctVsPrevWeek >= 0 ? '↑' : '↓'} {Math.abs(recap.revenuePctVsPrevWeek)}% vs the week before
+                  </p>
+                )}
+                {recap.bestSeller && (
+                  <p className="text-xs text-muted-foreground">⭐ Best seller: {recap.bestSeller}</p>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Next Best Action */}
           {advice.length > 0 && (
             <div className={`p-4 rounded-2xl border ${advicePriorityColor[advice[0].priority]} shadow-card`}>
@@ -828,7 +864,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           )}
 
           {/* Top Opportunities Card */}
-          {(() => {
+          {settings.productSuggestions && (() => {
             const opps = getTopOpportunities(store);
             if (opps.length === 0) return null;
             return (
@@ -1116,7 +1152,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           })()}
 
           {/* Inventory alerts */}
-          {(() => {
+          {settings.inventoryForecasts && (() => {
             const alerts = inventoryIntelligence(store).filter(f => f.urgency !== 'ok').slice(0, 3);
             if (alerts.length === 0) return null;
             return (
@@ -1189,6 +1225,9 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           <div className="p-4 rounded-2xl bg-card shadow-card">
             <h3 className="font-display font-bold text-base mb-1">Revenue Forecasts</h3>
             <p className="text-xs text-muted-foreground mb-4">Based on your last 30 days of sales using linear trend analysis.</p>
+            {!settings.revenueForecasts && !settings.profitForecasts ? (
+              <p className="text-xs text-muted-foreground p-3 rounded-lg bg-surface-2 border border-border">Revenue and Profit Forecasts are both turned off in Settings.</p>
+            ) : (
             <div className="space-y-3">
               {horizons.map(h => {
                 const f = forecastHorizon(store, h);
@@ -1200,13 +1239,13 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                       <span className={`text-[10px] font-display font-bold ${confColor}`}>{f.confidencePct}% confidence</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] text-muted-foreground">Expected Revenue</p><p className="font-display font-bold text-yellow-500">₦{Math.round(f.expectedRevenue).toLocaleString()}</p></div>
-                      <div><p className="text-[10px] text-muted-foreground">Expected Profit</p><p className="font-display font-bold text-success">₦{Math.round(f.expectedProfit).toLocaleString()}</p></div>
+                      {settings.revenueForecasts && <div><p className="text-[10px] text-muted-foreground">Expected Revenue</p><p className="font-display font-bold text-yellow-500">₦{Math.round(f.expectedRevenue).toLocaleString()}</p></div>}
+                      {settings.profitForecasts && <div><p className="text-[10px] text-muted-foreground">Expected Profit</p><p className="font-display font-bold text-success">₦{Math.round(f.expectedProfit).toLocaleString()}</p></div>}
                     </div>
                     <div className="mt-2 h-1.5 rounded-full bg-surface-3 overflow-hidden">
                       <div className="h-full bg-primary transition-all" style={{ width: `${f.confidencePct}%` }} />
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Range: ₦{Math.round(f.expectedRevenue * 0.8).toLocaleString()} – ₦{Math.round(f.expectedRevenue * 1.2).toLocaleString()}</p>
+                    {settings.revenueForecasts && <p className="text-[10px] text-muted-foreground mt-1">Range: ₦{Math.round(f.expectedRevenue * 0.8).toLocaleString()} – ₦{Math.round(f.expectedRevenue * 1.2).toLocaleString()}</p>}
                     {f.caveat && (
                       <p className="text-[10px] text-muted-foreground mt-1.5 italic bg-surface-3/50 p-1.5 rounded">ℹ️ {f.caveat}</p>
                     )}
@@ -1214,6 +1253,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 );
               })}
             </div>
+            )}
             {store.sales.length < 10 && (
               <p className="text-xs text-warning mt-3 p-2 rounded-lg bg-warning/10 border border-warning/20">📊 Forecasts become more accurate as you record more sales. Keep going!</p>
             )}
@@ -1278,7 +1318,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           })()}
 
           {/* Expense analysis */}
-          {(() => {
+          {settings.expenseAnalysis && (() => {
             const ea = expenseAnalysis(store);
             if (ea.byCat.length === 0) return null;
             return (
@@ -1333,7 +1373,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           })()}
 
           {/* Pricing alerts */}
-          {(() => {
+          {settings.autoSuggestPrices && (() => {
             const alerts = pricingAlerts(store);
             if (alerts.length === 0) return null;
             return (

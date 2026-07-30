@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { recordSale, saveStore, generateId, getSalesTargetStatus } from '@/lib/store-data';
+import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
+import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
 import SimpleVoiceSell from './SimpleVoiceSell';
 import SimpleOnboarding from './SimpleOnboarding';
@@ -25,11 +27,12 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
   const target = useMemo(() => getSalesTargetStatus(store), [store]);
 
   const [costPricePromptProductId, setCostPricePromptProductId] = useState<string | null>(null);
+  const [activeMilestone, setActiveMilestone] = useState<MilestoneDef | null>(null);
 
   const handleConfirmSale = (productId: string, quantity: number) => {
     const product = store.products.find(p => p.id === productId);
     if (!product) return;
-    if (product.quantity < quantity) {
+    if (product.quantity < quantity && !store.managerSettings?.backorderSellingEnabled) {
       showToast('Not enough stock for that quantity', 'error');
       return;
     }
@@ -37,6 +40,9 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     saveStore(updated);
     setStore(updated);
     markSaleQueuedIfOffline(store.accessCode);
+
+    const newMilestone = checkNewMilestone(updated);
+    if (newMilestone) setActiveMilestone(newMilestone);
 
     // Screen 11 — ask for cost price if this product doesn't have one yet, unless the owner opted out
     if (!store.simpleModeSettings?.skipCostPricePrompt && (!product.costPrice || product.costPrice <= 0)) {
@@ -162,6 +168,17 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
           setStore={setStore}
           product={promptProduct}
           onDone={() => setCostPricePromptProductId(null)}
+        />
+      )}
+
+      {activeMilestone && (
+        <MilestoneCelebration
+          milestone={activeMilestone}
+          onDismiss={() => {
+            const updated = markMilestoneReached(store, activeMilestone.id);
+            setStore(updated);
+            setActiveMilestone(null);
+          }}
         />
       )}
     </div>
