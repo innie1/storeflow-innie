@@ -36,9 +36,16 @@ interface MascotProps {
   animate?: boolean;
   store?: StoreData;
   role?: string;
+  // Lets a parent screen (e.g. the Create/Access Store flow) make Flow say
+  // something contextual. Pass a new string (or bump externalMessageKey) to
+  // trigger it — same speech bubble system Flow already uses internally.
+  externalMessage?: string | null;
+  externalMessageKey?: string | number;
+  externalMessageMood?: MascotMood | null;
+  externalMessageDuration?: number;
 }
 
-export default function Mascot({ size = 64, mood = 'idle', className = '', animate = true, store, role }: MascotProps) {
+export default function Mascot({ size = 64, mood = 'idle', className = '', animate = true, store, role, externalMessage, externalMessageKey, externalMessageMood, externalMessageDuration }: MascotProps) {
   const [activeTheme, setActiveTheme] = useState<'graphite' | 'blue' | 'forest'>('graphite');
   const [overrideMood, setOverrideMood] = useState<MascotMood | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -546,6 +553,13 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       setOverrideMood(null);
     }, duration);
   };
+
+  useEffect(() => {
+    if (externalMessage) {
+      triggerSpeech(externalMessage, externalMessageMood ?? null, externalMessageDuration ?? 3200);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalMessage, externalMessageKey]);
 
   // Confetti trigger
   const triggerConfetti = () => {

@@ -31,3 +31,5 @@
 [2026-07-30] v1.4.0 — New Performance Calendar (daily/weekly/monthly target consistency, streaks, achievements, drill-down insights) + proper click-to-accept flow for suggested prices (never auto-applies) — severity: Low (new features)
 [2026-07-30] v1.5.0 — Auto-Apply Prices now functional: applies within owner-set margin % and ₦ change cap, else falls back to manual Accept. Fixed pricingAlerts ignoring the Default Profit Margin setting — severity: Medium
 [2026-07-30] v1.6.0 — Auto-Applied Prices now logged and reversible: Undo button, before/after profit comparison, Auto-Priced badge on affected products — severity: Low
+[2026-07-30] v1.7.0 — Flow now speaks contextually through Create/Access Store flow (welcome, guidance, wrong-password reactions, celebration), subtle button entrance/hover polish, mascot size varies slightly by step — severity: Low (UX polish)
+

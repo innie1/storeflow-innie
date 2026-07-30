@@ -44,6 +44,24 @@ function CreateFlowProgress({ step }: { step: 1 | 2 | 3 }) {
 export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [mode, setMode] = useState<'choose' | 'create-choice' | 'access-choice' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>('choose');
 
+  // Flow's contextual speech bubble through this flow — bump flowMsgKey to
+  // force the same line to replay (e.g. two wrong passwords in a row).
+  const [flowMessage, setFlowMessage] = useState<string | null>(null);
+  const [flowMsgKey, setFlowMsgKey] = useState(0);
+  const say = (text: string) => { setFlowMessage(text); setFlowMsgKey(k => k + 1); };
+  const sayRandom = (lines: string[]) => say(lines[Math.floor(Math.random() * lines.length)]);
+  const FLOW_WRONG_LINES = [
+    "Nope, that's not it. Try again!",
+    "Hmm, that's not matching up. One more try?",
+    "Not quite — double-check and go again.",
+    "That's wrong. I know, I know — just try again.",
+  ];
+  const FLOW_WELCOME_BACK_LINES = [
+    "Welcome back! Let's get to work.",
+    "That's it — you're in!",
+    "Perfect. Good to see you again!",
+  ];
+
   // Supabase Auth States
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -112,6 +130,28 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     }
   }, [mode]);
 
+  // Flow talks through each step, so it feels like he's actually guiding
+  // setup rather than just decorating the screen.
+  useEffect(() => {
+    const lines: Partial<Record<typeof mode, string>> = {
+      'choose': "Hey, I'm Flow! Let's do this. 👋",
+      'create-choice': "Create a store with me — I'm good with this!",
+      'access-choice': "Getting back into your store? I've got you.",
+      'create': "First, the basics — name your store and pick a type. I know exactly what goes where.",
+      'setup-security': "Almost there! Just lock things down with a password.",
+      'access': "Pop in your store code — I'll find it for you.",
+      'login-select': "Who's this? Pick your profile and let's go.",
+      'login-password': "Your password, please — don't worry, I've got you.",
+      'login-pin': "Enter your PIN — nice and easy.",
+      'recovery': "Lost access? No stress, let's sort it out together.",
+      'auth-store-select': "Pick a store, or start a fresh one with me.",
+      'auth-store-create': "New store, new start — let's build it.",
+    };
+    const line = lines[mode];
+    if (line) say(line);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
   // Revert back to idle after typing pause
   useEffect(() => {
     if (!storeName && !accessCode) return;
@@ -162,6 +202,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       setLoadedStore(updated);
       setNewCode(updated.accessCode); // restore step 2's code display (Back may have cleared it)
       setAccessMood('celebrating');
+      say("There it is! Your store's ready. 🎉");
       return;
     }
 
@@ -183,6 +224,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     setGeneratedRecoveryKey(key);
 
     setAccessMood('celebrating');
+    say("Boom! Your store is live. Save that code somewhere safe!");
   };
 
   const handleSaveSecurity = (e: React.FormEvent) => {
@@ -495,10 +537,12 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       }
       
       setAccessMood('angry');
+      sayRandom(FLOW_WRONG_LINES);
       showToast('Store not found locally or in cloud backup', 'error');
     } catch (err: any) {
       console.error("handleAccess failed to load store:", err);
       setAccessMood('angry');
+      sayRandom(FLOW_WRONG_LINES);
       showToast('Failed to connect to cloud storage. Please check connection.', 'error');
     }
   };
@@ -522,6 +566,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     if (selectedUser.isOwner) {
       if (inputPassword === loadedStore.managerSettings?.ownerPassword) {
         setAccessMood('happy');
+        sayRandom(FLOW_WELCOME_BACK_LINES);
         showToast(`Welcome Owner!`);
         const ownerUser = {
           name: 'Owner',
@@ -532,6 +577,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         onStoreLoaded(loadedStore);
       } else {
         setAccessMood('angry');
+        sayRandom(FLOW_WRONG_LINES);
         setIsPasswordWrong(true);
         if (navigator.vibrate) {
           navigator.vibrate([100, 50, 100]);
@@ -543,6 +589,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       const staff = (loadedStore.staffMembers || []).find(s => s.id === selectedUser.id);
       if (staff && inputPassword === staff.pin) { // Admin and manager use staff.pin as password
         setAccessMood('happy');
+        sayRandom(FLOW_WELCOME_BACK_LINES);
         showToast(`Welcome ${staff.name}!`);
         const sessionUser = {
           id: staff.id,
@@ -554,6 +601,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         onStoreLoaded(loadedStore);
       } else {
         setAccessMood('angry');
+        sayRandom(FLOW_WRONG_LINES);
         setIsPasswordWrong(true);
         if (navigator.vibrate) {
           navigator.vibrate([100, 50, 100]);
@@ -934,7 +982,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="flex flex-col items-center text-center mb-6">
-          <Mascot size={80} mood={accessMood} className="mb-3" />
+          <Mascot
+            size={mode === 'choose' ? 96 : (mode === 'setup-security' || mode === 'create' && !!newCode) && accessMood === 'celebrating' ? 100 : 76}
+            mood={accessMood}
+            className="mb-3"
+            externalMessage={flowMessage}
+            externalMessageKey={flowMsgKey}
+          />
           <h1 className="wordmark text-4xl font-bold mb-2 select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
           <p className="text-muted-foreground text-sm">Offline-first store management</p>
         </div>
@@ -943,14 +997,16 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           <div className="space-y-3">
             <button
               onClick={() => setMode('create-choice')}
-              className="w-full p-4 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-lg hover:opacity-90 transition-opacity cursor-pointer active:scale-95 transition-all shadow-md"
+              style={{ animationDelay: '80ms' }}
+              className="w-full p-4 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-lg hover:opacity-90 hover:-translate-y-0.5 hover:shadow-lg transition-all cursor-pointer active:scale-95 shadow-md animate-fade-in"
             >
               Create New Store
             </button>
 
             <button
               onClick={() => setMode('access-choice')}
-              className="w-full p-4 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-lg hover:bg-surface-3 transition-colors border border-border cursor-pointer active:scale-95 transition-all"
+              style={{ animationDelay: '160ms' }}
+              className="w-full p-4 rounded-lg bg-secondary text-secondary-foreground font-display font-semibold text-lg hover:bg-surface-3 hover:-translate-y-0.5 hover:shadow-md transition-all border border-border cursor-pointer active:scale-95 animate-fade-in"
             >
               Access Existing Store
             </button>
@@ -1707,9 +1763,11 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                       }
 
                       setAccessMood('angry');
+                      sayRandom(FLOW_WRONG_LINES);
                       showToast('Store not found. Try entering the access code manually.', 'error');
                     } catch {
                       setAccessMood('angry');
+                      sayRandom(FLOW_WRONG_LINES);
                       showToast('Failed to look up store. Check your connection.', 'error');
                     }
                   })();
