@@ -927,8 +927,10 @@ export function recordSale(
     qtyDeduction = quantity / singles;
   }
 
-  if (product.quantity < qtyDeduction) return store;
-  
+  const backorderEnabled = !!store.managerSettings?.backorderSellingEnabled;
+  const shortfall = Math.round(Math.max(0, qtyDeduction - product.quantity) * 100) / 100;
+  if (shortfall > 0 && !backorderEnabled) return store;
+
   const sale: Sale = {
     id: generateId(),
     productId,
@@ -942,7 +944,8 @@ export function recordSale(
     channel: 'in_store',
   };
 
-  const newQty = Math.round((product.quantity - qtyDeduction) * 100) / 100;
+  const newQty = Math.max(0, Math.round((product.quantity - qtyDeduction) * 100) / 100);
+  const newBackorderedQty = Math.round((((product.backorderedQty || 0) + shortfall)) * 100) / 100;
   const newUnitsSold = Math.round(((product.units_sold || 0) + sale.quantity) * 100) / 100;
   const newTotalRevenue = Math.round(((product.total_revenue || 0) + sale.total) * 100) / 100;
   const newTotalProfit = Math.round(((product.total_profit || 0) + sale.profit) * 100) / 100;
@@ -952,6 +955,7 @@ export function recordSale(
     products: store.products.map(p => p.id === productId ? { 
       ...p, 
       quantity: newQty,
+      backorderedQty: newBackorderedQty,
       units_sold: newUnitsSold,
       total_revenue: newTotalRevenue,
       total_profit: newTotalProfit,
@@ -972,8 +976,42 @@ export function recordSale(
 
   if (actorName) {
     const displayQty = isSingle ? `${quantity} pcs` : `${quantity} ctn`;
-    updated = recordActivityLog(updated, actorName, actorRole, `Completed sale: ${product.name} × ${displayQty} (Total: ₦${sale.total.toLocaleString()})`);
+    const backorderNote = shortfall > 0 ? ' [backorder]' : '';
+    updated = recordActivityLog(updated, actorName, actorRole, `Completed sale: ${product.name} × ${displayQty} (Total: ₦${sale.total.toLocaleString()})${backorderNote}`);
   }
+  saveStore(updated);
+  return updated;
+}
+
+// Settle a product's backorder against its current stock (call after restocking).
+// Subtracts the owed quantity from stock and clears the backorder counter.
+export function syncBackorder(store: StoreData, productId: string): StoreData {
+  const product = store.products.find(p => p.id === productId);
+  if (!product || !product.backorderedQty) return store;
+
+  const newQty = Math.max(0, Math.round((product.quantity - product.backorderedQty) * 100) / 100);
+
+  const updated = {
+    ...store,
+    products: store.products.map(p => p.id === productId ? {
+      ...p,
+      quantity: newQty,
+      backorderedQty: 0,
+    } : p),
+  };
+  saveStore(updated);
+  return updated;
+}
+
+// Clear a product's backorder counter without touching stock (owner chose to write it off).
+export function clearBackorder(store: StoreData, productId: string): StoreData {
+  const updated = {
+    ...store,
+    products: store.products.map(p => p.id === productId ? {
+      ...p,
+      backorderedQty: 0,
+    } : p),
+  };
   saveStore(updated);
   return updated;
 }

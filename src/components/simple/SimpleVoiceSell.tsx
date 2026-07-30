@@ -52,14 +52,94 @@ const WORD_NUMS: Record<string, number> = {
   eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20,
 };
 
-function leadingQuantity(tokens: string[]): { qty: number; rest: string[] } {
-  if (tokens.length === 0) return { qty: 1, rest: tokens };
-  const first = tokens[0];
-  const asDigit = Number(first);
-  if (!isNaN(asDigit) && asDigit > 0) return { qty: asDigit, rest: tokens.slice(1) };
-  const asWord = WORD_NUMS[first];
-  if (asWord) return { qty: asWord, rest: tokens.slice(1) };
-  return { qty: 1, rest: tokens };
+const MULTIPLIER_WORDS: Record<string, number> = { hundred: 100, thousand: 1000 };
+
+// Reads a spoken amount off the END of a token list — "five hundred", "1 thousand",
+// plain "500" — so "sold indomie five hundred" resolves the trailing price correctly
+// instead of it being swallowed into the product name search.
+function parseTrailingAmount(tokens: string[]): { value: number; rest: string[] } | null {
+  let i = tokens.length;
+  let total = 0;
+  let matchedAny = false;
+
+  while (i > 0) {
+    const word = tokens[i - 1];
+    const mult = MULTIPLIER_WORDS[word];
+
+    if (mult !== undefined) {
+      const prevWord = i > 1 ? tokens[i - 2] : undefined;
+      const prevNum = prevWord !== undefined
+        ? (/^\d+$/.test(prevWord) ? Number(prevWord) : WORD_NUMS[prevWord])
+        : undefined;
+      if (prevNum !== undefined) {
+        total += prevNum * mult;
+        i -= 2;
+      } else {
+        total += mult;
+        i -= 1;
+      }
+      matchedAny = true;
+      continue;
+    }
+
+    if (/^\d+$/.test(word)) {
+      total += Number(word);
+      i -= 1;
+      matchedAny = true;
+      continue;
+    }
+
+    if (WORD_NUMS[word] !== undefined) {
+      total += WORD_NUMS[word];
+      i -= 1;
+      matchedAny = true;
+      continue;
+    }
+
+    break;
+  }
+
+  if (!matchedAny || total <= 0) return null;
+  return { value: total, rest: tokens.slice(0, i) };
+}
+
+// Splits a spoken sale into quantity, price guess, and the leftover name tokens.
+// "two Indomie five hundred"       -> qty 2, price 500, name "Indomie"
+// "Indomie five hundred"           -> qty 1, price 500, name "Indomie"
+// "five hundred Indomie for five hundred" -> same number as both a leading
+//   amount-phrase and a trailing one -> genuinely ambiguous, don't guess.
+function parseQtyAndPrice(tokens: string[]): {
+  qty: number;
+  priceGuess: number | null;
+  nameTokens: string[];
+  ambiguous: boolean;
+} {
+  let qty = 1;
+  let rest = tokens;
+  let leadingAmount: number | null = null;
+
+  if (tokens.length > 0) {
+    const first = tokens[0];
+    const firstNum = /^\d+$/.test(first) ? Number(first) : WORD_NUMS[first];
+    const second = tokens[1];
+    const isLeadingAmountPhrase = firstNum !== undefined && second !== undefined && MULTIPLIER_WORDS[second] !== undefined;
+
+    if (isLeadingAmountPhrase) {
+      // "five hundred Indomie..." reads as a price mentioned up front, not a quantity.
+      leadingAmount = firstNum * MULTIPLIER_WORDS[second];
+      rest = tokens.slice(2);
+    } else if (firstNum !== undefined) {
+      qty = firstNum;
+      rest = tokens.slice(1);
+    }
+  }
+
+  const trailing = parseTrailingAmount(rest);
+  const priceGuess = trailing ? trailing.value : leadingAmount;
+  const nameTokens = trailing ? trailing.rest : rest;
+  const ambiguous = leadingAmount !== null && trailing !== null && leadingAmount === trailing.value;
+
+  return { qty: ambiguous ? 1 : qty, priceGuess, nameTokens, ambiguous };
 }
 
 function norm(s: string) {
@@ -92,6 +172,17 @@ function lev(a: string, b: string): number {
   return dp[a.length][b.length];
 }
 
+// A short spoken word being a prefix of a much longer product name isn't a real
+// match — "indomi" is a prefix of "indomitabl" but they're different products.
+// Only count a containment match when the two strings are reasonably close in
+// length (the shorter is at least 65% of the longer).
+function lengthRatioOk(a: string, b: string): boolean {
+  const shorter = Math.min(a.length, b.length);
+  const longer = Math.max(a.length, b.length);
+  if (longer === 0) return false;
+  return shorter / longer >= 0.65;
+}
+
 // Finds the best-matching product for whatever's left of the transcript after quantity is stripped.
 // Returns the top match plus up to 2 runner-ups, so the UI can offer alternatives on low confidence.
 // Checks, in priority order: learned voice aliases -> exact name -> phonetic-exact ->
@@ -112,10 +203,10 @@ function findBestMatches(nameTokens: string[], products: Product[]): { product: 
 
     if (pn === spanN) return { product: p, score: 0 };
     if (pp === spanP) return { product: p, score: 0.3 };
-    if (pn.includes(spanN) && spanN.length >= 3) return { product: p, score: 1 };
-    if (spanN.includes(pn) && pn.length >= 3) return { product: p, score: 1.1 };
-    if (pp.includes(spanP) && spanP.length >= 3) return { product: p, score: 1.3 };
-    if (spanP.includes(pp) && pp.length >= 3) return { product: p, score: 1.4 };
+    if (pn.includes(spanN) && spanN.length >= 3 && lengthRatioOk(pn, spanN)) return { product: p, score: 1 };
+    if (spanN.includes(pn) && pn.length >= 3 && lengthRatioOk(spanN, pn)) return { product: p, score: 1.1 };
+    if (pp.includes(spanP) && spanP.length >= 3 && lengthRatioOk(pp, spanP)) return { product: p, score: 1.3 };
+    if (spanP.includes(pp) && pp.length >= 3 && lengthRatioOk(spanP, pp)) return { product: p, score: 1.4 };
 
     // Fuzzy fallback — tolerance scales a bit more generously with word length
     // than a strict 1/3 ratio, since short local product names (garri, indomie,
@@ -143,6 +234,7 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
   const [processingStep, setProcessingStep] = useState(0);
   const [spokenQuery, setSpokenQuery] = useState(''); // the product-name portion of what was heard, minus quantity
   const [spokenQty, setSpokenQty] = useState(1);
+  const [ambiguousAmount, setAmbiguousAmount] = useState<number | null>(null); // set when the same number could be qty or price — lets the add-product screen offer a one-tap swap
   const [newName, setNewName] = useState('');
   const [newSellingPrice, setNewSellingPrice] = useState('');
   const [newCostPrice, setNewCostPrice] = useState('');
@@ -157,9 +249,9 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     const tokens = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
     // Drop common filler words that don't carry product/quantity meaning
     const filtered = tokens.filter(t => !['sold', 'for', 'naira', 'just', 'i', 'a', 'an', 'the', 'of'].includes(t));
-    const { qty, rest } = leadingQuantity(filtered);
-    const matches = findBestMatches(rest, products);
-    const spokenSpan = rest.join(' ');
+    const { qty, priceGuess, nameTokens, ambiguous } = parseQtyAndPrice(filtered);
+    const matches = findBestMatches(nameTokens, products);
+    const spokenSpan = nameTokens.join(' ');
 
     // Step through recognizing -> finding -> extracting -> almost done (spec screen 6),
     // then land on the result. Total pacing kept short so it never feels sluggish.
@@ -172,9 +264,12 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
       clearInterval(stepTimerRef.current);
       setSpokenQuery(spokenSpan);
       setSpokenQty(qty);
+      setAmbiguousAmount(ambiguous ? priceGuess : null);
       if (matches.length === 0) {
+        // New product — sits alongside the existing add-product form, just
+        // pre-filled from what was already said so it's a one-tap save.
         setNewName(titleCase(spokenSpan));
-        setNewSellingPrice('');
+        setNewSellingPrice(priceGuess ? String(priceGuess) : '');
         setNewCostPrice('');
         setNewQty(String(qty));
         setStage('add-product');
@@ -361,7 +456,14 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
           {candidates.map((c, idx) => (
             <button
               key={c.product.id}
-              onClick={() => setSelected(c)}
+              onClick={() => {
+                setSelected(c);
+                // Owner picked something other than our top guess for this word —
+                // learn it, so next time this word jumps straight to the top.
+                if (spokenQuery && candidates[0]?.product.id !== c.product.id) {
+                  onSaveAlias(c.product.id, spokenQuery);
+                }
+              }}
               className={`w-full flex items-center justify-between p-3.5 rounded-xl border text-left transition-colors ${
                 selected.product.id === c.product.id
                   ? 'border-primary bg-primary/10'
@@ -448,6 +550,21 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
               </button>
             ))}
           </div>
+        )}
+
+        {ambiguousAmount !== null && (
+          <button
+            type="button"
+            onClick={() => {
+              // Swap: what we guessed as price becomes the quantity, and vice versa.
+              setNewQty(newSellingPrice);
+              setNewSellingPrice(newQty);
+              setAmbiguousAmount(null);
+            }}
+            className="w-full text-left px-3 py-2 rounded-xl border border-primary/40 bg-primary/5 text-[11px] text-muted-foreground"
+          >
+            Heard "{ambiguousAmount}" twice — not sure if that's the quantity or the price. Filled in as price below — <span className="text-primary font-bold">tap here to swap</span> if it's actually the quantity.
+          </button>
         )}
 
         <div className="grid grid-cols-2 gap-2">

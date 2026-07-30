@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product, SimilarProductReview } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore, saveStore } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore, saveStore, syncBackorder, clearBackorder } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
 import { interpretProductName } from '@/lib/import-intel';
@@ -1762,10 +1762,40 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   {p.addedAt && !p.discontinued && (Date.now() - new Date(p.addedAt).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
                     <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-bold">New</span>
                   )}
+                  {p.needsStockSetup && (
+                    <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 border border-yellow-500/30 font-bold">🟡 Pending Inventory</span>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground truncate font-medium mt-0.5">{p.category}</p>
                 <p className="text-yellow-500 font-display font-bold text-sm mt-1">₦{p.sellingPrice.toLocaleString()}</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">Cost: ₦{p.costPrice.toLocaleString()}</p>
+
+                {!!p.backorderedQty && (
+                  <div
+                    className="flex items-center gap-1.5 mt-1.5 flex-wrap"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 border border-orange-500/30 font-bold">
+                      {p.backorderedQty} owed (sold before restock)
+                    </span>
+                    <button
+                      onClick={() => onUpdate(syncBackorder(store, p.id))}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30 font-bold"
+                    >
+                      Sync
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Clear the ${p.backorderedQty} owed units for ${p.name}? This won't change stock, it just writes off the debt.`)) {
+                          onUpdate(clearBackorder(store, p.id));
+                        }
+                      }}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/30 font-bold"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
 
                 {!countMode && (
                   <button

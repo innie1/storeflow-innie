@@ -52,6 +52,11 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       quantity: Math.max(0, quantity || 0),
       category: store.storeType || 'others',
       addedAt: new Date().toISOString(),
+      source: 'voice_sale',
+      // No cost price yet means the owner just called out a sale, not a full
+      // product setup — flag it so it shows a Pending Inventory badge until
+      // they come back and fill in cost price / supplier / etc.
+      needsStockSetup: !costPrice,
     };
     const updated: StoreData = { ...store, products: [...store.products, newProduct] };
     saveStore(updated);

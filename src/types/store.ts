@@ -30,6 +30,9 @@ export interface Product {
   unit?: 'pcs' | 'kg' | 'liter' | 'load'; // how this item is sold — pcs (default) or by weight/volume/load for service-type stores
   isService?: boolean; // true for laundry-style named services (Wash & Iron, Express Service) — no stock tracking, has a turnaround time instead
   turnaround?: string; // e.g. "Same day", "24 hours", "48 hours", "3 days", "1 week" — only meaningful when isService is true
+  needsStockSetup?: boolean; // true when product was auto-created from a sale and hasn't had cost price / stock confirmed by the owner yet
+  source?: 'voice_sale' | 'manual' | 'scan'; // how this product was first created
+  backorderedQty?: number; // units sold while stock was at 0 (only when backorderSellingEnabled is on) — owed stock, settled via sync or cleared via delete
 }
 
 export interface InventoryMovement {
@@ -425,6 +428,7 @@ export interface BusinessChallenge {
 export interface ManagerSettings {
   enabled: boolean;
   ownerPassword?: string;          // Owner login password, checked on role switch and backup export
+  backorderSellingEnabled?: boolean; // when on, sales can go through even at 0 stock; the shortfall is tracked as backorderedQty on the product. Toggling this requires ownerPassword.
   emergencyRecoveryKey?: string;   // Used to encrypt/decrypt offline backup exports
   lastAutoRestockDraftDate?: string; // Last time the weekly auto restock draft notification was generated
   revenueForecasts: boolean;
@@ -508,6 +512,7 @@ export interface ManagerSettings {
 export const DEFAULT_MANAGER_SETTINGS: ManagerSettings = {
   enabled: true,
   voiceGender: 'young-male',
+  backorderSellingEnabled: false,
   revenueForecasts: true,
   profitForecasts: true,
   inventoryForecasts: true,

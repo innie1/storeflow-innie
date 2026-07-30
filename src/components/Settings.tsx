@@ -607,6 +607,29 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // Backorder-selling toggle — requires owner password to flip either way
+  const [backorderPwOpen, setBackorderPwOpen] = useState(false);
+  const [backorderPwInput, setBackorderPwInput] = useState('');
+  const [backorderPwPendingValue, setBackorderPwPendingValue] = useState(false);
+
+  const requestBackorderToggle = (nextValue: boolean) => {
+    setBackorderPwPendingValue(nextValue);
+    setBackorderPwInput('');
+    setBackorderPwOpen(true);
+  };
+
+  const confirmBackorderToggle = () => {
+    const ownerPw = store.managerSettings?.ownerPassword || 'owner';
+    if (backorderPwInput !== ownerPw) {
+      showToast('Incorrect password', 'error');
+      return;
+    }
+    updateMgr({ backorderSellingEnabled: backorderPwPendingValue });
+    setBackorderPwOpen(false);
+    setBackorderPwInput('');
+    showToast(backorderPwPendingValue ? 'Backorder selling turned on' : 'Backorder selling turned off');
+  };
+
   // Cloud Sync Auth Modal State
   const [showCloudAuthModal, setShowCloudAuthModal] = useState(false);
 
@@ -2739,6 +2762,47 @@ export default function Settings({ store, onUpdate, onLock, currentUser }: Setti
         <ToggleRow label="Inventory Alerts" checked={mgr.inventoryAlerts} onChange={v => updateMgr({ inventoryAlerts: v })} />
         <ToggleRow label="Low Stock Notifications" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />
       </div>
+
+      <div className="px-1 mt-4">
+        <SectionLabel>Selling Out-Of-Stock Items</SectionLabel>
+      </div>
+      <div className={`${card} px-4 divide-y divide-border`}>
+        <ToggleRow
+          label="Allow Backorder Selling"
+          description="Lets staff sell items even at 0 stock. The shortfall is tracked separately, never as negative stock. Password required to change this."
+          checked={!!mgr.backorderSellingEnabled}
+          onChange={v => requestBackorderToggle(v)}
+        />
+      </div>
+      {backorderPwOpen && (
+        <div className={`${card} p-4 space-y-3`}>
+          <p className="text-sm font-display font-semibold">
+            Enter owner password to {backorderPwPendingValue ? 'turn on' : 'turn off'} Backorder Selling
+          </p>
+          <input
+            type="password"
+            value={backorderPwInput}
+            onChange={e => setBackorderPwInput(e.target.value)}
+            placeholder="Owner password"
+            className="w-full p-3 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none focus:border-primary"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setBackorderPwOpen(false); setBackorderPwInput(''); }}
+              className="flex-1 py-2 rounded-lg text-xs font-display font-bold border border-border text-muted-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmBackorderToggle}
+              className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-primary text-primary-foreground"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="px-1 mt-4">
         <SectionLabel>Default Restock Settings</SectionLabel>
