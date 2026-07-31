@@ -35,6 +35,16 @@
 [2026-07-30] v1.8.0 — Fixed Settings back-navigation bug (jumped to Dashboard instead of Settings menu) and sticky sub-page state on tab re-entry; added Dark/Light/System toggle, Savings Active badge, and a store-code confirmation gate on Store Type changes — severity: High (navigation) / Low (rest)
 [2026-07-30] v1.9.0 — Multiple concurrent savings plans (was limited to one); Wholesale/Retail mode switch now requires store-code confirmation. Note: auto-save deduction formula changed for multi-goal support — affects future deduction amounts on stores with an active percentage-based goal — severity: Medium
 [2026-07-30] v1.10.0 — True light mode: every accent theme (Graphite/Blue Sky/Green Forest) now has a real light AND dark variant, independently toggleable. Previously Dark/Light just swapped between two different dark-ish accents — severity: Medium
+[2026-07-30] v1.11.0 — Fixed Flow's speech bubble overlapping the wordmark/tagline text, added 5 rotating taglines on Create/Access Store screen, fixed sleeping mascot's tap message to distinguish closed-hours rest from Flow being disabled — severity: Low
+[2026-07-31] v1.12.0 — Pulled mascot back closer to wordmark (previous fix over-reserved space), polished the product-match suggestions into a labeled "Similar Products" section with match-quality badges and Sell button — severity: Low
+[2026-07-31] v1.10.1 — Fixed orders/order_items RLS publicly exposing every store's customer data (name, phone, order contents) to anyone with the anon key; restored store-scoped SELECT, added get_order_by_number/get_customer_orders RPCs for customer tracking — 🔴 Critical fixed
+[2026-07-31] v1.10.2 — Fixed Flow mascot losing his angry expression on wrong password/store code since v1.7.0 — the "isTalking"/"isMouthTalking" generic speaking face was overriding the angry eyes and mouth whenever he had a line to say — 🟢 Low fixed
+[2026-07-31] v1.10.3 — Fixed Flow's speech bubble overlapping page headings (vertical placement now checks real space above/below and the next element on the page, instead of a blind "close to top of screen" flip) — 🟢 Low fixed
+[2026-07-31] v1.10.4 — Fixed walking-off animation using a fixed 200px distance (stranded him mid-screen on some layouts); now viewport-relative and rendered behind page content instead of on top while walking — 🟢 Low fixed
+[2026-07-31] v1.10.5 — Added a 4th-wrong-password reaction: Flow now calls you out ("who ARE you??") instead of repeating the usual wrong-password line — feature
+
+
+
 
 
 

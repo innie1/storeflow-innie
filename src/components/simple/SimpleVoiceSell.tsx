@@ -538,17 +538,30 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
 
         {nameSuggestions.length > 0 && (
           <div className="space-y-2">
-            <p className="text-[11px] text-muted-foreground">Did you mean one of these instead?</p>
-            {nameSuggestions.map(m => (
-              <button
-                key={m.product.id}
-                onClick={() => useSuggestion(m.product)}
-                className="w-full flex items-center justify-between p-3 rounded-xl border border-border bg-surface-2/40 text-left"
-              >
-                <p className="font-display font-semibold text-sm text-foreground">{m.product.name}</p>
-                <p className="text-xs text-muted-foreground">₦{m.product.sellingPrice.toLocaleString()} each</p>
-              </button>
-            ))}
+            <p className="text-[11px] text-muted-foreground uppercase font-bold tracking-wide">Similar Products</p>
+            {nameSuggestions.map(m => {
+              const isCloseMatch = m.score <= 1.1;
+              return (
+                <button
+                  key={m.product.id}
+                  onClick={() => useSuggestion(m.product)}
+                  className="w-full flex items-center justify-between gap-2 p-3 rounded-xl border border-border bg-surface-2/40 text-left active:scale-[0.98] transition-transform"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display font-semibold text-sm text-foreground truncate">{m.product.name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <p className="text-xs text-muted-foreground">₦{m.product.sellingPrice.toLocaleString()} each</p>
+                      <span className={`text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full ${isCloseMatch ? 'bg-primary/10 text-primary' : 'bg-surface-3 text-muted-foreground'}`}>
+                        {isCloseMatch ? 'Close match' : 'Different spelling'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-display font-bold border border-primary/40 text-primary">
+                    Sell
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 

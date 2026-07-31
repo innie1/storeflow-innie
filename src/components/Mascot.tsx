@@ -338,13 +338,26 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
         }
         setBubbleShiftX(shiftX);
 
-        // 2. Vertical position (above vs below)
-        // If the Mascot's top edge is less than 130px from the viewport top,
-        // flip the bubble to render below him.
-        if (rect.top < 130) {
+        // 2. Vertical position (above vs below) — pick whichever side
+        // actually has room, instead of just checking "close to top of
+        // viewport" and blindly flipping below (which used to land the
+        // bubble on top of a heading/label sitting right underneath).
+        const bubbleHeightEstimate = 76; // bubble + connector + margin
+        const spaceAbove = rect.top;
+
+        let spaceBelow = window.innerHeight - rect.bottom;
+        const nextEl = containerRef.current.nextElementSibling;
+        if (nextEl) {
+          const nextTop = nextEl.getBoundingClientRect().top;
+          spaceBelow = Math.min(spaceBelow, nextTop - rect.bottom);
+        }
+
+        if (spaceAbove >= bubbleHeightEstimate) {
+          setBubblePosition('above');
+        } else if (spaceBelow >= bubbleHeightEstimate) {
           setBubblePosition('below');
         } else {
-          setBubblePosition('above');
+          setBubblePosition(spaceAbove >= spaceBelow ? 'above' : 'below');
         }
       } else {
         setBubbleShiftX(0);
@@ -574,13 +587,35 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     setTimeout(() => setConfetti([]), 1500);
   };
 
+  const sayRandomSleepLine = () => {
+    const lines = isClosingTime
+      ? [
+          "Shh, the store's closed right now. I'm resting too. 😴",
+          "It's outside opening hours — catching some sleep. See you when we're open!",
+          "Store's closed, so I'm off the clock too. 💤",
+        ]
+      : [
+          "Just resting for now — I'll be back shortly. 😴",
+          "Taking a quick nap. Nudge me again in a bit!",
+        ];
+    triggerSpeech(lines[Math.floor(Math.random() * lines.length)], 'sleeping', 4000);
+  };
+
   // Normal tap action
   const handleTap = () => {
     resetInactivity();
 
-    // If disabled or sleeping, just tell them to wake us up so we can work
-    if (!isManagerEnabled || currentMood === 'sleeping') {
+    // Disabled in Settings — "wake me up" makes sense here, since the owner
+    // can genuinely turn Flow back on.
+    if (!isManagerEnabled) {
       triggerSpeech("Please wake me up so we can work together! 🥺", 'sleeping', 4000);
+      return;
+    }
+    // Actually asleep because the store is closed (or it's late) — a
+    // different situation, so it gets a different line. Tapping harder
+    // doesn't open the shop.
+    if (currentMood === 'sleeping') {
+      sayRandomSleepLine();
       return;
     }
 
@@ -817,7 +852,14 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     posture === 'look-right' ? 'translate-x-[1.5px]' : '';
 
   // SVG components based on mood
-  const eyeShape = isTalking ? (
+  const eyeShape = currentMood === 'angry' ? (
+    <g className={eyeOffsetClass} style={{ transformOrigin: 'center 33px' }}>
+      <line x1="16" y1="27" x2="25" y2="31" stroke="#0b0b12" strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="48" y1="27" x2="39" y2="31" stroke="#0b0b12" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="23" cy="33" r="3.2" fill="#0b0b12" />
+      <circle cx="41" cy="33" r="3.2" fill="#0b0b12" />
+    </g>
+  ) : isTalking ? (
     <g className={eyeOffsetClass} style={{ transformOrigin: 'center 33px' }}>
       <circle cx="23" cy="33" r="3.5" fill="#0b0b12" />
       <circle cx="41" cy="33" r="3.5" fill="#0b0b12" />
@@ -846,13 +888,6 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       <circle cx="41" cy="33" r="3.5" fill="#0b0b12" />
       <circle cx="21.5" cy="31.5" r="1" fill="#ffffff" />
       <circle cx="39.5" cy="31.5" r="1" fill="#ffffff" />
-    </g>
-  ) : currentMood === 'angry' ? (
-    <g className={eyeOffsetClass} style={{ transformOrigin: 'center 33px' }}>
-      <line x1="16" y1="27" x2="25" y2="31" stroke="#0b0b12" strokeWidth="2.2" strokeLinecap="round" />
-      <line x1="48" y1="27" x2="39" y2="31" stroke="#0b0b12" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="23" cy="33" r="3.2" fill="#0b0b12" />
-      <circle cx="41" cy="33" r="3.2" fill="#0b0b12" />
     </g>
   ) : currentMood === 'panic' ? (
     <g style={{ transformOrigin: 'center 33px' }}>
@@ -894,7 +929,9 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     </g>
   );
 
-  const mouth = isMouthTalking ? (
+  const mouth = currentMood === 'angry' ? (
+    <path d="M24 44 q8 -4 16 0" stroke="#0b0b12" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+  ) : isMouthTalking ? (
     <path 
       d="M22 41 q10 8 20 0" 
       stroke="#0b0b12" 
@@ -908,8 +945,6 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     <path d="M26 43 q6 -3 12 0" stroke="#0b0b12" strokeWidth="2.2" fill="none" strokeLinecap="round" />
   ) : currentMood === 'sleeping' ? (
     <path d="M28 43 h8" stroke="#0b0b12" strokeWidth="2.2" strokeLinecap="round" />
-  ) : currentMood === 'angry' ? (
-    <path d="M24 44 q8 -4 16 0" stroke="#0b0b12" strokeWidth="2.5" fill="none" strokeLinecap="round" />
   ) : currentMood === 'panic' ? (
     <ellipse cx="32" cy="43" rx="4" ry="5" fill="#0b0b12" />
   ) : currentMood === 'bathing' ? (
@@ -1080,6 +1115,9 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     ? { transform: 'scale(1.5)', zIndex: 100, transition: 'transform 1.5s ease-out' } 
     : { transition: 'transform 2.5s ease-in-out' };
 
+  const isWalkingOff = activity === 'walking-off-left' || activity === 'walking-off-right';
+  const walkZIndexStyle = isWalkingOff ? { zIndex: 0 } : {};
+
   return (
     <div 
       ref={containerRef}
@@ -1088,7 +1126,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       onMouseUp={handlePressEnd}
       onTouchStart={handlePressStart}
       onTouchEnd={handlePressEnd}
-      style={{ width: size, height: size, ...swellStyle }}
+      style={{ width: size, height: size, position: 'relative', ...swellStyle, ...walkZIndexStyle }}
     >
       <style>{`
         @keyframes mascot-float {
@@ -1189,16 +1227,16 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
         }
         @keyframes walk-off-left {
           0% { transform: translateX(0) scaleX(1); }
-          20% { transform: translateX(-200px) scaleX(1); }
-          21% { transform: translateX(-200px) scaleX(-1); }
-          80% { transform: translateX(-200px) scaleX(-1); }
+          20% { transform: translateX(-70vw) scaleX(1); }
+          21% { transform: translateX(-70vw) scaleX(-1); }
+          80% { transform: translateX(-70vw) scaleX(-1); }
           100% { transform: translateX(0) scaleX(-1); }
         }
         @keyframes walk-off-right {
           0% { transform: translateX(0) scaleX(-1); }
-          20% { transform: translateX(200px) scaleX(-1); }
-          21% { transform: translateX(200px) scaleX(1); }
-          80% { transform: translateX(200px) scaleX(1); }
+          20% { transform: translateX(70vw) scaleX(-1); }
+          21% { transform: translateX(70vw) scaleX(1); }
+          80% { transform: translateX(70vw) scaleX(1); }
           100% { transform: translateX(0) scaleX(1); }
         }
         @keyframes soccer-ball-timeline {

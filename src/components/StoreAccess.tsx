@@ -51,14 +51,14 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const say = (text: string) => { setFlowMessage(text); setFlowMsgKey(k => k + 1); };
   const sayRandom = (lines: string[]) => say(lines[Math.floor(Math.random() * lines.length)]);
   const FLOW_WRONG_LINES = [
-    "Nope, that's not it. Try again!",
+    "Nope, that's not it. Try again! 🙅",
     "Hmm, that's not matching up. One more try?",
     "Not quite — double-check and go again.",
-    "That's wrong. I know, I know — just try again.",
+    "That's wrong. I know, I know — just try again. 😅",
   ];
   const FLOW_WELCOME_BACK_LINES = [
-    "Welcome back! Let's get to work.",
-    "That's it — you're in!",
+    "Welcome back! Let's get to work. 👋",
+    "That's it — you're in! 🎉",
     "Perfect. Good to see you again!",
   ];
 
@@ -97,6 +97,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [inputPassword, setInputPassword] = useState('');
   const [pinBuffer, setPinBuffer] = useState('');
   const [isPasswordWrong, setIsPasswordWrong] = useState(false);
+  const [wrongPasswordCount, setWrongPasswordCount] = useState(0);
 
   // Recovery states
   const [recoveryMode, setRecoveryMode] = useState<'options' | 'question' | 'key' | 'code' | 'reset-pass'>('options');
@@ -550,6 +551,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const handleSelectLoginProfile = (user: { id: string; name: string; role: string; isOwner: boolean }) => {
     setSelectedUser(user);
     setIsPasswordWrong(false);
+    setWrongPasswordCount(0);
     if (user.isOwner) {
       setInputPassword('');
       setMode('login-password');
@@ -567,6 +569,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       if (inputPassword === loadedStore.managerSettings?.ownerPassword) {
         setAccessMood('happy');
         sayRandom(FLOW_WELCOME_BACK_LINES);
+        setWrongPasswordCount(0);
         showToast(`Welcome Owner!`);
         const ownerUser = {
           name: 'Owner',
@@ -577,7 +580,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         onStoreLoaded(loadedStore);
       } else {
         setAccessMood('angry');
-        sayRandom(FLOW_WRONG_LINES);
+        const nextCount = wrongPasswordCount + 1;
+        setWrongPasswordCount(nextCount);
+        if (nextCount >= 4) {
+          say("Okay wait... who ARE you?? 🤨");
+        } else {
+          sayRandom(FLOW_WRONG_LINES);
+        }
         setIsPasswordWrong(true);
         if (navigator.vibrate) {
           navigator.vibrate([100, 50, 100]);
@@ -590,6 +599,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       if (staff && inputPassword === staff.pin) { // Admin and manager use staff.pin as password
         setAccessMood('happy');
         sayRandom(FLOW_WELCOME_BACK_LINES);
+        setWrongPasswordCount(0);
         showToast(`Welcome ${staff.name}!`);
         const sessionUser = {
           id: staff.id,
@@ -601,7 +611,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         onStoreLoaded(loadedStore);
       } else {
         setAccessMood('angry');
-        sayRandom(FLOW_WRONG_LINES);
+        const nextCount = wrongPasswordCount + 1;
+        setWrongPasswordCount(nextCount);
+        if (nextCount >= 4) {
+          say("Okay wait... who ARE you?? 🤨");
+        } else {
+          sayRandom(FLOW_WRONG_LINES);
+        }
         setIsPasswordWrong(true);
         if (navigator.vibrate) {
           navigator.vibrate([100, 50, 100]);
