@@ -33,5 +33,9 @@
 [2026-07-30] v1.6.0 — Auto-Applied Prices now logged and reversible: Undo button, before/after profit comparison, Auto-Priced badge on affected products — severity: Low
 [2026-07-30] v1.7.0 — Flow now speaks contextually through Create/Access Store flow (welcome, guidance, wrong-password reactions, celebration), subtle button entrance/hover polish, mascot size varies slightly by step — severity: Low (UX polish)
 [2026-07-30] v1.8.0 — Fixed Settings back-navigation bug (jumped to Dashboard instead of Settings menu) and sticky sub-page state on tab re-entry; added Dark/Light/System toggle, Savings Active badge, and a store-code confirmation gate on Store Type changes — severity: High (navigation) / Low (rest)
+[2026-07-30] v1.9.0 — Multiple concurrent savings plans (was limited to one); Wholesale/Retail mode switch now requires store-code confirmation. Note: auto-save deduction formula changed for multi-goal support — affects future deduction amounts on stores with an active percentage-based goal — severity: Medium
+[2026-07-30] v1.10.0 — True light mode: every accent theme (Graphite/Blue Sky/Green Forest) now has a real light AND dark variant, independently toggleable. Previously Dark/Light just swapped between two different dark-ish accents — severity: Medium
+
+
 
 

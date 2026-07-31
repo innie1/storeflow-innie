@@ -288,6 +288,7 @@ export interface AutoPriceEvent {
 }
 
 export interface SavingsGoal {
+  id?: string; // present on every goal once multi-goal support is in use; legacy single-goal data may not have one until first touched
   amount: number;
   label?: string;
   source: 'revenue' | 'profit';
@@ -679,7 +680,8 @@ export interface StoreData {
   games?: GameService[];
   gameSessions?: GameSession[];
   customerRequests?: CustomerRequest[];
-  savingsGoal?: SavingsGoal;
+  savingsGoal?: SavingsGoal; // kept in sync as savingsGoals[0] for older code that still reads a single goal — see getSavingsGoals() in store-data.ts
+  savingsGoals?: SavingsGoal[]; // the real source of truth once multi-goal support is in use
   salesTarget?: SalesTarget;
   milestonesReached?: string[]; // ids from SALES_MILESTONES already celebrated, so the popup never repeats
   autoPriceLog?: AutoPriceEvent[]; // history of Auto-Apply price changes, so the owner can see and undo them

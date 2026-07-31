@@ -6,44 +6,37 @@
 
 /* ============================================================
    THEMES
-   - Default: Graphite (refined, quiet luxury)
-   - .theme-blue: Blue Sky (light, Apple-like)
-   - .theme-forest: Green Forest (premium, money-focused)
+   Two independent axes:
+   - Accent (hue/identity): .theme-graphite / .theme-blue / .theme-forest
+   - Polarity (background): .dark / .light
+   Combine both classes on <html>, e.g. class="theme-blue dark".
+   Every accent theme has a full light AND dark variant.
    ============================================================ */
 
 @layer base {
-  /* ---------- GRAPHITE (default) ---------- */
+  /* Fallback so there's no flash of unstyled colors before JS applies the
+     real theme+polarity classes on load. Matches Graphite Dark. */
   :root {
-    --background: 240 8% 5%;            /* Sleek dark charcoal: #0b0b0d */
-    --foreground: 240 5% 90%;           /* Soft white: #e3e3e6 */
-
-    --card: 240 6% 10%;                 /* Premium dark grey: #17171a */
+    --background: 240 8% 5%;
+    --foreground: 240 5% 90%;
+    --card: 240 6% 10%;
     --card-foreground: 240 5% 90%;
-
     --popover: 240 6% 11%;
     --popover-foreground: 240 5% 90%;
-
-    --primary: 45 92% 58%;              /* Elegant rich gold: #f5c53c */
+    --primary: 45 92% 58%;
     --primary-foreground: 240 8% 5%;
-
     --secondary: 240 6% 14%;
     --secondary-foreground: 240 5% 90%;
-
     --muted: 240 6% 14%;
-    --muted-foreground: 240 4% 60%;     /* Clear grey: #949499 */
-
+    --muted-foreground: 240 4% 60%;
     --accent: 45 92% 58%;
     --accent-foreground: 240 8% 5%;
-
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 240 5% 15%;               /* Premium subtle border: #232326 */
+    --border: 240 5% 15%;
     --input: 240 5% 15%;
     --ring: 45 92% 58%;
-
     --radius: 1rem;
-
     --gold: 45 92% 58%;
     --gold-dim: 45 70% 36%;
     --gold-glow: 45 92% 70%;
@@ -56,50 +49,128 @@
     --quick-sell-bg: 45 92% 58%;
     --quick-sell-hover: 45 92% 50%;
     --quick-sell-foreground: 240 8% 5%;
-
-    /* Chart-aware tokens (raw HSL channels for recharts) */
     --chart-revenue: 45 92% 58%;
     --chart-profit: 142 70% 45%;
     --chart-grid: 240 5% 16%;
     --chart-axis: 240 4% 50%;
     --chart-tooltip-bg: 240 6% 11%;
     --chart-tooltip-border: 240 5% 16%;
-
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
     --font-body: 'DM Mono', monospace;
     --font-display: 'Syne', sans-serif;
   }
 
-  /* ---------- BLUE SKY (Midnight Navy) ---------- */
-  .theme-blue {
+  /* ---------- GRAPHITE — Dark ---------- */
+  .theme-graphite.dark {
+    --background: 240 8% 5%;            /* Sleek dark charcoal: #0b0b0d */
+    --foreground: 240 5% 90%;           /* Soft white: #e3e3e6 */
+    --card: 240 6% 10%;                 /* Premium dark grey: #17171a */
+    --card-foreground: 240 5% 90%;
+    --popover: 240 6% 11%;
+    --popover-foreground: 240 5% 90%;
+    --primary: 45 92% 58%;              /* Elegant rich gold: #f5c53c */
+    --primary-foreground: 240 8% 5%;
+    --secondary: 240 6% 14%;
+    --secondary-foreground: 240 5% 90%;
+    --muted: 240 6% 14%;
+    --muted-foreground: 240 4% 60%;
+    --accent: 45 92% 58%;
+    --accent-foreground: 240 8% 5%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 15%;
+    --input: 240 5% 15%;
+    --ring: 45 92% 58%;
+    --radius: 1rem;
+    --gold: 45 92% 58%;
+    --gold-dim: 45 70% 36%;
+    --gold-glow: 45 92% 70%;
+    --surface-1: 240 6% 10%;
+    --surface-2: 240 6% 13%;
+    --surface-3: 240 6% 16%;
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 45 92% 58%;
+    --quick-sell-bg: 45 92% 58%;
+    --quick-sell-hover: 45 92% 50%;
+    --quick-sell-foreground: 240 8% 5%;
+    --chart-revenue: 45 92% 58%;
+    --chart-profit: 142 70% 45%;
+    --chart-grid: 240 5% 16%;
+    --chart-axis: 240 4% 50%;
+    --chart-tooltip-bg: 240 6% 11%;
+    --chart-tooltip-border: 240 5% 16%;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --font-body: 'DM Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  /* ---------- GRAPHITE — Light ---------- */
+  .theme-graphite.light {
+    --background: 240 20% 99%;          /* Near-white: #fbfbfc */
+    --foreground: 240 10% 12%;          /* Near-black text: #1b1b1f */
+    --card: 0 0% 100%;                  /* Pure white card: #ffffff */
+    --card-foreground: 240 10% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 12%;
+    --primary: 42 88% 45%;              /* Deepened gold for contrast on white: #cc9315 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 10% 95%;
+    --secondary-foreground: 240 10% 12%;
+    --muted: 240 10% 95%;
+    --muted-foreground: 240 6% 42%;
+    --accent: 42 88% 45%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 12% 88%;
+    --input: 240 12% 88%;
+    --ring: 42 88% 45%;
+    --radius: 1rem;
+    --gold: 42 88% 45%;
+    --gold-dim: 42 70% 55%;
+    --gold-glow: 42 88% 60%;
+    --surface-1: 0 0% 100%;
+    --surface-2: 240 10% 96%;
+    --surface-3: 240 10% 92%;
+    --success: 142 65% 35%;
+    --success-foreground: 0 0% 100%;
+    --warning: 42 88% 45%;
+    --quick-sell-bg: 42 88% 45%;
+    --quick-sell-hover: 42 88% 38%;
+    --quick-sell-foreground: 0 0% 100%;
+    --chart-revenue: 42 88% 45%;
+    --chart-profit: 142 65% 35%;
+    --chart-grid: 240 12% 90%;
+    --chart-axis: 240 6% 52%;
+    --chart-tooltip-bg: 0 0% 100%;
+    --chart-tooltip-border: 240 12% 88%;
+    --shadow-card: 0 1px 2px rgba(20, 20, 25, 0.06), 0 8px 24px rgba(20, 20, 25, 0.08);
+    --font-body: 'DM Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  /* ---------- BLUE SKY — Dark (Midnight Navy) ---------- */
+  .theme-blue.dark {
     --background: 220 28% 7%;           /* Midnight navy: #0b0e14 */
     --foreground: 210 20% 92%;          /* Icy white: #e6ebf2 */
-
     --card: 220 24% 12%;                /* Deep navy card: #151b26 */
     --card-foreground: 210 20% 92%;
-
     --popover: 220 24% 13%;
     --popover-foreground: 210 20% 92%;
-
     --primary: 205 92% 62%;             /* Electric sky blue: #44a8f7 */
     --primary-foreground: 220 28% 7%;
-
     --secondary: 220 20% 17%;
     --secondary-foreground: 210 20% 92%;
-
     --muted: 220 20% 17%;
-    --muted-foreground: 215 12% 60%;    /* Muted blue-grey: #8c9bb0 */
-
+    --muted-foreground: 215 12% 60%;
     --accent: 205 92% 62%;
     --accent-foreground: 220 28% 7%;
-
     --destructive: 358 88% 62%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 220 20% 19%;              /* Crisp navy border: #273142 */
+    --border: 220 20% 19%;
     --input: 220 20% 19%;
     --ring: 205 92% 62%;
-
     --gold: 205 92% 62%;
     --gold-dim: 205 70% 40%;
     --gold-glow: 205 92% 75%;
@@ -112,49 +183,82 @@
     --quick-sell-bg: 205 92% 62%;
     --quick-sell-hover: 205 92% 52%;
     --quick-sell-foreground: 220 28% 7%;
-
     --chart-revenue: 205 92% 62%;
     --chart-profit: 145 68% 46%;
     --chart-grid: 220 20% 18%;
     --chart-axis: 215 12% 54%;
     --chart-tooltip-bg: 220 24% 13%;
     --chart-tooltip-border: 220 20% 18%;
-
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(6, 12, 23, 0.5);
     --font-body: 'Inter', sans-serif;
     --font-display: 'Inter', sans-serif;
   }
 
-  /* ---------- GREEN FOREST (Sage Charcoal) ---------- */
-  .theme-forest {
+  /* ---------- BLUE SKY — Light (Apple-like) ---------- */
+  .theme-blue.light {
+    --background: 210 45% 98%;          /* Icy white-blue: #f6f9fc */
+    --foreground: 220 35% 12%;          /* Deep navy text: #12181f */
+    --card: 0 0% 100%;
+    --card-foreground: 220 35% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 35% 12%;
+    --primary: 205 88% 48%;             /* Deepened sky blue for contrast on white: #1387dd */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 30% 95%;
+    --secondary-foreground: 220 35% 12%;
+    --muted: 210 30% 95%;
+    --muted-foreground: 215 15% 42%;
+    --accent: 205 88% 48%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 358 78% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 25% 88%;
+    --input: 210 25% 88%;
+    --ring: 205 88% 48%;
+    --gold: 205 88% 48%;
+    --gold-dim: 205 70% 60%;
+    --gold-glow: 205 88% 65%;
+    --surface-1: 0 0% 100%;
+    --surface-2: 210 30% 96%;
+    --surface-3: 210 25% 92%;
+    --success: 145 65% 34%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 88% 48%;
+    --quick-sell-bg: 205 88% 48%;
+    --quick-sell-hover: 205 88% 40%;
+    --quick-sell-foreground: 0 0% 100%;
+    --chart-revenue: 205 88% 48%;
+    --chart-profit: 145 65% 34%;
+    --chart-grid: 210 25% 90%;
+    --chart-axis: 215 15% 52%;
+    --chart-tooltip-bg: 0 0% 100%;
+    --chart-tooltip-border: 210 25% 88%;
+    --shadow-card: 0 1px 2px rgba(10, 20, 35, 0.06), 0 8px 24px rgba(10, 20, 35, 0.08);
+    --font-body: 'Inter', sans-serif;
+    --font-display: 'Inter', sans-serif;
+  }
+
+  /* ---------- GREEN FOREST — Dark (Sage Charcoal) ---------- */
+  .theme-forest.dark {
     --background: 160 10% 6%;           /* Charcoal with moss/forest tint: #0f1110 */
     --foreground: 120 15% 92%;          /* Soft minty white: #e3e8e4 */
-
     --card: 160 12% 10%;                /* Dark moss charcoal card: #151b18 */
     --card-foreground: 120 15% 92%;
-
     --popover: 160 12% 11%;
     --popover-foreground: 120 15% 92%;
-
     --primary: 0 0% 100%;               /* Premium White: #ffffff */
     --primary-foreground: 160 10% 6%;
-
     --secondary: 160 10% 15%;
     --secondary-foreground: 120 15% 92%;
-
     --muted: 160 10% 15%;
-    --muted-foreground: 150 8% 60%;     /* Sage grey: #8fa093 */
-
+    --muted-foreground: 150 8% 60%;
     --accent: 0 0% 100%;
     --accent-foreground: 160 10% 6%;
-
     --destructive: 0 82% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 160 10% 16%;              /* Subtle dark forest border: #242926 */
+    --border: 160 10% 16%;
     --input: 160 10% 16%;
     --ring: 0 0% 100%;
-
     --gold: 0 0% 100%;
     --gold-dim: 0 0% 70%;
     --gold-glow: 0 0% 100%;
@@ -167,19 +271,66 @@
     --quick-sell-bg: 0 0% 100%;
     --quick-sell-hover: 0 0% 90%;
     --quick-sell-foreground: 160 10% 6%;
-
     --chart-revenue: 0 0% 100%;
     --chart-profit: 142 52% 58%;
     --chart-grid: 160 10% 16%;
     --chart-axis: 150 8% 54%;
     --chart-tooltip-bg: 160 12% 11%;
     --chart-tooltip-border: 160 10% 16%;
-
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(10, 16, 13, 0.5);
     --font-body: 'DM Mono', monospace;
     --font-display: 'Syne', sans-serif;
   }
+
+  /* ---------- GREEN FOREST — Light ----------
+     Note: the dark variant's primary is pure white, which would be
+     invisible on a light background — so light mode uses a rich forest
+     green as primary instead. Everything else follows the same sage/white
+     palette as the dark version. */
+  .theme-forest.light {
+    --background: 110 22% 98%;          /* Near-white with a hint of sage: #f8faf8 */
+    --foreground: 160 20% 12%;          /* Deep forest text: #101a15 */
+    --card: 0 0% 100%;
+    --card-foreground: 160 20% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 20% 12%;
+    --primary: 150 45% 32%;             /* Rich forest green: #2c7a52 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 110 15% 95%;
+    --secondary-foreground: 160 20% 12%;
+    --muted: 110 15% 95%;
+    --muted-foreground: 150 10% 40%;
+    --accent: 150 45% 32%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 110 15% 88%;
+    --input: 110 15% 88%;
+    --ring: 150 45% 32%;
+    --gold: 150 45% 32%;
+    --gold-dim: 150 35% 50%;
+    --gold-glow: 150 45% 55%;
+    --surface-1: 0 0% 100%;
+    --surface-2: 110 15% 96%;
+    --surface-3: 110 12% 92%;
+    --success: 142 55% 32%;
+    --success-foreground: 0 0% 100%;
+    --warning: 42 85% 45%;
+    --quick-sell-bg: 150 45% 32%;
+    --quick-sell-hover: 150 45% 26%;
+    --quick-sell-foreground: 0 0% 100%;
+    --chart-revenue: 150 45% 32%;
+    --chart-profit: 142 55% 32%;
+    --chart-grid: 110 15% 90%;
+    --chart-axis: 150 10% 50%;
+    --chart-tooltip-bg: 0 0% 100%;
+    --chart-tooltip-border: 110 15% 88%;
+    --shadow-card: 0 1px 2px rgba(10, 25, 15, 0.06), 0 8px 24px rgba(10, 25, 15, 0.08);
+    --font-body: 'DM Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
 }
+
 
 @layer base {
   * {

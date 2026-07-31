@@ -6,7 +6,7 @@ import {
 import CloudAuthModal from '@/components/CloudAuthModal';
 import { supabase } from '@/integrations/supabase/client';
 import { drawQRCode, encodeQRData, drawSimpleQR, drawBarcode, generateStoreUrl, generateProductUrl } from '@/lib/qr-code';
-import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex, getStoreIndex, STORE_PREFIX } from '@/lib/store-data';
+import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex, getStoreIndex, STORE_PREFIX, getSavingsGoals, addSavingsGoal, updateSavingsGoalById, deleteSavingsGoalById } from '@/lib/store-data';
 import { generatePerformanceSummary, generateFullTextReport, generateFullCSV } from '@/lib/reports';
 import { showToast } from '@/components/Toast';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
@@ -614,6 +614,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   const [showTrash, setShowTrash] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [showSavingsModal, setShowSavingsModal] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [deleteConfirmGoalId, setDeleteConfirmGoalId] = useState<string | null>(null);
   const [lowStock, setLowStock] = useState<string>(String(getLowStockThreshold()));
   const [helpOpen, setHelpOpen] = useState<string | null>(null);
   const [customQuestion, setCustomQuestion] = useState('');
@@ -3039,39 +3041,102 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     </SubPage>
   );
 
-  if (view === 'savings') return (
-    <SubPage title="Savings Plan" onBack={() => setView('home')}>
-      <div className={`${card} p-5 space-y-4`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <ProgressRing pct={savingsPct} size={72} color="hsl(var(--primary))" />
-            <div className="flex-1">
-              <p className="text-xs text-muted-foreground">Goal</p>
-              <p className="font-display font-bold text-xl text-primary">₦{savings.amount.toLocaleString()}</p>
-              <p className="text-[11px] text-muted-foreground">Saved ₦{savings.saved.toLocaleString()}</p>
+  if (view === 'savings') {
+    const goals = getSavingsGoals(store);
+    const editingGoal = goals.find(g => g.id === editingGoalId);
+    return (
+    <SubPage title="Savings Plans" onBack={() => setView('home')}>
+      {goals.length === 0 && (
+        <div className={`${card} p-5 text-center space-y-2`}>
+          <p className="text-sm text-muted-foreground">No savings plans yet.</p>
+          <p className="text-[11px] text-muted-foreground">Set one up to automatically put money aside as you sell.</p>
+        </div>
+      )}
+      {goals.map(g => {
+        const pct = g.amount > 0 ? Math.min(100, (g.saved / g.amount) * 100) : 0;
+        return (
+          <div key={g.id} className={`${card} p-5 space-y-4`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <ProgressRing pct={pct} size={64} color="hsl(var(--primary))" />
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground">{g.label || 'Savings Goal'}</p>
+                  <p className="font-display font-bold text-lg text-primary">₦{g.amount.toLocaleString()}</p>
+                  <p className="text-[11px] text-muted-foreground">Saved ₦{g.saved.toLocaleString()}</p>
+                </div>
+              </div>
+              <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-display font-bold px-2 py-1 rounded-full bg-success/10 text-success border border-success/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> Active
+              </span>
             </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <Stat label="Source" value={`${g.percentage}% of ${g.source}`} />
+              <Stat label="Frequency" value={g.frequency || 'weekly'} />
+              <Stat label="Destination" value={g.bankName || '—'} />
+              <Stat label="Progress" value={`${Math.round(pct)}%`} />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setEditingGoalId(g.id || null); setShowSavingsModal(true); }}
+                className="flex-1 p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setDeleteConfirmGoalId(g.id || null)}
+                className="px-4 rounded-xl bg-destructive/10 text-destructive border border-destructive/30 font-display font-bold text-sm"
+              >
+                Delete
+              </button>
+            </div>
+            {deleteConfirmGoalId === g.id && (
+              <div className="p-3 rounded-xl bg-destructive/5 border border-destructive/30 space-y-2">
+                <p className="text-xs text-muted-foreground">Delete "{g.label || 'this plan'}"? Money already saved isn't removed from anywhere — this just stops tracking it as a plan.</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setDeleteConfirmGoalId(null)} className="flex-1 py-2 rounded-lg text-xs font-display font-bold border border-border text-muted-foreground">Cancel</button>
+                  <button
+                    onClick={() => { onUpdate(deleteSavingsGoalById(store, g.id!)); setDeleteConfirmGoalId(null); showToast('Savings plan removed'); }}
+                    className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-destructive text-white"
+                  >
+                    Delete Plan
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-          {store.savingsGoal && store.savingsGoal.amount > 0 ? (
-            <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-display font-bold px-2 py-1 rounded-full bg-success/10 text-success border border-success/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> Active
-            </span>
-          ) : (
-            <span className="flex-shrink-0 text-[10px] font-display font-bold px-2 py-1 rounded-full bg-surface-2 text-muted-foreground border border-border">Not Set Up</span>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <Stat label="Source" value={`${savings.percentage}% of ${savings.source}`} />
-          <Stat label="Frequency" value={savings.frequency || 'weekly'} />
-          <Stat label="Destination" value={savings.bankName || '—'} />
-          <Stat label="Progress" value={`${Math.round(savingsPct)}%`} />
-        </div>
-        <button onClick={() => setShowSavingsModal(true)} className="w-full p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold">Edit Savings Plan</button>
-      </div>
+        );
+      })}
+
+      <button
+        onClick={() => { setEditingGoalId(null); setShowSavingsModal(true); }}
+        className="w-full p-3 rounded-xl bg-primary/10 text-primary border border-primary/30 font-display font-bold"
+      >
+        + Add Savings Plan
+      </button>
+
       {showSavingsModal && (
-        <SavingsModal initial={savings} onClose={() => setShowSavingsModal(false)} onSave={(g) => { updateSavings(g); setShowSavingsModal(false); showToast('Savings plan saved'); }} animate={mgr.mascotAnimations} store={store} />
+        <SavingsModal
+          initial={editingGoal || { amount: 0, label: '', source: 'profit', percentage: 10, saved: 0, frequency: 'weekly' } as SavingsGoal}
+          onClose={() => { setShowSavingsModal(false); setEditingGoalId(null); }}
+          onSave={(g) => {
+            if (editingGoalId) {
+              onUpdate(updateSavingsGoalById(store, editingGoalId, g));
+              showToast('Savings plan updated');
+            } else {
+              const { id, ...rest } = g;
+              onUpdate(addSavingsGoal(store, rest));
+              showToast('Savings plan created');
+            }
+            setShowSavingsModal(false);
+            setEditingGoalId(null);
+          }}
+          animate={mgr.mascotAnimations}
+          store={store}
+        />
       )}
     </SubPage>
   );
+  }
 
   if (view === 'appearance') return (
     <SubPage title="Appearance" onBack={() => setView('home')}>

@@ -355,14 +355,19 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
 }
 
 export function recalculateSavings(store: StoreData): StoreData {
-  if (!store.savingsGoal || store.savingsGoal.autoSaveEnabled) return store;
+  const goals = getSavingsGoals(store);
+  if (goals.length === 0) return store;
   const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
   const totalProfit = store.sales.reduce((sum, s) => sum + s.profit, 0);
-  const percentage = store.savingsGoal.percentage || 0;
-  const source = store.savingsGoal.source || 'profit';
-  const base = source === 'profit' ? totalProfit : totalRevenue;
-  store.savingsGoal.saved = Math.round((percentage / 100) * base * 100) / 100;
-  return store;
+
+  const updatedGoals = goals.map(g => {
+    if (g.autoSaveEnabled) return g; // auto-save goals track `saved` via runScheduledSavingsDeduction instead
+    const base = (g.source || 'profit') === 'profit' ? totalProfit : totalRevenue;
+    const saved = Math.round(((g.percentage || 0) / 100) * base * 100) / 100;
+    return { ...g, saved };
+  });
+
+  return withSyncedGoals(store, updatedGoals);
 }
 
 export function syncStoreData(store: StoreData): StoreData {
@@ -427,104 +432,138 @@ export function syncStoreData(store: StoreData): StoreData {
   return recalculateSavings(store);
 }
 
+// Returns every active savings goal. Falls back to wrapping the legacy
+// single `savingsGoal` field into a one-item array so old stores keep
+// working exactly as before until they add a second plan.
+export function getSavingsGoals(store: StoreData): SavingsGoal[] {
+  if (store.savingsGoals && store.savingsGoals.length > 0) return store.savingsGoals;
+  if (store.savingsGoal && store.savingsGoal.amount > 0) return [{ ...store.savingsGoal, id: store.savingsGoal.id || 'legacy' }];
+  return [];
+}
+
+function withSyncedGoals(store: StoreData, goals: SavingsGoal[]): StoreData {
+  return { ...store, savingsGoals: goals, savingsGoal: goals[0] };
+}
+
+export function addSavingsGoal(store: StoreData, goal: Omit<SavingsGoal, 'id'>): StoreData {
+  const newGoal: SavingsGoal = { ...goal, id: generateId() };
+  const updated = withSyncedGoals(store, [...getSavingsGoals(store), newGoal]);
+  saveStore(updated);
+  return updated;
+}
+
+export function updateSavingsGoalById(store: StoreData, id: string, patch: Partial<SavingsGoal>): StoreData {
+  const updated = withSyncedGoals(store, getSavingsGoals(store).map(g => g.id === id ? { ...g, ...patch } : g));
+  saveStore(updated);
+  return updated;
+}
+
+export function deleteSavingsGoalById(store: StoreData, id: string): StoreData {
+  const updated = withSyncedGoals(store, getSavingsGoals(store).filter(g => g.id !== id));
+  saveStore(updated);
+  return updated;
+}
+
+// Runs every active, auto-save-enabled goal independently against the same
+// net-income base — they're parallel budget envelopes (e.g. "10% to rent
+// fund" + "5% to equipment fund"), not a sequential stack that eats into
+// each other's share.
 export function runScheduledSavingsDeduction(store: StoreData): StoreData {
-  if (!store.savingsGoal || !store.savingsGoal.autoSaveEnabled) return store;
-  const goal = store.savingsGoal;
+  const goals = getSavingsGoals(store);
+  const dueGoals = goals.filter(g => g.autoSaveEnabled);
+  if (dueGoals.length === 0) return store;
+
   const nowTime = new Date();
-  const lastTime = goal.lastDeductionTime ? new Date(goal.lastDeductionTime) : new Date(store.createdAt || nowTime.toISOString());
-  
-  if (lastTime.getTime() >= nowTime.getTime()) return store;
-
-  const occurrences: Date[] = [];
-  let current = new Date(lastTime.getTime());
-  const [hStr, mStr] = (goal.timeOfDay || "00:00").split(":");
-  const schedHours = parseInt(hStr, 10) || 0;
-  const schedMinutes = parseInt(mStr, 10) || 0;
-
-  current.setHours(schedHours, schedMinutes, 0, 0);
-  if (current.getTime() <= lastTime.getTime()) {
-    current.setDate(current.getDate() + 1);
-  }
-
-  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-  while (current.getTime() <= nowTime.getTime()) {
-    let isDue = false;
-    if (goal.frequency === 'daily') {
-      isDue = true;
-    } else if (goal.frequency === 'weekly') {
-      const targetDay = goal.dayOfWeek || 'Monday';
-      if (DAYS[current.getDay()] === targetDay) {
-        isDue = true;
-      }
-    } else if (goal.frequency === 'monthly') {
-      const targetDayOfMonth = goal.dayOfMonth || 1;
-      const daysInMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
-      const adjustedTarget = Math.min(targetDayOfMonth, daysInMonth);
-      if (current.getDate() === adjustedTarget) {
-        isDue = true;
-      }
-    }
-
-    if (isDue) {
-      occurrences.push(new Date(current.getTime()));
-    }
-    current.setDate(current.getDate() + 1);
-    current.setHours(schedHours, schedMinutes, 0, 0);
-  }
-
-  if (occurrences.length === 0) return store;
-
-  let currentSaved = goal.saved || 0;
   let flowNotifications = store.flowNotifications || [];
   let memoryTimeline = store.memoryTimeline || [];
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-  occurrences.forEach(occurrence => {
-    const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
-    const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
-    const netIncomeBefore = totalRevenue - totalExpenses - currentSaved;
+  const updatedGoals = goals.map(goal => {
+    if (!goal.autoSaveEnabled) return goal;
 
-    let deductionAmount = 0;
-    if (goal.autoSaveAmount && goal.autoSaveAmount > 0) {
-      deductionAmount = goal.autoSaveAmount;
-    } else if (goal.percentage && goal.percentage > 0) {
-      deductionAmount = (goal.percentage / 100) * netIncomeBefore;
+    const lastTime = goal.lastDeductionTime ? new Date(goal.lastDeductionTime) : new Date(store.createdAt || nowTime.toISOString());
+    if (lastTime.getTime() >= nowTime.getTime()) return goal;
+
+    const occurrences: Date[] = [];
+    let current = new Date(lastTime.getTime());
+    const [hStr, mStr] = (goal.timeOfDay || "00:00").split(":");
+    const schedHours = parseInt(hStr, 10) || 0;
+    const schedMinutes = parseInt(mStr, 10) || 0;
+
+    current.setHours(schedHours, schedMinutes, 0, 0);
+    if (current.getTime() <= lastTime.getTime()) {
+      current.setDate(current.getDate() + 1);
     }
 
-    deductionAmount = Math.round(Math.max(0, deductionAmount) * 100) / 100;
-    if (deductionAmount > 0) {
-      currentSaved += deductionAmount;
-      const deductionMsg = `Auto-saved ₦${deductionAmount.toLocaleString()} to ${goal.label || 'Savings'}`;
-      
-      flowNotifications = [{
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-        text: deductionMsg,
-        icon: '🏦',
-        tone: 'success',
-        date: occurrence.toISOString(),
-        read: false,
-        title: 'Automated Savings',
-        description: deductionMsg,
-        actionLabel: 'View Savings',
-        actionTab: 'dashboard'
-      }, ...flowNotifications];
-
-      memoryTimeline = [{
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-        type: 'milestone',
-        title: 'Automated Savings',
-        date: occurrence.toISOString(),
-        description: deductionMsg
-      }, ...memoryTimeline];
+    while (current.getTime() <= nowTime.getTime()) {
+      let isDue = false;
+      if (goal.frequency === 'daily') {
+        isDue = true;
+      } else if (goal.frequency === 'weekly') {
+        const targetDay = goal.dayOfWeek || 'Monday';
+        if (DAYS[current.getDay()] === targetDay) isDue = true;
+      } else if (goal.frequency === 'monthly') {
+        const targetDayOfMonth = goal.dayOfMonth || 1;
+        const daysInMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
+        const adjustedTarget = Math.min(targetDayOfMonth, daysInMonth);
+        if (current.getDate() === adjustedTarget) isDue = true;
+      }
+      if (isDue) occurrences.push(new Date(current.getTime()));
+      current.setDate(current.getDate() + 1);
+      current.setHours(schedHours, schedMinutes, 0, 0);
     }
+
+    if (occurrences.length === 0) return goal;
+
+    let currentSaved = goal.saved || 0;
+
+    occurrences.forEach(occurrence => {
+      const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
+      const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+      const netIncomeBefore = totalRevenue - totalExpenses;
+
+      let deductionAmount = 0;
+      if (goal.autoSaveAmount && goal.autoSaveAmount > 0) {
+        deductionAmount = goal.autoSaveAmount;
+      } else if (goal.percentage && goal.percentage > 0) {
+        deductionAmount = (goal.percentage / 100) * netIncomeBefore;
+      }
+
+      deductionAmount = Math.round(Math.max(0, deductionAmount) * 100) / 100;
+      if (deductionAmount > 0) {
+        currentSaved += deductionAmount;
+        const deductionMsg = `Auto-saved ₦${deductionAmount.toLocaleString()} to ${goal.label || 'Savings'}`;
+
+        flowNotifications = [{
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+          text: deductionMsg,
+          icon: '🏦',
+          tone: 'success',
+          date: occurrence.toISOString(),
+          read: false,
+          title: 'Automated Savings',
+          description: deductionMsg,
+          actionLabel: 'View Savings',
+          actionTab: 'dashboard'
+        }, ...flowNotifications];
+
+        memoryTimeline = [{
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+          type: 'milestone',
+          title: 'Automated Savings',
+          date: occurrence.toISOString(),
+          description: deductionMsg
+        }, ...memoryTimeline];
+      }
+    });
+
+    return { ...goal, saved: currentSaved, lastDeductionTime: occurrences[occurrences.length - 1].toISOString() };
   });
 
-  store.savingsGoal.saved = currentSaved;
-  store.savingsGoal.lastDeductionTime = occurrences[occurrences.length - 1].toISOString();
-  store.flowNotifications = flowNotifications;
-  store.memoryTimeline = memoryTimeline;
-
-  return store;
+  const updated = withSyncedGoals(store, updatedGoals);
+  updated.flowNotifications = flowNotifications;
+  updated.memoryTimeline = memoryTimeline;
+  return updated;
 }
 
 export function loadStore(code: string): StoreData | null {

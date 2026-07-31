@@ -47,6 +47,8 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [category, setCategory] = useState<string>('All');
   const [lastSales, setLastSales] = useState<Sale[] | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<MilestoneDef | null>(null);
+  const [pendingSaleMode, setPendingSaleMode] = useState<'wholesale' | 'retail' | null>(null);
+  const [saleModeCodeInput, setSaleModeCodeInput] = useState('');
   const [scanning, setScanning] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [globalSaleMode, setGlobalSaleMode] = useState<'wholesale' | 'retail'>(() => (localStorage.getItem('storeflow_sale_mode') as 'wholesale' | 'retail') || 'retail');
@@ -541,10 +543,9 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       <div className="grid grid-cols-2 gap-1 bg-surface-2 p-1 rounded-xl border border-border/80 shadow-xs">
         <button
           onClick={() => {
-            setGlobalSaleMode('wholesale');
-            setSelectedSaleTypes({});
-            localStorage.setItem('storeflow_sale_mode', 'wholesale');
-            showToast('📦 Switched to Wholesale Mode (selling in cartons)', 'info');
+            if (globalSaleMode === 'wholesale') return;
+            setPendingSaleMode('wholesale');
+            setSaleModeCodeInput('');
           }}
           className={`py-2 rounded-lg font-display font-bold text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 ${
             globalSaleMode === 'wholesale'
@@ -556,10 +557,9 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         </button>
         <button
           onClick={() => {
-            setGlobalSaleMode('retail');
-            setSelectedSaleTypes({});
-            localStorage.setItem('storeflow_sale_mode', 'retail');
-            showToast('🧩 Switched to Retail Mode (selling in pieces)', 'info');
+            if (globalSaleMode === 'retail') return;
+            setPendingSaleMode('retail');
+            setSaleModeCodeInput('');
           }}
           className={`py-2 rounded-lg font-display font-bold text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 ${
             globalSaleMode === 'retail'
@@ -570,6 +570,50 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           <span>🧩</span> Retail Mode (Piece)
         </button>
       </div>
+
+      {pendingSaleMode && (
+        <div className="p-3 rounded-xl bg-warning/5 border border-warning/30 space-y-2">
+          <p className="text-xs font-display font-bold">
+            ⚠️ Switch to {pendingSaleMode === 'wholesale' ? 'Wholesale (carton pricing)' : 'Retail (piece pricing)'}?
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            This changes what price everyone selling here charges by default. Enter your store code to confirm.
+          </p>
+          <input
+            type="text"
+            value={saleModeCodeInput}
+            onChange={e => setSaleModeCodeInput(e.target.value)}
+            placeholder="Store code"
+            className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none focus:border-primary"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setPendingSaleMode(null); setSaleModeCodeInput(''); }}
+              className="flex-1 py-2 rounded-lg text-xs font-display font-bold border border-border text-muted-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (saleModeCodeInput.trim().toUpperCase() !== store.accessCode.toUpperCase()) {
+                  showToast('That store code is incorrect', 'error');
+                  return;
+                }
+                setGlobalSaleMode(pendingSaleMode);
+                setSelectedSaleTypes({});
+                localStorage.setItem('storeflow_sale_mode', pendingSaleMode);
+                showToast(pendingSaleMode === 'wholesale' ? '📦 Switched to Wholesale Mode (selling in cartons)' : '🧩 Switched to Retail Mode (selling in pieces)', 'info');
+                setPendingSaleMode(null);
+                setSaleModeCodeInput('');
+              }}
+              className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-warning text-black"
+            >
+              Confirm Switch
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="relative flex gap-2">
