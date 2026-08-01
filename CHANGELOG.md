@@ -45,6 +45,8 @@
 [2026-07-31] v1.13.0 — Multi-item voice sales: saying several products in one breath ("Indomitable, Garri and onions") now builds a review cart with a Sell All button, instead of one garbled search — severity: Low (new feature)
 [2026-08-01] v1.14.0 — Savings target cap fix: all savings goals now cap saved amount at target, auto-save stops once target is reached, and Fixed Cash deduction type can be selected independently of automated schedule — severity: High
 [2026-08-01] v1.15.0 — Daily Streaks & Surprise Rewards: consecutive store activity tracking, animated header streak flame, milestone reward unlocks (days 3, 7, 14, 30...), and reward reveal celebration modal — severity: Low (new feature)
+[2026-08-01] v1.16.0 — Simple Mode universal search: top-right search icon overlay searching across Inventory (name/ID/barcode), Customers (name/phone), and Receipts (item/transaction ID) with tab navigation — severity: Low (new feature)
+
 
 
 
