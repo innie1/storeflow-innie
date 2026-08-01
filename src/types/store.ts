@@ -642,10 +642,26 @@ export interface SimilarProductReview {
   reviewedAt: string;
 }
 
+export interface StreakReward {
+  day: number;
+  itemId: string;
+  wonAt: string;
+}
+
+export interface StreakData {
+  count: number;
+  longestCount: number;
+  lastOpenDate: string; // YYYY-MM-DD, local
+  claimedMilestones: number[];
+  rewards: StreakReward[];
+  pendingReveal?: StreakReward | null; // set the moment a milestone is hit, cleared once the UI shows it
+}
+
 export interface StoreData {
   id?: string;               // Supabase 'stores' table row id (UUID) — used for cloud sync, realtime channel scoping, and Edge Function calls. Not to be confused with storeId below.
   storeId?: string;          // Permanent immutable ID — never changes; generated once at store creation
   qrDesignVersion?: number;  // Permanent QR code design version
+  streak?: StreakData;
   learnedProducts?: LearnedProduct[];
   dismissedSimilarPairs?: string[];
   similarProductReviews?: SimilarProductReview[];

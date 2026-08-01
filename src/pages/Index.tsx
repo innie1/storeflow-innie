@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
+import { runStreakCheck, getStreakLine } from '@/lib/streaks';
+import StreakFlame from '@/components/streaks/StreakFlame';
+import StreakRewardReveal from '@/components/streaks/StreakRewardReveal';
 import { checkDebtExpenseReminders, checkWeeklyRestockDraft } from '@/lib/manager-intel';
 import StoreAccess from '@/components/StoreAccess';
 import StoreSwitcher from '@/components/StoreSwitcher';
@@ -920,6 +923,17 @@ export default function Index() {
           next = withDraft;
         }
 
+        // 4. Daily streak check — counts this as today's open, and rolls a
+        // reward if it lands on a milestone day.
+        const withStreak = runStreakCheck(next);
+        if (withStreak !== next) {
+          next = withStreak;
+          if (next.streak && !next.streak.pendingReveal && next.streak.count > 1) {
+            // Ordinary day (no reward this time) — a quick line from Flow, not a modal.
+            showToast(getStreakLine(next.streak.count), 'info');
+          }
+        }
+
         if (next === prev) return prev; // nothing changed, avoid a pointless re-render/save
         saveStore(next);
         return next;
@@ -1254,7 +1268,10 @@ export default function Index() {
       <div className="flex-1 flex flex-col md:pl-64">
         <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-4 md:px-6 py-3.5 flex items-center justify-between" style={{ paddingLeft: 'max(1rem, env(safe-area-inset-left))', paddingRight: 'max(1rem, env(safe-area-inset-right))', paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}>
           <div className="flex flex-col text-left">
-            <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
+            <div className="flex items-center gap-2">
+              <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
+              {(store.streak?.count || 0) > 0 && <StreakFlame count={store.streak!.count} size="sm" />}
+            </div>
             <button 
               onClick={() => setShowSwitcher(true)}
               className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors font-semibold mt-0.5"
@@ -1934,6 +1951,20 @@ export default function Index() {
             </div>
           </div>
         </div>
+      )}
+
+      {store.streak?.pendingReveal && (
+        <StreakRewardReveal
+          reward={store.streak.pendingReveal}
+          onClose={() => {
+            setStore(prev => {
+              if (!prev?.streak) return prev;
+              const updated = { ...prev, streak: { ...prev.streak, pendingReveal: null } };
+              saveStore(updated);
+              return updated;
+            });
+          }}
+        />
       )}
 
       {showNotifications && (
