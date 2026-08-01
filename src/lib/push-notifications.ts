@@ -24,13 +24,35 @@ export function isPushSupported(): boolean {
   return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
 }
 
+// Checks BOTH sides: does this browser have a live push subscription, AND
+// is that same subscription actually saved server-side? A browser-only
+// "subscribed" is not good enough — if the row never made it to Supabase
+// (RLS error, network blip, etc.) the send-order-push function has nothing
+// to send to, so we treat that case as not-subscribed and let the user
+// retry, instead of showing a toggle that's silently lying to them.
 export async function getPushSubscriptionState(): Promise<'unsupported' | 'denied' | 'subscribed' | 'not-subscribed'> {
   if (!isPushSupported()) return 'unsupported';
   if (Notification.permission === 'denied') return 'denied';
   try {
     const registration = await navigator.serviceWorker.ready;
     const sub = await registration.pushManager.getSubscription();
-    return sub ? 'subscribed' : 'not-subscribed';
+    if (!sub) return 'not-subscribed';
+
+    const endpoint = sub.toJSON().endpoint;
+    if (!endpoint) return 'not-subscribed';
+
+    const { data, error } = await supabase
+      .from('push_subscriptions')
+      .select('id')
+      .eq('endpoint', endpoint)
+      .maybeSingle();
+
+    if (error || !data) {
+      // Browser thinks it's subscribed but our database has no matching
+      // row — this is exactly the "toggle says on, nothing arrives" bug.
+      return 'not-subscribed';
+    }
+    return 'subscribed';
   } catch {
     return 'not-subscribed';
   }
@@ -55,6 +77,12 @@ export async function subscribeToOrderPush(storeId: string): Promise<{ success: 
 
   try {
     const registration = await navigator.serviceWorker.ready;
+    // NOTE: even if a subscription already exists in the browser (e.g. left
+    // over from an earlier attempt where the Supabase save failed), we still
+    // fall through and re-run the upsert below every time. That's the fix —
+    // previously an existing local subscription with no saved DB row would
+    // short-circuit here and the user could tap "on" forever with nothing
+    // ever getting saved.
     let subscription = await registration.pushManager.getSubscription();
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
@@ -65,10 +93,10 @@ export async function subscribeToOrderPush(storeId: string): Promise<{ success: 
 
     const json = subscription.toJSON();
     if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
-      return { success: false, message: 'Could not read push subscription details.' };
+      return { success: false, message: 'Could not read push subscription details \u2014 try toggling again.' };
     }
 
-    const { error } = await supabase.from('push_subscriptions').upsert(
+    const { error: upsertError } = await supabase.from('push_subscriptions').upsert(
       {
         store_id: storeId,
         endpoint: json.endpoint,
@@ -77,10 +105,27 @@ export async function subscribeToOrderPush(storeId: string): Promise<{ success: 
       },
       { onConflict: 'endpoint' }
     );
-    if (error) return { success: false, message: error.message };
+    if (upsertError) {
+      console.error('[push] save to Supabase failed:', upsertError);
+      return { success: false, message: `Couldn\u2019t save this device: ${upsertError.message}` };
+    }
+
+    // Re-read it back to confirm it actually landed, rather than trusting a
+    // response with no error. This is the check that was missing before.
+    const { data: verifyRow, error: verifyError } = await supabase
+      .from('push_subscriptions')
+      .select('id')
+      .eq('endpoint', json.endpoint)
+      .maybeSingle();
+
+    if (verifyError || !verifyRow) {
+      console.error('[push] verify-after-save failed:', verifyError);
+      return { success: false, message: 'Saved locally but couldn\u2019t confirm with the server \u2014 try again in a moment.' };
+    }
 
     return { success: true, message: 'You\u2019ll now get a notification when a new order comes in.' };
   } catch (err: any) {
+    console.error('[push] subscribe failed:', err);
     return { success: false, message: err.message || 'Failed to subscribe to push notifications.' };
   }
 }
