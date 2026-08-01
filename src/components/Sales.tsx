@@ -4,6 +4,7 @@ import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale, lo
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
+import { playSoldSound, playQuickAddSound } from '@/lib/sound-effects';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import VoiceSell from '@/components/VoiceSell';
@@ -194,15 +195,15 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + qty };
       setCart(updated);
     } else {
-      let unitPrice = product.sellingPrice;
-      let costPrice = product.costPrice;
-      if (saleType === 'single') {
-        const singles = product.singlesPerCarton || 1;
-        unitPrice = product.singleSellingPrice ?? (product.sellingPrice / singles);
-        costPrice = product.costPrice / singles;
-      }
+      const unitPrice = saleType === 'single' && product.singleSellingPrice !== undefined
+        ? product.singleSellingPrice
+        : (saleType === 'single' && product.singlesPerCarton ? Math.round(product.sellingPrice / product.singlesPerCarton) : product.sellingPrice);
 
-      setCart(prev => [...prev, {
+      const costPrice = saleType === 'single' && product.singlesPerCarton
+        ? product.costPrice / product.singlesPerCarton
+        : product.costPrice;
+
+      setCart([...cart, {
         productId,
         productName: product.name,
         quantity: qty,
@@ -211,6 +212,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         saleType,
       }]);
     }
+    playQuickAddSound();
     return true;
   };
 
@@ -406,6 +408,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       });
     onUpdate(result.store);
     if (result.sales.length > 0) {
+      playSoldSound();
       const newMilestone = checkNewMilestone(result.store);
       if (newMilestone) setActiveMilestone(newMilestone);
       setLastSales(result.sales);

@@ -1227,16 +1227,20 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
         }
         @keyframes walk-off-left {
           0% { transform: translateX(0) scaleX(1); }
-          20% { transform: translateX(-70vw) scaleX(1); }
-          21% { transform: translateX(-70vw) scaleX(-1); }
-          80% { transform: translateX(-70vw) scaleX(-1); }
-          100% { transform: translateX(0) scaleX(-1); }
+          18% { transform: translateX(-110%) scaleX(1); }
+          22%, 45% { transform: translateX(-140%) scaleX(1); }
+          50%, 75% { transform: translateX(-65%) rotate(8deg) scaleX(1); }
+          80% { transform: translateX(-140%) scaleX(1); }
+          85% { transform: translateX(-110%) scaleX(-1); }
+          100% { transform: translateX(0) scaleX(1); }
         }
         @keyframes walk-off-right {
           0% { transform: translateX(0) scaleX(-1); }
-          20% { transform: translateX(70vw) scaleX(-1); }
-          21% { transform: translateX(70vw) scaleX(1); }
-          80% { transform: translateX(70vw) scaleX(1); }
+          18% { transform: translateX(110%) scaleX(-1); }
+          22%, 45% { transform: translateX(140%) scaleX(-1); }
+          50%, 75% { transform: translateX(65%) rotate(-8deg) scaleX(-1); }
+          80% { transform: translateX(140%) scaleX(-1); }
+          85% { transform: translateX(110%) scaleX(1); }
           100% { transform: translateX(0) scaleX(1); }
         }
         @keyframes soccer-ball-timeline {
@@ -1401,7 +1405,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       )}
 
       {/* Speech Bubble - Screen Boundary Aware */}
-      {message && (
+      {message && !isWalkingOff && (
         <div 
           className={`absolute ${bubblePosition === 'above' ? 'bottom-full mb-3' : 'top-full mt-3'} left-1/2 z-50 pointer-events-none`}
           style={{

@@ -3,6 +3,7 @@ import { StoreData, StoreCategory } from '@/types/store';
 import { getStoreIndex, loadStore, createStore, removeStoreFromIndex } from '@/lib/store-data';
 import { saveSession } from '@/components/Settings';
 import { showToast } from '@/components/Toast';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 const CATEGORIES: { id: StoreCategory; label: string; icon: string }[] = [
   { id: 'retail', label: 'Retail', icon: '🛒' },
@@ -18,6 +19,7 @@ interface StoreSwitcherProps {
 }
 
 export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreSwitcherProps) {
+  useBodyScrollLock();
   const [mode, setMode] = useState<'list' | 'add' | 'create'>('list');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');

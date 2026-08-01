@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Eye, EyeOff, Lock, Mail, User, X, Cloud, LogIn, UserPlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showToast } from '@/components/Toast';
+import { Eye, EyeOff, Lock, Mail, User, Sparkles, Check, ArrowRight, X } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface CloudAuthModalProps {
   onClose: () => void;
@@ -16,6 +17,7 @@ export default function CloudAuthModal({
   initialEmail, 
   initialFullName 
 }: CloudAuthModalProps) {
+  useBodyScrollLock();
   const [tab, setTab] = useState<'login' | 'signup'>('signup');
   const [email, setEmail] = useState(initialEmail || '');
   const [password, setPassword] = useState('');

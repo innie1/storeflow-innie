@@ -48,6 +48,8 @@
 [2026-08-01] v1.16.0 — Simple Mode universal search: top-right search icon overlay searching across Inventory (name/ID/barcode), Customers (name/phone), and Receipts (item/transaction ID) with tab navigation — severity: Low (new feature)
 [2026-08-01] v1.17.0 — Simple Mode voice sell: multi-item sales now share one transactionId; catalog-based auto-segmentation detects multi-item lists without needing "and"/comma — 🔴 High + 🟠 High
 [2026-08-01] v1.18.0 — Simple Mode voice sell: low-confidence cart matches flagged with "Not sure?" badge and inline tap-to-swap selection — 🔴 High + 🟠 High + 🟡 Medium
+[2026-08-01] v1.19.0 — Simple Mode voice sell: added token word matching and window token validation (isValidWindowForProduct) to prevent multi-product voice speech from being swallowed into a single item — 🔴 High (multi-item parsing fix)
+
 
 
 

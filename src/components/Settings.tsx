@@ -60,7 +60,17 @@ import {
   CheckCircle2,
   Copy,
   Plus,
-  Info
+  Info,
+  Palette,
+  Bell,
+  Database,
+  FileText,
+  Headphones,
+  QrCode,
+  Star,
+  Upload,
+  Cloud,
+  MoreHorizontal
 } from 'lucide-react';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
@@ -2406,164 +2416,182 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   }
 
   if (view === 'marketplace-settings') return (
-    <SubPage title="Marketplace Settings" onBack={() => setView('home')}>
+    <SubPage title="Marketplace, Store Type & Loyalty Settings" onBack={() => setView('home')}>
       <MarketplaceSettings store={store} onUpdate={onUpdate} />
     </SubPage>
   );
 
   // ============ SUB-VIEWS ============
-  if (view === 'profile') return (
-    <SubPage title="Edit Profile" onBack={() => setView('home')}>
-      <div className={`${card} p-5 space-y-4`}>
-        <div className="flex items-center gap-4">
-          <button onClick={() => photoInputRef.current?.click()}
-            className="relative w-20 h-20 rounded-2xl overflow-hidden bg-primary/15 border border-primary/30 flex items-center justify-center text-3xl">
-            {profile.photo ? (
-              <img src={profile.photo} alt="" className="w-full h-full object-cover" />
-            ) : profile.logoStyle ? (
-              <StoreLogo storeName={store.storeName} selectedStyle={profile.logoStyle} className="w-full h-full" />
-            ) : (
-              '🏪'
-            )}
-            <span className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">📷</span>
-          </button>
-          <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoPick} />
-          <div className="flex-1 space-y-1.5">
-            <button onClick={() => photoInputRef.current?.click()} className="text-xs font-display font-semibold text-primary">Change photo</button>
-            {profile.photo && <button onClick={removePhoto} className="block text-xs text-destructive">Remove</button>}
-            <div className="text-[11px] text-muted-foreground font-mono">Store ID: {store.accessCode}</div>
-            {store.managerSettings?.multiDeviceSync ? (
-              <div className="text-[10px] text-success font-semibold flex items-center gap-1.5 mt-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                ✓ Pushed to Internet (Synced)
-              </div>
-            ) : (
-              <div className="text-[10px] text-muted-foreground/60 font-semibold flex items-center gap-1.5 mt-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
-                Not Synced
-              </div>
-            )}
+  if (view === 'profile') {
+    const displayStoreType = store.retailType
+      ? store.retailType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      : (profile.storeType || store.category || 'Retail Store');
+
+    return (
+      <SubPage title="Edit Profile" onBack={() => setView('home')}>
+        {/* Store Identity Header Card */}
+        <div className={`${card} p-5 space-y-4`}>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              className="relative w-20 h-20 rounded-2xl overflow-hidden bg-primary/15 border border-primary/30 flex items-center justify-center text-3xl shrink-0 group cursor-pointer hover:border-primary transition-all"
+            >
+              {profile.photo ? (
+                <img src={profile.photo} alt="" className="w-full h-full object-cover" />
+              ) : profile.logoStyle ? (
+                <StoreLogo storeName={store.storeName} selectedStyle={profile.logoStyle} className="w-full h-full" />
+              ) : (
+                <Store className="w-8 h-8 text-primary" />
+              )}
+              <span className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center shadow-md">📷</span>
+            </button>
+            <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoPick} />
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <button onClick={() => photoInputRef.current?.click()} className="text-xs font-display font-bold text-primary hover:underline cursor-pointer">Change photo</button>
+              {profile.photo && <button onClick={removePhoto} className="block text-xs text-destructive hover:underline cursor-pointer">Remove</button>}
+              <div className="text-[11px] text-muted-foreground font-mono">Store ID: {store.accessCode}</div>
+              {store.managerSettings?.multiDeviceSync ? (
+                <div className="text-[10px] text-success font-bold flex items-center gap-1.5 mt-1">
+                  <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                  ✓ Cloud Synced
+                </div>
+              ) : (
+                <div className="text-[10px] text-muted-foreground/60 font-semibold flex items-center gap-1.5 mt-1">
+                  <span className="w-2 h-2 rounded-full bg-muted-foreground/50" />
+                  Local Device
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Field label="Owner Name" value={profile.ownerName || ''} onChange={v => setProfile({ ...profile, ownerName: v })} placeholder="Your full name" />
+          
+          {/* Read-Only Store Type Display Badge */}
+          <div className="p-3.5 rounded-xl bg-surface-2 border border-border/70 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">Store Category & Type</span>
+              <span className="text-sm font-display font-black text-foreground capitalize mt-0.5 block">{displayStoreType}</span>
+            </div>
+            <span className="px-3 py-1 rounded-lg bg-primary/10 border border-primary/20 text-xs font-display font-bold text-primary flex items-center gap-1">
+              🏪 <span className="capitalize">{store.category || 'Retail'}</span>
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs text-muted-foreground font-bold">Store Logo Concept</label>
+            <div className="grid grid-cols-5 gap-1.5">
+              {LOGO_STYLES.map(style => (
+                <button
+                  key={style.id}
+                  type="button"
+                  onClick={() => setProfile({ ...profile, logoStyle: style.id })}
+                  className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                    profile.logoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-border-hover'
+                  }`}
+                >
+                  <StoreLogo storeName={store.storeName} selectedStyle={style.id} className="w-8 h-8" />
+                  <span className="text-[8px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Field label="Business Address" value={profile.location} onChange={v => setProfile({ ...profile, location: v })} placeholder="12 Market Road, Lagos" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Phone" value={profile.phone} onChange={v => setProfile({ ...profile, phone: v })} placeholder="08012345678" type="tel" />
+            <Field label="Email" value={profile.email} onChange={v => setProfile({ ...profile, email: v })} placeholder="store@email.com" type="email" />
+          </div>
+          <Field label="Website" value={profile.website || ''} onChange={v => setProfile({ ...profile, website: v })} placeholder="www.mystore.com" />
+          
+          <div className="space-y-1 text-left">
+            <label className="block text-xs text-muted-foreground font-bold">Owner Password</label>
+            <div className="relative flex items-center">
+              <input
+                type={revealProfilePass ? "text" : "password"}
+                value={profilePassword}
+                onChange={e => setProfilePassword(e.target.value)}
+                placeholder="Enter password"
+                className={`${inputClass} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setRevealProfilePass(!revealProfilePass)}
+                className="absolute right-3 p-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                title={revealProfilePass ? "Hide Password" : "Show Password"}
+              >
+                {revealProfilePass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Opening Time" value={profile.openingTime || ''} onChange={v => setProfile({ ...profile, openingTime: v })} type="time" />
+            <Field label="Closing Time" value={profile.closingTime || ''} onChange={v => setProfile({ ...profile, closingTime: v })} type="time" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Business Opened" value={profile.openingDate || ''} onChange={v => setProfile({ ...profile, openingDate: v })} type="date" />
+            <Field label="Employees" value={String(profile.employees ?? '')} onChange={v => setProfile({ ...profile, employees: Number(v) || undefined })} type="number" placeholder="0" />
           </div>
         </div>
 
-        <Field label="Owner Name" value={profile.ownerName || ''} onChange={v => setProfile({ ...profile, ownerName: v })} placeholder="Your full name" />
-        <div>
-          <label className="block text-xs text-muted-foreground mb-1">Store Type</label>
-          <select value={profile.storeType} onChange={e => setProfile({ ...profile, storeType: e.target.value })} className={inputClass}>
-            <option value="">Select type…</option>
-            {['Retail Shop','Supermarket','Provision Store','Mini Mart','Wholesale','Pharmacy','Restaurant','Other'].map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="block text-xs text-muted-foreground mb-1">Store Logo Concept</label>
-          <div className="grid grid-cols-5 gap-1.5">
-            {LOGO_STYLES.map(style => (
-              <button
-                key={style.id}
-                type="button"
-                onClick={() => setProfile({ ...profile, logoStyle: style.id })}
-                className={`p-1 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                  profile.logoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-border-hover'
-                }`}
-              >
-                <StoreLogo storeName={store.storeName} selectedStyle={style.id} className="w-8 h-8" />
-                <span className="text-[7.5px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
+        {/* Rent Card */}
+        <div className={`${card} p-5 space-y-3`}>
+          <h3 className="font-display font-bold text-base text-foreground">Store Rent</h3>
+          <p className="text-xs text-muted-foreground -mt-1">Is your store property rented?</p>
+          <div className="flex gap-2">
+            {[{v:true,l:'Yes'},{v:false,l:'No · Property Owned'}].map(o => (
+              <button key={o.l} onClick={() => updateRent({ isRented: o.v })}
+                className={`flex-1 py-2.5 rounded-xl border text-xs font-display font-bold transition-all cursor-pointer ${rent.isRented===o.v ? 'bg-primary/15 border-primary/40 text-primary shadow-xs' : 'bg-surface-2 border-border text-muted-foreground'}`}>
+                {o.l}
               </button>
             ))}
           </div>
-        </div>
-        <Field label="Business Address" value={profile.location} onChange={v => setProfile({ ...profile, location: v })} placeholder="12 Market Road, Lagos" />
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Phone" value={profile.phone} onChange={v => setProfile({ ...profile, phone: v })} placeholder="08012345678" type="tel" />
-          <Field label="Email" value={profile.email} onChange={v => setProfile({ ...profile, email: v })} placeholder="store@email.com" type="email" />
-        </div>
-        <Field label="Website" value={profile.website || ''} onChange={v => setProfile({ ...profile, website: v })} placeholder="www.mystore.com" />
-        <div className="space-y-1 text-left">
-          <label className="block text-xs text-muted-foreground mb-1">Owner Password</label>
-          <div className="relative">
-            <input
-              type={revealProfilePass ? "text" : "password"}
-              value={profilePassword}
-              onChange={e => setProfilePassword(e.target.value)}
-              placeholder="Enter password"
-              className={inputClass}
-            />
-            <button
-              type="button"
-              onClick={() => setRevealProfilePass(!revealProfilePass)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer text-xs"
-              title={revealProfilePass ? "Hide Password" : "Show Password"}
-            >
-              👁️
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Opening Time" value={profile.openingTime || ''} onChange={v => setProfile({ ...profile, openingTime: v })} type="time" />
-          <Field label="Closing Time" value={profile.closingTime || ''} onChange={v => setProfile({ ...profile, closingTime: v })} type="time" />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Business Opened" value={profile.openingDate || ''} onChange={v => setProfile({ ...profile, openingDate: v })} type="date" />
-          <Field label="Employees" value={String(profile.employees ?? '')} onChange={v => setProfile({ ...profile, employees: Number(v) || undefined })} type="number" placeholder="0" />
-        </div>
-      </div>
-
-      {/* Rent */}
-      <div className={`${card} p-5 space-y-3`}>
-        <h3 className="font-display font-bold text-base">Store Rent</h3>
-        <p className="text-xs text-muted-foreground -mt-1">Is your store rented?</p>
-        <div className="flex gap-2">
-          {[{v:true,l:'Yes'},{v:false,l:'No · I own it'}].map(o => (
-            <button key={o.l} onClick={() => updateRent({ isRented: o.v })}
-              className={`flex-1 py-2.5 rounded-lg border text-sm font-display font-semibold ${rent.isRented===o.v ? 'bg-primary/15 border-primary/40 text-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}>
-              {o.l}
-            </button>
-          ))}
-        </div>
-        {rent.isRented && (
-          <div className="space-y-3 pt-2">
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Rent Amount (₦)" value={String(rent.amount ?? '')} onChange={v => updateRent({ amount: Number(v) || 0 })} type="number" />
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Frequency</label>
-                <select value={rent.frequency || 'yearly'} onChange={e => updateRent({ frequency: e.target.value as RentFrequency })} className={inputClass}>
-                  <option value="monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
+          {rent.isRented && (
+            <div className="space-y-3 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Rent Amount (₦)" value={String(rent.amount ?? '')} onChange={v => updateRent({ amount: Number(v) || 0 })} type="number" />
+                <div>
+                  <label className="block text-xs text-muted-foreground font-bold mb-1">Frequency</label>
+                  <select value={rent.frequency || 'yearly'} onChange={e => updateRent({ frequency: e.target.value as RentFrequency })} className={inputClass}>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
               </div>
-            </div>
-            <Field label="Next Due Date" value={rent.dueDate || ''} onChange={v => updateRent({ dueDate: v })} type="date" />
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Landlord (optional)" value={rent.landlordName || ''} onChange={v => updateRent({ landlordName: v })} />
-              <Field label="Landlord Contact" value={rent.landlordContact || ''} onChange={v => updateRent({ landlordContact: v })} />
-            </div>
-            {rent.amount ? (
-              <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-xs text-success">
-                Flow will plan for a 10% buffer → target ₦{Math.round((rent.amount || 0) * 1.1).toLocaleString()}
+              <Field label="Next Due Date" value={rent.dueDate || ''} onChange={v => updateRent({ dueDate: v })} type="date" />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Landlord (optional)" value={rent.landlordName || ''} onChange={v => updateRent({ landlordName: v })} />
+                <Field label="Landlord Contact" value={rent.landlordContact || ''} onChange={v => updateRent({ landlordContact: v })} />
               </div>
-            ) : null}
-          </div>
-        )}
-        {!rent.isRented && (
-          <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-xs text-success">
-            Store Owned · Flow will track maintenance & emergency reserves.
-          </div>
-        )}
-      </div>
+              {rent.amount ? (
+                <div className="p-3 rounded-xl bg-success/10 border border-success/30 text-xs text-success font-semibold">
+                  Flow will plan for a 10% buffer → target ₦{Math.round((rent.amount || 0) * 1.1).toLocaleString()}
+                </div>
+              ) : null}
+            </div>
+          )}
+          {!rent.isRented && (
+            <div className="p-3 rounded-xl bg-success/10 border border-success/30 text-xs text-success font-semibold">
+              ✓ Property Owned · Flow will track maintenance & emergency reserves.
+            </div>
+          )}
+        </div>
 
-      <button onClick={() => {
-        persistProfile(profile);
-        if (profilePassword.trim() && profilePassword.trim() !== store.managerSettings?.ownerPassword) {
-          updateMgr({ ownerPassword: profilePassword.trim() });
-        }
-        setView('home');
-        showToast('Profile saved');
-      }}
-        className="w-full p-3 rounded-xl bg-primary text-primary-foreground font-display font-bold">Save Profile</button>
-
-    </SubPage>
-  );
+        <button onClick={() => {
+          persistProfile(profile);
+          if (profilePassword.trim() && profilePassword.trim() !== store.managerSettings?.ownerPassword) {
+            updateMgr({ ownerPassword: profilePassword.trim() });
+          }
+          setView('home');
+          showToast('Profile saved');
+        }}
+          className="w-full p-3.5 rounded-xl bg-primary text-primary-foreground font-display font-bold hover:opacity-90 active:scale-98 transition-all cursor-pointer shadow-md">
+          Save Profile
+        </button>
+      </SubPage>
+    );
+  }
 
   if (view === 'flow') return (
     <SubPage title="Flow Settings" onBack={() => setView('home')}>
@@ -2771,8 +2799,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     </SubPage>
   );
 
-  if (view === 'pricing') return (
-    <SubPage title="Pricing" onBack={() => setView('home')}>
+  if (view === 'pricing' || view === 'discount') return (
+    <SubPage title="Pricing & Discounts" subtitle="Configure profit margins, smart pricing rules, and automatic checkout discounts" onBack={() => setView('home')}>
+      {/* SECTION 1: Profit Margin & Smart Pricing */}
+      <div className="px-1">
+        <SectionLabel>Profit Margin & Smart Pricing</SectionLabel>
+      </div>
       <div className={`${card} p-4 space-y-3`}>
         <div className="flex items-center justify-between">
           <div>
@@ -2825,6 +2857,93 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           </div>
         </div>
       )}
+
+      {/* SECTION 2: Automatic Checkout Discounts */}
+      <div className="px-1 mt-4">
+        <SectionLabel>Automatic Checkout Discounts</SectionLabel>
+      </div>
+      <div className={`${card} px-4 divide-y divide-border`}>
+        <ToggleRow
+          label="Enable Automatic Discount"
+          description="Automatically calculate and apply a discount at checkout if criteria are met."
+          checked={mgr.autoDiscountEnabled ?? false}
+          onChange={v => updateMgr({ autoDiscountEnabled: v })}
+        />
+      </div>
+
+      {mgr.autoDiscountEnabled && (
+        <div className={`${card} p-4 space-y-4 animate-fade-in`}>
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">Discount Type</label>
+            <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden">
+              {([['percentage', 'Percentage (%)'], ['flat', 'Flat Amount (₦)']] as const).map(([type, label]) => (
+                <button
+                  key={type}
+                  onClick={() => updateMgr({ autoDiscountType: type })}
+                  className={`flex-1 px-3 py-2 text-xs font-display font-semibold transition-all ${
+                    mgr.autoDiscountType === type ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">
+              Discount Value {mgr.autoDiscountType === 'percentage' ? '(%)' : '(₦)'}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                value={discValStr}
+                onChange={e => handleDiscValChange(e.target.value)}
+                className={inputClass + ' flex-1 font-display font-bold text-sm'}
+                placeholder="0"
+              />
+              <span className="text-sm font-bold text-primary">
+                {mgr.autoDiscountType === 'percentage' ? '%' : '₦'}
+              </span>
+            </div>
+          </div>
+
+          <div className="border-t border-border/60 pt-3">
+            <h4 className="text-xs font-display font-bold text-muted-foreground uppercase mb-2">Conditions (Criteria)</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-1">Min Subtotal (₦)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={discMinStr}
+                  onChange={e => handleDiscMinChange(e.target.value)}
+                  className={inputClass + ' font-mono text-xs'}
+                  placeholder="0"
+                />
+                <span className="text-[9px] text-muted-foreground block mt-0.5">e.g. above 10,000</span>
+              </div>
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-1">Max Subtotal (₦)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={discMaxStr}
+                  onChange={e => handleDiscMaxChange(e.target.value)}
+                  className={inputClass + ' font-mono text-xs'}
+                  placeholder="0"
+                />
+                <span className="text-[9px] text-muted-foreground block mt-0.5">e.g. below 50,000</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="p-3 bg-success/10 border border-success/20 rounded-xl text-[11px] text-success leading-relaxed">
+        <strong>How it works:</strong> Automatic discounts apply in the shopping cart when the subtotal falls within your defined criteria range. You can always override or edit the discount manually during checkout.
+      </div>
     </SubPage>
   );
 
@@ -2944,99 +3063,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             Save Settings
           </button>
         </div>
-      </div>
-    </SubPage>
-  );
-
-  if (view === 'wishlist') return (
-    <SubPage title="Wishlist" subtitle="Track products you want to add or stock" onBack={() => setView('home')}>
-      <Wishlist store={store} onUpdate={handleWishlistUpdate} />
-    </SubPage>
-  );
-
-  if (view === 'discount') return (
-    <SubPage title="Automatic Discounts" onBack={() => setView('home')}>
-      <div className={`${card} px-4 divide-y divide-border`}>
-        <ToggleRow
-          label="Enable Automatic Discount"
-          description="Automatically calculate and apply a discount at checkout if criteria are met."
-          checked={mgr.autoDiscountEnabled ?? false}
-          onChange={v => updateMgr({ autoDiscountEnabled: v })}
-        />
-      </div>
-
-      {mgr.autoDiscountEnabled && (
-        <div className={`${card} p-4 space-y-4 animate-fade-in`}>
-          <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1">Discount Type</label>
-            <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden">
-              {([['percentage', 'Percentage (%)'], ['flat', 'Flat Amount (₦)']] as const).map(([type, label]) => (
-                <button
-                  key={type}
-                  onClick={() => updateMgr({ autoDiscountType: type })}
-                  className={`flex-1 px-3 py-2 text-xs font-display font-semibold transition-all ${
-                    mgr.autoDiscountType === type ? 'bg-primary text-primary-foreground font-bold' : 'text-muted-foreground'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1">
-              Discount Value {mgr.autoDiscountType === 'percentage' ? '(%)' : '(₦)'}
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min="0"
-                value={discValStr}
-                onChange={e => handleDiscValChange(e.target.value)}
-                className={inputClass + ' flex-1 font-display font-bold text-sm'}
-                placeholder="0"
-              />
-              <span className="text-sm font-bold text-primary">
-                {mgr.autoDiscountType === 'percentage' ? '%' : '₦'}
-              </span>
-            </div>
-          </div>
-
-          <div className="border-t border-border/60 pt-3">
-            <h4 className="text-xs font-display font-bold text-muted-foreground uppercase mb-2">Conditions (Criteria)</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] text-muted-foreground mb-1">Min Subtotal (₦)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={discMinStr}
-                  onChange={e => handleDiscMinChange(e.target.value)}
-                  className={inputClass + ' font-mono text-xs'}
-                  placeholder="0"
-                />
-                <span className="text-[9px] text-muted-foreground block mt-0.5">e.g. above 10,000</span>
-              </div>
-              <div>
-                <label className="block text-[10px] text-muted-foreground mb-1">Max Subtotal (₦)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={discMaxStr}
-                  onChange={e => handleDiscMaxChange(e.target.value)}
-                  className={inputClass + ' font-mono text-xs'}
-                  placeholder="0"
-                />
-                <span className="text-[9px] text-muted-foreground block mt-0.5">e.g. below 50,000</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      <div className="p-3 bg-success/10 border border-success/20 rounded-xl text-[11px] text-success leading-relaxed">
-        <strong>How it works:</strong> Automatic discounts apply in the shopping cart when the subtotal falls within your defined criteria range. You can always override or edit the discount manually during checkout.
       </div>
     </SubPage>
   );
@@ -4297,129 +4323,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             </div>
           </button>
 
-          {/* Store Type — editable anytime, drives what customers see when they scan */}
-          <div className={`${card} w-full p-4 space-y-2.5`}>
-            <div>
-              <h3 className="font-display font-bold text-sm">Store Type</h3>
-              <p className="text-[11px] text-muted-foreground">What customers see when they scan your QR code</p>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {([
-                { id: 'provision', label: 'Provision', icon: '🛒' },
-                { id: 'clothing', label: 'Clothing', icon: '👕' },
-                { id: 'food', label: 'Food', icon: '🍲' },
-                { id: 'electronics', label: 'Electronics', icon: '💻' },
-                { id: 'laundry', label: 'Laundry', icon: '👔' },
-                { id: 'gas_filling', label: 'Gas Filling', icon: '🔥' },
-                { id: 'restaurant', label: 'Restaurant', icon: '🍽️' },
-                { id: 'games', label: 'Games', icon: '🎮' },
-                { id: 'other', label: 'Other', icon: '🏪' },
-              ] as const).map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    if ((store.storeType || 'provision') === t.id) return;
-                    setPendingStoreType(t.id);
-                    setStoreTypeCodeInput('');
-                  }}
-                  className={`p-2.5 rounded-xl border text-center transition-colors ${
-                    (store.storeType || 'provision') === t.id
-                      ? 'bg-primary/10 border-primary text-foreground'
-                      : 'bg-surface-2/40 border-border text-muted-foreground'
-                  }`}
-                >
-                  <span className="block text-lg">{t.icon}</span>
-                  <span className="block text-[10px] font-display font-semibold mt-0.5">{t.label}</span>
-                </button>
-              ))}
-            </div>
-            {pendingStoreType && (
-              <div className="p-3 rounded-xl bg-warning/5 border border-warning/30 space-y-2">
-                <p className="text-xs font-display font-bold">⚠️ Confirm store type change</p>
-                <p className="text-[11px] text-muted-foreground">
-                  This changes what customers see when they scan your QR code. Enter your store code to confirm — this isn't permanent, you can always change it again the same way.
-                </p>
-                <input
-                  type="text"
-                  value={storeTypeCodeInput}
-                  onChange={e => setStoreTypeCodeInput(e.target.value)}
-                  placeholder="Store code"
-                  className={inputClass}
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { setPendingStoreType(null); setStoreTypeCodeInput(''); }}
-                    className="flex-1 py-2 rounded-lg text-xs font-display font-bold border border-border text-muted-foreground"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmStoreTypeChange}
-                    className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-warning text-black"
-                  >
-                    Confirm Change
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Loyalty Program — merchant sets the rate and redemption threshold */}
-          <div className={`${card} w-full p-4 space-y-3`}>
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-display font-bold text-sm">Loyalty Program</h3>
-                <p className="text-[11px] text-muted-foreground">Customers earn points on completed orders, redeemable for a discount</p>
-              </div>
-              <button
-                onClick={() => updateLoyalty({ enabled: !loyalty.enabled })}
-                className={`shrink-0 w-11 h-6 rounded-full transition-colors relative ${loyalty.enabled ? 'bg-primary' : 'bg-surface-2 border border-border'}`}
-              >
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${loyalty.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-              </button>
-            </div>
 
-            {loyalty.enabled && (
-              <div className="space-y-3 pt-1">
-                <div className="space-y-1">
-                  <label className="block text-[11px] text-muted-foreground uppercase font-bold">Points earned per ₦100 spent</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={loyalty.earnPerHundred}
-                    onChange={e => updateLoyalty({ earnPerHundred: Math.max(0, Number(e.target.value) || 0) })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] text-muted-foreground uppercase font-bold">Points to redeem</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={loyalty.redeemThreshold}
-                      onChange={e => updateLoyalty({ redeemThreshold: Math.max(1, Number(e.target.value) || 1) })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="block text-[11px] text-muted-foreground uppercase font-bold">Discount (₦)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={loyalty.redeemValueNaira}
-                      onChange={e => updateLoyalty({ redeemValueNaira: Math.max(0, Number(e.target.value) || 0) })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface-2/40 text-sm font-display focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Example: a customer spending ₦{(loyalty.redeemThreshold * 100 / Math.max(1, loyalty.earnPerHundred)).toLocaleString()} total earns enough points for ₦{loyalty.redeemValueNaira.toLocaleString()} off.
-                </p>
-              </div>
-            )}
-          </div>
 
           {/* Sales Target Card */}
           <div className={`${card} w-full p-4 space-y-3`}>
@@ -4509,20 +4414,25 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
         {/* Right column — settings tiles */}
         <div className="md:col-span-7 space-y-3">
-          <SettingTile icon="🏷️" color="#F2C94C" title="Pricing" desc="Manage profit margin and pricing." right={<><p className="text-[10px] text-muted-foreground">Default Margin</p><p className="text-base font-display font-bold text-primary">{mgr.defaultMargin}%</p></>} onClick={() => setView('pricing')} />
-          <SettingTile icon="💸" color="#10B981" title="Discounts" desc="Automatic checkout discount settings."
-            right={<>
-              <p className="text-[10px] text-muted-foreground">{mgr.autoDiscountEnabled ? 'Active' : 'Disabled'}</p>
-              {mgr.autoDiscountEnabled && (
-                <p className="text-sm font-display font-bold text-success">
-                  {mgr.autoDiscountType === 'percentage' ? `${mgr.autoDiscountValue}%` : `₦${(mgr.autoDiscountValue || 0).toLocaleString()}`}
+          <SettingTile
+            icon={<Tag className="w-5 h-5" />}
+            color="#F2C94C"
+            title="Pricing & Discounts"
+            desc="Manage profit margin, smart pricing rules, and automatic discounts"
+            right={
+              <div>
+                <p className="text-[10px] text-muted-foreground">Default Margin</p>
+                <p className="text-sm font-display font-bold text-primary">{mgr.defaultMargin}%</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Discount: {mgr.autoDiscountEnabled ? (mgr.autoDiscountType === 'percentage' ? `${mgr.autoDiscountValue}%` : `₦${(mgr.autoDiscountValue || 0).toLocaleString()}`) : 'Off'}
                 </p>
-              )}
-            </>}
-            onClick={() => setView('discount')} />
-          <SettingTile icon="📦" color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />
-          <SettingTile icon="🌟" color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView('wishlist')} />
-          <SettingTile icon="🐖" color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}
+              </div>
+            }
+            onClick={() => setView('pricing')}
+          />
+          <SettingTile icon={<Package className="w-5 h-5" />} color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />
+          <SettingTile icon={<Star className="w-5 h-5" />} color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView('wishlist')} />
+          <SettingTile icon={<PiggyBank className="w-5 h-5" />} color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}
             right={<div className="text-right space-y-1">
               <p className="text-[10px] text-muted-foreground">Goal</p>
               <p className="text-sm font-display font-bold" style={{ color: '#9B6BFB' }}>₦{savings.amount.toLocaleString()}</p>
@@ -4532,7 +4442,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               <p className="text-[10px] text-muted-foreground">{Math.round(savingsPct)}%</p>
             </div>} />
 
-          <SettingTile icon="🎨" color="#5B8FF9" title="Appearance" desc="Customize theme and experience." onClick={() => setView('appearance')}
+          <SettingTile icon={<Palette className="w-5 h-5" />} color="#5B8FF9" title="Appearance" desc="Customize theme and experience." onClick={() => setView('appearance')}
             right={<div className="flex gap-1.5">
               {THEMES.map(t => (
                 <div key={t.id} className={`w-10 h-10 rounded-xl flex items-center justify-center text-base border ${theme===t.id ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`} style={{ background: t.swatch + '22' }}>
@@ -4541,34 +4451,39 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               ))}
             </div>} />
 
-          <SettingTile icon="🔔" color="#FF8A3D" title="Notifications" desc="Manage alerts and reminders." onClick={() => setView('notifications')}
+          <SettingTile icon={<Bell className="w-5 h-5" />} color="#FF8A3D" title="Notifications" desc="Manage alerts and reminders." onClick={() => setView('notifications')}
             right={<><p className="text-[10px] font-display font-semibold text-warning">{activeNotifTypes} Types Active</p>
               <div className="flex gap-1 mt-1">{['📊','⭐','⚠️','📘','💰'].map((e,i)=><span key={i} className="w-6 h-6 rounded bg-surface-2 border border-border flex items-center justify-center text-[10px]">{e}</span>)}</div></> } />
 
-          <SettingTile icon="🛡️" color="#2EBFB1" title="Security" desc="App lock, access code, reset password, and credentials." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='4h'?'4 Hours':timer==='8h'?'8 Hours':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
+          <SettingTile icon={<ShieldCheck className="w-5 h-5" />} color="#2EBFB1" title="Security" desc="App lock, access code, reset password, and credentials." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='4h'?'4 Hours':timer==='8h'?'8 Hours':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
 
-          <SettingTile icon="📱" color="#FFC72C" title="QR & Barcodes" desc="Branded QR codes, analytics, and product tags." onClick={() => setView('barcode')} />
+          <SettingTile icon={<QrCode className="w-5 h-5" />} color="#FFC72C" title="QR & Barcodes" desc="Branded QR codes, analytics, and product tags." onClick={() => setView('barcode')} />
 
-          <SettingTile icon="🛍️" color="#EC4899" title="Marketplace Settings" desc="Configure storefront visibility, pricing, delivery, and rewards." onClick={() => setView('marketplace-settings')} />
+          <SettingTile icon={<Store className="w-5 h-5" />} color="#EC4899" title="Marketplace, Store Type & Loyalty Settings" desc="Configure storefront visibility, category type, pricing, loyalty rewards, and delivery." onClick={() => setView('marketplace-settings')} />
 
-          <SettingTile icon="🖨️" color="#22C55E" title="Printer Settings" desc="Choose System/WiFi or Bluetooth thermal printing for receipts."
+          <SettingTile icon={<Printer className="w-5 h-5" />} color="#22C55E" title="Printer Settings" desc="Choose System/WiFi or Bluetooth thermal printing for receipts."
             right={<p className="text-[10px] font-display font-semibold" style={{color:'#22C55E'}}>{(store.managerSettings?.printMethod || 'system') === 'bluetooth' ? '🔵 Bluetooth' : '🖨️ System/WiFi'}</p>}
             onClick={() => setView('printer-settings')} />
 
-          <SettingTile icon="🗄️" color="#3B82F6" title="Data & Storage" desc="Import, export, backups, and store deletion." onClick={() => setView('data')}
+          <SettingTile icon={<Database className="w-5 h-5" />} color="#3B82F6" title="Data & Storage" desc="Import, export, backups, and store deletion." onClick={() => setView('data')}
             right={<div className="flex gap-1">
-              {[{e:'⬆️',l:'Export'},{e:'⬇️',l:'Import'},{e:'☁️',l:'Backup'},{e:'⋯',l:'More'}].map(o=>(
-                <div key={o.l} className="w-10 h-10 rounded-lg bg-surface-2 border border-border flex flex-col items-center justify-center">
-                  <span className="text-xs">{o.e}</span>
-                  <span className="text-[8px] text-muted-foreground">{o.l}</span>
+              {[
+                { e: <Download className="w-3.5 h-3.5 text-emerald-500" />, l: 'Export' },
+                { e: <Upload className="w-3.5 h-3.5 text-primary" />, l: 'Import' },
+                { e: <Cloud className="w-3.5 h-3.5 text-sky-400" />, l: 'Backup' },
+                { e: <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />, l: 'More' }
+              ].map(o => (
+                <div key={o.l} className="w-10 h-10 rounded-lg bg-surface-2 border border-border flex flex-col items-center justify-center gap-0.5">
+                  {o.e}
+                  <span className="text-[8px] text-muted-foreground font-semibold">{o.l}</span>
                 </div>
               ))}
             </div>} />
 
           {currentUser?.role === 'owner' && (
-            <SettingTile icon="📋" color="#2F80ED" title="Audit Activity Logs" desc="View secure logs tracking actions performed in this store." onClick={() => setView('activity-log')} />
+            <SettingTile icon={<FileText className="w-5 h-5" />} color="#2F80ED" title="Audit Activity Logs" desc="View secure logs tracking actions performed in this store." onClick={() => setView('activity-log')} />
           )}
-          <SettingTile icon="🎧" color="#F2C94C" title="Support" desc="Help, FAQs and contact." onClick={() => setView('support')} />
+          <SettingTile icon={<Headphones className="w-5 h-5" />} color="#F2C94C" title="Support" desc="Help, FAQs and contact." onClick={() => setView('support')} />
         </div>
       </div>
 
@@ -4624,7 +4539,7 @@ function NumberRow({ label, value, onChange, onSave }: { label: string; value: s
   );
 }
 
-function SettingTile({ icon, color, title, desc, right, onClick }: { icon: string; color: string; title: string; desc: string; right?: React.ReactNode; onClick: () => void }) {
+function SettingTile({ icon, color, title, desc, right, onClick }: { icon: React.ReactNode; color: string; title: string; desc: string; right?: React.ReactNode; onClick: () => void }) {
   return (
     <button onClick={onClick} className={tileBase}>
       <IconBadge color={color}>{icon}</IconBadge>
@@ -4640,8 +4555,8 @@ function SettingTile({ icon, color, title, desc, right, onClick }: { icon: strin
 
 function DataTile({ icon, label, subtitle, onClick, iconBg, iconColor }: { icon: React.ReactNode; label: string; subtitle: string; onClick: () => void; iconBg: string; iconColor: string }) {
   return (
-    <button onClick={onClick} className="p-4.5 rounded-2xl bg-card border border-border flex flex-col gap-3.5 hover:border-primary/40 transition-all text-left w-full cursor-pointer active:scale-[0.98]">
-      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: iconBg, color: iconColor }}>
+    <button onClick={onClick} className="p-4.5 rounded-2xl bg-card border border-border flex flex-col items-center justify-center text-center gap-3 hover:border-primary/40 transition-all w-full cursor-pointer active:scale-[0.98]">
+      <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: iconBg, color: iconColor }}>
         {icon}
       </div>
       <div className="space-y-1">

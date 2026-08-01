@@ -1,5 +1,6 @@
 import { StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface NotificationDrawerProps {
   store: StoreData;
@@ -9,6 +10,7 @@ interface NotificationDrawerProps {
 }
 
 export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate }: NotificationDrawerProps) {
+  useBodyScrollLock();
   // Only display unread notifications in the tray
   const notes = (store.flowNotifications || []).filter(n => !n.read);
 

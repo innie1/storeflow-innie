@@ -5,10 +5,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { generateStoreUrl } from '@/lib/qr-code';
 import { saveStore } from '@/lib/store-data';
 import { getPushSubscriptionState, subscribeToOrderPush, unsubscribeFromOrderPush } from '@/lib/push-notifications';
+import ToggleRow from '@/components/Toggle';
 import { 
   Store, Eye, Percent, Clock, CreditCard, MapPin, 
   Calendar, Bell, UserCheck, ShieldAlert, Check, X,
-  ExternalLink, ChevronRight, Phone
+  ExternalLink, ChevronRight, Phone, Tag, Award
 } from 'lucide-react';
 
 interface MarketplaceSettingsProps {
@@ -115,6 +116,42 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
   const [form, setForm] = useState(settings);
   const [activeSection, setActiveSection] = useState<string>('visibility');
   const [saving, setSaving] = useState(false);
+
+  const [loyaltySettings, setLoyaltySettings] = useState(
+    store.loyaltySettings || { enabled: false, earnPerHundred: 1, redeemThreshold: 100, redeemValueNaira: 500 }
+  );
+
+  useEffect(() => {
+    if (store.loyaltySettings) setLoyaltySettings(store.loyaltySettings);
+  }, [store.loyaltySettings]);
+
+  const handleLoyaltyChange = (patch: Partial<typeof loyaltySettings>) => {
+    const next = { ...loyaltySettings, ...patch };
+    setLoyaltySettings(next);
+    const updatedStore: StoreData = {
+      ...store,
+      loyaltySettings: next,
+    };
+    saveStore(updatedStore);
+    onUpdate(updatedStore);
+  };
+
+  const [pendingStoreType, setPendingStoreType] = useState<string | null>(null);
+  const [storeTypeCodeInput, setStoreTypeCodeInput] = useState('');
+
+  const confirmStoreTypeChange = () => {
+    if (!pendingStoreType) return;
+    if (storeTypeCodeInput.trim() !== store.accessCode) {
+      showToast('Incorrect store code', 'error');
+      return;
+    }
+    const updatedStore = { ...store, storeType: pendingStoreType };
+    saveStore(updatedStore);
+    onUpdate(updatedStore);
+    setPendingStoreType(null);
+    setStoreTypeCodeInput('');
+    showToast('Store type updated', 'success');
+  };
 
   // Sync pricing settings with store.managerSettings pricing toggles
   const updatePricingModes = (pricingMode: 'retail' | 'wholesale' | 'both') => {
@@ -401,6 +438,78 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                   onChange={v => handleChange('showLimitedStock', v)}
                 />
               </div>
+
+              {/* Store Type — editable anytime, drives what customers see when they scan */}
+              <div className="bg-surface-2 p-4 rounded-2xl border border-border space-y-2.5">
+                <div>
+                  <h4 className="font-display font-bold text-sm">Store Type</h4>
+                  <p className="text-[11px] text-muted-foreground">What customers see when they scan your QR code</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { id: 'provision', label: 'Provision', icon: '🛒' },
+                    { id: 'clothing', label: 'Clothing', icon: '👕' },
+                    { id: 'food', label: 'Food', icon: '🍲' },
+                    { id: 'electronics', label: 'Electronics', icon: '💻' },
+                    { id: 'laundry', label: 'Laundry', icon: '👔' },
+                    { id: 'gas_filling', label: 'Gas Filling', icon: '🔥' },
+                    { id: 'restaurant', label: 'Restaurant', icon: '🍽️' },
+                    { id: 'games', label: 'Games', icon: '🎮' },
+                    { id: 'other', label: 'Other', icon: '🏪' },
+                  ] as const).map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        if ((store.storeType || 'provision') === t.id) return;
+                        setPendingStoreType(t.id);
+                        setStoreTypeCodeInput('');
+                      }}
+                      className={`p-2.5 rounded-xl border text-center transition-colors cursor-pointer ${
+                        (store.storeType || 'provision') === t.id
+                          ? 'bg-primary/10 border-primary text-foreground font-bold'
+                          : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span className="block text-lg">{t.icon}</span>
+                      <span className="block text-[10px] font-display font-semibold mt-0.5">{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {pendingStoreType && (
+                  <div className="p-3 rounded-xl bg-warning/5 border border-warning/30 space-y-2">
+                    <p className="text-xs font-display font-bold">⚠️ Confirm store type change</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      This changes what customers see when they scan your QR code. Enter your store code to confirm — this isn't permanent, you can always change it again the same way.
+                    </p>
+                    <input
+                      type="text"
+                      value={storeTypeCodeInput}
+                      onChange={e => setStoreTypeCodeInput(e.target.value)}
+                      placeholder="Store code"
+                      className="w-full p-2.5 rounded-lg bg-card border border-border text-foreground focus:outline-none focus:border-primary text-sm"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setPendingStoreType(null); setStoreTypeCodeInput(''); }}
+                        className="flex-1 py-2 rounded-lg text-xs font-display font-bold border border-border text-muted-foreground"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmStoreTypeChange}
+                        className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-warning text-black"
+                      >
+                        Confirm Change
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
 
@@ -680,6 +789,58 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                   </div>
                 </div>
               </div>
+
+              {/* Loyalty Program — merchant sets the rate and redemption threshold */}
+              <div className="bg-surface-2 p-4 rounded-2xl border border-border space-y-3">
+                <ToggleRow
+                  label="Loyalty Program"
+                  description="Customers earn points on completed orders, redeemable for a discount"
+                  checked={loyaltySettings.enabled}
+                  onChange={(val) => handleLoyaltyChange({ enabled: val })}
+                />
+
+                {loyaltySettings.enabled && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-muted-foreground uppercase font-bold">Points earned per ₦100 spent</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={loyaltySettings.earnPerHundred}
+                        onChange={e => handleLoyaltyChange({ earnPerHundred: Math.max(0, Number(e.target.value) || 0) })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-card text-sm font-display focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-muted-foreground uppercase font-bold">Points to redeem</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={loyaltySettings.redeemThreshold}
+                          onChange={e => handleLoyaltyChange({ redeemThreshold: Math.max(1, Number(e.target.value) || 1) })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-card text-sm font-display focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-muted-foreground uppercase font-bold">Discount (₦)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={loyaltySettings.redeemValueNaira}
+                          onChange={e => handleLoyaltyChange({ redeemValueNaira: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-card text-sm font-display focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Example: a customer spending ₦{(loyaltySettings.redeemThreshold * 100 / Math.max(1, loyaltySettings.earnPerHundred)).toLocaleString()} total earns enough points for ₦{loyaltySettings.redeemValueNaira.toLocaleString()} off.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+
 
               {/* Promo badge preview */}
               <div className="bg-primary/5 p-3 rounded-2xl border border-primary/20 flex flex-col items-center justify-center text-center">

@@ -4,6 +4,7 @@ import { recordSale, saveStore, generateId, getSalesTargetStatus } from '@/lib/s
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
+import { playSoldSound, playProductAddedSound } from '@/lib/sound-effects';
 import SimpleVoiceSell from './SimpleVoiceSell';
 import SimpleOnboarding from './SimpleOnboarding';
 import OfflineQueueBanner, { markSaleQueuedIfOffline } from './OfflineQueueBanner';
@@ -79,6 +80,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     saveStore(updated);
     setStore(updated);
     markSaleQueuedIfOffline(store.accessCode);
+    playSoldSound();
 
     if (blockedAny) {
       showToast('Some items didn\'t have enough stock and were skipped', 'error');
@@ -106,6 +108,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     const updated: StoreData = { ...store, products: [...store.products, newProduct] };
     saveStore(updated);
     setStore(updated);
+    playProductAddedSound();
     showToast(`${name} added`, 'success');
     return newProduct;
   };

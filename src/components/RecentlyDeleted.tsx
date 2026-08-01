@@ -3,6 +3,7 @@ import { StoreData, TrashItem, Product, Sale, Expense } from '@/types/store';
 import { getTrash, restoreTrashItem, purgeTrashItem, emptyTrash } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface RecentlyDeletedProps {
   store: StoreData;
@@ -23,25 +24,23 @@ function describe(item: TrashItem): { title: string; subtitle: string } {
   }
   if (item.kind === 'sale') {
     const s = item.payload as Sale;
-    return {
-      title: s.productName,
-      subtitle: `${s.quantity} × ₦${s.unitPrice.toLocaleString()} = ₦${s.total.toLocaleString()}`,
-    };
+    return { title: `Sale #${s.id.slice(-6)}`, subtitle: `₦${s.totalAmount.toLocaleString()} • ${s.items.length} items` };
   }
   const e = item.payload as Expense;
-  return { title: e.category, subtitle: `₦${e.amount.toLocaleString()}${e.note ? ` • ${e.note}` : ''}` };
+  return { title: e.description || 'Expense', subtitle: `₦${e.amount.toLocaleString()} • ${e.category}` };
 }
 
 function timeLeft(deletedAt: string): string {
-  const ms = 7 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(deletedAt).getTime());
-  if (ms <= 0) return 'expiring';
-  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
-  const hours = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  const expires = new Date(deletedAt).getTime() + 30 * 24 * 60 * 60 * 1000;
+  const remMs = Math.max(0, expires - Date.now());
+  const days = Math.floor(remMs / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((remMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
   if (days >= 1) return `${days}d ${hours}h left`;
   return `${hours}h left`;
 }
 
 export default function RecentlyDeleted({ store, onUpdate, onClose }: RecentlyDeletedProps) {
+  useBodyScrollLock();
   const trash = getTrash(store);
   const [filter, setFilter] = useState<'all' | TrashItem['kind']>('all');
   const [confirmEmpty, setConfirmEmpty] = useState(false);

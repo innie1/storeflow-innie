@@ -5,6 +5,7 @@ import {
   getAchievements, getPerformanceInsight, PerfStatus, PeriodPerformance, DayPerformance,
 } from '@/lib/performance-calendar';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface PerformanceCalendarProps {
   store: StoreData;
@@ -33,6 +34,7 @@ const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function PerformanceCalendar({ store, onClose }: PerformanceCalendarProps) {
+  useBodyScrollLock();
   const [view, setView] = useState<ViewMode>('daily');
   const [cursor, setCursor] = useState(new Date());
   const [detail, setDetail] = useState<PeriodPerformance | null>(null);

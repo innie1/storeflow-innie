@@ -236,6 +236,21 @@ function findBestMatches(nameTokens: string[], products: Product[]): { product: 
 
     if (pn === spanN) return { product: p, score: 0 };
     if (pp === spanP) return { product: p, score: 0.3 };
+
+    // Token/word match — e.g. "indomie" matches "Indomie Chicken 70g" or "Indomie Super Pack"
+    const pWordsN = p.name.toLowerCase().split(/\s+/).map(norm).filter(Boolean);
+    const pWordsP = p.name.toLowerCase().split(/\s+/).map(phoneticNorm).filter(Boolean);
+    const queryWordsN = nameTokens.map(norm).filter(Boolean);
+    const queryWordsP = nameTokens.map(phoneticNorm).filter(Boolean);
+
+    if (queryWordsN.length > 0) {
+      const allTokensMatch = queryWordsN.every(qw =>
+        pWordsN.some(pw => pw === qw || (pw.startsWith(qw) && qw.length >= 3)) ||
+        pWordsP.some((pw, idx) => pw === queryWordsP[idx] || (pw.startsWith(queryWordsP[idx]) && queryWordsP[idx].length >= 3))
+      );
+      if (allTokensMatch) return { product: p, score: 0.5 };
+    }
+
     if (pn.includes(spanN) && spanN.length >= 3 && lengthRatioOk(pn, spanN)) return { product: p, score: 1 };
     if (spanN.includes(pn) && pn.length >= 3 && lengthRatioOk(spanN, pn)) return { product: p, score: 1.1 };
     if (pp.includes(spanP) && spanP.length >= 3 && lengthRatioOk(pp, spanP)) return { product: p, score: 1.3 };
@@ -262,6 +277,26 @@ function findBestMatches(nameTokens: string[], products: Product[]): { product: 
 // of tokens that never matches anything gets folded into a leftover
 // "unmatched" cart entry (product: null) — same as the single-item
 // add-product fallback already shows, just inside the cart view instead.
+// Validates that every token in a window run actually belongs to or matches
+// the product name or voice alias, preventing a long window from greedily
+// swallowing unrelated subsequent product names into one match.
+function isValidWindowForProduct(windowTokens: string[], p: Product): boolean {
+  const pWordsN = p.name.toLowerCase().split(/\s+/).map(norm).filter(Boolean);
+  const pWordsP = p.name.toLowerCase().split(/\s+/).map(phoneticNorm).filter(Boolean);
+  const aliasesN = (p.voiceAliases || []).map(norm);
+  const aliasesP = (p.voiceAliases || []).map(phoneticNorm);
+
+  return windowTokens.every(tok => {
+    const tn = norm(tok);
+    const tp = phoneticNorm(tok);
+    if (!tn) return true;
+    const nameMatch = pWordsN.some(pw => pw === tn || (pw.startsWith(tn) && tn.length >= 3) || (tn.startsWith(pw) && pw.length >= 3)) ||
+                      pWordsP.some(pw => pw === tp || (pw.startsWith(tp) && tp.length >= 3) || (tp.startsWith(pw) && pw.length >= 3));
+    const aliasMatch = aliasesN.some(an => an.includes(tn)) || aliasesP.some(ap => ap.includes(tp));
+    return nameMatch || aliasMatch;
+  });
+}
+
 function autoSegmentByCatalog(tokens: string[], products: Product[]): CartItem[] {
   const items: CartItem[] = [];
   if (tokens.length === 0 || products.length === 0) return items;
@@ -300,13 +335,13 @@ function autoSegmentByCatalog(tokens: string[], products: Product[]): CartItem[]
     for (let w = maxWindow; w >= 1; w--) {
       const windowTokens = tokens.slice(i + qtyConsumed, i + qtyConsumed + w);
       const matches = findBestMatches(windowTokens, products);
-      // Require a fairly confident match here (score <= 1.5, i.e. exact/
-      // phonetic/substring tier) — this function is guessing at item
-      // boundaries with no spoken cue, so it shouldn't accept the same
-      // loose fuzzy-distance matches the single-item flow allows.
+      // Require a fairly confident match (score <= 1.5) AND verify every token
+      // in the window actually belongs to the matched product.
       if (matches.length > 0 && matches[0].score <= 1.5) {
-        bestMatch = { product: matches[0].product, window: w, score: matches[0].score, alternatives: matches.slice(1).map(m => m.product) };
-        break;
+        if (isValidWindowForProduct(windowTokens, matches[0].product)) {
+          bestMatch = { product: matches[0].product, window: w, score: matches[0].score, alternatives: matches.slice(1).map(m => m.product) };
+          break;
+        }
       }
     }
 
@@ -417,7 +452,7 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMult
     // exactly as before.
     const autoItems = autoSegmentByCatalog(filtered, products);
     const autoMatchedCount = autoItems.filter(it => it.product).length;
-    if (autoMatchedCount >= 2) {
+    if (autoMatchedCount >= 2 || (autoItems.length >= 2 && autoMatchedCount >= 1)) {
       setTimeout(() => {
         clearInterval(stepTimerRef.current);
         setCartItems(autoItems);

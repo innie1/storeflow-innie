@@ -3,13 +3,16 @@ import { StoreData, Product, SimilarProductReview } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore, saveStore, syncBackorder, clearBackorder } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
+import { playProductAddedSound } from '@/lib/sound-effects';
 import { interpretProductName } from '@/lib/import-intel';
 import { getSimilarity, extractCoreProduct } from '@/lib/similarity';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SmartRestockEngine from '@/components/SmartRestockEngine';
+import ProductIcon from '@/components/ProductIcon';
 import Mascot, { MascotMood } from '@/components/Mascot';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import { 
   Search, 
   Camera, 
@@ -78,6 +81,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
   const [performancePeriod, setPerformancePeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [detailTab, setDetailTab] = useState<'overview' | 'performance' | 'history'>('overview');
   
   // ---------- Product Performance Calculations ----------
   const filteredSales = useMemo(() => {
@@ -872,6 +876,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     });
     setShowAddConfirm(false);
     setShowAddModal(false);
+    playProductAddedSound();
     showToast('Product added');
   };
 
@@ -1746,7 +1751,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 {p.image ? (
                   <img src={p.image} alt={p.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display='none'; }} />
                 ) : (
-                  <span className="text-2xl">{p.category === 'Beverages' ? '🥤' : p.category === 'Groceries' ? '🛒' : p.category === 'Snacks' ? '🍪' : '📦'}</span>
+                  <ProductIcon product={p} className="w-6 h-6" />
                 )}
               </div>
 
@@ -3632,317 +3637,205 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       )}
 
       {selectedDetailProduct && (
-        <Modal title={`Product Details: ${selectedDetailProduct.name}`} onClose={() => setSelectedDetailProduct(null)}>
+        <Modal title={`Product Details`} onClose={() => setSelectedDetailProduct(null)}>
           <div className="space-y-4 text-left">
-            {/* Details Grid */}
-            <div className="grid grid-cols-2 gap-3 bg-surface-2 p-3 rounded-xl border border-border text-xs">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Category</p>
-                <p className="font-bold text-foreground mt-0.5">{selectedDetailProduct.category}</p>
+            {/* Hero Header Card */}
+            <div className="bg-surface-2 p-3.5 rounded-2xl border border-border flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-2xl bg-card border border-border/80 p-2 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                {selectedDetailProduct.image ? (
+                  <img src={selectedDetailProduct.image} alt={selectedDetailProduct.name} className="w-full h-full object-cover rounded-xl" onError={(e) => { e.currentTarget.style.display='none'; }} />
+                ) : (
+                  <ProductIcon product={selectedDetailProduct} className="w-7 h-7" />
+                )}
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Barcode / SKU</p>
-                <p className="font-mono font-bold text-success mt-0.5">{selectedDetailProduct.barcode || 'Not Linked'}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Current Stock</p>
-                <p className={`font-black mt-0.5 ${selectedDetailProduct.quantity <= lowThreshold ? 'text-destructive' : selectedDetailProduct.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
-                  {selectedDetailProduct.quantity} units
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Profit Margin</p>
-                {(() => {
-                  const margin = selectedDetailProduct.sellingPrice - selectedDetailProduct.costPrice;
-                  const pct = selectedDetailProduct.costPrice > 0 ? (margin / selectedDetailProduct.costPrice) * 100 : 0;
-                  const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
-                  return <p className={`font-bold mt-0.5 ${cls}`}>₦{margin.toLocaleString()} (+{pct.toFixed(0)}%)</p>;
-                })()}
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Cost Price</p>
-                <p className="font-bold text-muted-foreground mt-0.5">₦{selectedDetailProduct.costPrice.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Selling Price</p>
-                <p className="font-bold text-primary mt-0.5">₦{selectedDetailProduct.sellingPrice.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-semibold">Status</p>
-                <p className={`font-bold mt-0.5 ${selectedDetailProduct.discontinued ? 'text-destructive' : 'text-success'}`}>
-                  {selectedDetailProduct.discontinued ? '🚫 Discontinued' : '✅ Active'}
-                </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-display font-black text-base text-foreground truncate">{selectedDetailProduct.name}</h3>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${selectedDetailProduct.discontinued ? 'bg-destructive/10 text-destructive border-destructive/20' : 'bg-success/10 text-success border-success/20'}`}>
+                    {selectedDetailProduct.discontinued ? '🚫 Discontinued' : '✅ Active'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground flex-wrap">
+                  <span className="bg-card px-2 py-0.5 rounded-md border border-border/60 font-semibold">{selectedDetailProduct.category}</span>
+                  {selectedDetailProduct.barcode && (
+                    <span className="font-mono bg-card px-2 py-0.5 rounded-md border border-border/60 text-primary font-bold">
+                      {selectedDetailProduct.barcode}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Product Performance Section */}
-            <div className="space-y-3 mt-3 pt-3 border-t border-border">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-1.5">
-                  <h4 className="text-xs font-display font-bold text-primary flex items-center gap-1.5">
-                    📊 Product Performance
-                  </h4>
-                  <div className="group relative">
-                    <span className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">ⓘ</span>
-                    <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden w-48 rounded bg-slate-900 p-2 text-[9px] leading-relaxed text-slate-100 shadow-xl border border-border group-hover:block z-50">
-                      View business metrics calculated from store sales history and restock transactions. Contribution % represents this product's share of total store profit.
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-1 bg-surface-2 px-2 py-1 rounded-lg border border-border text-[10px]">
-                  <span className="text-muted-foreground">📅</span>
-                  <select 
-                    value={performancePeriod} 
-                    onChange={(e) => setPerformancePeriod(e.target.value as any)}
-                    className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer"
-                  >
-                    <option value="all">All Time</option>
-                    <option value="today">Today</option>
-                    <option value="week">This Week</option>
-                    <option value="month">This Month</option>
-                  </select>
-                </div>
-              </div>
+            {/* Segmented Sub-Tab Switcher */}
+            <div className="flex p-1 rounded-xl bg-surface-2 border border-border">
+              {[
+                { id: 'overview' as const, label: 'Overview & Pricing', icon: '🏷️' },
+                { id: 'performance' as const, label: 'Performance', icon: '📊' },
+                { id: 'history' as const, label: 'Cost History', icon: '📈' }
+              ].map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setDetailTab(t.id)}
+                  className={`flex-1 py-2 text-xs font-display font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    detailTab === t.id
+                      ? 'bg-card text-foreground shadow-xs border border-border/60'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <span>{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
 
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                {/* Times Restocked */}
-                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Times Restocked</span>
-                    <div className="w-5 h-5 rounded-md bg-purple-500/10 flex items-center justify-center text-[10px]">📦</div>
+            {/* TAB 1: OVERVIEW & PRICING */}
+            {detailTab === 'overview' && (
+              <div className="space-y-3 animate-fade-in">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Selling Price</p>
+                    <p className="text-base font-display font-black text-primary">₦{selectedDetailProduct.sellingPrice.toLocaleString()}</p>
                   </div>
-                  <div className="mt-1">
-                    <span className="text-sm font-black text-foreground">{filteredRestocksCount}</span>
-                    <span className="text-[8px] text-muted-foreground ml-1">times</span>
+                  <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Cost Price</p>
+                    <p className="text-base font-display font-bold text-foreground">₦{selectedDetailProduct.costPrice.toLocaleString()}</p>
                   </div>
-                </div>
-
-                {/* Units Sold */}
-                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Units Sold</span>
-                    <div className="w-5 h-5 rounded-md bg-blue-500/10 flex items-center justify-center text-[10px]">🛒</div>
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-sm font-black text-foreground">{Math.round(unitsSold * 100) / 100}</span>
-                    <span className="text-[8px] text-muted-foreground ml-1">
-                      {selectedDetailProduct.isCartonSingleEnabled ? 'ctn' : 'units'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Total Revenue */}
-                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Total Revenue</span>
-                    <div className="w-5 h-5 rounded-md bg-emerald-500/10 flex items-center justify-center text-[10px]">💰</div>
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-sm font-black text-foreground">₦{Math.round(totalRevenue).toLocaleString()}</span>
-                  </div>
-                </div>
-
-                {/* Total Profit */}
-                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Total Profit</span>
-                    <div className="w-5 h-5 rounded-md bg-amber-500/10 flex items-center justify-center text-[10px]">📈</div>
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-sm font-black text-foreground">₦{Math.round(totalProfit).toLocaleString()}</span>
-                  </div>
-                </div>
-
-                {/* Contribution */}
-                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Contribution</span>
-                    <div className="w-5 h-5 rounded-md bg-pink-500/10 flex items-center justify-center text-[10px]">📊</div>
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-sm font-black text-foreground">{contributionPct}%</span>
-                    <span className="text-[8px] text-muted-foreground ml-1">of Store Profit</span>
-                  </div>
-                </div>
-
-                {/* Product Rank */}
-                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Product Rank</span>
-                    <div className="w-5 h-5 rounded-md bg-yellow-500/10 flex items-center justify-center text-[10px]">🏆</div>
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-sm font-black text-foreground">
-                      {productRankInfo.hasSales ? `#${productRankInfo.rank}` : '—'}
-                    </span>
-                    <span className="text-[8px] text-muted-foreground ml-1">
-                      {productRankInfo.hasSales ? 'Best Seller' : 'No sales'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Last Sold */}
-                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Last Sold</span>
-                    <div className="w-5 h-5 rounded-md bg-teal-500/10 flex items-center justify-center text-[10px]">📅</div>
-                  </div>
-                  <div className="mt-1 flex flex-col">
+                  <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Profit Margin</p>
                     {(() => {
-                      const rel = formatRelativeDate(selectedDetailProduct.last_sold_at);
-                      const parts = rel.split(' ');
-                      const mainVal = parts[0];
-                      const subVal = parts.slice(1).join(' ');
-                      return (
-                        <>
-                          <span className="text-sm font-black text-foreground">{mainVal}</span>
-                          {subVal && <span className="text-[8px] text-muted-foreground mt-0.5">{subVal}</span>}
-                        </>
-                      );
+                      const margin = selectedDetailProduct.sellingPrice - selectedDetailProduct.costPrice;
+                      const pct = selectedDetailProduct.costPrice > 0 ? (margin / selectedDetailProduct.costPrice) * 100 : 0;
+                      const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
+                      return <p className={`text-base font-display font-bold ${cls}`}>₦{margin.toLocaleString()} ({pct.toFixed(0)}%)</p>;
                     })()}
                   </div>
-                </div>
-
-                {/* Avg. Sales Speed */}
-                <div className="bg-[#13161c] border border-border/60 p-2.5 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Avg Speed</span>
-                    <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-[10px]">⚡</div>
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-sm font-black text-foreground">{avgSalesSpeed}</span>
-                    <span className="text-[8px] text-muted-foreground ml-1">
-                      {selectedDetailProduct.isCartonSingleEnabled ? 'ctn/day' : 'units/day'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Sales Summary */}
-                <div className="bg-[#13161c] border border-border/60 p-2 rounded-xl flex flex-col justify-between h-20 hover:border-border transition-colors">
-                  <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider flex justify-between items-center border-b border-border/30 pb-1">
-                    <span>Sales Summary</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-1 gap-y-0.5 text-[8px] mt-1 text-muted-foreground leading-tight">
-                    <div className="flex justify-between">
-                      <span>Today:</span>
-                      <strong className="text-success">{Math.round(salesSummary.today)}</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Week:</span>
-                      <strong className="text-success">{Math.round(salesSummary.week)}</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Month:</span>
-                      <strong className="text-success">{Math.round(salesSummary.month)}</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>All:</span>
-                      <strong className="text-foreground">{Math.round(salesSummary.all)}</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Flow Manager Insight Card */}
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-purple-500/30 p-3 mt-3 flex items-center gap-3">
-                <div className="flex-shrink-0 bg-[#0f1117]/80 rounded-xl p-1 border border-purple-500/20 shadow-inner">
-                  <Mascot size={52} mood={flowInsights.mood} />
-                </div>
-                
-                <div className="flex-1 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-display font-black text-purple-300 text-[10px] uppercase tracking-wider flex items-center gap-1">
-                      ✨ Flow Manager Insight
-                    </span>
-                    <span className="px-1.5 py-0.5 text-[8px] rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
-                      {flowInsights.badge}
-                    </span>
-                  </div>
-                  <div className="mt-1 space-y-0.5 text-[10px] text-slate-200 leading-normal font-medium animate-fade-in">
-                    {flowInsights.list.map((ins, i) => (
-                      <p key={i} className="flex items-start gap-1">
-                        <span>{ins}</span>
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Price History Section */}
-            {(() => {
-              const priceHistory = selectedDetailProduct.priceHistory || [];
-              return (
-                <div className="space-y-2 mt-3 pt-3 border-t border-border">
-                  <h4 className="text-xs font-display font-bold text-primary flex items-center gap-1.5">
-                    📈 Cost Price History Chart
-                  </h4>
-                  {priceHistory.length >= 2 ? (
-                    <div className="h-32 w-full bg-surface-2 p-1 rounded-lg border border-border">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={priceHistory}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
-                          <XAxis
-                            dataKey="date"
-                            tickFormatter={(str) => {
-                              try {
-                                return new Date(str).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-                              } catch {
-                                return '';
-                              }
-                            }}
-                            tick={{ fill: '#94a3b8', fontSize: 8 }}
-                          />
-                          <YAxis
-                            tick={{ fill: '#94a3b8', fontSize: 8 }}
-                            domain={['auto', 'auto']}
-                          />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: '#1e293b', borderColor: '#d97706', borderRadius: '6px', padding: '6px' }}
-                            labelStyle={{ color: '#f59e0b', fontSize: 9, fontWeight: 'bold' }}
-                            itemStyle={{ color: '#f8fafc', fontSize: 9 }}
-                            labelFormatter={(lbl) => {
-                              try {
-                                return new Date(lbl).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
-                              } catch {
-                                return String(lbl);
-                              }
-                            }}
-                          />
-                          <Line type="monotone" dataKey="costPrice" stroke="#d97706" strokeWidth={1.5} dot={{ fill: '#d97706', r: 2 }} name="Cost" />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : (
-                    <p className="text-[10px] text-muted-foreground italic text-center py-1">
-                      At least two cost changes are required to render the history trend line.
+                  <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Current Stock</p>
+                    <p className={`text-base font-display font-black ${selectedDetailProduct.quantity <= lowThreshold ? 'text-destructive' : selectedDetailProduct.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
+                      {selectedDetailProduct.quantity} units
                     </p>
-                  )}
+                  </div>
+                </div>
 
-                  <p className="text-[10px] text-muted-foreground uppercase font-semibold">Change Log Timeline</p>
-                  {priceHistory.length > 0 ? (
-                    <div className="max-h-24 overflow-y-auto space-y-1 text-[9px] no-scrollbar">
-                      {priceHistory.slice().reverse().map((h, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-surface-2 p-1 rounded border border-border">
-                          <span className="text-muted-foreground">
-                            {new Date(h.date).toLocaleDateString('en-GB')} {new Date(h.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <span className="font-bold text-foreground">₦{h.costPrice.toLocaleString()}</span>
-                        </div>
+                {/* Carton / Single Breakdown if enabled */}
+                {selectedDetailProduct.isCartonSingleEnabled && (
+                  <div className="p-3.5 bg-surface-2 border border-border rounded-xl space-y-2">
+                    <p className="text-xs font-display font-bold text-primary flex items-center gap-1.5">
+                      📦 Carton & Single Package Pricing
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-card p-2.5 rounded-lg border border-border/60">
+                        <span className="text-[10px] text-muted-foreground block">Singles per Carton</span>
+                        <strong className="text-foreground font-display font-bold">{selectedDetailProduct.singlesPerCarton} pcs</strong>
+                      </div>
+                      <div className="bg-card p-2.5 rounded-lg border border-border/60">
+                        <span className="text-[10px] text-muted-foreground block">Single Selling Price</span>
+                        <strong className="text-foreground font-display font-bold">₦{(selectedDetailProduct.singleSellingPrice ?? Math.round(selectedDetailProduct.sellingPrice / (selectedDetailProduct.singlesPerCarton || 1))).toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: PERFORMANCE & ANALYTICS */}
+            {detailTab === 'performance' && (
+              <div className="space-y-3 animate-fade-in">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-display font-bold text-primary flex items-center gap-1.5">
+                    📊 Performance Metrics
+                  </h4>
+                  <div className="flex items-center gap-1 bg-surface-2 px-2.5 py-1 rounded-lg border border-border text-[10px]">
+                    <span className="text-muted-foreground">📅 Filter:</span>
+                    <select 
+                      value={performancePeriod} 
+                      onChange={(e) => setPerformancePeriod(e.target.value as any)}
+                      className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer"
+                    >
+                      <option value="all">All Time</option>
+                      <option value="today">Today</option>
+                      <option value="week">This Week</option>
+                      <option value="month">This Month</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="bg-card border border-border p-3 rounded-xl">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Units Sold</span>
+                    <p className="text-base font-black text-foreground mt-0.5">{Math.round(unitsSold * 100) / 100}</p>
+                  </div>
+                  <div className="bg-card border border-border p-3 rounded-xl">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Total Revenue</span>
+                    <p className="text-base font-black text-foreground mt-0.5">₦{Math.round(totalRevenue).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-card border border-border p-3 rounded-xl">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Total Profit</span>
+                    <p className="text-base font-black text-emerald-500 mt-0.5">₦{Math.round(totalProfit).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-card border border-border p-3 rounded-xl">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Contribution</span>
+                    <p className="text-base font-black text-purple-400 mt-0.5">{contributionPct}%</p>
+                  </div>
+                </div>
+
+                {/* Flow AI Insight Card */}
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-500/30 p-3 flex items-center gap-3">
+                  <div className="flex-shrink-0 bg-[#0f1117]/80 rounded-xl p-1 border border-purple-500/20 shadow-inner">
+                    <Mascot size={48} mood={flowInsights.mood} />
+                  </div>
+                  <div className="flex-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-display font-black text-purple-300 text-[10px] uppercase tracking-wider">
+                        ✨ Flow Insight
+                      </span>
+                      <span className="px-1.5 py-0.5 text-[8px] rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                        {flowInsights.badge}
+                      </span>
+                    </div>
+                    <div className="mt-1 space-y-0.5 text-[10px] text-slate-200 leading-normal font-medium">
+                      {flowInsights.list.map((ins, i) => (
+                        <p key={i}>{ins}</p>
                       ))}
                     </div>
-                  ) : (
-                    <div className="p-2 rounded bg-surface-2 border border-border text-center text-[10px] text-muted-foreground">
-                      Initial Cost Price: ₦{selectedDetailProduct.costPrice.toLocaleString()} (added at creation)
-                    </div>
-                  )}
+                  </div>
                 </div>
-              );
-            })()}
+              </div>
+            )}
 
-            {/* Actions buttons inside popup */}
-            <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-border">
+            {/* TAB 3: COST HISTORY */}
+            {detailTab === 'history' && (
+              <div className="space-y-3 animate-fade-in">
+                {(() => {
+                  const priceHistory = selectedDetailProduct.priceHistory || [];
+                  return (
+                    <div className="space-y-3">
+                      {priceHistory.length >= 2 ? (
+                        <div className="h-36 w-full bg-surface-2 p-2 rounded-xl border border-border">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={priceHistory}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
+                              <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 8 }} />
+                              <YAxis tick={{ fill: '#94a3b8', fontSize: 8 }} domain={['auto', 'auto']} />
+                              <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#d97706', borderRadius: '8px' }} />
+                              <Line type="monotone" dataKey="costPrice" stroke="#d97706" strokeWidth={2} dot={{ fill: '#d97706', r: 3 }} name="Cost" />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic text-center py-4 bg-surface-2 rounded-xl border border-border">
+                          Initial Cost Price: ₦{selectedDetailProduct.costPrice.toLocaleString()} (added at product creation)
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Action buttons inside popup */}
+            <div className="grid grid-cols-4 gap-2 pt-3 border-t border-border">
               <button
                 type="button"
                 onClick={() => {
@@ -3951,7 +3844,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   setSingleRestockFunding('balance');
                   setSelectedDetailProduct(null);
                 }}
-                className="p-2 rounded-lg bg-success text-white font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer"
+                className="p-2.5 rounded-xl bg-success text-white font-display font-bold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer active:scale-95 transition-all"
               >
                 ↑ Restock
               </button>
@@ -3963,7 +3856,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   setTransferDestCode('');
                   setSelectedDetailProduct(null);
                 }}
-                className="p-2 rounded-lg bg-warning text-slate-950 font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer"
+                className="p-2.5 rounded-xl bg-warning text-slate-950 font-display font-bold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer active:scale-95 transition-all"
               >
                 🚚 Transfer
               </button>
@@ -3977,7 +3870,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   setEditCustomCategoryVal(p.category);
                   setSelectedDetailProduct(null);
                 }}
-                className="p-2 rounded-lg bg-primary text-primary-foreground font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer"
+                className="p-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer active:scale-95 transition-all"
               >
                 ✎ Edit
               </button>
@@ -3990,7 +3883,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   setSelectedDetailProduct({ ...selectedDetailProduct, discontinued: !isDiscontinued });
                   showToast(isDiscontinued ? 'Product reactivated' : 'Product discontinued');
                 }}
-                className={`p-2 rounded-lg font-display font-semibold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer ${
+                className={`p-2.5 rounded-xl font-display font-bold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer active:scale-95 transition-all ${
                   selectedDetailProduct.discontinued 
                     ? 'bg-success/20 text-success border border-success/30' 
                     : 'bg-destructive/20 text-destructive border border-destructive/30'
@@ -4482,6 +4375,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useBodyScrollLock();
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md bg-card border border-border rounded-xl p-5 animate-slide-up max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
