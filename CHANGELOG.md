@@ -42,6 +42,10 @@
 [2026-07-31] v1.10.3 — Fixed Flow's speech bubble overlapping page headings (vertical placement now checks real space above/below and the next element on the page, instead of a blind "close to top of screen" flip) — 🟢 Low fixed
 [2026-07-31] v1.10.4 — Fixed walking-off animation using a fixed 200px distance (stranded him mid-screen on some layouts); now viewport-relative and rendered behind page content instead of on top while walking — 🟢 Low fixed
 [2026-07-31] v1.10.5 — Added a 4th-wrong-password reaction: Flow now calls you out ("who ARE you??") instead of repeating the usual wrong-password line — feature
+[2026-07-31] v1.13.0 — Multi-item voice sales: saying several products in one breath ("Indomitable, Garri and onions") now builds a review cart with a Sell All button, instead of one garbled search — severity: Low (new feature)
+[2026-08-01] v1.14.0 — Savings target cap fix: all savings goals now cap saved amount at target, auto-save stops once target is reached, and Fixed Cash deduction type can be selected independently of automated schedule — severity: High
+
+
 
 
 

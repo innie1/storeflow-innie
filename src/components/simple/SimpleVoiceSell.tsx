@@ -3,7 +3,14 @@ import { Product } from '@/types/store';
 import { Mic, Check, X } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────
-type Stage = 'idle' | 'listening' | 'processing' | 'confirm' | 'add-product' | 'saved' | 'item-added';
+type Stage = 'idle' | 'listening' | 'processing' | 'confirm' | 'add-product' | 'saved' | 'item-added' | 'cart';
+
+interface CartItem {
+  key: string;
+  spokenName: string;
+  quantity: number;
+  product: Product | null; // null = no confident match, shown but excluded from Sell All
+}
 
 interface Match {
   product: Product;
@@ -13,6 +20,7 @@ interface Match {
 interface SimpleVoiceSellProps {
   products: Product[];
   onConfirmSale: (productId: string, quantity: number) => void;
+  onConfirmMultiSale: (items: { productId: string; quantity: number }[]) => void;
   onCreateProduct: (name: string, sellingPrice: number, costPrice: number, quantity: number) => Product;
   onSaveAlias: (productId: string, alias: string) => void;
 }
@@ -108,6 +116,29 @@ function parseTrailingAmount(tokens: string[]): { value: number; rest: string[] 
 // "Indomie five hundred"           -> qty 1, price 500, name "Indomie"
 // "five hundred Indomie for five hundred" -> same number as both a leading
 //   amount-phrase and a trailing one -> genuinely ambiguous, don't guess.
+// Splits a transcript into separate item phrases so "Indomitable, Garri and
+// onions" becomes 3 separate things to look up, instead of one long garbled
+// name search. Falls back to a single segment when no separator is heard —
+// that's what keeps the existing single-item flow working unchanged.
+const SEGMENT_SEPARATORS = ['and', 'plus', 'also', 'with'];
+function splitItemSegments(transcript: string): string[] {
+  const withCommaBreaks = transcript.replace(/,/g, ' , ');
+  const rawTokens = withCommaBreaks.split(/\s+/).filter(Boolean);
+  const segments: string[] = [];
+  let current: string[] = [];
+  rawTokens.forEach(tok => {
+    const lower = tok.toLowerCase();
+    if (lower === ',' || SEGMENT_SEPARATORS.includes(lower)) {
+      if (current.length > 0) segments.push(current.join(' '));
+      current = [];
+    } else {
+      current.push(tok);
+    }
+  });
+  if (current.length > 0) segments.push(current.join(' '));
+  return segments.filter(s => s.trim().length > 0);
+}
+
 function parseQtyAndPrice(tokens: string[]): {
   qty: number;
   priceGuess: number | null;
@@ -224,8 +255,10 @@ const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechReco
 // so the parse doesn't feel instantaneous/jarring on real devices.
 const PROCESSING_STEPS = ['Recognizing…', 'Finding your product…', 'Extracting quantity…', 'Almost done…'];
 
-export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProduct, onSaveAlias }: SimpleVoiceSellProps) {
+export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMultiSale, onCreateProduct, onSaveAlias }: SimpleVoiceSellProps) {
   const [stage, setStage] = useState<Stage>('idle');
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [lastCartSummary, setLastCartSummary] = useState<{ count: number; total: number } | null>(null);
   const [voiceMode, setVoiceMode] = useState<'sell' | 'add'>('sell');
   const [justAdded, setJustAdded] = useState<Product | null>(null);
   const [heardText, setHeardText] = useState('');
@@ -246,12 +279,9 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
   const runParse = useCallback((transcript: string) => {
     setStage('processing');
     setProcessingStep(0);
-    const tokens = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
-    // Drop common filler words that don't carry product/quantity meaning
-    const filtered = tokens.filter(t => !['sold', 'for', 'naira', 'just', 'i', 'a', 'an', 'the', 'of'].includes(t));
-    const { qty, priceGuess, nameTokens, ambiguous } = parseQtyAndPrice(filtered);
-    const matches = findBestMatches(nameTokens, products);
-    const spokenSpan = nameTokens.join(' ');
+
+    const segments = splitItemSegments(transcript);
+    const FILLER_WORDS = ['sold', 'for', 'naira', 'just', 'i', 'a', 'an', 'the', 'of'];
 
     // Step through recognizing -> finding -> extracting -> almost done (spec screen 6),
     // then land on the result. Total pacing kept short so it never feels sluggish.
@@ -259,6 +289,37 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     stepTimerRef.current = setInterval(() => {
       setProcessingStep(s => Math.min(s + 1, PROCESSING_STEPS.length - 1));
     }, 220);
+
+    if (segments.length > 1) {
+      // Multiple items in one breath — "Indomitable, Garri and onions" —
+      // parse each segment independently and land on a review cart instead
+      // of the single-item confirm screen.
+      setTimeout(() => {
+        clearInterval(stepTimerRef.current);
+        const items: CartItem[] = segments.map((seg, i) => {
+          const tokens = seg.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+          const filtered = tokens.filter(t => !FILLER_WORDS.includes(t));
+          const { qty, nameTokens } = parseQtyAndPrice(filtered);
+          const matches = findBestMatches(nameTokens, products);
+          return {
+            key: `${i}-${Date.now()}`,
+            spokenName: titleCase(nameTokens.join(' ')),
+            quantity: qty,
+            product: matches.length > 0 ? matches[0].product : null,
+          };
+        });
+        setCartItems(items);
+        setStage('cart');
+      }, 900);
+      return;
+    }
+
+    const tokens = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+    // Drop common filler words that don't carry product/quantity meaning
+    const filtered = tokens.filter(t => !FILLER_WORDS.includes(t));
+    const { qty, priceGuess, nameTokens, ambiguous } = parseQtyAndPrice(filtered);
+    const matches = findBestMatches(nameTokens, products);
+    const spokenSpan = nameTokens.join(' ');
 
     setTimeout(() => {
       clearInterval(stepTimerRef.current);
@@ -281,6 +342,22 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
       setStage('confirm');
     }, 900);
   }, [products]);
+
+  const updateCartQty = (key: string, delta: number) => {
+    setCartItems(items => items.map(it => it.key === key ? { ...it, quantity: Math.max(1, it.quantity + delta) } : it));
+  };
+  const removeCartItem = (key: string) => {
+    setCartItems(items => items.filter(it => it.key !== key));
+  };
+  const cartMatchedItems = cartItems.filter(it => it.product);
+  const cartTotal = cartMatchedItems.reduce((sum, it) => sum + (it.product!.sellingPrice * it.quantity), 0);
+  const confirmCart = () => {
+    if (cartMatchedItems.length === 0) return;
+    onConfirmMultiSale(cartMatchedItems.map(it => ({ productId: it.product!.id, quantity: it.quantity })));
+    setLastCartSummary({ count: cartMatchedItems.length, total: cartTotal });
+    setCartItems([]);
+    setStage('saved');
+  };
 
   // Add Item mode — "Indomie 500 600" -> name + cost/selling prices, straight
   // to the same add-product form (no matching against existing products,
@@ -370,6 +447,8 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
     setNewSellingPrice('');
     setNewCostPrice('');
     setNewQty('');
+    setCartItems([]);
+    setLastCartSummary(null);
   }, []);
 
   // Live suggestions while editing the name in the add-product popup — catches
@@ -419,14 +498,18 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
   };
 
   // ── Saved confirmation ──
-  if (stage === 'saved' && selected) {
+  if (stage === 'saved' && (selected || lastCartSummary)) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-10 animate-fade-in">
         <div className="w-16 h-16 rounded-full bg-success/15 flex items-center justify-center">
           <Check className="w-9 h-9 text-success" />
         </div>
         <p className="font-display font-bold text-foreground text-base">Sale Saved</p>
-        <p className="text-sm text-muted-foreground">{selected.product.name} × {selected.quantity}</p>
+        {lastCartSummary ? (
+          <p className="text-sm text-muted-foreground">{lastCartSummary.count} items — ₦{lastCartSummary.total.toLocaleString()}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">{selected!.product.name} × {selected!.quantity}</p>
+        )}
       </div>
     );
   }
@@ -443,6 +526,58 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onCreateProdu
           {justAdded.name} — ₦{justAdded.sellingPrice.toLocaleString()}
           {justAdded.costPrice > 0 ? ` (cost ₦${justAdded.costPrice.toLocaleString()})` : ''}
         </p>
+      </div>
+    );
+  }
+
+  // ── Multi-item cart screen ("Indomitable, Garri and onions") ──
+  if (stage === 'cart') {
+    return (
+      <div className="space-y-3 animate-fade-in">
+        <p className="text-sm font-display font-bold text-foreground text-center">Heard {cartItems.length} items — review and sell</p>
+        <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+          {cartItems.map(item => (
+            <div
+              key={item.key}
+              className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${item.product ? 'bg-surface-2/40 border-border' : 'bg-warning/5 border-warning/30'}`}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-semibold text-sm truncate">{item.product ? item.product.name : item.spokenName}</p>
+                {item.product ? (
+                  <p className="text-xs text-muted-foreground">₦{item.product.sellingPrice.toLocaleString()} each</p>
+                ) : (
+                  <p className="text-xs text-warning">Couldn't find this — say it alone to add it as a new product</p>
+                )}
+              </div>
+              {item.product && (
+                <div className="flex-shrink-0 flex items-center gap-2">
+                  <button onClick={() => updateCartQty(item.key, -1)} className="w-7 h-7 rounded-full bg-surface-3 flex items-center justify-center font-display font-bold">−</button>
+                  <span className="w-5 text-center font-display font-bold text-sm">{item.quantity}</span>
+                  <button onClick={() => updateCartQty(item.key, 1)} className="w-7 h-7 rounded-full bg-surface-3 flex items-center justify-center font-display font-bold">+</button>
+                </div>
+              )}
+              <button onClick={() => removeCartItem(item.key)} className="flex-shrink-0 text-muted-foreground text-lg leading-none px-1">×</button>
+            </div>
+          ))}
+        </div>
+
+        {cartMatchedItems.length > 0 && (
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs text-muted-foreground">{cartMatchedItems.length} item{cartMatchedItems.length === 1 ? '' : 's'} ready</p>
+            <p className="font-display font-bold text-primary">₦{cartTotal.toLocaleString()}</p>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button onClick={reset} className="flex-1 py-3 rounded-xl border border-border text-muted-foreground font-display font-bold text-sm">Cancel</button>
+          <button
+            onClick={confirmCart}
+            disabled={cartMatchedItems.length === 0}
+            className="flex-[2] py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm disabled:opacity-40"
+          >
+            Sell All ({cartMatchedItems.length})
+          </button>
+        </div>
       </div>
     );
   }

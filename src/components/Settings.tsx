@@ -4702,7 +4702,38 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
         </div>
 
         <div className="p-3 rounded-xl bg-surface-2 border border-border space-y-3">
-          <label className="flex items-center justify-between text-xs font-bold text-foreground cursor-pointer select-none">
+          <div>
+            <label className="text-[10px] uppercase font-bold text-muted-foreground">Deduction Type</label>
+            <div className="flex gap-2 mt-1">
+              <button 
+                type="button" 
+                onClick={() => setG({ ...g, autoSaveAmount: undefined })} 
+                className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${!g.autoSaveAmount ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-3 border-border text-muted-foreground'}`}
+              >
+                Use Percentage
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setG({ ...g, autoSaveAmount: g.autoSaveAmount || 2000 })} 
+                className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${g.autoSaveAmount ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-3 border-border text-muted-foreground'}`}
+              >
+                Use Fixed Cash
+              </button>
+            </div>
+          </div>
+          {g.autoSaveAmount !== undefined && (
+            <div>
+              <label className="text-[10px] uppercase font-bold text-muted-foreground">Periodic Cash Deduction (₦)</label>
+              <input 
+                type="number" 
+                value={g.autoSaveAmount || ''} 
+                onChange={e => setG({ ...g, autoSaveAmount: Math.max(0, Number(e.target.value) || 0) })} 
+                placeholder="e.g. 2000" 
+                className={inp} 
+              />
+            </div>
+          )}
+          <label className="flex items-center justify-between text-xs font-bold text-foreground cursor-pointer select-none pt-1.5 border-t border-border/60">
             <span>Automated Net Income Deduction</span>
             <input 
               type="checkbox" 
@@ -4711,40 +4742,8 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
               className="rounded accent-primary w-4 h-4 cursor-pointer"
             />
           </label>
-          {g.autoSaveEnabled && (
-            <div className="space-y-2.5 pt-1.5 border-t border-border/60">
-              <div>
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Deduction Type</label>
-                <div className="flex gap-2 mt-1">
-                  <button 
-                    type="button" 
-                    onClick={() => setG({ ...g, autoSaveAmount: undefined })} 
-                    className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${!g.autoSaveAmount ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-3 border-border text-muted-foreground'}`}
-                  >
-                    Use Percentage
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => setG({ ...g, autoSaveAmount: g.autoSaveAmount || 2000 })} 
-                    className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${g.autoSaveAmount ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-3 border-border text-muted-foreground'}`}
-                  >
-                    Use Fixed Cash
-                  </button>
-                </div>
-              </div>
-              {g.autoSaveAmount !== undefined && (
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Periodic Cash Deduction (₦)</label>
-                  <input 
-                    type="number" 
-                    value={g.autoSaveAmount || ''} 
-                    onChange={e => setG({ ...g, autoSaveAmount: Math.max(0, Number(e.target.value) || 0) })} 
-                    placeholder="e.g. 2000" 
-                    className={inp} 
-                  />
-                </div>
-              )}
-            </div>
+          {!g.autoSaveEnabled && (
+            <p className="text-[10px] text-muted-foreground">Off: track this goal's savings manually. On: deducts automatically on a schedule.</p>
           )}
         </div>
 

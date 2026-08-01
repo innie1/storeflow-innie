@@ -362,8 +362,14 @@ export function recalculateSavings(store: StoreData): StoreData {
 
   const updatedGoals = goals.map(g => {
     if (g.autoSaveEnabled) return g; // auto-save goals track `saved` via runScheduledSavingsDeduction instead
-    const base = (g.source || 'profit') === 'profit' ? totalProfit : totalRevenue;
-    const saved = Math.round(((g.percentage || 0) / 100) * base * 100) / 100;
+    let saved = g.saved || 0;
+    if (g.autoSaveAmount && g.autoSaveAmount > 0) {
+      // Fixed Cash mode, no schedule: `saved` is tracked manually/elsewhere — just enforce the cap below, don't overwrite it from revenue.
+    } else {
+      const base = (g.source || 'profit') === 'profit' ? totalProfit : totalRevenue;
+      saved = Math.round(((g.percentage || 0) / 100) * base * 100) / 100;
+    }
+    if (g.amount && g.amount > 0) saved = Math.min(saved, g.amount);
     return { ...g, saved };
   });
 
@@ -518,6 +524,9 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
     let currentSaved = goal.saved || 0;
 
     occurrences.forEach(occurrence => {
+      const hasTarget = goal.amount && goal.amount > 0;
+      if (hasTarget && currentSaved >= goal.amount) return; // target already hit — stop depositing
+
       const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
       const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
       const netIncomeBefore = totalRevenue - totalExpenses;
@@ -530,6 +539,10 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
       }
 
       deductionAmount = Math.round(Math.max(0, deductionAmount) * 100) / 100;
+      if (hasTarget) {
+        // don't overshoot the target on the final deposit
+        deductionAmount = Math.min(deductionAmount, goal.amount - currentSaved);
+      }
       if (deductionAmount > 0) {
         currentSaved += deductionAmount;
         const deductionMsg = `Auto-saved ₦${deductionAmount.toLocaleString()} to ${goal.label || 'Savings'}`;

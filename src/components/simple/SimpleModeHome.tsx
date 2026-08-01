@@ -50,6 +50,36 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     }
   };
 
+  // Records several items from one voice sale ("Indomitable, Garri and
+  // onions") in one go. Uses a running accumulator instead of calling
+  // handleConfirmSale in a loop — looping calls to recordSale against the
+  // same stale `store` closure would silently drop all but the last item.
+  const handleConfirmMultiSale = (items: { productId: string; quantity: number }[]) => {
+    let updated = store;
+    let blockedAny = false;
+
+    items.forEach(({ productId, quantity }) => {
+      const product = updated.products.find(p => p.id === productId);
+      if (!product) return;
+      if (product.quantity < quantity && !updated.managerSettings?.backorderSellingEnabled) {
+        blockedAny = true;
+        return;
+      }
+      updated = recordSale(updated, productId, quantity, currentUser?.name, currentUser?.role);
+    });
+
+    saveStore(updated);
+    setStore(updated);
+    markSaleQueuedIfOffline(store.accessCode);
+
+    if (blockedAny) {
+      showToast('Some items didn\'t have enough stock and were skipped', 'error');
+    }
+
+    const newMilestone = checkNewMilestone(updated);
+    if (newMilestone) setActiveMilestone(newMilestone);
+  };
+
   const handleCreateProduct = (name: string, sellingPrice: number, costPrice: number, quantity: number): Product => {
     const newProduct: Product = {
       id: generateId(),
@@ -147,6 +177,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       <SimpleVoiceSell
         products={store.products}
         onConfirmSale={handleConfirmSale}
+        onConfirmMultiSale={handleConfirmMultiSale}
         onCreateProduct={handleCreateProduct}
         onSaveAlias={handleSaveAlias}
       />
