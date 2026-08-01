@@ -62,17 +62,24 @@ export default function QuickSellGrid({ store, onSell }: QuickSellGridProps) {
       <p className="text-xs text-muted-foreground font-display font-semibold uppercase tracking-wide text-center mb-3">
         Or Tap To Sell
       </p>
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
         {products.map(p => (
           <button
             key={p.id}
             onClick={() => openTile(p)}
-            className="aspect-square rounded-2xl border border-border bg-surface-2/40 flex flex-col items-center justify-center text-center px-1.5 gap-0.5 active:scale-95 transition-transform"
+            className="py-2.5 px-3 rounded-xl border border-border/80 bg-surface-2/40 hover:bg-surface-2 flex items-center justify-between gap-2 active:scale-[0.98] transition-all text-left group"
           >
-            <span className="font-display font-semibold text-xs text-foreground leading-tight line-clamp-2">
-              {p.name}
-            </span>
-            <span className="text-[10px] text-muted-foreground">₦{p.sellingPrice.toLocaleString()}</span>
+            <div className="min-w-0 flex-1">
+              <span className="font-display font-semibold text-xs text-foreground block truncate group-hover:text-primary transition-colors">
+                {p.name}
+              </span>
+              <span className="text-[11px] font-medium text-muted-foreground block mt-0.5">
+                ₦{p.sellingPrice.toLocaleString()}
+              </span>
+            </div>
+            <div className="shrink-0 w-6 h-6 rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold text-xs flex items-center justify-center">
+              +
+            </div>
           </button>
         ))}
       </div>

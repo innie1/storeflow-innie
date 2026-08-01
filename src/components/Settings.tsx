@@ -112,7 +112,7 @@ export function getActiveSession(): string | null {
 type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
   | 'appearance' | 'notifications' | 'security' | 'data' | 'support'
-  | 'help' | 'faq' | 'about' | 'contact' | 'backups' | 'discount' | 'activity-log'
+  | 'help' | 'faq' | 'about' | 'contact' | 'privacy' | 'terms' | 'backups' | 'discount' | 'activity-log'
   | 'wishlist' | 'barcode' | 'marketplace-settings' | 'printer-settings';
 
 interface SettingsProps {
@@ -4277,13 +4277,138 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     );
   }
 
+  // ===== PRIVACY POLICY =====
+  if (view === 'privacy') return (
+    <SubPage title="Privacy Policy" subtitle="Last updated: August 2026" onBack={() => setView('support')}>
+      <div className={`${card} p-5 space-y-4 text-left`}>
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/20">
+          <Shield className="w-6 h-6 text-primary shrink-0" />
+          <div>
+            <h3 className="font-display font-bold text-sm text-foreground">Your Business Data Belongs to You</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">StoreFlow is designed with offline-first privacy at its core.</p>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">1. Data Storage & Ownership</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            By default, all your store records — including products, daily sales, expenses, debts, staff records, and financial analytics — are stored locally on your device. We do not sell, monetize, or scan your business data.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">2. Cloud Synchronization & Security</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            If you enable Cloud Sync, your store data is encrypted using Industry Standard TLS/SSL protocols in transit and protected by Supabase Row-Level Security (RLS) policies. Only authenticated devices authorized with your store access code can read or write store records.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">3. Information We Collect</h4>
+          <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4 leading-relaxed">
+            <li><strong>Account Profile:</strong> Store name, owner name, business contact email, and phone number provided during setup.</li>
+            <li><strong>Transactional Records:</strong> Products, prices, sales history, expenses, and inventory stock counts.</li>
+            <li><strong>Device & Crash Logs:</strong> Anonymous performance diagnostics to resolve app errors.</li>
+          </ul>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">4. Data Sharing & Third Parties</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            We never share your customer data or sales revenue metrics with third-party advertisers. Data is shared strictly with infrastructure service providers (e.g., Supabase, WhatsApp API) solely to execute requested services like cloud backups or receipt delivery.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">5. Data Control & Deletion Rights</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            You retain full control over your data. You may export your entire store backup as a JSON file or execute a complete, permanent wipe of all local and cloud records at any time directly in <strong>Settings → Data & Storage</strong>.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">6. Contact Privacy Officer</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            For privacy inquiries or compliance requests under applicable data protection laws, contact us at <a href="mailto:inniegroup@gmail.com" className="text-primary font-bold hover:underline">inniegroup@gmail.com</a>.
+          </p>
+        </div>
+      </div>
+    </SubPage>
+  );
+
+  // ===== TERMS & CONDITIONS =====
+  if (view === 'terms') return (
+    <SubPage title="Terms & Conditions" subtitle="Effective Date: August 2026" onBack={() => setView('support')}>
+      <div className={`${card} p-5 space-y-4 text-left`}>
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/20">
+          <FileText className="w-6 h-6 text-primary shrink-0" />
+          <div>
+            <h3 className="font-display font-bold text-sm text-foreground">Terms of Service Agreement</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Please read these standard operational terms governing StoreFlow.</p>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">1. Agreement to Terms</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            By creating a store, accessing, or using the StoreFlow application, you agree to be bound by these Terms and Conditions. If you do not agree, you should cease using the platform.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">2. License & Acceptable Use</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Innie Group grants you a limited, non-exclusive, non-transferable license to use StoreFlow for managing store inventory, POS sales, receipt issuance, and retail reporting. You agree not to use the service for illegal trade, fraud, or reverse engineering.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">3. Account & Security Responsibilities</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            You are responsible for maintaining the confidentiality of your Store Access Code, owner password, and staff credentials. StoreFlow is not liable for unauthorized access resulting from compromised local passwords.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">4. Accuracy of Transactions & Tax</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Merchants maintain sole responsibility for verifying product prices, stock counts, customer receipt details, and local tax compliance. StoreFlow provides calculation tools but does not act as a licensed tax advisory service.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">5. Limitation of Liability</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            To the maximum extent permitted by law, Innie Group shall not be liable for direct, indirect, incidental, or consequential damages resulting from device hardware loss, network downtime, or data corruption beyond reasonable control.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">6. Service Modifications & Updates</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            We continuously improve StoreFlow with new features, security updates, and performance optimizations. We reserve the right to update software functionality or these terms with notice.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">7. Governing Law & Inquiries</h4>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            These terms are governed by the laws applicable to commercial retail software. For legal inquiries, contact <a href="mailto:inniegroup@gmail.com" className="text-primary font-bold hover:underline">inniegroup@gmail.com</a>.
+          </p>
+        </div>
+      </div>
+    </SubPage>
+  );
+
   // ===== SUPPORT HOME =====
   if (view === 'support') return (
-    <SubPage title="Support" onBack={() => setView('home')}>
+    <SubPage title="Support & Legal" subtitle="Help, policies & contact information" onBack={() => setView('home')}>
       <div className={`${card} divide-y divide-border`}>
         <SupportRow icon="📖" label="Help Center" onClick={() => { setHelpOpen(null); setView('help'); }} />
         <SupportRow icon="❓" label="FAQ" onClick={() => { setHelpOpen(null); setView('faq'); }} />
         <SupportRow icon="💬" label="Contact Support" onClick={() => setView('contact')} />
+        <SupportRow icon="🛡️" label="Privacy Policy" onClick={() => setView('privacy')} />
+        <SupportRow icon="📜" label="Terms & Conditions" onClick={() => setView('terms')} />
         <SupportRow icon="ℹ️" label="About StoreFlow" onClick={() => setView('about')} />
       </div>
     </SubPage>

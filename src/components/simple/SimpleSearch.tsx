@@ -74,28 +74,48 @@ export default function SimpleSearch({ store, onNavigate, onClose }: SimpleSearc
 
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {q.length < 1 && (
-          <div className="flex flex-col items-center text-center mt-12">
-            <div className="w-24 h-24 rounded-3xl bg-surface-2 border border-dashed border-border flex items-center justify-center mb-4">
-              <div className="grayscale opacity-40">
-                <Mascot size={56} mood="idle" animate={false} />
+          <div className="flex flex-col items-center text-center mt-8 px-4 animate-fade-in">
+            <div className="relative flex flex-col items-center mb-3">
+              <Mascot size={100} mood="thinking" animate={true} />
+              <div className="mt-3 px-4 py-2 rounded-2xl bg-surface-2 border border-border shadow-sm max-w-[260px]">
+                <p className="text-xs font-display font-medium text-foreground">
+                  What are we searching for today? 🔍
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Type a product name, customer, or receipt # above
+                </p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground max-w-[220px]">
-              Search your inventory, customers, and past receipts.
-            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+              <span className="text-[11px] px-2.5 py-1 rounded-full bg-surface-2 border border-border/60 text-muted-foreground flex items-center gap-1">
+                <Package className="w-3 h-3 text-primary" /> Products
+              </span>
+              <span className="text-[11px] px-2.5 py-1 rounded-full bg-surface-2 border border-border/60 text-muted-foreground flex items-center gap-1">
+                <Users className="w-3 h-3 text-primary" /> Customers
+              </span>
+              <span className="text-[11px] px-2.5 py-1 rounded-full bg-surface-2 border border-border/60 text-muted-foreground flex items-center gap-1">
+                <Receipt className="w-3 h-3 text-primary" /> Receipts
+              </span>
+            </div>
           </div>
         )}
 
         {q.length >= 1 && !hasAny && (
-          <div className="flex flex-col items-center text-center mt-12">
-            <div className="w-24 h-24 rounded-3xl bg-surface-2 border border-dashed border-border flex items-center justify-center mb-4">
-              <div className="grayscale opacity-40">
-                <Mascot size={56} mood="concerned" animate={false} />
+          <div className="flex flex-col items-center text-center mt-8 px-4 animate-fade-in">
+            <div className="w-full max-w-xs p-5 rounded-2xl bg-surface-2/80 border border-border/80 shadow-md flex flex-col items-center gap-3">
+              <div className="relative">
+                <Mascot size={110} mood="concerned" animate={true} />
+              </div>
+              <div>
+                <h4 className="font-display font-bold text-sm text-foreground">Nothing Found</h4>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Flow checked your store, but couldn't find any matches for <span className="font-semibold text-foreground">"{query}"</span>. 🙈
+                </p>
+              </div>
+              <div className="w-full pt-2.5 border-t border-border/40 text-[11px] text-muted-foreground flex items-center justify-center gap-1">
+                <span>💡 Check spelling or search by barcode / phone</span>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground max-w-[220px]">
-              No matches for "{query}"
-            </p>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -56,8 +56,8 @@
     --chart-tooltip-bg: 240 6% 11%;
     --chart-tooltip-border: 240 5% 16%;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
-    --font-body: 'DM Mono', monospace;
-    --font-display: 'Syne', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-display: 'Inter', sans-serif;
   }
 
   /* ---------- GRAPHITE — Dark ---------- */
@@ -101,8 +101,8 @@
     --chart-tooltip-bg: 240 6% 11%;
     --chart-tooltip-border: 240 5% 16%;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
-    --font-body: 'DM Mono', monospace;
-    --font-display: 'Syne', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-display: 'Inter', sans-serif;
   }
 
   /* ---------- GRAPHITE — Light (Luxury Warm Pearl) ---------- */
@@ -146,8 +146,8 @@
     --chart-tooltip-bg: 0 0% 100%;
     --chart-tooltip-border: 215 16% 89%;
     --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.04), 0 10px 28px -4px rgba(15, 23, 42, 0.07);
-    --font-body: 'DM Mono', monospace;
-    --font-display: 'Syne', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-display: 'Inter', sans-serif;
   }
 
   /* ---------- BLUE SKY — Dark (Midnight Navy) ---------- */
@@ -278,8 +278,8 @@
     --chart-tooltip-bg: 160 12% 11%;
     --chart-tooltip-border: 160 10% 16%;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(10, 16, 13, 0.5);
-    --font-body: 'DM Mono', monospace;
-    --font-display: 'Syne', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-display: 'Inter', sans-serif;
   }
 
   /* ---------- GREEN FOREST — Light (Organic Mint Emerald) ---------- */
@@ -322,8 +322,8 @@
     --chart-tooltip-bg: 0 0% 100%;
     --chart-tooltip-border: 140 18% 88%;
     --shadow-card: 0 1px 3px rgba(5, 150, 105, 0.04), 0 10px 28px -4px rgba(10, 41, 25, 0.07);
-    --font-body: 'DM Mono', monospace;
-    --font-display: 'Syne', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-display: 'Inter', sans-serif;
   }
 }
 

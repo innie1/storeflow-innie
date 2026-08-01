@@ -10,7 +10,8 @@ import SimpleOnboarding from './SimpleOnboarding';
 import OfflineQueueBanner, { markSaleQueuedIfOffline } from './OfflineQueueBanner';
 import CostPricePrompt from './CostPricePrompt';
 import QuickSellGrid from './QuickSellGrid';
-import { History } from 'lucide-react';
+import SimpleSearch from './SimpleSearch';
+import { History, Search } from 'lucide-react';
 
 interface SimpleModeHomeProps {
   store: StoreData;
@@ -27,6 +28,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
   const todayCount = todaySales.length;
   const target = useMemo(() => getSalesTargetStatus(store), [store]);
 
+  const [showSearch, setShowSearch] = useState(false);
   const [costPricePromptProductId, setCostPricePromptProductId] = useState<string | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<MilestoneDef | null>(null);
 
@@ -149,8 +151,17 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     : null;
 
   return (
-    <div className="flex flex-col items-center px-5 pt-8 pb-10 max-w-sm mx-auto">
+    <div className="relative flex flex-col items-center px-3 pt-0 pb-6 max-w-sm mx-auto">
       <OfflineQueueBanner store={store} setStore={setStore} />
+
+      {/* Small search icon — browse inventory, customers, receipts without leaving Simple Mode */}
+      <button
+        onClick={() => setShowSearch(true)}
+        className="absolute top-4 right-4 w-9 h-9 rounded-full bg-surface-2 border border-border flex items-center justify-center hover:bg-surface-3 active:scale-95 transition-all cursor-pointer shadow-sm z-20"
+        title="Search products, customers, receipts"
+      >
+        <Search className="w-4.5 h-4.5 text-foreground/80" />
+      </button>
 
       {/* Today's total */}
       <div className="w-full text-center mb-10">
@@ -221,6 +232,14 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
             setStore(updated);
             setActiveMilestone(null);
           }}
+        />
+      )}
+
+      {showSearch && (
+        <SimpleSearch
+          store={store}
+          onNavigate={onNavigate}
+          onClose={() => setShowSearch(false)}
         />
       )}
     </div>

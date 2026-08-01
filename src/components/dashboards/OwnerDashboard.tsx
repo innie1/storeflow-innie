@@ -3,7 +3,7 @@ import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { getDashboardStats, getTopSellers, getSalesTargetStatus } from '@/lib/store-data';
 import { generatePerformanceSummary } from '@/lib/reports';
 import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
-import { XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
+import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import Mascot, { MascotBadge } from '@/components/Mascot';
 
 interface OwnerDashboardProps {
@@ -843,7 +843,15 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
                         borderColor: 'hsl(var(--border))',
                         borderRadius: '0.75rem',
                       }}
-                      formatter={(val: number) => [`₦${val.toLocaleString()}`]}
+                      formatter={(val: number, name: string) => [`₦${val.toLocaleString()}`, name]}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      align="right"
+                      height={28}
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}
                     />
                     <Line type="monotone" dataKey="total" name="Revenue" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3 }} />
                     <Line type="monotone" dataKey="profit" name="Profit" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 2 }} />

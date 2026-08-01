@@ -93,6 +93,8 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const lastTapTime = useRef<number>(0);
   const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastNotifCountRef = useRef<number | null>(null);
+  const isInitialSalesLoadRef = useRef<boolean>(true);
 
   // Determine current active mood (check active store hours or fallback to late night auto-sleep)
   const nowTime = new Date();
@@ -280,23 +282,49 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   useEffect(() => {
     if (isManagerEnabled && store && store.sales) {
       const newSalesCount = store.sales.length;
+      if (isInitialSalesLoadRef.current) {
+        lastSalesCountRef.current = newSalesCount;
+        isInitialSalesLoadRef.current = false;
+        return;
+      }
       if (lastSalesCountRef.current !== null && newSalesCount > lastSalesCountRef.current) {
         const saleDiff = newSalesCount - lastSalesCountRef.current;
         const latestSales = store.sales.slice(-saleDiff);
         const totalAmount = latestSales.reduce((sum, s) => sum + s.total, 0);
         
-        const celebrationPhrases = [
-          `Awesome! We just sold items for ₦${totalAmount.toLocaleString()}! 💵🎉`,
-          `Ka-ching! A new sale of ₦${totalAmount.toLocaleString()} recorded! 🚀💰`,
-          `Nice job! ₦${totalAmount.toLocaleString()} added to revenue! Keep it up! 🛒✨`,
-          `Another customer served! ₦${totalAmount.toLocaleString()} sale completed! 🥳📦`
-        ];
-        triggerSpeech(celebrationPhrases[Math.floor(Math.random() * celebrationPhrases.length)], 'celebrating', 5000);
-        triggerConfetti();
+        if (totalAmount > 0) {
+          const celebrationPhrases = [
+            `Awesome! We just sold items for ₦${totalAmount.toLocaleString()}! 💵🎉`,
+            `Ka-ching! A new sale of ₦${totalAmount.toLocaleString()} recorded! 🚀💰`,
+            `Nice job! ₦${totalAmount.toLocaleString()} added to revenue! Keep it up! 🛒✨`,
+            `Another customer served! ₦${totalAmount.toLocaleString()} sale completed! 🥳📦`
+          ];
+          triggerSpeech(celebrationPhrases[Math.floor(Math.random() * celebrationPhrases.length)], 'celebrating', 5000);
+          triggerConfetti();
+        }
       }
       lastSalesCountRef.current = newSalesCount;
     }
-  }, [store?.sales?.length, store]);
+  }, [store?.sales?.length, store, isManagerEnabled]);
+
+  // Real-time notification awareness
+  useEffect(() => {
+    if (isManagerEnabled && store && store.flowNotifications) {
+      const currentNotifCount = store.flowNotifications.length;
+      if (lastNotifCountRef.current === null) {
+        lastNotifCountRef.current = currentNotifCount;
+        return;
+      }
+      if (currentNotifCount > lastNotifCountRef.current) {
+        const latestNotif = store.flowNotifications[0];
+        if (latestNotif && !latestNotif.read) {
+          const toneMood: MascotMood = latestNotif.tone === 'danger' ? 'concerned' : latestNotif.tone === 'warning' ? 'warning' : 'excited';
+          triggerSpeech(`🔔 ${latestNotif.title || 'Notification'}: ${latestNotif.text}`, toneMood, 5000);
+        }
+      }
+      lastNotifCountRef.current = currentNotifCount;
+    }
+  }, [store?.flowNotifications?.length, store?.flowNotifications, isManagerEnabled]);
 
   // Speech-aware mouth animation timing
   useEffect(() => {
@@ -820,6 +848,17 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
         { text: "Let's review overall store health metrics! 📊", mood: 'confident' as MascotMood },
         { text: "Cashier shifts look active today! 🌟", mood: 'happy' as MascotMood }
       ];
+    }
+
+    // Notification Awareness — if store has unread notifications, prioritize alerting user
+    const unreadNotifs = (store?.flowNotifications || []).filter(n => !n.read);
+    if (unreadNotifs.length > 0) {
+      const topNotif = unreadNotifs[0];
+      const notifMood: MascotMood = topNotif.tone === 'danger' ? 'concerned' : topNotif.tone === 'warning' ? 'warning' : 'excited';
+      singleTaps.unshift(
+        { text: `You have ${unreadNotifs.length} unread store notification${unreadNotifs.length > 1 ? 's' : ''}! 🔔 Tap the bell icon to check.`, mood: 'excited' as MascotMood },
+        { text: `Alert: ${topNotif.title || topNotif.text}`, mood: notifMood }
+      );
     }
 
     const picked = singleTaps[Math.floor(Math.random() * singleTaps.length)];
