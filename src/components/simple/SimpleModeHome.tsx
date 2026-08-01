@@ -9,8 +9,7 @@ import SimpleOnboarding from './SimpleOnboarding';
 import OfflineQueueBanner, { markSaleQueuedIfOffline } from './OfflineQueueBanner';
 import CostPricePrompt from './CostPricePrompt';
 import QuickSellGrid from './QuickSellGrid';
-import SimpleSearch from './SimpleSearch';
-import { History, Search } from 'lucide-react';
+import { History } from 'lucide-react';
 
 interface SimpleModeHomeProps {
   store: StoreData;
@@ -29,7 +28,6 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
 
   const [costPricePromptProductId, setCostPricePromptProductId] = useState<string | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<MilestoneDef | null>(null);
-  const [showSearch, setShowSearch] = useState(false);
 
   const handleConfirmSale = (productId: string, quantity: number) => {
     const product = store.products.find(p => p.id === productId);
@@ -60,6 +58,14 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     let updated = store;
     let blockedAny = false;
 
+    // One shared transactionId links every item into a single order — same
+    // pattern recordCheckout uses for the main POS cart. Without this, each
+    // voice-sold item lands as its own disconnected sale row: no combined
+    // receipt in Sales History, and it gets silently skipped by the
+    // transaction-basket analytics in manager-intel.ts (which requires a
+    // transactionId to group items together).
+    const transactionId = generateId();
+
     items.forEach(({ productId, quantity }) => {
       const product = updated.products.find(p => p.id === productId);
       if (!product) return;
@@ -67,7 +73,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
         blockedAny = true;
         return;
       }
-      updated = recordSale(updated, productId, quantity, currentUser?.name, currentUser?.role);
+      updated = recordSale(updated, productId, quantity, currentUser?.name, currentUser?.role, transactionId);
     });
 
     saveStore(updated);
@@ -140,17 +146,8 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     : null;
 
   return (
-    <div className="relative flex flex-col items-center px-5 pt-8 pb-10 max-w-sm mx-auto">
+    <div className="flex flex-col items-center px-5 pt-8 pb-10 max-w-sm mx-auto">
       <OfflineQueueBanner store={store} setStore={setStore} />
-
-      {/* Small search icon — browse inventory, customers, receipts without leaving Simple Mode */}
-      <button
-        onClick={() => setShowSearch(true)}
-        className="absolute top-4 right-4 w-8 h-8 rounded-full bg-surface-2 border border-border flex items-center justify-center hover:bg-surface-3 active:scale-95 transition-all cursor-pointer"
-        title="Search"
-      >
-        <Search className="w-4 h-4 text-muted-foreground" />
-      </button>
 
       {/* Today's total */}
       <div className="w-full text-center mb-10">
@@ -221,14 +218,6 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
             setStore(updated);
             setActiveMilestone(null);
           }}
-        />
-      )}
-
-      {showSearch && (
-        <SimpleSearch
-          store={store}
-          onNavigate={onNavigate}
-          onClose={() => setShowSearch(false)}
         />
       )}
     </div>

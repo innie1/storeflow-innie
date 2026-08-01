@@ -10,6 +10,8 @@ interface CartItem {
   spokenName: string;
   quantity: number;
   product: Product | null; // null = no confident match, shown but excluded from Sell All
+  matchScore: number | null; // score of the selected match — used to flag low-confidence picks for review
+  alternatives: Product[]; // other candidate products, offered as a one-tap swap when matchScore isn't confident
 }
 
 interface Match {
@@ -249,6 +251,92 @@ function findBestMatches(nameTokens: string[], products: Product[]): { product: 
   return scored.filter(s => s.score < 99).sort((a, b) => a.score - b.score).slice(0, 3);
 }
 
+// Segments a transcript into multiple cart items using ONLY the product
+// catalog — no "and"/comma required. Covers the common real-world case of
+// someone just listing items back to back ("two indomie one garri onions")
+// where there's no spoken separator for splitItemSegments to key off of.
+//
+// Walks left to right and, at each position, tries the LONGEST run of
+// tokens first (max-munch), so a multi-word product name like "Coca Cola"
+// matches as one item instead of getting split into "Coca" + "Cola". A run
+// of tokens that never matches anything gets folded into a leftover
+// "unmatched" cart entry (product: null) — same as the single-item
+// add-product fallback already shows, just inside the cart view instead.
+function autoSegmentByCatalog(tokens: string[], products: Product[]): CartItem[] {
+  const items: CartItem[] = [];
+  if (tokens.length === 0 || products.length === 0) return items;
+
+  const maxNameWords = Math.min(4, Math.max(1, ...products.map(p => p.name.trim().split(/\s+/).length)));
+
+  let leftover: string[] = [];
+  const flushLeftover = () => {
+    if (leftover.length === 0) return;
+    items.push({
+      key: `u${items.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      spokenName: titleCase(leftover.join(' ')),
+      quantity: 1,
+      product: null,
+      matchScore: null,
+      alternatives: [],
+    });
+    leftover = [];
+  };
+
+  let i = 0;
+  while (i < tokens.length) {
+    let qty = 1;
+    let qtyConsumed = 0;
+    const first = tokens[i];
+    const firstNum = /^\d+$/.test(first) ? Number(first) : WORD_NUMS[first];
+    // Only treat a leading number as a quantity if something follows it —
+    // a bare trailing number with nothing after it is more likely a price.
+    if (firstNum !== undefined && i + 1 < tokens.length) {
+      qty = firstNum;
+      qtyConsumed = 1;
+    }
+
+    let bestMatch: { product: Product; window: number; score: number; alternatives: Product[] } | null = null;
+    const maxWindow = Math.min(maxNameWords, tokens.length - i - qtyConsumed);
+    for (let w = maxWindow; w >= 1; w--) {
+      const windowTokens = tokens.slice(i + qtyConsumed, i + qtyConsumed + w);
+      const matches = findBestMatches(windowTokens, products);
+      // Require a fairly confident match here (score <= 1.5, i.e. exact/
+      // phonetic/substring tier) — this function is guessing at item
+      // boundaries with no spoken cue, so it shouldn't accept the same
+      // loose fuzzy-distance matches the single-item flow allows.
+      if (matches.length > 0 && matches[0].score <= 1.5) {
+        bestMatch = { product: matches[0].product, window: w, score: matches[0].score, alternatives: matches.slice(1).map(m => m.product) };
+        break;
+      }
+    }
+
+    if (bestMatch) {
+      flushLeftover();
+      items.push({
+        key: `m${items.length}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        spokenName: bestMatch.product.name,
+        quantity: qty,
+        product: bestMatch.product,
+        matchScore: bestMatch.score,
+        alternatives: bestMatch.alternatives,
+      });
+      i += qtyConsumed + bestMatch.window;
+    } else {
+      leftover.push(tokens[i]);
+      i += 1;
+    }
+  }
+  flushLeftover();
+
+  return items;
+}
+
+// A match this weak (substring/fuzzy tiers, not exact/phonetic-exact/alias)
+// gets accepted so the flow doesn't stall, but it's flagged for a quick
+// glance in the cart — silently trusting a fuzzy guess in a batch sale is
+// how the wrong product gets sold.
+const CONFIDENT_MATCH_SCORE = 0.3;
+
 const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
 // Processing screen steps (spec section 5, screen 6) — purely cosmetic pacing
@@ -258,6 +346,7 @@ const PROCESSING_STEPS = ['Recognizing…', 'Finding your product…', 'Extracti
 export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMultiSale, onCreateProduct, onSaveAlias }: SimpleVoiceSellProps) {
   const [stage, setStage] = useState<Stage>('idle');
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [reviewKey, setReviewKey] = useState<string | null>(null); // cart item currently showing alternate-match options
   const [lastCartSummary, setLastCartSummary] = useState<{ count: number; total: number } | null>(null);
   const [voiceMode, setVoiceMode] = useState<'sell' | 'add'>('sell');
   const [justAdded, setJustAdded] = useState<Product | null>(null);
@@ -306,6 +395,8 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMult
             spokenName: titleCase(nameTokens.join(' ')),
             quantity: qty,
             product: matches.length > 0 ? matches[0].product : null,
+            matchScore: matches.length > 0 ? matches[0].score : null,
+            alternatives: matches.slice(1).map(m => m.product),
           };
         });
         setCartItems(items);
@@ -317,6 +408,24 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMult
     const tokens = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
     // Drop common filler words that don't carry product/quantity meaning
     const filtered = tokens.filter(t => !FILLER_WORDS.includes(t));
+
+    // No spoken separator ("and"/comma) was heard — before treating this as
+    // one single item, check whether the catalog itself reveals 2+ items
+    // back to back ("two indomie one garri onions"). Only switches to the
+    // cart view when it confidently recognizes at least 2 products, so a
+    // genuine single-item sale still goes through the normal confirm screen
+    // exactly as before.
+    const autoItems = autoSegmentByCatalog(filtered, products);
+    const autoMatchedCount = autoItems.filter(it => it.product).length;
+    if (autoMatchedCount >= 2) {
+      setTimeout(() => {
+        clearInterval(stepTimerRef.current);
+        setCartItems(autoItems);
+        setStage('cart');
+      }, 900);
+      return;
+    }
+
     const { qty, priceGuess, nameTokens, ambiguous } = parseQtyAndPrice(filtered);
     const matches = findBestMatches(nameTokens, products);
     const spokenSpan = nameTokens.join(' ');
@@ -448,6 +557,7 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMult
     setNewCostPrice('');
     setNewQty('');
     setCartItems([]);
+    setReviewKey(null);
     setLastCartSummary(null);
   }, []);
 
@@ -536,29 +646,66 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMult
       <div className="space-y-3 animate-fade-in">
         <p className="text-sm font-display font-bold text-foreground text-center">Heard {cartItems.length} items — review and sell</p>
         <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-          {cartItems.map(item => (
-            <div
-              key={item.key}
-              className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${item.product ? 'bg-surface-2/40 border-border' : 'bg-warning/5 border-warning/30'}`}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="font-display font-semibold text-sm truncate">{item.product ? item.product.name : item.spokenName}</p>
-                {item.product ? (
-                  <p className="text-xs text-muted-foreground">₦{item.product.sellingPrice.toLocaleString()} each</p>
-                ) : (
-                  <p className="text-xs text-warning">Couldn't find this — say it alone to add it as a new product</p>
-                )}
-              </div>
-              {item.product && (
-                <div className="flex-shrink-0 flex items-center gap-2">
-                  <button onClick={() => updateCartQty(item.key, -1)} className="w-7 h-7 rounded-full bg-surface-3 flex items-center justify-center font-display font-bold">−</button>
-                  <span className="w-5 text-center font-display font-bold text-sm">{item.quantity}</span>
-                  <button onClick={() => updateCartQty(item.key, 1)} className="w-7 h-7 rounded-full bg-surface-3 flex items-center justify-center font-display font-bold">+</button>
+          {cartItems.map(item => {
+            const needsReview = !!item.product && item.matchScore !== null && item.matchScore > CONFIDENT_MATCH_SCORE;
+            const swapOptions = item.product ? [item.product, ...item.alternatives] : [];
+            return (
+              <div
+                key={item.key}
+                className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${item.product ? 'bg-surface-2/40 border-border' : 'bg-warning/5 border-warning/30'}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-display font-semibold text-sm truncate">{item.product ? item.product.name : item.spokenName}</p>
+                    {needsReview && (
+                      <span className="flex-shrink-0 text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">Not sure?</span>
+                    )}
+                  </div>
+                  {item.product ? (
+                    <p className="text-xs text-muted-foreground">₦{item.product.sellingPrice.toLocaleString()} each</p>
+                  ) : (
+                    <p className="text-xs text-warning">Couldn't find this — say it alone to add it as a new product</p>
+                  )}
+                  {needsReview && swapOptions.length > 1 && (
+                    <button
+                      onClick={() => setReviewKey(k => (k === item.key ? null : item.key))}
+                      className="text-[11px] text-primary font-display font-bold mt-0.5"
+                    >
+                      {reviewKey === item.key ? 'Hide options' : 'Not this one? tap to change'}
+                    </button>
+                  )}
+                  {reviewKey === item.key && (
+                    <div className="mt-2 space-y-1.5">
+                      {swapOptions.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            setCartItems(items => items.map(it =>
+                              it.key === item.key ? { ...it, product: p, matchScore: p.id === item.product?.id ? it.matchScore : 0 } : it
+                            ));
+                            setReviewKey(null);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs border ${
+                            p.id === item.product?.id ? 'border-primary bg-primary/10 font-bold' : 'border-border bg-surface-3'
+                          }`}
+                        >
+                          {p.name} — ₦{p.sellingPrice.toLocaleString()}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-              <button onClick={() => removeCartItem(item.key)} className="flex-shrink-0 text-muted-foreground text-lg leading-none px-1">×</button>
-            </div>
-          ))}
+                {item.product && (
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    <button onClick={() => updateCartQty(item.key, -1)} className="w-7 h-7 rounded-full bg-surface-3 flex items-center justify-center font-display font-bold">−</button>
+                    <span className="w-5 text-center font-display font-bold text-sm">{item.quantity}</span>
+                    <button onClick={() => updateCartQty(item.key, 1)} className="w-7 h-7 rounded-full bg-surface-3 flex items-center justify-center font-display font-bold">+</button>
+                  </div>
+                )}
+                <button onClick={() => removeCartItem(item.key)} className="flex-shrink-0 text-muted-foreground text-lg leading-none px-1">×</button>
+              </div>
+            );
+          })}
         </div>
 
         {cartMatchedItems.length > 0 && (
