@@ -40,25 +40,30 @@ setCatchHandler(async ({ event }) => {
   return Response.error();
 });
 
-// ─── Push Notifications ─────────────────────────────────────────────────
-// Payload shape sent by the send-order-push edge function:
-// { title, body, tag, url }
+// ─── Push Notifications (Background OS Lockscreen & System Tray) ─────────
+// Handles Web Push payloads sent by Edge Functions (send-order-push) even when
+// the app or browser is completely closed — matching WhatsApp / Facebook behavior.
 self.addEventListener('push', (event: PushEvent) => {
   let data: { title?: string; body?: string; tag?: string; url?: string } = {};
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: 'StoreFlow', body: event.data?.text() || 'You have a new notification' };
+    data = { title: 'StoreFlow', body: event.data?.text() || 'New order notification received' };
   }
 
-  const title = data.title || 'StoreFlow';
+  const title = data.title || 'StoreFlow Order Alert 🛒';
   const options: NotificationOptions = {
-    body: data.body || '',
+    body: data.body || 'New order received!',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    tag: data.tag,
-    data: { url: data.url || '/' },
-    vibrate: [200, 100, 200],
+    tag: data.tag || 'storeflow-order',
+    renotify: true,
+    requireInteraction: true, // keeps notification active in system tray like WhatsApp
+    data: { url: data.url || '/?tab=orders' },
+    vibrate: [300, 100, 300, 100, 300], // system alert vibration pattern
+    actions: [
+      { action: 'open', title: '🛒 View Order' }
+    ]
   } as NotificationOptions;
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -66,7 +71,7 @@ self.addEventListener('push', (event: PushEvent) => {
 
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
+  const url = (event.notification.data && event.notification.data.url) || '/?tab=orders';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
