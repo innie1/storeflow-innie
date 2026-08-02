@@ -544,16 +544,22 @@ export default function Index() {
             playOrderAlertSound();
           }
 
+          const isOrderRel = newNotif.type === 'new_order' || newNotif.type?.startsWith('order_');
+          let notifIcon = '🔔';
+          if (newNotif.type === 'new_order') notifIcon = '🛒';
+          else if (newNotif.type === 'order_cancelled' || newNotif.type === 'order_rejected') notifIcon = '🚫';
+          else if (newNotif.type === 'order_update') notifIcon = '📝';
+
           const newNotification = {
             id: newNotif.id || 'notif-' + Date.now(),
             title: newNotif.title || 'System Alert',
             message: newNotif.message || '',
             date: newNotif.created_at || new Date().toISOString(),
             read: newNotif.is_read || false,
-            tone: (newNotif.type === 'new_order' ? 'info' : (newNotif.type || 'info')) as any,
-            actionTab: newNotif.type === 'new_order' ? 'orders' : undefined,
-            actionLabel: newNotif.type === 'new_order' ? 'View Orders' : undefined,
-            icon: newNotif.type === 'new_order' ? '🛒' : '🔔'
+            tone: (newNotif.type === 'order_cancelled' ? 'destructive' : newNotif.type === 'new_order' ? 'info' : (newNotif.type || 'info')) as any,
+            actionTab: isOrderRel ? 'orders' : undefined,
+            actionLabel: isOrderRel ? 'View Orders' : undefined,
+            icon: notifIcon
           };
 
           setStore(prev => {
