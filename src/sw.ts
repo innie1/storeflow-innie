@@ -1,8 +1,12 @@
 /// <reference lib="webworker" />
-// Custom service worker (replaces the auto-generated one) so we can add
-// push notification + notification-click handling for new orders, while
-// keeping the same offline-first precaching/runtime-caching behavior the
-// app already had.
+// StoreFlow Merchant Service Worker
+//
+// Production-grade push notification handler with:
+// - Foreground suppression (no system notification if app window is visible)
+// - Auto-clear stale notifications via CLEAR_NOTIFICATIONS message
+// - Badge count management
+// - Tag-based deduplication (no renotify)
+// - Priority-based requireInteraction
 
 import { precacheAndRoute, cleanupOutdatedCaches, matchPrecache } from 'workbox-precaching';
 import { registerRoute, setCatchHandler } from 'workbox-routing';
@@ -28,11 +32,6 @@ registerRoute(
   new StaleWhileRevalidate({ cacheName: 'assets' })
 );
 
-// SPA offline fallback — equivalent to the old workbox `navigateFallback:
-// "/index.html"`, which injectManifest mode doesn't provide automatically.
-// Without this, a direct/offline navigation to a client-side route (e.g.
-// reopening the app on /inventory with no network) would fail instead of
-// falling back to the shell.
 setCatchHandler(async ({ event }) => {
   if (event.request.mode === 'navigate') {
     return (await matchPrecache('/index.html')) || Response.error();
@@ -40,11 +39,20 @@ setCatchHandler(async ({ event }) => {
   return Response.error();
 });
 
-// ─── Push Notifications (Background OS Lockscreen & System Tray) ─────────
-// Handles Web Push payloads sent by Edge Functions even when the app or browser
-// is completely closed — matching native WhatsApp / Facebook behavior.
+// ─── Push Notifications ──────────────────────────────────────────────────
+
 self.addEventListener('push', (event: PushEvent) => {
-  let data: { title?: string; body?: string; tag?: string; url?: string; actions?: { action: string; title: string }[] } = {};
+  let data: {
+    title?: string;
+    body?: string;
+    tag?: string;
+    url?: string;
+    priority?: 'critical' | 'normal';
+    notification_id?: string;
+    orderId?: string;
+    actions?: { action: string; title: string }[];
+  } = {};
+
   try {
     data = event.data ? event.data.json() : {};
   } catch {
@@ -52,45 +60,125 @@ self.addEventListener('push', (event: PushEvent) => {
   }
 
   const title = data.title || 'StoreFlow Alert ⚡';
-  const tag = data.tag || 'storeflow-alert';
+  const tag = data.tag || data.notification_id || 'storeflow-alert';
   const url = data.url || '/?tab=orders';
+  const priority = data.priority || 'normal';
 
+  // Determine action button based on notification content
   let defaultActions = [{ action: 'open', title: '🛒 View Order' }];
-  if (tag.includes('streak') || tag.includes('flow') || title.includes('Streak') || title.includes('Flow')) {
+  if (tag.includes('streak') || tag.includes('flow') || title.includes('Streak')) {
     defaultActions = [{ action: 'open', title: '🔥 Open StoreFlow' }];
-  } else if (tag.includes('sales') || tag.includes('margin') || title.includes('Sales') || title.includes('Check-In')) {
+  } else if (tag.includes('sales') || title.includes('Sales') || title.includes('Check-In')) {
     defaultActions = [{ action: 'open', title: '📈 View Dashboard' }];
-  } else if (tag.includes('debt') || tag.includes('bill') || title.includes('Repayment') || title.includes('Capital')) {
+  } else if (tag.includes('debt') || tag.includes('bill') || title.includes('Repayment')) {
     defaultActions = [{ action: 'open', title: '💰 View Pending' }];
   }
 
-  const options: NotificationOptions = {
-    body: data.body || 'New alert received!',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    tag: tag,
-    renotify: true,
-    requireInteraction: true, // keeps notification active in system tray like WhatsApp
-    data: { url: url },
-    vibrate: [300, 100, 300, 100, 300], // system alert vibration pattern
-    actions: data.actions || defaultActions,
-  } as NotificationOptions;
+  const showNotification = () => {
+    const options: NotificationOptions = {
+      body: data.body || 'New alert received!',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: tag,
+      renotify: false, // Don't re-display if same tag exists — dedup
+      requireInteraction: priority === 'critical', // Only pin critical notifications
+      data: { url, orderId: data.orderId || null },
+      vibrate: priority === 'critical' ? [300, 100, 300, 100, 300] : [200, 100, 200],
+      actions: data.actions || defaultActions,
+    } as NotificationOptions;
 
-  event.waitUntil(self.registration.showNotification(title, options));
+    return self.registration.showNotification(title, options);
+  };
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clients) => {
+      // Check if any visible window exists
+      const visibleClient = clients.find(
+        (c) => (c as WindowClient).visibilityState === 'visible'
+      ) as WindowClient | undefined;
+
+      if (visibleClient) {
+        // App is in foreground — send data to the app for in-app toast instead
+        visibleClient.postMessage({
+          type: 'STOREFLOW_PUSH_RECEIVED',
+          title,
+          body: data.body || '',
+          url,
+          orderId: data.orderId || null,
+          tag,
+          priority,
+        });
+        // Don't show system notification for foreground — app handles it
+        return;
+      }
+
+      // App is in background or closed — show system notification
+      await showNotification();
+
+      // Update badge count
+      const existingNotifications = await self.registration.getNotifications();
+      const badgeCount = existingNotifications.length + 1;
+      if ('setAppBadge' in navigator) {
+        try { (navigator as any).setAppBadge(badgeCount); } catch {}
+      }
+    })
+  );
 });
+
+// ─── Notification Click ──────────────────────────────────────────────────
 
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/?tab=orders';
+  const url = event.notification.data?.url || '/?tab=orders';
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
-      const existing = clientsArr.find((c) => 'focus' in c) as WindowClient | undefined;
+    (async () => {
+      // Clear badge
+      if ('clearAppBadge' in navigator) {
+        try { (navigator as any).clearAppBadge(); } catch {}
+      }
+
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const existing = clients.find((c) => 'focus' in c) as WindowClient | undefined;
+
       if (existing) {
-        existing.navigate(url).catch(() => {});
+        await existing.navigate(url).catch(() => {});
         return existing.focus();
       }
       return self.clients.openWindow(url);
-    })
+    })()
   );
+});
+
+// ─── Message Handler (clear notifications from app) ──────────────────────
+
+self.addEventListener('message', (event: ExtendableMessageEvent) => {
+  const msg = event.data;
+  if (!msg) return;
+
+  if (msg.type === 'CLEAR_NOTIFICATIONS') {
+    event.waitUntil(
+      (async () => {
+        const notifications = await self.registration.getNotifications();
+        const orderId = msg.orderId;
+
+        for (const n of notifications) {
+          if (orderId) {
+            // Clear notifications for a specific order
+            if (n.data?.orderId === orderId || n.tag?.includes(orderId)) {
+              n.close();
+            }
+          } else {
+            // Clear all StoreFlow notifications
+            n.close();
+          }
+        }
+
+        // Reset badge
+        if ('clearAppBadge' in navigator) {
+          try { (navigator as any).clearAppBadge(); } catch {}
+        }
+      })()
+    );
+  }
 });

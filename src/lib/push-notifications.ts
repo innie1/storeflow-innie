@@ -163,3 +163,25 @@ export async function autoSubscribeIfGranted(storeId: string): Promise<void> {
     console.warn('[push] autoSubscribeIfGranted error:', err);
   }
 }
+
+// Clear system tray notifications for a specific order (e.g. when viewing it)
+export async function clearNotificationsForOrder(orderId: string): Promise<void> {
+  if (!isPushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    registration.active?.postMessage({ type: 'CLEAR_NOTIFICATIONS', orderId });
+  } catch (err) {
+    console.warn('[push] clearNotificationsForOrder error:', err);
+  }
+}
+
+// Clear all StoreFlow notifications from system tray (e.g. on app focus)
+export async function clearAllStoreFlowNotifications(): Promise<void> {
+  if (!isPushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    registration.active?.postMessage({ type: 'CLEAR_NOTIFICATIONS' });
+  } catch (err) {
+    console.warn('[push] clearAllStoreFlowNotifications error:', err);
+  }
+}

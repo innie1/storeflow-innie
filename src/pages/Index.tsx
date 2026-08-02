@@ -16,7 +16,7 @@ import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 import Orders from '@/components/Orders';
 import { supabase } from '@/integrations/supabase/client';
-import { autoSubscribeIfGranted } from '@/lib/push-notifications';
+import { autoSubscribeIfGranted, clearAllStoreFlowNotifications } from '@/lib/push-notifications';
 
 // Eager helper imports from settings
 import { saveSession, clearSession, getActiveSession } from '@/components/Settings';
@@ -475,7 +475,39 @@ export default function Index() {
     if (store?.id) {
       autoSubscribeIfGranted(store.id);
     }
-  }, [store?.id]);
+
+    // Clear stale notifications when merchant returns to the app (WhatsApp-like)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        clearAllStoreFlowNotifications();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Listen for foreground push messages from SW (shown as in-app toast instead of system notification)
+    const handleSWMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'STOREFLOW_PUSH_RECEIVED') {
+        const { title, body } = event.data;
+        showToast(`${title}: ${body}`, 'info');
+
+        // Play alert sound for foreground pushes if enabled
+        const isSoundEnabled = store?.marketplaceSettings?.alertSound !== false && store?.marketplaceSettings?.notifNewOrders !== false;
+        if (isSoundEnabled) {
+          playOrderAlertSound();
+        }
+      }
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSWMessage);
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      }
+    };
+  }, [store?.id, store?.marketplaceSettings?.alertSound, store?.marketplaceSettings?.notifNewOrders, playOrderAlertSound]);
 
   // Set up Supabase Realtime channel listener on orders table
   useEffect(() => {
@@ -776,6 +808,18 @@ export default function Index() {
         
       if (error) throw error;
       showToast(`Order status updated to ${newStatus}`);
+
+      // Explicitly notify the CUSTOMER via Edge Function.
+      // initiated_by: "merchant" ensures the merchant does NOT get a push for their own action.
+      supabase.functions.invoke('send-order-push', {
+        body: {
+          order_id: orderId,
+          new_status: newStatus,
+          old_status: targetOrder.status,
+          is_customer_update: true,
+          initiated_by: 'merchant'
+        }
+      }).catch(err => console.warn('[Push] Failed to invoke send-order-push:', err));
 
       // Update local state directly
       setOrders(prev =>
