@@ -16,6 +16,7 @@ import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 import Orders from '@/components/Orders';
 import { supabase } from '@/integrations/supabase/client';
+import { autoSubscribeIfGranted } from '@/lib/push-notifications';
 
 // Eager helper imports from settings
 import { saveSession, clearSession, getActiveSession } from '@/components/Settings';
@@ -329,10 +330,13 @@ export default function Index() {
   // through, one back-swipe always lands you cleanly on Dashboard, in a
   // single synchronous step, never a multi-entry unwind.
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const queryTab = params.get('tab') as TabId | null;
     const hash = window.location.hash.replace('#', '') as TabId;
-    if (hash && hash !== 'dashboard') {
-      setTabState(hash);
-      window.history.replaceState({ tab: hash, index: 1 }, '', '#' + hash);
+    const initialTab = queryTab || hash;
+    if (initialTab && initialTab !== 'dashboard') {
+      setTabState(initialTab);
+      window.history.replaceState({ tab: initialTab, index: 1 }, '', '#' + initialTab);
     } else {
       window.history.replaceState({ tab: 'dashboard', index: 0 }, '', '#dashboard');
     }
@@ -464,6 +468,14 @@ export default function Index() {
       active = false;
     };
   }, [store?.id, getNormalizedStatus]);
+
+  // Auto-heal / maintain background push notification subscription when store is loaded
+  // so streak reminders & order alerts arrive reliably even when the app is closed
+  useEffect(() => {
+    if (store?.id) {
+      autoSubscribeIfGranted(store.id);
+    }
+  }, [store?.id]);
 
   // Set up Supabase Realtime channel listener on orders table
   useEffect(() => {

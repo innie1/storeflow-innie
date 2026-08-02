@@ -3,6 +3,7 @@ import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
 import OrderReceipt from '@/components/OrderReceipt';
+import { subscribeToOrderPush } from '@/lib/push-notifications';
 
 interface OrdersProps {
   store: StoreData;
@@ -78,6 +79,10 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [quickMsgMenuFor, setQuickMsgMenuFor] = useState<string | null>(null);
   const [receiptOrder, setReceiptOrder] = useState<any | null>(null);
+
+  const [pushDismissed, setPushDismissed] = useState(false);
+  const [enablingPush, setEnablingPush] = useState(false);
+  const showPushBanner = typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default' && !pushDismissed;
 
   // Date & Time Filter states
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -242,6 +247,44 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
 
   return (
     <div className="space-y-3.5 pt-1">
+      {showPushBanner && (
+        <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs text-foreground animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <span className="text-lg">🔔</span>
+            <div>
+              <span className="font-semibold block">Enable Background Order &amp; Streak Alerts</span>
+              <span className="text-muted-foreground">Get phone alerts for new orders &amp; Flow streak reminders even when StoreFlow is closed.</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={async () => {
+                if (!store.id) {
+                  showToast('Store not fully synced yet — try again in a moment.', 'error');
+                  return;
+                }
+                setEnablingPush(true);
+                const result = await subscribeToOrderPush(store.id);
+                setEnablingPush(false);
+                showToast(result.message, result.success ? 'success' : 'error');
+                if (result.success || Notification.permission !== 'default') {
+                  setPushDismissed(true);
+                }
+              }}
+              disabled={enablingPush}
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition disabled:opacity-50"
+            >
+              {enablingPush ? 'Enabling...' : 'Enable Alerts'}
+            </button>
+            <button
+              onClick={() => setPushDismissed(true)}
+              className="px-2 py-1 text-muted-foreground hover:text-foreground"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       {/* Top Action Bar (Store Open/Close Toggle & Capacity Badge) */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <button

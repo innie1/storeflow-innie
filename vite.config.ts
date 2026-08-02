@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => ({
       srcDir: "src",
       filename: "sw.ts",
       registerType: "autoUpdate",
-      devOptions: { enabled: false },
+      devOptions: { enabled: true, type: "module" },
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
       manifest: {
         name: "StoreFlow",

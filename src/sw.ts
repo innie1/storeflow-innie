@@ -41,29 +41,39 @@ setCatchHandler(async ({ event }) => {
 });
 
 // ─── Push Notifications (Background OS Lockscreen & System Tray) ─────────
-// Handles Web Push payloads sent by Edge Functions (send-order-push) even when
-// the app or browser is completely closed — matching WhatsApp / Facebook behavior.
+// Handles Web Push payloads sent by Edge Functions even when the app or browser
+// is completely closed — matching native WhatsApp / Facebook behavior.
 self.addEventListener('push', (event: PushEvent) => {
-  let data: { title?: string; body?: string; tag?: string; url?: string } = {};
+  let data: { title?: string; body?: string; tag?: string; url?: string; actions?: { action: string; title: string }[] } = {};
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: 'StoreFlow', body: event.data?.text() || 'New order notification received' };
+    data = { title: 'StoreFlow', body: event.data?.text() || 'New notification received' };
   }
 
-  const title = data.title || 'StoreFlow Order Alert 🛒';
+  const title = data.title || 'StoreFlow Alert ⚡';
+  const tag = data.tag || 'storeflow-alert';
+  const url = data.url || '/?tab=orders';
+
+  let defaultActions = [{ action: 'open', title: '🛒 View Order' }];
+  if (tag.includes('streak') || tag.includes('flow') || title.includes('Streak') || title.includes('Flow')) {
+    defaultActions = [{ action: 'open', title: '🔥 Open StoreFlow' }];
+  } else if (tag.includes('sales') || tag.includes('margin') || title.includes('Sales') || title.includes('Check-In')) {
+    defaultActions = [{ action: 'open', title: '📈 View Dashboard' }];
+  } else if (tag.includes('debt') || tag.includes('bill') || title.includes('Repayment') || title.includes('Capital')) {
+    defaultActions = [{ action: 'open', title: '💰 View Pending' }];
+  }
+
   const options: NotificationOptions = {
-    body: data.body || 'New order received!',
+    body: data.body || 'New alert received!',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    tag: data.tag || 'storeflow-order',
+    tag: tag,
     renotify: true,
     requireInteraction: true, // keeps notification active in system tray like WhatsApp
-    data: { url: data.url || '/?tab=orders' },
+    data: { url: url },
     vibrate: [300, 100, 300, 100, 300], // system alert vibration pattern
-    actions: [
-      { action: 'open', title: '🛒 View Order' }
-    ]
+    actions: data.actions || defaultActions,
   } as NotificationOptions;
 
   event.waitUntil(self.registration.showNotification(title, options));

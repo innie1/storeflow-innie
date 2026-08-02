@@ -146,3 +146,20 @@ export async function unsubscribeFromOrderPush(): Promise<{ success: boolean; me
     return { success: false, message: err.message || 'Failed to unsubscribe.' };
   }
 }
+
+// Silently checks if notification permission was previously granted and ensures
+// the device's Web Push endpoint is actively registered and saved to Supabase
+// push_subscriptions so background delivery never fails when the app is closed.
+export async function autoSubscribeIfGranted(storeId: string): Promise<void> {
+  if (!isPushSupported() || !storeId) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    const state = await getPushSubscriptionState();
+    if (state !== 'subscribed') {
+      console.log('[push] Auto-healing Web Push subscription for store:', storeId);
+      await subscribeToOrderPush(storeId);
+    }
+  } catch (err) {
+    console.warn('[push] autoSubscribeIfGranted error:', err);
+  }
+}

@@ -1374,11 +1374,55 @@ function PushNotificationToggle({ store }: { store: StoreData }) {
   }
 
   return (
-    <ToggleRow
-      label={busy ? 'Working…' : state === 'subscribed' ? 'On for this device' : 'Off for this device'}
-      description="Sends a real phone notification when a new order comes in, even if StoreFlow is closed."
-      checked={state === 'subscribed'}
-      onChange={handleToggle}
-    />
+    <div className="space-y-3">
+      <ToggleRow
+        label={busy ? 'Working…' : state === 'subscribed' ? 'On for this device' : 'Off for this device'}
+        description="Sends real phone notifications when new orders come in or when Flow reminds you of daily streaks, even if StoreFlow is closed."
+        checked={state === 'subscribed'}
+        onChange={handleToggle}
+      />
+      {state === 'subscribed' && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={async () => {
+              if (!store.id) return;
+              showToast('Sending test streak notification...', 'info');
+              try {
+                const res = await supabase.functions.invoke('send-flow-reminders', {
+                  body: { store_id: store.id, reminder_type: 'streak' }
+                });
+                if (res.error) throw res.error;
+                showToast('Test push sent! Check your notifications or lockscreen.', 'success');
+              } catch (err: any) {
+                showToast(`Could not send test push: ${err.message || 'Check if edge function is deployed'}`, 'error');
+              }
+            }}
+            className="text-xs px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground font-medium hover:opacity-90 transition flex items-center gap-1.5"
+          >
+            🔥 Test Streak Reminder
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!store.id) return;
+              showToast('Sending test sales check-in...', 'info');
+              try {
+                const res = await supabase.functions.invoke('send-flow-reminders', {
+                  body: { store_id: store.id, reminder_type: 'sales' }
+                });
+                if (res.error) throw res.error;
+                showToast('Test push sent! Check your notifications or lockscreen.', 'success');
+              } catch (err: any) {
+                showToast(`Could not send test push: ${err.message || 'Check if edge function is deployed'}`, 'error');
+              }
+            }}
+            className="text-xs px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground font-medium hover:opacity-90 transition flex items-center gap-1.5"
+          >
+            📈 Test Sales Reminder
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
