@@ -301,19 +301,17 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     saveStore(updatedStore);
     setLoadedStore(updatedStore);
 
-    // Fire-and-forget — never blocks store creation. Silently no-ops until
-    // RESEND_API_KEY is configured as a Supabase Edge Function secret.
-    fetch('https://jawfalghkftldvkopuaw.supabase.co/functions/v1/send-account-recovery-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    // Fire-and-forget — never blocks store creation. Sends recovery details to
+    // the configured recovery email via Resend in our Supabase Edge Function.
+    supabase.functions.invoke('send-account-recovery-email', {
+      body: {
         to: recoveryEmail.trim(),
         storeName: updatedStore.storeName,
         accessCode: updatedStore.accessCode,
         emergencyRecoveryKey: generatedRecoveryKey,
         recoveryQuestion,
-      }),
-    }).catch(() => { /* best-effort — recovery details still visible in Settings either way */ });
+      },
+    }).catch(err => console.warn('Failed to send account recovery email via Resend:', err));
 
     showToast('Store secured successfully!');
 
@@ -667,7 +665,28 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     setInputCode('');
     
     const target = method === 'email' ? loadedStore.managerSettings?.recoveryEmail : loadedStore.managerSettings?.recoveryPhone;
-    showToast(`[SIMULATION] Verification Code sent to ${target}: ${code}`, 'info', 8000);
+    if (method === 'email' && target) {
+      showToast(`Sending Verification Code to ${target}...`, 'info', 5000);
+      supabase.functions.invoke('send-account-recovery-email', {
+        body: {
+          to: target,
+          storeName: loadedStore.storeName,
+          type: 'verification_code',
+          code,
+        },
+      }).then(({ error }) => {
+        if (error) {
+          console.warn('Resend verification code delivery failed, falling back to simulated display:', error);
+          showToast(`[FALLBACK] Verification Code sent to ${target}: ${code}`, 'info', 8000);
+        } else {
+          showToast(`Verification Code emailed successfully to ${target}! Check your inbox.`, 'success', 6000);
+        }
+      }).catch(() => {
+        showToast(`[SIMULATION] Verification Code sent to ${target}: ${code}`, 'info', 8000);
+      });
+    } else {
+      showToast(`[SIMULATION] Verification Code sent to ${target}: ${code}`, 'info', 8000);
+    }
     setRecoveryMode('code');
   };
 
