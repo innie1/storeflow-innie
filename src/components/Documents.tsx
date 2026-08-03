@@ -67,11 +67,15 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
   };
 
   const handleDeleteDocument = (id: string) => {
-    if (confirm('Are you sure you want to delete this document from the vault?')) {
-      const nextStore = deleteVaultDocument(store, id);
-      onUpdate(nextStore);
-      showToast('Document deleted.');
-    }
+    setPendingDeleteId(id);
+  };
+
+  const confirmDeleteDocument = () => {
+    if (!pendingDeleteId) return;
+    const nextStore = deleteVaultDocument(store, pendingDeleteId);
+    onUpdate(nextStore);
+    showToast('Document deleted.');
+    setPendingDeleteId(null);
   };
 
   const documents = store.documents || [];
@@ -300,6 +304,18 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingDeleteId)}
+        title="Delete Document?"
+        description="Are you sure you want to delete this document from the vault?"
+        confirmText="Delete Document"
+        cancelText="Cancel"
+        variant="danger"
+        icon="📄"
+        onConfirm={confirmDeleteDocument}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

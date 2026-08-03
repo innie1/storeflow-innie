@@ -2,21 +2,23 @@ import { useState } from 'react';
 import { StoreData } from '@/types/store';
 import { getGames, updateGame, deleteGame, addGame, moveGame } from '@/lib/games-data';
 import { showToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
 const ICONS = ['🎮', '🎱', '🏓', '🎯', '🎤', '🥽', '♟️', '🎲', '🃏', '🕹️', '⚽', '🏀', '🎳', '🎪'];
 
-interface Props {
+interface GamesSettingsProps {
   store: StoreData;
-  onUpdate: (s: StoreData) => void;
+  onUpdate: (store: StoreData) => void;
 }
 
-export default function GamesSettings({ store, onUpdate }: Props) {
+export default function GamesSettings({ store, onUpdate }: GamesSettingsProps) {
   const games = getGames(store);
   const [adding, setAdding] = useState(false);
   const [newGame, setNewGame] = useState({ name: '', price: '', icon: '🎮' });
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
 
-  const handleToggle = (id: string, enabled: boolean) => {
-    onUpdate(updateGame(store, id, { enabled }));
+  const handleToggle = (id: string, current: boolean) => {
+    onUpdate(updateGame(store, id, { enabled: !current }));
   };
   const handlePrice = (id: string, value: string) => {
     const n = Number(value) || 0;
@@ -26,9 +28,13 @@ export default function GamesSettings({ store, onUpdate }: Props) {
     onUpdate(updateGame(store, id, { icon }));
   };
   const handleRemove = (id: string) => {
-    if (!confirm('Remove this game?')) return;
-    onUpdate(deleteGame(store, id));
+    setPendingRemoveId(id);
+  };
+  const confirmRemoveGame = () => {
+    if (!pendingRemoveId) return;
+    onUpdate(deleteGame(store, pendingRemoveId));
     showToast('Game removed');
+    setPendingRemoveId(null);
   };
   const handleAdd = () => {
     if (!newGame.name.trim()) return showToast('Enter a name', 'error');
@@ -106,6 +112,18 @@ export default function GamesSettings({ store, onUpdate }: Props) {
           + Add custom game
         </button>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingRemoveId)}
+        title="Remove Game?"
+        description="Are you sure you want to remove this game configuration?"
+        confirmText="Remove Game"
+        cancelText="Cancel"
+        variant="danger"
+        icon="🎮"
+        onConfirm={confirmRemoveGame}
+        onCancel={() => setPendingRemoveId(null)}
+      />
     </div>
   );
 }

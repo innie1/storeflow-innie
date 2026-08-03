@@ -25,7 +25,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
       {/* Backdrop — tap outside to close */}
       <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" onClick={onClose} />
 
-      <div className="absolute md:left-4 left-2 top-full mt-2 z-50 w-[300px] max-w-[92vw] rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden animate-slide-up">
+      <div className="fixed left-1/2 -translate-x-1/2 top-24 md:absolute md:left-4 md:translate-x-0 md:top-full md:mt-2 z-50 w-[300px] max-w-[92vw] rounded-2xl border border-border bg-surface-1 shadow-2xl overflow-hidden animate-slide-up">
         {/* Header */}
         <div className="relative px-5 pt-5 pb-4 text-center bg-gradient-to-b from-orange-500/10 to-transparent">
           <button

@@ -5,6 +5,7 @@ import {
   Warehouse, Plus, Phone, MessageSquare, MapPin, Search, Edit, Trash2, Tag, ShieldAlert, Sparkles
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface SuppliersProps {
   store: StoreData;
@@ -15,6 +16,7 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Form fields
   const [name, setName] = useState('');
@@ -349,6 +351,18 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingDeleteId)}
+        title="Delete Supplier?"
+        description="Are you sure you want to delete this supplier record?"
+        confirmText="Delete Supplier"
+        cancelText="Cancel"
+        variant="danger"
+        icon="🏭"
+        onConfirm={confirmDeleteSupplier}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

@@ -1,14 +1,16 @@
 import { StoreData } from '@/types/store';
 import { deleteSession, getAnalytics } from '@/lib/games-data';
 import { showToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
-interface Props {
+interface GamesHistoryProps {
   store: StoreData;
-  onUpdate: (s: StoreData) => void;
+  onUpdate: (store: StoreData) => void;
 }
 
-export default function GamesHistory({ store, onUpdate }: Props) {
+export default function GamesHistory({ store, onUpdate }: GamesHistoryProps) {
   const sessions = (store.gameSessions || []);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { dayTotal, weekTotal, monthTotal } = getAnalytics(store);
 
   const today = new Date();
@@ -17,9 +19,14 @@ export default function GamesHistory({ store, onUpdate }: Props) {
   const todaySessions = sessions.filter(s => new Date(s.date).getTime() >= todayTs);
 
   const handleDelete = (id: string) => {
-    if (!confirm('Delete this session?')) return;
-    onUpdate(deleteSession(store, id));
+    setPendingDeleteId(id);
+  };
+
+  const confirmDeleteSession = () => {
+    if (!pendingDeleteId) return;
+    onUpdate(deleteSession(store, pendingDeleteId));
     showToast('Session deleted');
+    setPendingDeleteId(null);
   };
 
   return (
@@ -82,6 +89,18 @@ export default function GamesHistory({ store, onUpdate }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingDeleteId)}
+        title="Delete Session?"
+        description="Are you sure you want to delete this game session record?"
+        confirmText="Delete Session"
+        cancelText="Cancel"
+        variant="danger"
+        icon="🎮"
+        onConfirm={confirmDeleteSession}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

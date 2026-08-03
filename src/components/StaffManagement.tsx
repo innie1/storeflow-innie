@@ -7,6 +7,7 @@ import {
   Briefcase, UserPlus, Lock, Key, Shield, Calendar, Play, Square, FileText, CheckSquare, Trash2, Edit
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface StaffManagementProps {
   store: StoreData;
@@ -17,6 +18,7 @@ interface StaffManagementProps {
 export default function StaffManagement({ store, onUpdate, currentUser }: StaffManagementProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Form states for adding staff
   const [name, setName] = useState('');
@@ -456,6 +458,18 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingDeleteId)}
+        title="Remove Employee Account?"
+        description="Are you sure you want to permanently remove this employee account? Access will be revoked immediately."
+        confirmText="Remove Account"
+        cancelText="Cancel"
+        variant="danger"
+        icon="👤"
+        onConfirm={confirmDeleteStaff}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

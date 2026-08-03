@@ -7,6 +7,7 @@ import {
 import { showToast } from '@/components/Toast';
 import { getFlowMemory, claimReferral } from '@/lib/flow-memory';
 import { FlowIcon } from '@/components/FlowIcon';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface GoalsProps {
   store: StoreData;
@@ -17,6 +18,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
   const [activeTab, setActiveTab] = useState<'goals' | 'wallet'>('goals');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingGoal, setEditingGoal] = useState<BusinessGoal | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Form states
   const [category, setCategory] = useState<'revenue' | 'profit' | 'savings' | 'debt' | 'inventory'>('revenue');
@@ -628,6 +630,18 @@ function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: S
           )}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingDeleteId)}
+        title="Delete Goal?"
+        description="Are you sure you want to delete this business goal?"
+        confirmText="Delete Goal"
+        cancelText="Cancel"
+        variant="danger"
+        icon="🎯"
+        onConfirm={confirmDeleteGoal}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

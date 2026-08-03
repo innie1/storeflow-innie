@@ -7,6 +7,7 @@ import { playProductAddedSound } from '@/lib/sound-effects';
 import { interpretProductName } from '@/lib/import-intel';
 import { getSimilarity, extractCoreProduct } from '@/lib/similarity';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
+import ConfirmModal from '@/components/ConfirmModal';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SmartRestockEngine from '@/components/SmartRestockEngine';
@@ -82,6 +83,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [search, setSearch] = useState('');
   const [performancePeriod, setPerformancePeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [detailTab, setDetailTab] = useState<'overview' | 'performance' | 'history'>('overview');
+  const [pendingBackorderClear, setPendingBackorderClear] = useState<Product | null>(null);
+  const [pendingMassEditDelete, setPendingMassEditDelete] = useState<MassEditItem | null>(null);
   
   // ---------- Product Performance Calculations ----------
   const filteredSales = useMemo(() => {
@@ -1793,11 +1796,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       Sync
                     </button>
                     <button
-                      onClick={() => {
-                        if (window.confirm(`Clear the ${p.backorderedQty} owed units for ${p.name}? This won't change stock, it just writes off the debt.`)) {
-                          onUpdate(clearBackorder(store, p.id));
-                        }
-                      }}
+                      onClick={() => setPendingBackorderClear(p)}
                       className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/30 font-bold"
                     >
                       Delete
@@ -3369,12 +3368,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                         <div className="flex justify-end pt-1">
                           <button
                             type="button"
-                            onClick={() => {
-                              if (confirm(`Are you sure you want to delete ${it.name}?`)) {
-                                setMassEditItems(massEditItems.filter(item => item.id !== it.id));
-                                showToast(`Removed ${it.name}`, 'info');
-                              }
-                            }}
+                            onClick={() => setPendingMassEditDelete(it)}
                             className="px-3 py-1.5 bg-destructive/10 hover:bg-destructive/20 border border-destructive/25 text-destructive rounded-lg text-xs font-display font-bold cursor-pointer transition-colors"
                           >
                             🗑️ Delete Product
@@ -4370,6 +4364,42 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           </div>
         </Modal>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingBackorderClear)}
+        title="Clear Owed Backorder?"
+        description={pendingBackorderClear ? `Are you sure you want to clear the ${pendingBackorderClear.backorderedQty || 0} owed units for ${pendingBackorderClear.name}? This writes off the debt without changing stock.` : ''}
+        confirmText="Clear Debt"
+        cancelText="Cancel"
+        variant="warning"
+        icon="📦"
+        onConfirm={() => {
+          if (pendingBackorderClear) {
+            onUpdate(clearBackorder(store, pendingBackorderClear.id));
+            showToast(`Cleared owed units for ${pendingBackorderClear.name}`);
+            setPendingBackorderClear(null);
+          }
+        }}
+        onCancel={() => setPendingBackorderClear(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(pendingMassEditDelete)}
+        title="Delete Product?"
+        description={pendingMassEditDelete ? `Are you sure you want to delete ${pendingMassEditDelete.name}?` : ''}
+        confirmText="Delete Product"
+        cancelText="Cancel"
+        variant="danger"
+        icon="🗑️"
+        onConfirm={() => {
+          if (pendingMassEditDelete) {
+            setMassEditItems(items => items.filter(item => item.id !== pendingMassEditDelete.id));
+            showToast(`Removed ${pendingMassEditDelete.name}`, 'info');
+            setPendingMassEditDelete(null);
+          }
+        }}
+        onCancel={() => setPendingMassEditDelete(null)}
+      />
     </div>
   );
 }

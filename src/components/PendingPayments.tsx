@@ -67,8 +67,14 @@ export default function PendingPayments({ store, onUpdate }: Props) {
   };
 
   const handleDelete = (p: PendingPayment) => {
-    if (!confirm(`Delete pending record for ${p.customerName}?`)) return;
-    onUpdate(deletePendingPayment(store, p.id));
+    setPendingDeleteRecord(p);
+  };
+
+  const confirmDeletePending = () => {
+    if (!pendingDeleteRecord) return;
+    onUpdate(deletePendingPayment(store, pendingDeleteRecord.id));
+    showToast(`Deleted pending record for ${pendingDeleteRecord.customerName}`);
+    setPendingDeleteRecord(null);
   };
 
   const call = (phone?: string) => phone ? window.open(`tel:${phone}`) : showToast('No phone number on file', 'error');
@@ -257,6 +263,18 @@ export default function PendingPayments({ store, onUpdate }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingDeleteRecord)}
+        title="Delete Pending Payment Record?"
+        description={pendingDeleteRecord ? `Are you sure you want to delete the pending payment record for ${pendingDeleteRecord.customerName}?` : ''}
+        confirmText="Delete Record"
+        cancelText="Cancel"
+        variant="danger"
+        icon="💳"
+        onConfirm={confirmDeletePending}
+        onCancel={() => setPendingDeleteRecord(null)}
+      />
     </div>
   );
 }

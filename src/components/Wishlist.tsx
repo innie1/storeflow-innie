@@ -4,7 +4,7 @@ import { addWishlistItem, deleteWishlistItem } from '@/lib/store-data';
 import { 
   Star, Plus, Trash2, Calendar, CircleDollarSign, HelpCircle, Sparkles, ShoppingBag
 } from 'lucide-react';
-import { showToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface WishlistProps {
   store: StoreData;
@@ -16,6 +16,7 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
   const [name, setName] = useState('');
   const [estimatedCost, setEstimatedCost] = useState('');
   const [notes, setNotes] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const handleAddWish = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,11 +31,15 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
   };
 
   const handleDeleteWish = (id: string) => {
-    if (confirm('Remove item from wishlist?')) {
-      const nextStore = deleteWishlistItem(store, id);
-      onUpdate(nextStore);
-      showToast('Item removed.');
-    }
+    setPendingDeleteId(id);
+  };
+
+  const confirmDeleteWish = () => {
+    if (!pendingDeleteId) return;
+    const nextStore = deleteWishlistItem(store, pendingDeleteId);
+    onUpdate(nextStore);
+    showToast('Item removed.');
+    setPendingDeleteId(null);
   };
 
   const handleAddFromRecommendation = (recommendedName: string, estCost: number) => {
@@ -213,6 +218,18 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingDeleteId)}
+        title="Remove Wishlist Item?"
+        description="Are you sure you want to remove this product from your store wishlist?"
+        confirmText="Remove Item"
+        cancelText="Cancel"
+        variant="danger"
+        icon="⭐"
+        onConfirm={confirmDeleteWish}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

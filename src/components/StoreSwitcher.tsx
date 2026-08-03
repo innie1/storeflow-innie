@@ -5,6 +5,8 @@ import { saveSession } from '@/components/Settings';
 import { showToast } from '@/components/Toast';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
+import ConfirmModal from '@/components/ConfirmModal';
+
 const CATEGORIES: { id: StoreCategory; label: string; icon: string }[] = [
   { id: 'retail', label: 'Retail', icon: '🛒' },
   { id: 'restaurant', label: 'Restaurant', icon: '🍽️' },
@@ -26,6 +28,7 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
   const [category, setCategory] = useState<StoreCategory>('retail');
   const [retailType, setRetailType] = useState('provision_retail');
   const [stores, setStores] = useState(getStoreIndex());
+  const [pendingRemoveCode, setPendingRemoveCode] = useState<string | null>(null);
 
   const switchTo = (storeCode: string) => {
     const store = loadStore(storeCode);
@@ -55,10 +58,15 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
 
   const handleRemove = (storeCode: string) => {
     if (storeCode === currentCode) return showToast('Cannot remove the active store', 'error');
-    if (!confirm('Remove this store from this device? Its data will be deleted.')) return;
-    removeStoreFromIndex(storeCode);
+    setPendingRemoveCode(storeCode);
+  };
+
+  const confirmRemoveStore = () => {
+    if (!pendingRemoveCode) return;
+    removeStoreFromIndex(pendingRemoveCode);
     setStores(getStoreIndex());
     showToast('Store removed');
+    setPendingRemoveCode(null);
   };
 
   return (
@@ -169,6 +177,18 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={Boolean(pendingRemoveCode)}
+        title="Remove Store?"
+        description="Are you sure you want to remove this store from this device? Its data will be deleted."
+        confirmText="Remove Store"
+        cancelText="Cancel"
+        variant="danger"
+        icon="🏪"
+        onConfirm={confirmRemoveStore}
+        onCancel={() => setPendingRemoveCode(null)}
+      />
     </div>
   );
 }
