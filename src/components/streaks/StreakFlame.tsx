@@ -1,6 +1,6 @@
 import { Flame } from 'lucide-react';
 
-export default function StreakFlame({ count, size = 'md' }: { count: number; size?: 'sm' | 'md' | 'lg' }) {
+export default function StreakFlame({ count, size = 'md', onClick }: { count: number; size?: 'sm' | 'md' | 'lg'; onClick?: () => void }) {
   const dims = size === 'sm' ? 22 : size === 'lg' ? 44 : 30;
   const badgePadding = size === 'sm' ? 'px-2 py-0.5' : size === 'lg' ? 'px-4 py-2' : 'px-3 py-1';
   const textSize = size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-xl' : 'text-sm';
@@ -11,16 +11,19 @@ export default function StreakFlame({ count, size = 'md' }: { count: number; siz
   const gradientId = `streak-flame-grad-${size}`;
   const superGradientId = `super-streak-flame-grad-${size}`;
 
+  const Tag = onClick ? 'button' : 'div';
+
   return (
-    <div 
-      className={`inline-flex items-center gap-2 rounded-full border backdrop-blur-md transition-all select-none ${badgePadding} ${
+    <Tag
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-full border backdrop-blur-md transition-all select-none ${badgePadding} ${onClick ? 'active:scale-95 cursor-pointer' : ''} ${
         lit 
           ? isSuper
             ? 'bg-amber-500/10 border-amber-500/40 shadow-lg shadow-amber-500/10'
             : 'bg-orange-500/10 border-orange-500/30 shadow-md shadow-orange-500/10'
           : 'bg-surface-2/80 border-border text-muted-foreground'
       }`} 
-      title={lit ? `${count} day active streak! 🔥` : 'No active streak yet'}
+      title={lit ? `${count} day active streak! 🔥 Tap for details` : 'No active streak yet'}
     >
       <div className="relative flex items-center justify-center">
         {/* Glow halo behind flame */}
@@ -100,6 +103,6 @@ export default function StreakFlame({ count, size = 'md' }: { count: number; siz
           </span>
         )}
       </div>
-    </div>
+    </Tag>
   );
 }

@@ -750,7 +750,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             
             const currentSaleType = selectedSaleTypes[p.id] || (globalSaleMode === 'retail' ? 'single' : 'carton');
             const cartonPrice = p.sellingPrice;
-            const singlePrice = p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : 0);
+            const singlePrice = p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : p.sellingPrice);
             const activePrice = currentSaleType === 'single' ? singlePrice : cartonPrice;
             const isSingleStockAvailable = p.singlesPerCarton ? (avail * p.singlesPerCarton >= 1) : (avail >= 1);
             const canSell = currentSaleType === 'single' ? isSingleStockAvailable : (avail >= 1);
@@ -899,7 +899,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                               type="button"
                               onClick={() => {
                                 const nextType = item.saleType === 'carton' ? 'single' : 'carton';
-                                const unit = nextType === 'carton' ? p.sellingPrice : (p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : 0));
+                                const unit = nextType === 'carton' ? p.sellingPrice : (p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : p.sellingPrice));
                                 const cost = nextType === 'carton' ? p.costPrice : (p.costPrice / (p.singlesPerCarton || 1));
                                 const updated = [...cart];
                                 updated[i] = { ...item, saleType: nextType, unitPrice: unit, costPrice: cost };

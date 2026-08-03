@@ -49,6 +49,7 @@
 [2026-08-01] v1.17.0 — Simple Mode voice sell: multi-item sales now share one transactionId; catalog-based auto-segmentation detects multi-item lists without needing "and"/comma — 🔴 High + 🟠 High
 [2026-08-01] v1.18.0 — Simple Mode voice sell: low-confidence cart matches flagged with "Not sure?" badge and inline tap-to-swap selection — 🔴 High + 🟠 High + 🟡 Medium
 [2026-08-01] v1.19.0 — Simple Mode voice sell: added token word matching and window token validation (isValidWindowForProduct) to prevent multi-product voice speech from being swallowed into a single item — 🔴 High (multi-item parsing fix)
+[2026-08-03] v2.0.0 — Streak Retention System: 4-feature drop — (1) Streak Freeze: 1 auto-granted on 1st of each month, consumed when gap > 1 day to preserve streak; (2) Filler Milestones: 5-day intervals between 30–90 so no gap > 10 days without a reward; (3) Pre-Loss Warning: server-side targeted push via pg_cron hourly job + edge function, only fires at 7pm+ local per store, deduped via lastWarningDate; (4) Progress Ring: SVG ring on StreakFlame showing fraction toward next milestone, tier-colored. First pg_cron job in project — rollback: `SELECT cron.unschedule('streak-loss-warning-hourly');` — 🟡 Medium (retention)
 
 
 

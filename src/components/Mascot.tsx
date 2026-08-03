@@ -25,9 +25,10 @@ export type MascotMood =
   | 'concerned'
   | 'worried'
   | 'angry'
-  | 'panic'
   | 'resting'
-  | 'bathing';
+  | 'bathing'
+  | 'offline-umbrella'
+  | 'yawn-stretch';
 
 interface MascotProps {
   size?: number;
@@ -78,7 +79,23 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const [isBreathingAir, setIsBreathingAir] = useState(false);
 
   // Occasional activity state
-  const [activity, setActivity] = useState<'soccer-ball' | 'drinking-water' | 'shaking-clock' | 'staring-phone' | 'reading-book' | 'listening-music' | 'walking-off-left' | 'walking-off-right' | null>(null);
+  const [activity, setActivity] = useState<
+    | 'soccer-ball'
+    | 'drinking-water'
+    | 'shaking-clock'
+    | 'staring-phone'
+    | 'reading-book'
+    | 'listening-music'
+    | 'walking-off-left'
+    | 'walking-off-right'
+    | 'counting-cash'
+    | 'sync-fistpump'
+    | 'order-doorbell-ears'
+    | 'goal-trophy-lift'
+    | 'refund-wince'
+    | 'staff-wave'
+    | null
+  >(null);
 
   // Easter Egg & Wake Override logic
   const [wakeOverride, setWakeOverride] = useState(false);
@@ -214,7 +231,11 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     }
     
     inactivityTimer.current = setTimeout(() => {
-      setIsSleeping(true);
+      setOverrideMood('yawn-stretch');
+      setTimeout(() => {
+        setIsSleeping(true);
+        setOverrideMood(null);
+      }, 2000);
     }, 180000); // 3 minutes timeout
   };
 
@@ -258,6 +279,8 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
                   ];
                   triggerSpeech(celebrationPhrases[Math.floor(Math.random() * celebrationPhrases.length)], 'celebrating', 5000);
                   triggerConfetti();
+                  setActivity('counting-cash');
+                  setTimeout(() => setActivity(null), 1800);
                 }
                 lastSalesCountRef.current = newSalesCount;
               }
@@ -301,6 +324,8 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           ];
           triggerSpeech(celebrationPhrases[Math.floor(Math.random() * celebrationPhrases.length)], 'celebrating', 5000);
           triggerConfetti();
+          setActivity('counting-cash');
+          setTimeout(() => setActivity(null), 1800);
         }
       }
       lastSalesCountRef.current = newSalesCount;
@@ -325,6 +350,52 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       lastNotifCountRef.current = currentNotifCount;
     }
   }, [store?.flowNotifications?.length, store?.flowNotifications, isManagerEnabled]);
+
+  // Offline & sync event hooks
+  useEffect(() => {
+    const handleOffline = () => {
+      setOverrideMood('offline-umbrella');
+      triggerSpeech("Offline mode active — changes saved locally! 🌧️☔", 'offline-umbrella', 5000);
+    };
+    const handleOnline = () => {
+      setOverrideMood(null);
+      setActivity('sync-fistpump');
+      setTimeout(() => setActivity(null), 550);
+      triggerSpeech("Back online! Queued data synced! ⚡🚀", 'happy', 4000);
+    };
+
+    if (!navigator.onLine) {
+      setOverrideMood('offline-umbrella');
+    }
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    const onSale = () => { setActivity('counting-cash'); setTimeout(() => setActivity(null), 1800); };
+    const onSync = () => { setActivity('sync-fistpump'); setTimeout(() => setActivity(null), 550); };
+    const onOrder = () => { setActivity('order-doorbell-ears'); setTimeout(() => setActivity(null), 1800); };
+    const onGoal = () => { setActivity('goal-trophy-lift'); setTimeout(() => setActivity(null), 1800); };
+    const onRefund = () => { setActivity('refund-wince'); setTimeout(() => setActivity(null), 380); };
+    const onStaff = () => { setActivity('staff-wave'); setTimeout(() => setActivity(null), 1800); };
+
+    window.addEventListener('storeflow-sale-complete', onSale);
+    window.addEventListener('storeflow-sync-complete', onSync);
+    window.addEventListener('storeflow-new-order', onOrder);
+    window.addEventListener('storeflow-goal-reached', onGoal);
+    window.addEventListener('storeflow-refund-action', onRefund);
+    window.addEventListener('storeflow-staff-login', onStaff);
+
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('storeflow-sale-complete', onSale);
+      window.removeEventListener('storeflow-sync-complete', onSync);
+      window.removeEventListener('storeflow-new-order', onOrder);
+      window.removeEventListener('storeflow-goal-reached', onGoal);
+      window.removeEventListener('storeflow-refund-action', onRefund);
+      window.removeEventListener('storeflow-staff-login', onStaff);
+    };
+  }, []);
 
   // Speech-aware mouth animation timing
   useEffect(() => {
@@ -470,7 +541,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
       // 45% chance to trigger a random activity
       if (Math.random() < 0.45) {
-        const isAngryOrPanic = currentMood === 'angry' || currentMood === 'panic' || currentMood === 'worried' || currentMood === 'concerned';
+        const isAngryOrPanic = currentMood === 'angry' || currentMood === 'worried' || currentMood === 'concerned';
 
         if (isAngryOrPanic) {
           const angryActivities: ('staring-phone' | 'walking-off' | 'drinking-water')[] = [
@@ -928,13 +999,6 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       <circle cx="21.5" cy="31.5" r="1" fill="#ffffff" />
       <circle cx="39.5" cy="31.5" r="1" fill="#ffffff" />
     </g>
-  ) : currentMood === 'panic' ? (
-    <g style={{ transformOrigin: 'center 33px' }}>
-      <circle cx="23" cy="32" r="5" fill="none" stroke="#0b0b12" strokeWidth="2" />
-      <circle cx="23" cy="32" r="1.8" fill="#0b0b12" />
-      <circle cx="41" cy="32" r="5" fill="none" stroke="#0b0b12" strokeWidth="2" />
-      <circle cx="41" cy="32" r="1.8" fill="#0b0b12" />
-    </g>
   ) : currentMood === 'happy' || currentMood === 'celebrating' ? (
     <g className={`${animate ? "animate-[eye-blink_4.5s_infinite]" : ""} ${eyeOffsetClass}`} style={{ transformOrigin: 'center 33px' }}>
       <circle cx="23" cy="33" r="3.5" fill="#0b0b12" />
@@ -959,6 +1023,18 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       <path d="M18 35 q5 3 10 0" stroke="#0b0b12" strokeWidth="2.5" fill="none" strokeLinecap="round" />
       <path d="M36 35 q5 3 10 0" stroke="#0b0b12" strokeWidth="2.5" fill="none" strokeLinecap="round" />
     </>
+  ) : currentMood === 'yawn-stretch' ? (
+    <g style={{ transformOrigin: 'center 33px' }}>
+      <path d="M18 33 q5 -3 10 0" stroke="#0b0b12" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+      <path d="M36 33 q5 -3 10 0" stroke="#0b0b12" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+    </g>
+  ) : currentMood === 'offline-umbrella' ? (
+    <g className={`${animate ? "animate-[eye-blink_4.5s_infinite]" : ""} ${eyeOffsetClass}`} style={{ transformOrigin: 'center 33px' }}>
+      <circle cx="23" cy="34" r="3.2" fill="#0b0b12" />
+      <circle cx="41" cy="34" r="3.2" fill="#0b0b12" />
+      <circle cx="22" cy="32.8" r="0.8" fill="#ffffff" />
+      <circle cx="40" cy="32.8" r="0.8" fill="#ffffff" />
+    </g>
   ) : (
     <g className={`${animate ? "animate-[eye-blink_4.5s_infinite]" : ""} ${eyeOffsetClass}`} style={{ transformOrigin: 'center 33px' }}>
       <circle cx="23" cy="33" r="3.5" fill="#0b0b12" />
@@ -982,13 +1058,13 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     />
   ) : currentMood === 'warning' || currentMood === 'concerned' || currentMood === 'worried' ? (
     <path d="M26 43 q6 -3 12 0" stroke="#0b0b12" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-  ) : currentMood === 'sleeping' ? (
-    <path d="M28 43 h8" stroke="#0b0b12" strokeWidth="2.2" strokeLinecap="round" />
-  ) : currentMood === 'panic' ? (
-    <ellipse cx="32" cy="43" rx="4" ry="5" fill="#0b0b12" />
   ) : currentMood === 'bathing' ? (
     /* Cute bubble-blowing round mouth */
     <circle cx="32" cy="42" r="2.8" stroke="#0b0b12" strokeWidth="2" fill="#ffffff" />
+  ) : currentMood === 'yawn-stretch' ? (
+    <ellipse cx="32" cy="43" rx="5" ry="6" fill="#0b0b12" />
+  ) : currentMood === 'offline-umbrella' ? (
+    <path d="M26 41 q6 3 12 0" stroke="#0b0b12" strokeWidth="2" fill="none" strokeLinecap="round" />
   ) : (
     // Default and other stable states use a small calm smile
     <path d="M25 41 q7 4 14 0" stroke="#0b0b12" strokeWidth="2.5" fill="none" strokeLinecap="round" />
@@ -1001,9 +1077,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     </>
   );
 
-  const sweatDrop = currentMood === 'panic' ? (
-    <path d="M50 22 q-2.5 3 0 5.5 q2.5 -2.5 0 -5.5" fill="#38bdf8" className="animate-bounce" />
-  ) : null;
+  const sweatDrop = null;
 
   const angryStress = currentMood === 'angry' ? (
     <g stroke="#ef4444" strokeWidth="1.2" fill="none" opacity="0.8">
@@ -1124,10 +1198,10 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     switch (currentMood) {
       case 'excited': return 'glow-excited';
       case 'happy': case 'celebrating': return 'glow-gold';
-      case 'thinking': return 'glow-gold opacity-90';
+      case 'offline-umbrella': return 'glow-sleep opacity-90';
+      case 'yawn-stretch': return 'glow-sleep';
       case 'concerned': case 'worried': return 'glow-worried';
       case 'angry': return 'glow-angry';
-      case 'panic': return 'glow-panic';
       case 'sleeping': return 'glow-sleep';
       case 'resting': return 'glow-sleep';
       case 'bathing': return 'glow-sleep opacity-80';
@@ -1140,10 +1214,10 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     currentMood === 'sleeping' ? '' :
     currentMood === 'bathing' ? 'mascot-bath-anim' :
     currentMood === 'thinking' ? 'mascot-think-anim' :
-    currentMood === 'excited' ? 'mascot-excited-anim' :
+    currentMood === 'yawn-stretch' ? 'mascot-yawn-anim' :
+    currentMood === 'offline-umbrella' ? 'mascot-float-anim' :
     currentMood === 'worried' || currentMood === 'concerned' ? 'mascot-worried-anim' :
     currentMood === 'angry' ? 'mascot-angry-anim' :
-    currentMood === 'panic' ? 'mascot-panic-anim' :
     '';
 
   const walkClass = 
@@ -1395,6 +1469,64 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           100% { transform: translate(-50%, 30px) scale(0.8) rotate(3deg); opacity: 0; }
         }
         .animate-flash { animation: flash-animation 0.2s ease-out forwards; }
+        @keyframes note-flick {
+          0% { transform: rotate(0deg) translateY(0); }
+          100% { transform: rotate(-15deg) translateY(-3px); }
+        }
+        @keyframes counting-cash-flick {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-1.5px); }
+        }
+        @keyframes shelf-peek {
+          0% { transform: rotate(0deg) translateX(0); }
+          100% { transform: rotate(4deg) translateX(1px); }
+        }
+        @keyframes rain-fall {
+          0% { transform: translateY(0); opacity: 0; }
+          30% { opacity: 0.8; }
+          100% { transform: translateY(12px); opacity: 0; }
+        }
+        @keyframes umbrella-sway {
+          0%, 100% { transform: rotate(-3deg); }
+          50% { transform: rotate(3deg); }
+        }
+        @keyframes fistpump {
+          0% { transform: translateY(8px) scale(0.85); }
+          40% { transform: translateY(-4px) scale(1.1); }
+          100% { transform: translateY(0) scale(1); }
+        }
+        @keyframes ears-perk {
+          0% { transform: scale(1) rotate(0deg); }
+          100% { transform: scale(1.15) rotate(5deg); }
+        }
+        @keyframes bell-shake {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(-12deg); }
+          75% { transform: rotate(12deg); }
+        }
+        @keyframes mascot-yawn {
+          0%, 100% { transform: scale(1) translateY(0); }
+          50% { transform: scale(1.06, 1.12) translateY(-2px); }
+        }
+        @keyframes trophy-lift {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-3px) scale(1.05); }
+        }
+        @keyframes refund-wince-anim {
+          0% { transform: scale(1) rotate(0deg); }
+          30% { transform: scale(0.92) rotate(-5deg) translateY(2px); }
+          100% { transform: scale(1) rotate(0deg); }
+        }
+        @keyframes staff-wave-arm {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(-20deg); }
+        }
+        @keyframes mascot-low-stock {
+          0%, 100% { transform: rotate(0deg) translateY(0); }
+          50% { transform: rotate(4deg) translateY(1px); }
+        }
+        .mascot-low-stock-anim { animation: mascot-low-stock 1.5s ease-in-out infinite alternate; }
+        .mascot-yawn-anim { animation: mascot-yawn 2s ease-in-out infinite; }
       `}</style>
 
       {showFlash && (
@@ -1543,7 +1675,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           {renderMascotBody()}
           {cheeks}
           {eyeShape}
-          {isWearingGlasses && currentMood !== 'confident' && currentMood !== 'sleeping' && (
+          {(isWearingGlasses || sunglassesEasterEgg || (new Date().getDay() === 0 || new Date().getDay() === 6)) && currentMood !== 'confident' && currentMood !== 'sleeping' && (
             <g>
               <circle cx="23" cy="33" r="5.5" fill="none" stroke="#eab308" strokeWidth="1.5" />
               <circle cx="41" cy="33" r="5.5" fill="none" stroke="#eab308" strokeWidth="1.5" />
@@ -1643,6 +1775,117 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
             </g>
           )}
 
+          {/* Occasional Body-Attached Activity Elements */}
+          {activity === 'counting-cash' && (
+            <g className="animate-[counting-cash-flick_1.2s_infinite]" style={{ transformOrigin: '44px 44px' }}>
+              <rect x="36" y="44" width="14" height="8" rx="1.2" fill="#14532d" opacity="0.6" transform="rotate(-6 43 48)" />
+              <rect x="37" y="42" width="14" height="8" rx="1.2" fill="#15803d" opacity="0.8" transform="rotate(-3 44 46)" />
+              <rect x="38" y="40" width="14" height="8" rx="1.2" fill="#22c55e" stroke="#064e3b" strokeWidth="0.8" />
+              <line x1="43" y1="40" x2="43" y2="48" stroke="#f59e0b" strokeWidth="0.8" strokeDasharray="1.5 1" />
+              <text x="47.5" y="46" fontSize="5" fontWeight="900" fill="#ffffff" textAnchor="middle" fontFamily="'Inter', sans-serif">₦</text>
+              <g className="animate-[note-flick_0.3s_infinite_alternate]" style={{ transformOrigin: '38px 40px' }}>
+                <rect x="38" y="38" width="13" height="7.5" rx="1.2" fill="#4ade80" stroke="#064e3b" strokeWidth="0.6" />
+                <line x1="42" y1="38" x2="42" y2="45.5" stroke="#f59e0b" strokeWidth="0.7" />
+                <text x="46.5" y="43.5" fontSize="4.5" fontWeight="900" fill="#064e3b" textAnchor="middle" fontFamily="'Inter', sans-serif">₦</text>
+              </g>
+            </g>
+          )}
+
+          {currentMood === 'low-stock-peek' && (
+            <g className="animate-[shelf-peek_1.5s_infinite_alternate]" style={{ transformOrigin: '52px 36px' }}>
+              <line x1="44" y1="45" x2="62" y2="45" stroke="#78350f" strokeWidth="2.5" strokeLinecap="round" />
+              <line x1="44" y1="46" x2="62" y2="46" stroke="#451a03" strokeWidth="0.8" strokeLinecap="round" />
+              <rect x="46" y="35" width="6" height="10" rx="1" fill="#f59e0b" stroke="#78350f" strokeWidth="0.8" />
+              <line x1="49" y1="35" x2="49" y2="45" stroke="#d97706" strokeWidth="0.8" />
+              <rect x="54" y="40" width="6" height="5" fill="#ef4444" opacity="0.3" rx="1" stroke="#ef4444" strokeWidth="0.6" strokeDasharray="1.5 1" />
+              <circle cx="57" cy="34" r="3" fill="#ef4444" className="animate-pulse" />
+              <text x="57" y="36.2" fontSize="4.5" fontWeight="900" fill="#ffffff" textAnchor="middle" fontFamily="sans-serif">!</text>
+            </g>
+          )}
+
+          {currentMood === 'offline-umbrella' && (
+            <g>
+              <g stroke="#38bdf8" strokeWidth="1.2" strokeLinecap="round" opacity="0.8">
+                <line x1="14" y1="1" x2="12" y2="9" className="animate-[rain-fall_0.7s_infinite_linear]" style={{ animationDelay: '0s' }} />
+                <line x1="32" y1="-2" x2="30" y2="7" className="animate-[rain-fall_0.7s_infinite_linear]" style={{ animationDelay: '0.25s' }} />
+                <line x1="50" y1="2" x2="48" y2="10" className="animate-[rain-fall_0.7s_infinite_linear]" style={{ animationDelay: '0.5s' }} />
+              </g>
+              <g style={{ transformOrigin: '32px 13px' }} className="animate-[umbrella-sway_2s_infinite_ease-in-out]">
+                <path d="M14 15 Q 32 3 50 15 C 44 13, 38 13, 32 15 C 26 13, 20 13, 14 15 Z" fill="#4f46e5" stroke="#1e1b4b" strokeWidth="1.2" />
+                <path d="M20 13.5 Q 32 7 44 13.5" fill="none" stroke="#818cf8" strokeWidth="1" opacity="0.6" />
+                <path d="M32 3 v-2" stroke="#1e1b4b" strokeWidth="1.5" strokeLinecap="round" />
+                <line x1="32" y1="14" x2="32" y2="29" stroke="#312e81" strokeWidth="1.8" />
+                <path d="M32 29 q-2.5 3.5 -5 1" stroke="#312e81" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+              </g>
+            </g>
+          )}
+
+          {activity === 'sync-fistpump' && (
+            <g className="animate-[fistpump_0.5s_ease-out_forwards]" style={{ transformOrigin: '46px 42px' }}>
+              <path d="M40 46 Q 45 34 49 22" stroke="#f59e0b" strokeWidth="1.8" fill="none" strokeDasharray="3 2" opacity="0.9" />
+              <path d="M44 48 Q 48 37 52 26" stroke="#38bdf8" strokeWidth="1.5" fill="none" strokeDasharray="2 2" opacity="0.8" />
+              <path d="M37 42 Q 44 35 46 25" stroke="#0b0b12" strokeWidth="3.2" strokeLinecap="round" fill="none" />
+              <circle cx="46" cy="24" r="4" fill="#f59e0b" stroke="#0b0b12" strokeWidth="1.2" />
+              <path d="M46 17 l1.2 2.5 l2.8 0.4 l-2 2 l0.5 2.8 l-2.5 -1.3 l-2.5 1.3 l0.5 -2.8 l-2 -2 l2.8 -0.4 z" fill="#ffffff" stroke="#f59e0b" strokeWidth="0.5" />
+            </g>
+          )}
+
+          {activity === 'order-doorbell-ears' && (
+            <g>
+              <g className="animate-[ears-perk_0.5s_infinite_alternate]" style={{ transformOrigin: '32px 14px' }}>
+                <path d="M22 18 Q 17 6 19 4" stroke="#f59e0b" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+                <circle cx="19" cy="3.5" r="2.5" fill="#ef4444" className="animate-pulse" />
+                <path d="M42 18 Q 47 6 45 4" stroke="#f59e0b" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+                <circle cx="45" cy="3.5" r="2.5" fill="#ef4444" className="animate-pulse" />
+              </g>
+              <g className="animate-[bell-shake_0.35s_infinite]" style={{ transformOrigin: '54px 18px' }}>
+                <path d="M49 16 q5 -7 10 0 v4 h2 v1.8 h-14 v-1.8 h2 z" fill="#fbbf24" stroke="#78350f" strokeWidth="1" />
+                <circle cx="54" cy="23" r="1.5" fill="#78350f" />
+                <path d="M60 13 q3 3.5 0 7" stroke="#f59e0b" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+                <path d="M62 11 q4.5 5.5 0 11" stroke="#f59e0b" strokeWidth="1" fill="none" strokeLinecap="round" opacity="0.6" />
+              </g>
+            </g>
+          )}
+
+          {currentMood === 'yawn-stretch' && (
+            <g>
+              <path d="M14 36 Q 4 28 2 20" stroke="#0b0b12" strokeWidth="3" strokeLinecap="round" fill="none" />
+              <circle cx="2" cy="19" r="2.5" fill="#a27b5c" />
+              <path d="M50 36 Q 60 28 62 20" stroke="#0b0b12" strokeWidth="3" strokeLinecap="round" fill="none" />
+              <circle cx="62" cy="19" r="2.5" fill="#a27b5c" />
+            </g>
+          )}
+
+          {activity === 'goal-trophy-lift' && (
+            <g className="animate-[trophy-lift_1.2s_ease-out_infinite]" style={{ transformOrigin: '32px 14px' }}>
+              <path d="M22 36 Q 24 18 28 16" stroke="#0b0b12" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+              <path d="M42 36 Q 40 18 36 16" stroke="#0b0b12" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+              <path d="M25 6 h14 v7 q0 7 -7 7 q-7 0 -7 -7 z" fill="url(#goldEggGrad)" stroke="#78350f" strokeWidth="1" />
+              <path d="M25 8 h-2.5 q-2 0 -2 3.5 q0 3.5 2.5 3.5 h2" fill="none" stroke="#d97706" strokeWidth="1.2" />
+              <path d="M39 8 h2.5 q2 0 2 3.5 q0 3.5 -2.5 3.5 h-2" fill="none" stroke="#d97706" strokeWidth="1.2" />
+              <rect x="30" y="20" width="4" height="3" fill="#d97706" />
+              <rect x="26" y="23" width="12" height="3.5" rx="0.8" fill="#451a03" stroke="#78350f" strokeWidth="0.8" />
+              <circle cx="38" cy="5" r="1.8" fill="#ffffff" className="animate-ping" />
+            </g>
+          )}
+
+          {activity === 'refund-wince' && (
+            <g className="animate-[refund-wince-anim_0.35s_ease-out_forwards]" style={{ transformOrigin: '32px 37px' }}>
+              <path d="M18 40 Q 24 34 28 42" stroke="#0b0b12" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+              <path d="M46 40 Q 40 34 36 42" stroke="#0b0b12" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+              <circle cx="20" cy="48" r="3" fill="#f59e0b" stroke="#78350f" strokeWidth="0.8" />
+              <text x="20" y="49.5" fontSize="3.5" fontWeight="bold" fill="#78350f" textAnchor="middle">₦</text>
+            </g>
+          )}
+
+          {activity === 'staff-wave' && (
+            <g className="animate-[staff-wave-arm_0.4s_infinite_alternate]" style={{ transformOrigin: '44px 44px' }}>
+              <path d="M42 42 Q 49 32 54 24" stroke="#0b0b12" strokeWidth="3" strokeLinecap="round" fill="none" />
+              <circle cx="54" cy="23" r="3.2" fill="#a27b5c" stroke="#0b0b12" strokeWidth="0.8" />
+              <path d="M57 20 q3 2 0 6" stroke="#f59e0b" strokeWidth="1" fill="none" strokeLinecap="round" />
+            </g>
+          )}
+
           {/* Soap bubbles on head when bathing */}
           {currentMood === 'bathing' && (
             <g fill="#ffffff" stroke="#94a3b8" strokeWidth="0.8" opacity="0.95">
@@ -1674,6 +1917,13 @@ export function MascotBadge({ on }: { on: boolean }) {
 
 const getActivityDuration = (act: string): number => {
   switch (act) {
+    case 'sync-fistpump': return 550;
+    case 'refund-wince': return 380;
+    case 'counting-cash':
+    case 'order-doorbell-ears':
+    case 'goal-trophy-lift':
+    case 'staff-wave':
+      return 1800;
     case 'listening-music': return 10000;
     case 'soccer-ball': return 7000;
     case 'staring-phone': return 8000;

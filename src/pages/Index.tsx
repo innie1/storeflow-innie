@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
-import { runStreakCheck, getStreakLine } from '@/lib/streaks';
+import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
+import StreakDetailsPanel from '@/components/streaks/StreakDetailsPanel';
 import StreakRewardReveal from '@/components/streaks/StreakRewardReveal';
 import { checkDebtExpenseReminders, checkWeeklyRestockDraft } from '@/lib/manager-intel';
 import StoreAccess from '@/components/StoreAccess';
@@ -857,6 +858,7 @@ export default function Index() {
   const [showScanner, setShowScanner] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showStreakPanel, setShowStreakPanel] = useState(false);
   const [showLockConfirm, setShowLockConfirm] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [scanCart, setScanCart] = useState<{ product: Product; qty: number }[]>([]);
@@ -990,7 +992,11 @@ export default function Index() {
         const withStreak = runStreakCheck(next);
         if (withStreak !== next) {
           next = withStreak;
-          if (next.streak && !next.streak.pendingReveal && next.streak.count > 1) {
+          if (next.streak?.freezeConsumedToday) {
+            // A freeze covered a missed day — tell them, then clear the transient flag.
+            showToast(getFreezeUsedLine(next.streak.count), 'info');
+            next = { ...next, streak: { ...next.streak, freezeConsumedToday: false } };
+          } else if (next.streak && !next.streak.pendingReveal && next.streak.count > 1) {
             // Ordinary day (no reward this time) — a quick line from Flow, not a modal.
             showToast(getStreakLine(next.streak.count), 'info');
           }
@@ -1332,7 +1338,14 @@ export default function Index() {
           <div className="flex flex-col text-left">
             <div className="flex items-center gap-2">
               <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
-              {(store.streak?.count || 0) > 0 && <StreakFlame count={store.streak!.count} size="sm" />}
+              {(store.streak?.count || 0) > 0 && (
+                <div className="relative">
+                  <StreakFlame count={store.streak!.count} size="sm" onClick={() => setShowStreakPanel(v => !v)} />
+                  {showStreakPanel && (
+                    <StreakDetailsPanel store={store} onClose={() => setShowStreakPanel(false)} />
+                  )}
+                </div>
+              )}
             </div>
             <button 
               onClick={() => setShowSwitcher(true)}

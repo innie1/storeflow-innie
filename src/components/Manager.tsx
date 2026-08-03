@@ -631,12 +631,10 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     if (isSleepTime) return 'sleeping';
 
     const activeProducts = store.products.filter(p => !p.discontinued);
-    const hasZeroStock = activeProducts.length > 0 && activeProducts.every(p => p.quantity === 0);
     const hasLowStock = activeProducts.some(p => p.quantity <= 3);
     const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
     const isGoalAchieved = savings && savings.saved >= savings.amount && savings.amount > 0;
     
-    if (hasZeroStock) return 'panic';
     if (isGoalAchieved) return 'celebrating';
     
     // Performance checks

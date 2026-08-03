@@ -301,15 +301,19 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     saveStore(updatedStore);
     setLoadedStore(updatedStore);
 
-    // Fire-and-forget — never blocks store creation. Sends recovery details to
+    // Fire-and-forget — never blocks store creation. Sends recovery & storefront details to
     // the configured recovery email via Resend in our Supabase Edge Function.
+    const storeIdForUrl = updatedStore.storeId || updatedStore.accessCode;
     supabase.functions.invoke('send-account-recovery-email', {
       body: {
         to: recoveryEmail.trim(),
         storeName: updatedStore.storeName,
         accessCode: updatedStore.accessCode,
+        storeId: storeIdForUrl,
+        storeUrl: generateStoreUrl(storeIdForUrl),
         emergencyRecoveryKey: generatedRecoveryKey,
         recoveryQuestion,
+        type: 'security_backup',
       },
     }).catch(err => console.warn('Failed to send account recovery email via Resend:', err));
 
@@ -957,8 +961,21 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       };
       localStorage.setItem('storeflow_active_user', JSON.stringify(ownerUser));
 
+      if (activeProfile.email) {
+        supabase.functions.invoke('send-account-recovery-email', {
+          body: {
+            to: activeProfile.email,
+            storeName: store.storeName,
+            accessCode: store.accessCode,
+            storeId: storeId,
+            storeUrl: storeUrl,
+            type: 'new_account',
+          },
+        }).catch(err => console.warn('Failed to send cloud onboarding email via Resend:', err));
+      }
+
       setAccessMood('celebrating');
-      showToast('Cloud Store created successfully!', 'success');
+      showToast('Cloud Store created & details emailed successfully!', 'success');
       onStoreLoaded(store);
     } catch (err: any) {
       setAccessMood('angry' as any);

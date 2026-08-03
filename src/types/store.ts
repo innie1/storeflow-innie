@@ -655,6 +655,11 @@ export interface StreakData {
   claimedMilestones: number[];
   rewards: StreakReward[];
   pendingReveal?: StreakReward | null; // set the moment a milestone is hit, cleared once the UI shows it
+  freezesAvailable?: number;      // 0 or 1 — one free freeze granted per calendar month
+  freezeGrantedMonth?: string;    // YYYY-MM of the last month a freeze was granted, prevents double-granting
+  freezesUsedDates?: string[];    // YYYY-MM-DD dates a freeze was consumed, for history/debugging
+  freezeConsumedToday?: boolean;  // transient — true right after a freeze saves the streak, UI shows Flow's line then it's cleared
+  openedDates?: string[];         // YYYY-MM-DD, last ~14 days the store was opened — powers the week-log dropdown
 }
 
 export interface StoreData {

@@ -43,22 +43,66 @@ function pickRandomReward(alreadyWon: string[]): StreakRewardItem {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function currentMonthLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function pushOpenedDate(dates: string[] | undefined, today: string): string[] {
+  const list = [...(dates || [])];
+  if (!list.includes(today)) list.push(today);
+  // Keep last 14 days only — the UI only ever shows a 7-day week row, 14 gives headroom.
+  return list.slice(-14);
+}
+
 // Call this once per app open. Returns the store unchanged (same reference)
 // if nothing needs to update, so callers can skip a save/re-render.
 export function runStreakCheck(store: StoreData): StoreData {
   const today = todayLocal();
+  const thisMonth = currentMonthLocal();
   const prev: StreakData = store.streak || {
     count: 0,
     longestCount: 0,
     lastOpenDate: '',
     claimedMilestones: [],
     rewards: [],
+    freezesAvailable: 0,
+    freezeGrantedMonth: '',
+    freezesUsedDates: [],
+    openedDates: [],
   };
 
-  if (prev.lastOpenDate === today) return store; // already counted today
+  // Grant one free freeze per calendar month, capped at 1 stored at a time.
+  const freezesAvailable = prev.freezeGrantedMonth === thisMonth
+    ? (prev.freezesAvailable ?? 0)
+    : Math.min(1, (prev.freezesAvailable ?? 0) + 1);
+  const freezeGrantedMonth = thisMonth;
+
+  if (prev.lastOpenDate === today) {
+    // Already counted today — but still persist a freeze grant / opened-date log update if needed.
+    if (freezeGrantedMonth === prev.freezeGrantedMonth) return store;
+    return { ...store, streak: { ...prev, freezesAvailable, freezeGrantedMonth } };
+  }
 
   const gap = prev.lastOpenDate ? daysBetween(prev.lastOpenDate, today) : null;
-  const nextCount = gap === 1 ? prev.count + 1 : 1; // consecutive day vs. broken streak (gap===null covers first-ever open)
+  const missedADay = gap !== null && gap > 1;
+
+  let nextCount: number;
+  let freezeConsumedToday = false;
+  let remainingFreezes = freezesAvailable;
+
+  if (gap === 1 || gap === null) {
+    // Consecutive day, or very first-ever open.
+    nextCount = prev.count + 1 || 1;
+  } else if (missedADay && remainingFreezes > 0) {
+    // Missed a day, but a freeze covers it — streak survives.
+    nextCount = prev.count;
+    remainingFreezes -= 1;
+    freezeConsumedToday = true;
+  } else {
+    // Missed a day, no freeze available — resets.
+    nextCount = 1;
+  }
 
   const next: StreakData = {
     ...prev,
@@ -66,6 +110,11 @@ export function runStreakCheck(store: StoreData): StoreData {
     longestCount: Math.max(prev.longestCount, nextCount),
     lastOpenDate: today,
     pendingReveal: null,
+    freezesAvailable: remainingFreezes,
+    freezeGrantedMonth,
+    freezesUsedDates: freezeConsumedToday ? [...(prev.freezesUsedDates || []), today] : (prev.freezesUsedDates || []),
+    freezeConsumedToday,
+    openedDates: pushOpenedDate(prev.openedDates, today),
   };
 
   if (STREAK_MILESTONES.includes(nextCount) && !prev.claimedMilestones.includes(nextCount)) {
@@ -79,8 +128,47 @@ export function runStreakCheck(store: StoreData): StoreData {
   return { ...store, streak: next };
 }
 
-function nextMilestoneAfter(count: number): number | null {
+export function nextMilestoneAfter(count: number): number | null {
   return STREAK_MILESTONES.find(m => m > count) ?? null;
+}
+
+// One entry per of the last 7 calendar days (oldest first), Monday-first week
+// like the reference design (M T W T F S S). Used by the streak dropdown panel.
+export interface WeekLogDay {
+  label: string;   // 'M', 'T', 'W'...
+  date: string;     // YYYY-MM-DD
+  opened: boolean;
+  isToday: boolean;
+  isFuture: boolean;
+}
+
+export function getWeekLog(streak: StreakData | undefined): WeekLogDay[] {
+  const opened = new Set(streak?.openedDates || []);
+  const today = new Date();
+  // Find this week's Monday (getDay(): 0=Sun..6=Sat)
+  const dow = today.getDay();
+  const diffToMonday = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMonday);
+
+  const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const todayStr = todayLocal();
+
+  return labels.map((label, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${day}`;
+    return {
+      label,
+      date: dateStr,
+      opened: opened.has(dateStr),
+      isToday: dateStr === todayStr,
+      isFuture: dateStr > todayStr,
+    };
+  });
 }
 
 // Flow's line when a streak day (not a reward day) is reached. Picks one at random.
@@ -91,6 +179,16 @@ export function getStreakLine(count: number): string {
     `${count} days straight! I'm keeping count too, you know.`,
     next ? `Streak's at ${count}. ${next - count} more day${next - count === 1 ? '' : 's'} till your next surprise.` : `${count} days. I'm honestly impressed.`,
     `Back again on day ${count}. This is becoming a habit — a good one.`,
+  ];
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
+// Flow's line when a missed day was covered by a streak freeze instead of resetting.
+export function getFreezeUsedLine(count: number): string {
+  const lines = [
+    `Used a streak freeze to save your ${count}-day run — you had this one coming.`,
+    `Missed a day, but your freeze covered it. ${count} days still standing.`,
+    `That's what the freeze is for. ${count}-day streak, still alive.`,
   ];
   return lines[Math.floor(Math.random() * lines.length)];
 }
