@@ -307,27 +307,6 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
           </div>
         </div>
 
-        {/* Selected / Active Day Status Description */}
-        <div className="mx-4 my-2 px-3 py-1.5 rounded-lg bg-surface-3/70 border border-border/50 text-[10px] text-center font-semibold text-foreground truncate">
-          {getStatusDescription(activeDay, activeDayCount, isActiveMilestone)}
-        </div>
-
-        {/* Legend */}
-        <div className="flex items-center justify-center gap-4 text-[9px] font-bold text-muted-foreground pb-2">
-          <span className="flex items-center gap-1">
-            <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px]">✓</span>
-            Done
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3.5 h-3.5 rounded-full bg-rose-500/30 text-rose-400 border border-rose-500/50 flex items-center justify-center text-[8px]">✕</span>
-            Skipped
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3.5 h-3.5 rounded-full bg-sky-500/30 text-sky-300 border border-sky-400/50 flex items-center justify-center text-[8px]">❄</span>
-            Freeze
-          </span>
-        </div>
-
         {/* Stats card */}
         <div className="mx-4 mb-3 rounded-xl bg-surface-3/60 border border-border/60 px-3 py-2.5">
           <div className="grid grid-cols-4 gap-1 text-center">
