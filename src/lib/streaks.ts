@@ -37,6 +37,15 @@ function daysBetween(a: string, b: string): number {
   return Math.round((db.getTime() - da.getTime()) / 86400000);
 }
 
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function pickRandomReward(alreadyWon: string[]): StreakRewardItem {
   const available = STREAK_REWARD_POOL.filter(i => !alreadyWon.includes(i.id));
   const pool = available.length > 0 ? available : STREAK_REWARD_POOL; // pool exhausted — allow repeats rather than stop rewarding
@@ -112,7 +121,12 @@ export function runStreakCheck(store: StoreData): StoreData {
     pendingReveal: null,
     freezesAvailable: remainingFreezes,
     freezeGrantedMonth,
-    freezesUsedDates: freezeConsumedToday ? [...(prev.freezesUsedDates || []), today] : (prev.freezesUsedDates || []),
+    // Freeze protects the day that was actually missed (day after last open),
+    // not "today" — recording it on today made the calendar show the wrong
+    // day as frozen and the real missed day as "skipped".
+    freezesUsedDates: freezeConsumedToday
+      ? [...(prev.freezesUsedDates || []), addDays(prev.lastOpenDate, 1)]
+      : (prev.freezesUsedDates || []),
     freezeConsumedToday,
     openedDates: pushOpenedDate(prev.openedDates, today),
   };
