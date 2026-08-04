@@ -18,6 +18,7 @@ import InstallPrompt from '@/components/InstallPrompt';
 import Orders from '@/components/Orders';
 import { supabase } from '@/integrations/supabase/client';
 import { autoSubscribeIfGranted, clearAllStoreFlowNotifications } from '@/lib/push-notifications';
+import { forceUnlockBodyScroll } from '@/hooks/use-body-scroll-lock';
 
 // Eager helper imports from settings
 import { saveSession, clearSession, getActiveSession } from '@/components/Settings';
@@ -349,6 +350,11 @@ export default function Index() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Ensure body scroll is never left locked when switching tabs
+  useEffect(() => {
+    forceUnlockBodyScroll();
+  }, [tab]);
 
   // Helper to normalize order status casing and old values
   const getNormalizedStatus = useCallback((status?: string): string => {

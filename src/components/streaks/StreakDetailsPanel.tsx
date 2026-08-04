@@ -3,6 +3,7 @@ import { X, Snowflake, Check, ChevronLeft, ChevronRight, Star } from 'lucide-rea
 import { StoreData } from '@/types/store';
 import { getStreakLog, StreakLogDay, nextMilestoneAfter, STREAK_MILESTONES } from '@/lib/streaks';
 import { healthScore } from '@/lib/manager-intel';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import RewardIcon from './RewardIcon';
 import StreakFlame from './StreakFlame';
 
@@ -13,6 +14,7 @@ function salesTodayCount(store: StoreData): number {
 
 export default function StreakDetailsPanel({ store, onClose }: { store: StoreData; onClose: () => void }) {
   const streak = store.streak;
+  useBodyScrollLock(!!streak);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLDivElement>(null);
