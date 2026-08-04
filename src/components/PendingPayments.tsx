@@ -3,6 +3,7 @@ import { StoreData, PendingPayment, PaymentMethod } from '@/types/store';
 import { addPaymentToPending, markPendingPaid, deletePendingPayment, getPendingSummary } from '@/lib/store-data';
 import { getRepaymentInsights, CustomerRepaymentInsight } from '@/lib/manager-intel';
 import { showToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface Props { store: StoreData; onUpdate: (s: StoreData) => void; }
 
@@ -17,6 +18,7 @@ export default function PendingPayments({ store, onUpdate }: Props) {
   const [filter, setFilter] = useState<'all' | 'overdue' | 'paid'>('all');
   const [partialFor, setPartialFor] = useState<PendingPayment | null>(null);
   const [partialAmt, setPartialAmt] = useState('');
+  const [pendingDeleteRecord, setPendingDeleteRecord] = useState<PendingPayment | null>(null);
   const [partialMethod, setPartialMethod] = useState<PaymentMethod>(() => {
     return (localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer';
   });

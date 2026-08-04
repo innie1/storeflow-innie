@@ -94,11 +94,15 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   };
 
   const handleDeleteStaff = (id: string) => {
-    if (confirm('Permanently remove this employee account?')) {
-      const nextStore = deleteStaffMember(store, id);
-      onUpdate(nextStore);
-      showToast('Employee deleted.');
-    }
+    setPendingDeleteId(id);
+  };
+
+  const confirmDeleteStaff = () => {
+    if (!pendingDeleteId) return;
+    const nextStore = deleteStaffMember(store, pendingDeleteId);
+    onUpdate(nextStore);
+    showToast('Employee deleted.');
+    setPendingDeleteId(null);
   };
 
   const handleStartShift = () => {

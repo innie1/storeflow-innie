@@ -5,6 +5,7 @@ import {
   FolderArchive, Upload, FileText, Trash2, Calendar, HardDrive, Eye, Download, Info
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface DocumentsProps {
   store: StoreData;
@@ -20,6 +21,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
   
   // Modal view file
   const [viewingDoc, setViewingDoc] = useState<VaultDocument | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const categories = ['Invoice', 'Receipt', 'Rent Agreement', 'Supplier Doc', 'License', 'Other'];
 

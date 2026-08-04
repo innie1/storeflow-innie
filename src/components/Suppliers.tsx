@@ -71,11 +71,15 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
   };
 
   const handleDeleteSupplier = (id: string) => {
-    if (confirm('Delete this supplier record?')) {
-      const nextStore = deleteSupplier(store, id);
-      onUpdate(nextStore);
-      showToast('Supplier deleted.');
-    }
+    setPendingDeleteId(id);
+  };
+
+  const confirmDeleteSupplier = () => {
+    if (!pendingDeleteId) return;
+    const nextStore = deleteSupplier(store, pendingDeleteId);
+    onUpdate(nextStore);
+    showToast('Supplier deleted.');
+    setPendingDeleteId(null);
   };
 
   const resetForm = () => {
