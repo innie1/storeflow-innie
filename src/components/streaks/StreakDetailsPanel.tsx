@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { X, Snowflake, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Snowflake, Check, ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { StoreData } from '@/types/store';
-import { getStreakLog, StreakLogDay, nextMilestoneAfter } from '@/lib/streaks';
+import { getStreakLog, StreakLogDay, nextMilestoneAfter, STREAK_MILESTONES } from '@/lib/streaks';
 import { healthScore } from '@/lib/manager-intel';
 import RewardIcon from './RewardIcon';
 import StreakFlame from './StreakFlame';
@@ -13,18 +13,9 @@ function salesTodayCount(store: StoreData): number {
 
 export default function StreakDetailsPanel({ store, onClose }: { store: StoreData; onClose: () => void }) {
   const streak = store.streak;
-  if (!streak) return null;
-
-  const logDays = getStreakLog(streak, 21, 4, store.createdAt);
-  const health = healthScore(store);
-  const sales = salesTodayCount(store);
-  const freezes = streak.freezesAvailable ?? 0;
-  const next = nextMilestoneAfter(streak.count);
-  const ownerName = store.storeName || 'there';
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLDivElement>(null);
-
   const [selectedDay, setSelectedDay] = useState<StreakLogDay | null>(null);
 
   // Auto scroll to today when opened
@@ -36,6 +27,15 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
       container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
     }
   }, []);
+
+  if (!streak) return null;
+
+  const logDays = getStreakLog(streak, 21, 4, store.createdAt);
+  const health = healthScore(store);
+  const sales = salesTodayCount(store);
+  const freezes = streak.freezesAvailable ?? 0;
+  const next = nextMilestoneAfter(streak.count);
+  const ownerName = store.storeName || 'there';
 
   const handleScrollLeft = () => {
     if (scrollRef.current) {
@@ -49,9 +49,83 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
     }
   };
 
-  const activeDay = selectedDay || logDays.find(d => d.isToday) || logDays[logDays.length - 1];
+  // Compute projected/actual streak count for each log day to check milestones
+  const todayIdx = logDays.findIndex(d => d.isToday);
+  const dayCounts = new Array(logDays.length).fill(0);
+  
+  if (todayIdx !== -1) {
+    const isTodayDone = logDays[todayIdx].status === 'today_completed';
+    const currentCount = streak.count;
+    
+    // 1. Project future/today counts
+    if (isTodayDone) {
+      dayCounts[todayIdx] = currentCount;
+      for (let i = todayIdx + 1; i < logDays.length; i++) {
+        dayCounts[i] = currentCount + (i - todayIdx);
+      }
+    } else {
+      const nextCountToday = currentCount === 0 ? 1 : currentCount + 1;
+      dayCounts[todayIdx] = nextCountToday;
+      for (let i = todayIdx + 1; i < logDays.length; i++) {
+        dayCounts[i] = nextCountToday + (i - todayIdx);
+      }
+    }
+    
+    // 2. Trace past counts backwards
+    let lastKnownCompletedIdx = -1;
+    let lastKnownCount = 0;
+    
+    if (isTodayDone) {
+      lastKnownCompletedIdx = todayIdx;
+      lastKnownCount = currentCount;
+    } else {
+      const lastOpenIdx = logDays.findIndex(d => d.date === streak.lastOpenDate);
+      if (lastOpenIdx !== -1) {
+        lastKnownCompletedIdx = lastOpenIdx;
+        lastKnownCount = currentCount;
+        dayCounts[lastOpenIdx] = currentCount;
+      }
+    }
+    
+    if (lastKnownCompletedIdx !== -1) {
+      let tempCount = lastKnownCount;
+      for (let i = lastKnownCompletedIdx - 1; i >= 0; i--) {
+        const status = logDays[i].status;
+        if (status === 'completed' || status === 'frozen') {
+          if (status === 'completed') {
+            tempCount = tempCount - 1;
+          }
+          dayCounts[i] = Math.max(1, tempCount);
+        } else {
+          tempCount = 0;
+          dayCounts[i] = 0;
+        }
+      }
+    }
+  }
 
-  const renderStatusIcon = (status: StreakLogDay['status'], dayNum: number) => {
+  const activeDay = selectedDay || logDays.find(d => d.isToday) || logDays[logDays.length - 1];
+  const activeDayIdx = logDays.findIndex(d => d.date === activeDay.date);
+  const activeDayCount = activeDayIdx !== -1 ? dayCounts[activeDayIdx] : 0;
+  const isActiveMilestone = STREAK_MILESTONES.includes(activeDayCount);
+
+  const renderStatusIcon = (status: StreakLogDay['status'], dayNum: number, isMilestone: boolean) => {
+    if (isMilestone) {
+      switch (status) {
+        case 'completed':
+        case 'today_completed':
+          return <Star className="w-3.5 h-3.5 fill-current stroke-[2.25] text-amber-950" />;
+        case 'frozen':
+          return <Snowflake className="w-3.5 h-3.5 text-sky-400" />;
+        case 'skipped':
+          return <X className="w-3.5 h-3.5 stroke-[3.5] text-rose-500" />;
+        case 'today_pending':
+        case 'future':
+        default:
+          return <Star className="w-3.5 h-3.5 fill-none stroke-[2.5]" />;
+      }
+    }
+
     switch (status) {
       case 'completed':
       case 'today_completed':
@@ -68,15 +142,32 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
     }
   };
 
-  const getStatusColorClass = (status: StreakLogDay['status'], isToday: boolean) => {
+  const getStatusColorClass = (status: StreakLogDay['status'], isToday: boolean, isMilestone: boolean) => {
+    if (isMilestone) {
+      switch (status) {
+        case 'completed':
+        case 'today_completed':
+          return 'bg-gradient-to-br from-amber-400 to-yellow-500 text-amber-950 shadow-md shadow-amber-500/30 ring-2 ring-yellow-400 border border-yellow-500';
+        case 'skipped':
+          return 'bg-rose-500/10 border border-rose-500/50 text-rose-400';
+        case 'frozen':
+          return 'bg-sky-500/20 border border-sky-400/50 text-sky-300';
+        case 'today_pending':
+          return 'border border-amber-400 text-amber-400 bg-amber-500/10 font-bold animate-pulse';
+        case 'future':
+        default:
+          return 'border border-amber-500/40 text-amber-500/60 bg-transparent';
+      }
+    }
+
     switch (status) {
       case 'completed':
       case 'today_completed':
         return 'bg-gradient-to-br from-emerald-500 to-amber-500 text-white shadow-md shadow-emerald-500/20';
       case 'skipped':
-        return 'bg-rose-500/20 border-rose-500/50 text-rose-400 font-bold';
+        return 'bg-rose-500/20 border border-rose-500/50 text-rose-400 font-bold';
       case 'frozen':
-        return 'bg-sky-500/20 border-sky-400/50 text-sky-300 font-bold';
+        return 'bg-sky-500/20 border border-sky-400/50 text-sky-300 font-bold';
       case 'today_pending':
         return 'border-2 border-orange-400 text-orange-400 bg-orange-500/10 font-bold';
       case 'future':
@@ -85,12 +176,29 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
     }
   };
 
-  const getStatusDescription = (day: StreakLogDay) => {
+  const getStatusDescription = (day: StreakLogDay, countOnDay: number, isMilestone: boolean) => {
     const formattedDate = new Date(day.date + 'T00:00:00').toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
       weekday: 'short'
     });
+
+    if (isMilestone) {
+      switch (day.status) {
+        case 'completed':
+        case 'today_completed':
+          return `⭐ ${formattedDate} — Milestone reached! Surprise reward unlocked!`;
+        case 'skipped':
+          return `✕ ${formattedDate} — Missed milestone surprise`;
+        case 'frozen':
+          return `❄ ${formattedDate} — Milestone saved by Streak Freeze!`;
+        case 'today_pending':
+          return `🎁 ${formattedDate} — Complete today to unlock a surprise milestone reward!`;
+        case 'future':
+        default:
+          return `🎁 ${formattedDate} — Projected milestone surprise day!`;
+      }
+    }
 
     switch (day.status) {
       case 'completed':
@@ -164,8 +272,10 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
             className="flex items-center gap-2 overflow-x-auto px-2 py-2 no-scrollbar scroll-smooth"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {logDays.map((d) => {
+            {logDays.map((d, index) => {
               const isSelected = activeDay?.date === d.date;
+              const dayCount = dayCounts[index] || 0;
+              const isMilestone = STREAK_MILESTONES.includes(dayCount);
               return (
                 <div
                   key={d.date}
@@ -181,10 +291,11 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
                   <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${getStatusColorClass(
                       d.status,
-                      d.isToday
+                      d.isToday,
+                      isMilestone
                     )} ${isSelected ? 'ring-2 ring-orange-400 ring-offset-2 ring-offset-surface-1' : ''}`}
                   >
-                    {renderStatusIcon(d.status, d.dayNum)}
+                    {renderStatusIcon(d.status, d.dayNum, isMilestone)}
                   </div>
                   <span className="text-[9px] text-muted-foreground/80 font-medium">{d.dayNum}</span>
                 </div>
@@ -195,7 +306,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
 
         {/* Selected / Active Day Status Description */}
         <div className="mx-4 my-2 px-3 py-1.5 rounded-lg bg-surface-2/70 border border-border/50 text-[10px] text-center font-semibold text-foreground truncate">
-          {getStatusDescription(activeDay)}
+          {getStatusDescription(activeDay, activeDayCount, isActiveMilestone)}
         </div>
 
         {/* Legend */}

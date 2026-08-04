@@ -128,9 +128,10 @@ export function runStreakCheck(store: StoreData): StoreData {
     freezeGrantedMonth,
     // Freeze protects the day that was actually missed (day after last open),
     // not "today" — recording it on today made the calendar show the wrong
-    // day as frozen and the real missed day as "skipped".
+    // day as frozen and the real missed day as "skipped". Capped at 90 like
+    // openedDates so this array doesn't grow forever.
     freezesUsedDates: freezeConsumedToday
-      ? [...(prev.freezesUsedDates || []), addDays(prev.lastOpenDate, 1)]
+      ? [...(prev.freezesUsedDates || []), addDays(prev.lastOpenDate, 1)].slice(-90)
       : (prev.freezesUsedDates || []),
     freezeConsumedToday,
     openedDates: pushOpenedDate(prev.openedDates, today),
