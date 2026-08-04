@@ -68,6 +68,8 @@
 [2026-08-04] v1.1.0 — Minimal flame redesign + fixed streak-freeze date bug — 🟡 Medium
 [2026-08-04] v1.2.0 — Duolingo-style streak logic: freeze only covers 1 missed day, pre-account days hidden from calendar — 🟡 Medium
 [2026-08-04] v1.3.0 — Fixed hooks-order crash risk in StreakDetailsPanel, capped freezesUsedDates growth — 🟠 High
+[2026-08-04] v1.4.0 — Streak panel redesign: bigger flame, no duplicate number, lighter background, shorter status line, solid checkmark color, tap-to-see freeze tooltip — 🟢 Low
+
 
 
 

@@ -19,6 +19,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
   const scrollRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLDivElement>(null);
   const [selectedDay, setSelectedDay] = useState<StreakLogDay | null>(null);
+  const [showFreezeInfo, setShowFreezeInfo] = useState(false);
 
   // Auto scroll to today when opened
   useEffect(() => {
@@ -165,7 +166,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
     switch (status) {
       case 'completed':
       case 'today_completed':
-        return 'bg-gradient-to-br from-emerald-500 to-amber-500 text-white shadow-md shadow-emerald-500/20';
+        return 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25';
       case 'skipped':
         return 'bg-rose-500/20 border border-rose-500/50 text-rose-400 font-bold';
       case 'frozen':
@@ -174,7 +175,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
         return 'border-2 border-orange-400 text-orange-400 bg-orange-500/10 font-bold';
       case 'future':
       default:
-        return 'bg-surface-2 text-muted-foreground/40 border border-border/40';
+        return 'bg-surface-3 text-muted-foreground/40 border border-border/40';
     }
   };
 
@@ -223,19 +224,19 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
       {/* Backdrop — tap outside to close */}
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] animate-in fade-in-0 duration-200" onClick={onClose} />
 
-      <div className="fixed left-1/2 -translate-x-1/2 top-20 md:absolute md:left-0 md:translate-x-0 md:top-full md:mt-2 z-50 w-[320px] max-w-[94vw] rounded-2xl border border-border bg-surface-1 shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200">
+      <div className="fixed left-1/2 -translate-x-1/2 top-20 md:absolute md:left-0 md:translate-x-0 md:top-full md:mt-2 z-50 w-[320px] max-w-[94vw] rounded-2xl border border-border bg-surface-2 shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200">
         {/* Header */}
         <div className="relative px-5 pt-5 pb-3 text-center bg-gradient-to-b from-orange-500/15 via-amber-500/5 to-transparent flex flex-col items-center">
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center bg-surface-2/80 hover:bg-surface-3 transition-colors text-muted-foreground hover:text-foreground cursor-pointer z-10"
+            className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center bg-surface-3/80 hover:bg-surface-3 transition-colors text-muted-foreground hover:text-foreground cursor-pointer z-10"
           >
             <X className="w-4 h-4" />
           </button>
 
-          {/* Flame Badge */}
+          {/* Flame Badge — bigger, no duplicate number */}
           <div className="mb-2">
-            <StreakFlame count={streak.count} size="md" />
+            <StreakFlame count={streak.count} size="lg" showCount={false} />
           </div>
 
           <div className="font-display font-black text-xl text-foreground tracking-tight">
@@ -252,14 +253,14 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
           <div className="flex items-center gap-1">
             <button
               onClick={handleScrollLeft}
-              className="p-1 rounded-md bg-surface-2 hover:bg-surface-3 transition-colors text-muted-foreground hover:text-foreground"
+              className="p-1 rounded-md bg-surface-3 hover:bg-surface-3/70 transition-colors text-muted-foreground hover:text-foreground"
               title="Scroll back"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={handleScrollRight}
-              className="p-1 rounded-md bg-surface-2 hover:bg-surface-3 transition-colors text-muted-foreground hover:text-foreground"
+              className="p-1 rounded-md bg-surface-3 hover:bg-surface-3/70 transition-colors text-muted-foreground hover:text-foreground"
               title="Scroll forward"
             >
               <ChevronRight className="w-3.5 h-3.5" />
@@ -307,7 +308,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
         </div>
 
         {/* Selected / Active Day Status Description */}
-        <div className="mx-4 my-2 px-3 py-1.5 rounded-lg bg-surface-2/70 border border-border/50 text-[10px] text-center font-semibold text-foreground truncate">
+        <div className="mx-4 my-2 px-3 py-1.5 rounded-lg bg-surface-3/70 border border-border/50 text-[10px] text-center font-semibold text-foreground truncate">
           {getStatusDescription(activeDay, activeDayCount, isActiveMilestone)}
         </div>
 
@@ -328,7 +329,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
         </div>
 
         {/* Stats card */}
-        <div className="mx-4 mb-3 rounded-xl bg-surface-2/60 border border-border/60 px-3 py-2.5">
+        <div className="mx-4 mb-3 rounded-xl bg-surface-3/60 border border-border/60 px-3 py-2.5">
           <div className="grid grid-cols-4 gap-1 text-center">
             <div>
               <div className="text-base font-display font-black text-foreground">{streak.count}</div>
@@ -342,12 +343,23 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
               <div className="text-base font-display font-black text-foreground">{Math.round(health.overall)}</div>
               <div className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Health</div>
             </div>
-            <div>
-              <div className="text-base font-display font-black flex items-center justify-center gap-0.5 text-sky-400">
-                <Snowflake className="w-3.5 h-3.5" />
-                {freezes}
-              </div>
-              <div className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Freezes</div>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowFreezeInfo(v => !v)}
+                className="w-full cursor-pointer"
+              >
+                <div className="text-base font-display font-black flex items-center justify-center gap-0.5 text-sky-400">
+                  <Snowflake className="w-3.5 h-3.5" />
+                  {freezes}
+                </div>
+                <div className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Freezes</div>
+              </button>
+              {showFreezeInfo && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 rounded-lg bg-surface-3 border border-border/60 px-2.5 py-1.5 text-[10px] text-center text-foreground shadow-lg z-10">
+                  Used automatically when you miss a day
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -366,7 +378,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
                 <div
                   key={r.day}
                   title={`Day ${r.day} Gift`}
-                  className="shrink-0 w-8 h-8 rounded-lg bg-surface-2 border border-border/60 flex items-center justify-center"
+                  className="shrink-0 w-8 h-8 rounded-lg bg-surface-3 border border-border/60 flex items-center justify-center"
                 >
                   <RewardIcon itemId={r.itemId} size={18} />
                 </div>
