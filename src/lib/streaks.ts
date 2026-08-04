@@ -51,8 +51,8 @@ function currentMonthLocal(): string {
 function pushOpenedDate(dates: string[] | undefined, today: string): string[] {
   const list = [...(dates || [])];
   if (!list.includes(today)) list.push(today);
-  // Keep last 14 days only — the UI only ever shows a 7-day week row, 14 gives headroom.
-  return list.slice(-14);
+  // Keep last 90 days of history for scrollable streak logging
+  return list.slice(-90);
 }
 
 // Call this once per app open. Returns the store unchanged (same reference)
@@ -132,8 +132,68 @@ export function nextMilestoneAfter(count: number): number | null {
   return STREAK_MILESTONES.find(m => m > count) ?? null;
 }
 
+export interface StreakLogDay {
+  label: string;       // 'Mon', 'Tue'...
+  shortDay: string;    // 'M', 'T', 'W'...
+  date: string;        // 'YYYY-MM-DD'
+  dayNum: number;      // 1..31
+  status: 'completed' | 'skipped' | 'frozen' | 'today_pending' | 'today_completed' | 'future';
+  isToday: boolean;
+  isFuture: boolean;
+}
+
+export function getStreakLog(streak: StreakData | undefined, daysBack = 14, daysAhead = 4): StreakLogDay[] {
+  const opened = new Set(streak?.openedDates || []);
+  const frozen = new Set(streak?.freezesUsedDates || []);
+  const today = new Date();
+  const todayStr = todayLocal();
+  const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayLabelsLetter = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  const days: StreakLogDay[] = [];
+
+  for (let i = -daysBack; i <= daysAhead; i++) {
+    const d = new Date();
+    d.setDate(today.getDate() + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${day}`;
+
+    const isToday = dateStr === todayStr;
+    const isFuture = dateStr > todayStr;
+    let status: StreakLogDay['status'];
+
+    if (isFuture) {
+      status = 'future';
+    } else if (isToday) {
+      status = (opened.has(dateStr) || streak?.lastOpenDate === dateStr) ? 'today_completed' : 'today_pending';
+    } else {
+      if (frozen.has(dateStr)) {
+        status = 'frozen';
+      } else if (opened.has(dateStr)) {
+        status = 'completed';
+      } else {
+        status = 'skipped';
+      }
+    }
+
+    const dow = d.getDay();
+    days.push({
+      label: dayNamesShort[dow],
+      shortDay: dayLabelsLetter[dow],
+      date: dateStr,
+      dayNum: d.getDate(),
+      status,
+      isToday,
+      isFuture,
+    });
+  }
+
+  return days;
+}
+
 // One entry per of the last 7 calendar days (oldest first), Monday-first week
-// like the reference design (M T W T F S S). Used by the streak dropdown panel.
 export interface WeekLogDay {
   label: string;   // 'M', 'T', 'W'...
   date: string;     // YYYY-MM-DD
@@ -145,7 +205,6 @@ export interface WeekLogDay {
 export function getWeekLog(streak: StreakData | undefined): WeekLogDay[] {
   const opened = new Set(streak?.openedDates || []);
   const today = new Date();
-  // Find this week's Monday (getDay(): 0=Sun..6=Sat)
   const dow = today.getDay();
   const diffToMonday = dow === 0 ? -6 : 1 - dow;
   const monday = new Date(today);
