@@ -94,7 +94,11 @@ export function runStreakCheck(store: StoreData): StoreData {
   }
 
   const gap = prev.lastOpenDate ? daysBetween(prev.lastOpenDate, today) : null;
-  const missedADay = gap !== null && gap > 1;
+  // Duolingo-style rule: a freeze only saves you if exactly ONE day was
+  // missed (gap === 2, i.e. yesterday was skipped). Miss two or more days
+  // in a row and the streak resets even if a freeze is sitting in reserve —
+  // freezes aren't meant to cover open-ended absences.
+  const oneDayMissed = gap === 2;
 
   let nextCount: number;
   let freezeConsumedToday = false;
@@ -103,13 +107,14 @@ export function runStreakCheck(store: StoreData): StoreData {
   if (gap === 1 || gap === null) {
     // Consecutive day, or very first-ever open.
     nextCount = prev.count + 1 || 1;
-  } else if (missedADay && remainingFreezes > 0) {
-    // Missed a day, but a freeze covers it — streak survives.
+  } else if (oneDayMissed && remainingFreezes > 0) {
+    // Exactly one day missed, and a freeze covers it — streak survives.
     nextCount = prev.count;
     remainingFreezes -= 1;
     freezeConsumedToday = true;
   } else {
-    // Missed a day, no freeze available — resets.
+    // Either no freeze available for a single missed day, or two+ days
+    // missed (freezes don't cover that) — streak resets.
     nextCount = 1;
   }
 
@@ -156,13 +161,34 @@ export interface StreakLogDay {
   isFuture: boolean;
 }
 
-export function getStreakLog(streak: StreakData | undefined, daysBack = 14, daysAhead = 4): StreakLogDay[] {
+export function getStreakLog(
+  streak: StreakData | undefined,
+  daysBack = 14,
+  daysAhead = 4,
+  accountCreatedAt?: string
+): StreakLogDay[] {
   const opened = new Set(streak?.openedDates || []);
   const frozen = new Set(streak?.freezesUsedDates || []);
   const today = new Date();
   const todayStr = todayLocal();
   const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayLabelsLetter = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  let accountCreatedDateStr: string | null = null;
+  if (accountCreatedAt) {
+    const d = new Date(accountCreatedAt);
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      accountCreatedDateStr = `${y}-${m}-${day}`;
+    }
+  }
+
+  // Earliest day we actually have a record for. Anything before this
+  // never had an account running — so it's skipped entirely, not marked.
+  const openedSorted = [...opened].sort();
+  const earliestKnownDate = accountCreatedDateStr || openedSorted[0] || streak?.lastOpenDate || todayStr;
 
   const days: StreakLogDay[] = [];
 
@@ -174,6 +200,8 @@ export function getStreakLog(streak: StreakData | undefined, daysBack = 14, days
     const day = String(d.getDate()).padStart(2, '0');
     const dateStr = `${y}-${m}-${day}`;
 
+    if (dateStr < earliestKnownDate) continue; // don't show pre-account days at all
+
     const isToday = dateStr === todayStr;
     const isFuture = dateStr > todayStr;
     let status: StreakLogDay['status'];
@@ -182,14 +210,12 @@ export function getStreakLog(streak: StreakData | undefined, daysBack = 14, days
       status = 'future';
     } else if (isToday) {
       status = (opened.has(dateStr) || streak?.lastOpenDate === dateStr) ? 'today_completed' : 'today_pending';
+    } else if (frozen.has(dateStr)) {
+      status = 'frozen';
+    } else if (opened.has(dateStr)) {
+      status = 'completed';
     } else {
-      if (frozen.has(dateStr)) {
-        status = 'frozen';
-      } else if (opened.has(dateStr)) {
-        status = 'completed';
-      } else {
-        status = 'skipped';
-      }
+      status = 'skipped';
     }
 
     const dow = d.getDay();

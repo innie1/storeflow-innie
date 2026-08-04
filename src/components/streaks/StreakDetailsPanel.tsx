@@ -15,7 +15,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
   const streak = store.streak;
   if (!streak) return null;
 
-  const logDays = getStreakLog(streak, 21, 4);
+  const logDays = getStreakLog(streak, 21, 4, store.createdAt);
   const health = healthScore(store);
   const sales = salesTodayCount(store);
   const freezes = streak.freezesAvailable ?? 0;
