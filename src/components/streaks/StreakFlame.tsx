@@ -157,6 +157,8 @@ export default function StreakFlame({ count, size = 'sm', onClick, showCount = t
   const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
     const triggerLightning = () => {
       setIsZap(true);
       setZapProgress(0);
@@ -172,18 +174,23 @@ export default function StreakFlame({ count, size = 'sm', onClick, showCount = t
           animRef.current = requestAnimationFrame(animate);
         } else {
           setIsZap(false);
+          scheduleNext();
         }
       };
 
       animRef.current = requestAnimationFrame(animate);
     };
 
-    const interval = setInterval(() => {
-      triggerLightning();
-    }, 5000);
+    const scheduleNext = () => {
+      // Random time between 15 and 45 seconds
+      const nextDelay = 15000 + Math.random() * 30000;
+      timeoutId = setTimeout(triggerLightning, nextDelay);
+    };
+
+    scheduleNext();
 
     return () => {
-      clearInterval(interval);
+      clearTimeout(timeoutId);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
   }, []);
@@ -236,10 +243,14 @@ export default function StreakFlame({ count, size = 'sm', onClick, showCount = t
       `}</style>
       <div className="flex items-center gap-1 leading-none">
         <div className="relative flex items-center justify-center">
-          {isZap ? (
-            <>
-              {/* Circular effect removed */}
-              
+          <Flame
+            className={`${flameSize} ${
+              lit ? 'text-amber-500 fill-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]' : 'text-muted-foreground/30'
+            } transition-all duration-500 ${isZap ? 'opacity-0 scale-50' : 'opacity-100 scale-100'}`}
+          />
+          
+          {isZap && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className={`${flameSize} z-10`}>
                 <CinematicLightning progress={zapProgress} />
               </div>
@@ -248,20 +259,15 @@ export default function StreakFlame({ count, size = 'sm', onClick, showCount = t
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
                 <span className="absolute w-2 h-2 rounded-full bg-white shadow-[0_0_10px_#ffffff] animate-[spark-burst-1_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
                 <span className="absolute w-2 h-2 rounded-full bg-yellow-300 shadow-[0_0_10px_#fde047] animate-[spark-burst-2_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
-                <span className="absolute w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_#f59e0b] animate-[spark-burst-3_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
-                <span className="absolute w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_10px_#22d3ee] animate-[spark-burst-4_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
-                <span className="absolute w-2 h-2 rounded-full bg-yellow-200 shadow-[0_0_10px_#facc15] animate-[spark-burst-5_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
-                <span className="absolute w-2.5 h-2.5 rounded-full bg-sky-300 shadow-[0_0_10px_#38bdf8] animate-[spark-burst-6_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
-                <span className="absolute w-1.5 h-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_#f59e0b] animate-[spark-burst-7_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
-                <span className="absolute w-1.5 h-1.5 rounded-full bg-yellow-300 shadow-[0_0_8px_#eab308] animate-[spark-burst-8_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
+                <span className="absolute w-2 h-2 rounded-full bg-orange-400 shadow-[0_0_10px_#fb923c] animate-[spark-burst-3_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
+                <span className="absolute w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_10px_#67e8f9] animate-[spark-burst-4_1.1s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
+                
+                <span className="absolute w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_10px_#ffffff] animate-[spark-burst-5_0.9s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
+                <span className="absolute w-1.5 h-1.5 rounded-full bg-yellow-400 shadow-[0_0_10px_#facc15] animate-[spark-burst-6_0.9s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
+                <span className="absolute w-1.5 h-1.5 rounded-full bg-cyan-200 shadow-[0_0_10px_#a5f3fc] animate-[spark-burst-7_0.9s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
+                <span className="absolute w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_10px_#f59e0b] animate-[spark-burst-8_0.9s_cubic-bezier(0.1,0.9,0.2,1)_forwards]" />
               </div>
-            </>
-          ) : (
-            <Flame
-              className={`${flameSize} ${
-                lit ? 'text-orange-500 fill-orange-500/20 stroke-[2.25]' : 'text-muted-foreground/60 stroke-[1.75]'
-              } transition-all duration-300`}
-            />
+            </div>
           )}
         </div>
         {showCount && (
