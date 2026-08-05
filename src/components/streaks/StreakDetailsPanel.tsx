@@ -166,13 +166,13 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
     switch (status) {
       case 'completed':
       case 'today_completed':
-        return 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25';
+        return 'bg-primary/25 text-primary border border-primary/40 shadow-sm shadow-primary/10 font-bold';
       case 'skipped':
         return 'bg-rose-500/20 border border-rose-500/50 text-rose-400 font-bold';
       case 'frozen':
         return 'bg-sky-500/20 border border-sky-400/50 text-sky-300 font-bold';
       case 'today_pending':
-        return 'border-2 border-orange-400 text-orange-400 bg-orange-500/10 font-bold';
+        return 'border-2 border-primary text-primary bg-primary/10 font-bold animate-pulse';
       case 'future':
       default:
         return 'bg-surface-3 text-muted-foreground/40 border border-border/40';
@@ -226,7 +226,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
 
       <div className="fixed left-1/2 -translate-x-1/2 top-20 md:absolute md:left-0 md:translate-x-0 md:top-full md:mt-2 z-50 w-[320px] max-w-[94vw] rounded-2xl border border-border bg-surface-2 shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200">
         {/* Header */}
-        <div className="relative px-5 pt-5 pb-3 text-center bg-gradient-to-b from-orange-500/15 via-amber-500/5 to-transparent flex flex-col items-center">
+        <div className="relative px-5 pt-5 pb-3 text-center bg-gradient-to-b from-primary/20 via-primary/5 to-transparent flex flex-col items-center">
           <button
             onClick={onClose}
             className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center bg-surface-3/80 hover:bg-surface-3 transition-colors text-muted-foreground hover:text-foreground cursor-pointer z-10"
@@ -288,7 +288,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
                     isSelected ? 'scale-105' : 'hover:scale-102'
                   }`}
                 >
-                  <span className={`text-[10px] font-bold ${d.isToday ? 'text-orange-400 font-extrabold' : 'text-muted-foreground'}`}>
+                  <span className={`text-[10px] font-bold ${d.isToday ? 'text-primary font-extrabold' : 'text-muted-foreground'}`}>
                     {d.shortDay}
                   </span>
                   <div
@@ -296,7 +296,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
                       d.status,
                       d.isToday,
                       isMilestone
-                    )} ${isSelected ? 'ring-2 ring-orange-400 ring-offset-2 ring-offset-surface-1' : ''}`}
+                    )} ${isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-surface-1' : ''}`}
                   >
                     {renderStatusIcon(d.status, d.dayNum, isMilestone)}
                   </div>
@@ -350,7 +350,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Gifts Earned
               </span>
-              <span className="text-[10px] font-bold text-orange-400">{streak.rewards.length}</span>
+              <span className="text-[10px] font-bold text-primary">{streak.rewards.length}</span>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {streak.rewards.map((r) => (
@@ -368,7 +368,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
 
         {next && (
           <div className="px-5 pb-3 text-center text-[11px] font-medium text-muted-foreground">
-            <span className="text-orange-400 font-bold">{next - streak.count}</span> more day{next - streak.count === 1 ? '' : 's'} to your next gift
+            <span className="text-primary font-bold">{next - streak.count}</span> more day{next - streak.count === 1 ? '' : 's'} to your next gift
           </div>
         )}
       </div>
