@@ -81,7 +81,9 @@ import {
   Coins,
   MessageSquare,
   Bell,
-  QrCode
+  QrCode,
+  User,
+  UserCheck
 } from 'lucide-react';
 
 
@@ -864,6 +866,7 @@ export default function Index() {
   const [showScanner, setShowScanner] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showStreakPanel, setShowStreakPanel] = useState(false);
   const [showLockConfirm, setShowLockConfirm] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -1340,30 +1343,30 @@ export default function Index() {
 
       {/* Main Layout Area */}
       <div className="flex-1 flex flex-col md:pl-64">
-        <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-4 md:px-6 py-3.5 flex items-center justify-between" style={{ paddingLeft: 'max(1rem, env(safe-area-inset-left))', paddingRight: 'max(1rem, env(safe-area-inset-right))', paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}>
+        <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-3 md:px-6 py-1.5 flex items-center justify-between" style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingTop: 'max(0.4rem, env(safe-area-inset-top))', paddingBottom: '0.35rem' }}>
           <div className="flex flex-col text-left">
-            <div className="flex items-center gap-2">
-              <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
-              {(store.streak?.count || 0) > 0 && (
-                <div className="relative">
-                  <StreakFlame count={store.streak!.count} size="sm" onClick={() => setShowStreakPanel(v => !v)} />
-                  {showStreakPanel && (
-                    <StreakDetailsPanel store={store} onClose={() => setShowStreakPanel(false)} />
-                  )}
-                </div>
-              )}
-            </div>
+            <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
             <button 
               onClick={() => setShowSwitcher(true)}
-              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors font-semibold mt-0.5"
+              className="w-fit self-start inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors font-semibold mt-0.5 px-1 py-0.5 rounded hover:bg-surface-2/60 cursor-pointer active:scale-95"
               title="Switch Store"
             >
-              <span className="truncate max-w-[120px]">{store.storeName}</span>
+              <span className="truncate max-w-[130px]">{store.storeName}</span>
               <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* Streak Flame (Positioned next to Notification Bell) */}
+            {(store.streak?.count || 0) > 0 && (
+              <div className="relative">
+                <StreakFlame count={store.streak!.count} size="sm" onClick={() => setShowStreakPanel(v => !v)} />
+                {showStreakPanel && (
+                  <StreakDetailsPanel store={store} onClose={() => setShowStreakPanel(false)} />
+                )}
+              </div>
+            )}
+
             {/* Global Notification Bell */}
             <button
               onClick={() => setShowNotifications(true)}
@@ -1372,26 +1375,79 @@ export default function Index() {
             >
               <Bell className="w-4 h-4 text-foreground" />
               {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-destructive border-2 border-background animate-pulse" />
               )}
             </button>
 
-            <button
-              onClick={() => setShowSwitchUser(true)}
-              className="h-9 px-3.5 rounded-full bg-black/40 border border-border/80 hover:border-yellow-500/40 text-xs text-foreground font-display font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer whitespace-nowrap"
-            >
-              <span className="flex items-center gap-1.5 whitespace-nowrap font-display">
-                <span className="text-muted-foreground text-[13px]">👤</span>
-                <span className="truncate capitalize">{currentUser?.role === 'owner' ? 'Owner' : (currentUser?.name || 'Staff')}</span>
-              </span>
-            </button>
-            <button
-              onClick={() => setShowLockConfirm(true)}
-              className="w-9 h-9 rounded-full bg-destructive/10 text-destructive border border-destructive/25 flex items-center justify-center hover:bg-destructive/20 transition-all cursor-pointer active:scale-95"
-              title="Lock Store"
-            >
-              <Lock className="w-4 h-4" />
-            </button>
+            {/* Profile Button & Dropdown Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowProfileMenu(prev => !prev)}
+                className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
+                  showProfileMenu 
+                    ? 'bg-primary/10 border-primary text-primary shadow-sm' 
+                    : 'bg-surface-2 hover:bg-surface-3 border-border text-foreground'
+                }`}
+                title="Account & Security"
+              >
+                <User className="w-4 h-4" />
+              </button>
+
+              {showProfileMenu && (
+                <>
+                  {/* Backdrop to close dropdown when tapping outside */}
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowProfileMenu(false)} 
+                  />
+
+                  {/* Profile Dropdown */}
+                  <div 
+                    className="absolute right-0 mt-2 w-52 bg-card/95 backdrop-blur-xl border border-border/80 rounded-2xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right space-y-1"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {/* User Info Header */}
+                    <div className="px-3 py-2 border-b border-border/60 flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold shrink-0">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div className="flex flex-col text-left min-w-0 flex-1">
+                        <span className="text-xs font-bold text-foreground truncate capitalize">
+                          {currentUser?.name || (currentUser?.role === 'owner' ? 'Owner' : 'Staff')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                          {currentUser?.role === 'owner' ? 'Store Owner' : (currentUser?.role || 'Staff')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Switch Role Action */}
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        setShowSwitchUser(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl hover:bg-surface-2 text-xs font-semibold flex items-center gap-2.5 text-foreground transition-colors cursor-pointer text-left"
+                    >
+                      <UserCheck className="w-4 h-4 text-primary" />
+                      <span>Switch Role</span>
+                    </button>
+
+                    {/* Lock Store Action */}
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        setShowLockConfirm(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl hover:bg-destructive/10 text-xs font-semibold flex items-center gap-2.5 text-destructive transition-colors cursor-pointer text-left"
+                    >
+                      <Lock className="w-4 h-4" />
+                      <span>Lock Store</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </header>
 

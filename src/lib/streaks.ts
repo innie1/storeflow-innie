@@ -12,15 +12,28 @@ export interface StreakRewardItem {
 // The reward pool. Keep this list growing — items are picked at random per
 // milestone and never repeat for the same store until the pool runs out.
 export const STREAK_REWARD_POOL: StreakRewardItem[] = [
-  { id: 'glasses', name: 'Round Glasses' },
-  { id: 'soccer-ball', name: 'Soccer Ball' },
-  { id: 'phone', name: 'Smartphone' },
-  { id: 'headphones', name: 'Headphones' },
-  { id: 'watch', name: 'Wrist Watch' },
-  { id: 'camera', name: 'Camera' },
-  { id: 'backpack', name: 'Backpack' },
-  { id: 'trophy', name: 'Gold Trophy' },
-  { id: 'guitar', name: 'Guitar' },
+  { id: 'popcorn', name: 'Movie Popcorn 🍿' },
+  { id: 'coffee', name: 'Fresh Coffee ☕' },
+  { id: 'vr-headset', name: 'VR Headset 🥽' },
+  { id: 'laptop', name: 'Workstation Laptop 💻' },
+  { id: 'burger', name: 'Burger & Soda 🍔' },
+  { id: 'spaghetti', name: 'Italian Spaghetti 🍝' },
+  { id: 'armchair', name: 'Cozy Armchair 🛋️' },
+  { id: 'tennis', name: 'Tennis Set 🎾' },
+  { id: 'headphones', name: 'Studio Headphones 🎧' },
+  { id: 'glasses', name: 'Smart Glasses 👓' },
+  { id: 'phone', name: 'Smartphone 📱' },
+  { id: 'soccer-ball', name: 'Soccer Ball ⚽' },
+  { id: 'watch', name: 'Wrist Watch ⌚' },
+  { id: 'camera', name: 'Camera 📷' },
+  { id: 'backpack', name: 'Backpack 🎒' },
+  { id: 'trophy', name: 'Gold Trophy 🏆' },
+  { id: 'guitar', name: 'Guitar 🎸' },
+  { id: 'painting', name: 'Canvas Painting 🖼️' },
+  { id: 'waterfall', name: 'Zen Waterfall 🏞️' },
+  { id: 'cupcake', name: 'Sweet Cupcake 🧁' },
+  { id: 'moon', name: 'Moon Lamp 🌙' },
+  { id: 'dog-house', name: 'Puppy House 🐶' },
 ];
 
 function todayLocal(): string {

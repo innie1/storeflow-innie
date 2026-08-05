@@ -188,7 +188,7 @@ function MoneyOwedCard({ store, onClick }: { store: StoreData; onClick?: () => v
         <div className="p-2.5 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Customers</p><p className="font-display font-bold text-sm">{s.customerCount}</p></div>
         <div className="p-2.5 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Overdue</p><p className="font-display font-bold text-sm text-destructive">{s.overdue.length}</p></div>
       </div>
-      {advices.length > 0 && <div className="space-y-1.5">{advices.map((a, i) => (<p key={i} className="text-[11px] text-foreground/90 leading-snug flex gap-1.5"><span>💡</span><span className="flex-1">{a}</span></p>))}</div>}
+      {advices.length > 0 && <div className="space-y-1">{advices.map((a, i) => (<p key={i} className="text-[10px] text-foreground/90 leading-tight flex gap-1"><span className="flex-1">{a}</span></p>))}</div>}
     </div>
   );
 }
@@ -816,9 +816,8 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">Today, {today}</p>
             {/* Flow greeting */}
-            <div className="mt-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/15 flex items-start gap-2">
-              <span className="text-base animate-[mascot-float_2s_infinite]">💡</span>
-              <p className="text-xs text-foreground/90 leading-relaxed flex-1">
+            <div className="mt-1.5 inline-flex items-center px-2.5 py-1 rounded-lg bg-primary/5 border border-primary/15 max-w-full">
+              <p className="text-[11px] font-medium text-foreground/90 leading-snug">
                 <Typewriter text={greeting} />
               </p>
             </div>
@@ -975,8 +974,8 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                         </span>
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{l.description}</p>
-                      <p className="text-[10px] text-emerald-400 mt-1.5 bg-emerald-500/5 p-1.5 rounded border border-emerald-500/10">
-                        💡 <strong>Recommendation:</strong> {l.recommendation}
+                      <p className="text-[10px] text-emerald-400 mt-1 bg-emerald-500/5 p-1 rounded border border-emerald-500/10">
+                        <strong>Recommendation:</strong> {l.recommendation}
                       </p>
                     </div>
                   ))}
@@ -1006,8 +1005,8 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                       <p className="font-display font-bold text-xs text-foreground">{weather.weatherCondition}</p>
                       <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{weather.effect}</p>
                       <p className="text-[10px] text-muted-foreground mt-1 leading-normal italic">{weather.impactDetails}</p>
-                      <p className="text-[10px] text-emerald-400 mt-1.5 bg-emerald-500/5 p-1.5 rounded border border-emerald-500/10">
-                        💡 {weather.suggestedAction}
+                      <p className="text-[10px] text-emerald-400 mt-1 bg-emerald-500/5 p-1 rounded border border-emerald-500/10">
+                        {weather.suggestedAction}
                       </p>
                     </div>
                   )}
@@ -1528,7 +1527,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
           {/* Insights */}
           <div className="space-y-2">
-            <h3 className="font-display font-bold text-sm px-1">💡 Insights</h3>
+            <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider">Insights</h3>
             {insights.length === 0 ? <p className="text-sm text-muted-foreground p-4 text-center">Record more sales to unlock insights.</p> : null}
             {insights.map(i => {
               const tones: Record<string, string> = { success: 'bg-success/10 border-success/30 text-success', warning: 'bg-warning/10 border-warning/30 text-warning', info: 'bg-primary/10 border-primary/30 text-primary', danger: 'bg-destructive/10 border-destructive/30 text-destructive' };

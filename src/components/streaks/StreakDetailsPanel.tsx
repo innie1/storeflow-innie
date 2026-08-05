@@ -224,7 +224,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
       {/* Backdrop — tap outside to close */}
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] animate-in fade-in-0 duration-200" onClick={onClose} />
 
-      <div className="fixed left-1/2 -translate-x-1/2 top-20 md:absolute md:left-0 md:translate-x-0 md:top-full md:mt-2 z-50 w-[320px] max-w-[94vw] rounded-2xl border border-border bg-surface-2 shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200">
+      <div className="absolute right-0 top-full mt-2 z-50 w-[340px] max-w-[calc(100vw-2rem)] rounded-2xl border border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-200 origin-top-right">
         {/* Header */}
         <div className="relative px-5 pt-5 pb-3 text-center bg-gradient-to-b from-primary/20 via-primary/5 to-transparent flex flex-col items-center">
           <button
@@ -348,19 +348,24 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
           <div className="mx-4 mb-3 rounded-xl border border-border/60 px-3 py-2">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Gifts Earned
+                Gifts Earned (Tap to use!)
               </span>
               <span className="text-[10px] font-bold text-primary">{streak.rewards.length}</span>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
               {streak.rewards.map((r) => (
-                <div
+                <button
                   key={r.day}
-                  title={`Day ${r.day} Gift`}
-                  className="shrink-0 w-8 h-8 rounded-lg bg-surface-3 border border-border/60 flex items-center justify-center"
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('storeflow-use-item', { detail: { itemId: r.itemId } }));
+                    onClose();
+                  }}
+                  title={`Tap Flow to use Day ${r.day} Gift!`}
+                  className="shrink-0 w-9 h-9 rounded-lg bg-surface-3 hover:bg-primary/20 border border-border/80 hover:border-primary/50 flex items-center justify-center transition-all cursor-pointer active:scale-90"
                 >
                   <RewardIcon itemId={r.itemId} size={18} />
-                </div>
+                </button>
               ))}
             </div>
           </div>

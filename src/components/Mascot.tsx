@@ -438,11 +438,10 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
         setBubbleShiftX(shiftX);
 
         // 2. Vertical position (above vs below) — pick whichever side
-        // actually has room, instead of just checking "close to top of
-        // viewport" and blindly flipping below (which used to land the
-        // bubble on top of a heading/label sitting right underneath).
+        // actually has room. Subtract ~90px to account for the top app header
+        // which obstructs the top of the viewport.
         const bubbleHeightEstimate = 76; // bubble + connector + margin
-        const spaceAbove = rect.top;
+        const safeSpaceAbove = rect.top - 90;
 
         let spaceBelow = window.innerHeight - rect.bottom;
         const nextEl = containerRef.current.nextElementSibling;
@@ -451,12 +450,12 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           spaceBelow = Math.min(spaceBelow, nextTop - rect.bottom);
         }
 
-        if (spaceAbove >= bubbleHeightEstimate) {
+        if (safeSpaceAbove >= bubbleHeightEstimate) {
           setBubblePosition('above');
         } else if (spaceBelow >= bubbleHeightEstimate) {
           setBubblePosition('below');
         } else {
-          setBubblePosition(spaceAbove >= spaceBelow ? 'above' : 'below');
+          setBubblePosition(safeSpaceAbove >= spaceBelow ? 'above' : 'below');
         }
       } else {
         setBubbleShiftX(0);
@@ -1339,22 +1338,22 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           100% { transform: translateY(-20px) scale(1.2); opacity: 0; }
         }
         @keyframes walk-off-left {
-          0% { transform: translateX(0) scaleX(1); }
-          18% { transform: translateX(-110%) scaleX(1); }
-          22%, 45% { transform: translateX(-140%) scaleX(1); }
-          50%, 75% { transform: translateX(-65%) rotate(8deg) scaleX(1); }
-          80% { transform: translateX(-140%) scaleX(1); }
-          85% { transform: translateX(-110%) scaleX(-1); }
-          100% { transform: translateX(0) scaleX(1); }
+          0% { transform: translateX(0) scale(1, 1); filter: brightness(1) blur(0px); }
+          18% { transform: translateX(-80%) scale(0.75, 0.75); filter: brightness(0.8) blur(0.5px); }
+          22%, 45% { transform: translateX(-140%) scale(0.5, 0.5); filter: brightness(0.5) blur(2px); }
+          50%, 75% { transform: translateX(-90%) rotate(8deg) scale(0.6, 0.6); filter: brightness(0.6) blur(1px); }
+          80% { transform: translateX(-140%) scale(0.5, 0.5); filter: brightness(0.5) blur(2px); }
+          85% { transform: translateX(-80%) scale(-0.75, 0.75); filter: brightness(0.8) blur(0.5px); }
+          100% { transform: translateX(0) scale(1, 1); filter: brightness(1) blur(0px); }
         }
         @keyframes walk-off-right {
-          0% { transform: translateX(0) scaleX(-1); }
-          18% { transform: translateX(110%) scaleX(-1); }
-          22%, 45% { transform: translateX(140%) scaleX(-1); }
-          50%, 75% { transform: translateX(65%) rotate(-8deg) scaleX(-1); }
-          80% { transform: translateX(140%) scaleX(-1); }
-          85% { transform: translateX(110%) scaleX(1); }
-          100% { transform: translateX(0) scaleX(1); }
+          0% { transform: translateX(0) scale(-1, 1); filter: brightness(1) blur(0px); }
+          18% { transform: translateX(80%) scale(-0.75, 0.75); filter: brightness(0.8) blur(0.5px); }
+          22%, 45% { transform: translateX(140%) scale(-0.5, 0.5); filter: brightness(0.5) blur(2px); }
+          50%, 75% { transform: translateX(90%) rotate(-8deg) scale(-0.6, 0.6); filter: brightness(0.6) blur(1px); }
+          80% { transform: translateX(140%) scale(-0.5, 0.5); filter: brightness(0.5) blur(2px); }
+          85% { transform: translateX(80%) scale(0.75, 0.75); filter: brightness(0.8) blur(0.5px); }
+          100% { transform: translateX(0) scale(1, 1); filter: brightness(1) blur(0px); }
         }
         @keyframes soccer-ball-timeline {
           /* 0% to 56.8%: Bouncing on head */
