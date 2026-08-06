@@ -1,6 +1,7 @@
-import { StoreData, Product, FlowNotification } from '@/types/store';
+import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { getPendingSummary } from '@/lib/store-data';
+import type { AutoFixSpec } from '@/lib/auto-fix';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -498,6 +499,12 @@ export interface AdviceCard {
   // When set (2+ entries), the UI renders one card with a compact list
   // instead of a separate full-size card per item.
   items?: { name: string; note: string }[];
+  // "Go to Action" — which tab opens the screen needed to act on this advice.
+  goTo?: TabId;
+  // "Auto Fix" — when present, the UI offers a button that (after the
+  // store-code confirmation gate) applies this exact change via
+  // lib/auto-fix.ts. Omitted for advice that has no safe automatic fix.
+  autoFix?: AutoFixSpec;
 }
 
 // Reads the customer-supplied cancellation reason off a marketplace order's
@@ -540,7 +547,13 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         detail: isOut
           ? `Out of Stock: ${f.product.name} is completely sold out. Restock at least ${f.restockQty} units immediately to recover lost revenue.`
           : `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`,
-        priority: 'critical'
+        priority: 'critical',
+        goTo: 'inventory',
+        autoFix: {
+          type: 'generate_purchase_order',
+          summary: `Create a draft purchase order for ${f.restockQty} units of ${f.product.name}`,
+          payload: { items: [{ productId: f.product.id, name: f.product.name, qty: f.restockQty, costPrice: f.product.costPrice }] },
+        },
       });
     } else if (criticalStock.length > 1) {
       advice.push({
@@ -552,7 +565,13 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         items: criticalStock.map(f => ({
           name: f.product.name,
           note: f.product.quantity === 0 ? 'Sold out' : `${f.daysLeft}d left · order ${f.restockQty}`
-        }))
+        })),
+        goTo: 'inventory',
+        autoFix: {
+          type: 'generate_purchase_order',
+          summary: `Create a draft purchase order covering all ${criticalStock.length} critical products`,
+          payload: { items: criticalStock.map(f => ({ productId: f.product.id, name: f.product.name, qty: f.restockQty, costPrice: f.product.costPrice })) },
+        },
       });
     }
   }
@@ -604,7 +623,17 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
   const alerts = pricingAlerts(store);
   const underpriced = alerts.filter(a => a.type === 'underpriced').slice(0, 1);
   underpriced.forEach(a => {
-    advice.push({ id: `price-${a.product.id}`, icon: '📈', title: `Raise price on ${a.product.name}`, detail: `Current margin: ${(a.currentMargin * 100).toFixed(0)}%. Suggest ₦${a.suggestedPrice.toLocaleString()} — adds ₦${a.expectedLift.toLocaleString()} per unit.`, priority: 'high' });
+    advice.push({
+      id: `price-${a.product.id}`, icon: '📈', title: `Raise price on ${a.product.name}`,
+      detail: `Current margin: ${(a.currentMargin * 100).toFixed(0)}%. Suggest ₦${a.suggestedPrice.toLocaleString()} — adds ₦${a.expectedLift.toLocaleString()} per unit.`,
+      priority: 'high',
+      goTo: 'inventory',
+      autoFix: {
+        type: 'update_price',
+        summary: `Set ${a.product.name}'s price to ₦${a.suggestedPrice.toLocaleString()} (from ₦${a.product.sellingPrice.toLocaleString()})`,
+        payload: { productId: a.product.id, newPrice: a.suggestedPrice },
+      },
+    });
   });
 
   // Medium: restock soon
@@ -612,7 +641,17 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
     const soonStock = stock.filter(f => f.urgency === 'soon').slice(0, 5);
     if (soonStock.length === 1) {
       const f = soonStock[0];
-      advice.push({ id: `soon-${f.product.id}`, icon: '📦', title: `Order ${f.product.name} this week`, detail: `About ${f.daysLeft} days of stock left. Restock ${f.restockQty} units to avoid a gap.`, priority: 'medium' });
+      advice.push({
+        id: `soon-${f.product.id}`, icon: '📦', title: `Order ${f.product.name} this week`,
+        detail: `About ${f.daysLeft} days of stock left. Restock ${f.restockQty} units to avoid a gap.`,
+        priority: 'medium',
+        goTo: 'inventory',
+        autoFix: {
+          type: 'generate_purchase_order',
+          summary: `Create a draft purchase order for ${f.restockQty} units of ${f.product.name}`,
+          payload: { items: [{ productId: f.product.id, name: f.product.name, qty: f.restockQty, costPrice: f.product.costPrice }] },
+        },
+      });
     } else if (soonStock.length > 1) {
       advice.push({
         id: 'soon-group',
@@ -620,9 +659,44 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         title: `${soonStock.length} products to order this week`,
         detail: 'Running low but not urgent yet — plan a restock order soon.',
         priority: 'medium',
-        items: soonStock.map(f => ({ name: f.product.name, note: `${f.daysLeft}d left · order ${f.restockQty}` }))
+        items: soonStock.map(f => ({ name: f.product.name, note: `${f.daysLeft}d left · order ${f.restockQty}` })),
+        goTo: 'inventory',
+        autoFix: {
+          type: 'generate_purchase_order',
+          summary: `Create a draft purchase order covering all ${soonStock.length} products`,
+          payload: { items: soonStock.map(f => ({ productId: f.product.id, name: f.product.name, qty: f.restockQty, costPrice: f.product.costPrice })) },
+        },
       });
     }
+  }
+
+  // Medium: fast-selling products with no reorder level set — Auto Fix can
+  // set one to a sensible 7-day-supply default in one tap.
+  const missingReorder = store.products
+    .filter(p => !p.discontinued && !p.isService && p.reorderLevel == null)
+    .map(p => {
+      const sold14 = store.sales.filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(13)).reduce((s, sale) => s + sale.quantity, 0);
+      const perDay = sold14 / 14;
+      return { product: p, perDay, suggested: Math.max(1, Math.ceil(perDay * 7)) };
+    })
+    .filter(x => x.perDay > 0)
+    .sort((a, b) => b.perDay - a.perDay)
+    .slice(0, 5);
+  if (missingReorder.length >= 2) {
+    advice.push({
+      id: 'reorder-levels',
+      icon: '🔔',
+      title: `${missingReorder.length} fast sellers have no reorder level set`,
+      detail: `Setting a reorder level triggers a restock alert automatically instead of you noticing stock is low by chance.`,
+      priority: 'medium',
+      items: missingReorder.map(x => ({ name: x.product.name, note: `suggest ${x.suggested}` })),
+      goTo: 'inventory',
+      autoFix: {
+        type: 'adjust_reorder_level',
+        summary: `Set reorder levels (≈7 days of stock) on ${missingReorder.length} products`,
+        payload: { items: missingReorder.map(x => ({ productId: x.product.id, reorderLevel: x.suggested })) },
+      },
+    });
   }
 
   // Medium: co-purchase opportunity
@@ -633,7 +707,41 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
 
   // Medium: never-sold products tying up capital
   if (analysis.neverSold.length >= 3) {
-    advice.push({ id: 'dead-stock', icon: '😴', title: `${analysis.neverSold.length} products never sold`, detail: `${analysis.neverSold.slice(0, 2).map(p => p.name).join(', ')} and others have never sold. Consider discounting or replacing with faster movers.`, priority: 'medium' });
+    const targets = analysis.neverSold.slice(0, 5);
+    advice.push({
+      id: 'dead-stock', icon: '😴', title: `${analysis.neverSold.length} products never sold`,
+      detail: `${analysis.neverSold.slice(0, 2).map(p => p.name).join(', ')} and others have never sold. Consider discounting or replacing with faster movers.`,
+      priority: 'medium',
+      goTo: 'inventory',
+      autoFix: {
+        type: 'create_promotion',
+        summary: `Apply a 15% promo price to ${targets.length} never-sold product${targets.length === 1 ? '' : 's'} for 14 days`,
+        payload: { productIds: targets.map(p => p.id), discountPct: 15, days: 14, reason: 'Clearing dead stock' },
+      },
+    });
+  }
+
+  // Low: long-dormant products worth archiving — separate from the
+  // never-sold discount advice above; this is for products that DID sell
+  // once but have gone quiet for a long time, where discounting is less
+  // useful than just getting them off the active list.
+  const dormantLong = getProductInsightBadges(store, 60).filter(b => b.label === 'Dormant Product');
+  if (dormantLong.length > 0 && dormantLong.length <= 4) {
+    dormantLong.forEach(b => {
+      advice.push({
+        id: `archive-${b.productId}`,
+        icon: '🗄️',
+        title: `Consider archiving ${b.productName}`,
+        detail: `${b.explain} Archiving hides it from active inventory without deleting its sales history.`,
+        priority: 'low',
+        goTo: 'inventory',
+        autoFix: {
+          type: 'archive_product',
+          summary: `Archive ${b.productName} (mark as discontinued)`,
+          payload: { productId: b.productId },
+        },
+      });
+    });
   }
 
   // Low: health is great
@@ -1045,6 +1153,8 @@ export interface Insight {
   icon: string;
   text: string;
   tone: 'success' | 'warning' | 'info' | 'danger';
+  // One-line reason this insight appeared, shown smaller/muted under `text`.
+  explain: string;
 }
 
 export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetime' = '7d'): Insight[] {
@@ -1054,38 +1164,149 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
   const prev = dailySeries(store, days * 2).slice(0, days);
   const curRev = cur.reduce((s, d) => s + d.revenue, 0);
   const prevRev = prev.reduce((s, d) => s + d.revenue, 0);
+  const periodWord = range === '7d' ? 'week' : range === '1m' ? 'month' : 'period';
   if (prevRev > 0) {
     const pct = ((curRev - prevRev) / prevRev) * 100;
     if (Math.abs(pct) >= 1) {
-      out.push({ id: 'rev', icon: pct >= 0 ? '📈' : '📉', text: `Revenue ${pct >= 0 ? 'increased' : 'decreased'} ${Math.abs(pct).toFixed(1)}% vs previous ${range === '7d' ? 'week' : range === '1m' ? 'month' : 'period'}`, tone: pct >= 0 ? 'success' : 'warning' });
+      out.push({
+        id: 'rev', icon: pct >= 0 ? '📈' : '📉',
+        text: `Revenue ${pct >= 0 ? 'increased' : 'decreased'} ${Math.abs(pct).toFixed(1)}% vs previous ${periodWord}`,
+        tone: pct >= 0 ? 'success' : 'warning',
+        explain: `Compares total revenue this ${periodWord} (₦${curRev.toLocaleString()}) to the previous one (₦${prevRev.toLocaleString()}).`,
+      });
     }
   } else if (curRev > 0) {
-    out.push({ id: 'rev', icon: '📈', text: `Revenue is growing — keep going!`, tone: 'success' });
+    out.push({ id: 'rev', icon: '📈', text: `Revenue is growing — keep going!`, tone: 'success', explain: 'No revenue recorded in the prior period to compare against, so growth can\u2019t be zero.' });
   }
   const threshold = getLowStockThreshold();
   const low = store.products.filter(p => !p.discontinued && p.quantity > 0 && p.quantity <= threshold);
   if (!isStoreOnboarding(store) && low.length > 0) {
-    out.push({ id: 'low', icon: '⚠', text: `${low.length} product${low.length === 1 ? '' : 's'} need restocking`, tone: 'warning' });
+    out.push({
+      id: 'low', icon: '⚠', text: `${low.length} product${low.length === 1 ? '' : 's'} need restocking`, tone: 'warning',
+      explain: `${low.length} product${low.length === 1 ? '' : 's'} at or below your low-stock threshold of ${threshold} units.`,
+    });
   }
   const tally = new Map<string, number>();
+  const tallyValue = new Map<string, number>();
   store.sales
     .filter(s => new Date(s.date) >= daysAgo(days - 1))
-    .forEach(s => tally.set(s.productName, (tally.get(s.productName) || 0) + s.quantity));
-  const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (best) out.push({ id: 'best', icon: '⭐', text: `${best[0]} is your best seller ${range === '7d' ? 'this week' : range === '1m' ? 'this month' : 'overall'}`, tone: 'info' });
+    .forEach(s => {
+      tally.set(s.productName, (tally.get(s.productName) || 0) + s.quantity);
+      tallyValue.set(s.productName, (tallyValue.get(s.productName) || 0) + (s.total || 0));
+    });
+  // Best seller ranks by sales value first, quantity only as a tiebreaker —
+  // matches how "Best Seller" is defined for product badges below.
+  const best = [...tallyValue.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return (tally.get(b[0]) || 0) - (tally.get(a[0]) || 0);
+  })[0];
+  if (best) {
+    out.push({
+      id: 'best', icon: '⭐', text: `${best[0]} is your best seller ${range === '7d' ? 'this week' : range === '1m' ? 'this month' : 'overall'}`, tone: 'info',
+      explain: `Generated the highest sales value (₦${best[1].toLocaleString()}) ${periodWord === 'period' ? 'overall' : `this ${periodWord}`}.`,
+    });
+  }
   if (curRev > 0) {
     const savable = Math.round(curRev * 0.05 / 100) * 100;
-    if (savable >= 500) out.push({ id: 'save', icon: '💰', text: `Save ₦${savable.toLocaleString()} this ${range === '7d' ? 'week' : 'period'}`, tone: 'info' });
+    if (savable >= 500) out.push({
+      id: 'save', icon: '💰', text: `Save ₦${savable.toLocaleString()} this ${range === '7d' ? 'week' : 'period'}`, tone: 'info',
+      explain: `5% of this ${periodWord}'s revenue (₦${curRev.toLocaleString()}) — a common starting savings rate.`,
+    });
   }
   const ea = expenseAnalysis(store, ['Restock']);
   if (ea.trendPct > 20) {
-    out.push({ id: 'exp', icon: '🧾', text: `Expenses rose ${ea.trendPct.toFixed(0)}% this month. Largest: ${ea.largestCategory}`, tone: 'warning' });
+    out.push({
+      id: 'exp', icon: '🧾', text: `Expenses rose ${ea.trendPct.toFixed(0)}% this month. Largest: ${ea.largestCategory}`, tone: 'warning',
+      explain: `${ea.largestCategory} spending grew ${ea.trendPct.toFixed(0)}% month-over-month, more than any other category.`,
+    });
   }
   const rent = rentAnalysis(store);
   if (rent && rent.affordabilityPct > 30) {
-    out.push({ id: 'rent', icon: '🏠', text: `Rent is ${rent.affordabilityPct}% of monthly revenue — high. Consider growing sales.`, tone: rent.affordabilityPct > 50 ? 'danger' : 'warning' });
+    out.push({
+      id: 'rent', icon: '🏠', text: `Rent is ${rent.affordabilityPct}% of monthly revenue — high. Consider growing sales.`, tone: rent.affordabilityPct > 50 ? 'danger' : 'warning',
+      explain: `Rent divided by this month's revenue. Above 30% is generally considered high for a small retail business.`,
+    });
   }
   return out.slice(0, 6);
+}
+
+// ─── Product Insight Badges ─────────────────────────────────────────────────
+// Per-product labels shown on inventory/product cards, each with a short,
+// fixed-format explanation of why the product earned the badge.
+export interface ProductInsightBadge {
+  productId: string;
+  productName: string;
+  label: 'Best Seller' | 'Fast Mover' | 'High Sales' | 'Dormant Product';
+  explain: string;
+}
+
+export function getProductInsightBadges(store: StoreData, dormantDays = 30): ProductInsightBadge[] {
+  const badges: ProductInsightBadge[] = [];
+  const active = store.products.filter(p => !p.discontinued && !p.isService);
+  if (active.length === 0) return badges;
+
+  // Best Seller — this week, ranked by sales value first, quantity as tiebreak.
+  const weekCutoff = daysAgo(6);
+  const weekValue = new Map<string, number>();
+  const weekQty = new Map<string, number>();
+  store.sales.filter(s => new Date(s.date) >= weekCutoff).forEach(s => {
+    weekValue.set(s.productId, (weekValue.get(s.productId) || 0) + (s.total || 0));
+    weekQty.set(s.productId, (weekQty.get(s.productId) || 0) + s.quantity);
+  });
+  const bestSellerId = [...weekValue.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return (weekQty.get(b[0]) || 0) - (weekQty.get(a[0]) || 0);
+  })[0]?.[0];
+  if (bestSellerId) {
+    const p = active.find(p => p.id === bestSellerId);
+    if (p) badges.push({
+      productId: p.id, productName: p.name, label: 'Best Seller',
+      explain: `Generated the highest sales value this week (₦${(weekValue.get(p.id) || 0).toLocaleString()}). Ties are broken by quantity sold.`,
+    });
+  }
+
+  // Fast Mover — this month, top 3 by units sold.
+  const monthCutoff = daysAgo(29);
+  const monthQty = new Map<string, number>();
+  const monthValue = new Map<string, number>();
+  store.sales.filter(s => new Date(s.date) >= monthCutoff).forEach(s => {
+    monthQty.set(s.productId, (monthQty.get(s.productId) || 0) + s.quantity);
+    monthValue.set(s.productId, (monthValue.get(s.productId) || 0) + (s.total || 0));
+  });
+  [...monthQty.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([id, qty]) => {
+    const p = active.find(p => p.id === id);
+    if (p) badges.push({
+      productId: p.id, productName: p.name, label: 'Fast Mover',
+      explain: `Sold the highest number of units this month (${qty} unit${qty === 1 ? '' : 's'}).`,
+    });
+  });
+
+  // High Sales — this month, top 3 by revenue.
+  [...monthValue.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([id, val]) => {
+    const p = active.find(p => p.id === id);
+    if (p) badges.push({
+      productId: p.id, productName: p.name, label: 'High Sales',
+      explain: `Generated the highest revenue this month (₦${val.toLocaleString()}).`,
+    });
+  });
+
+  // Dormant Product — no sales in dormantDays, regardless of stock level.
+  const soldProductIds = new Set(store.sales.map(s => s.productId));
+  active.forEach(p => {
+    const lastSale = p.last_sold_at ? new Date(p.last_sold_at) : null;
+    const daysSince = lastSale ? daysBetween(lastSale, new Date()) : null;
+    const neverSold = !soldProductIds.has(p.id) && !lastSale;
+    if (neverSold || (daysSince !== null && daysSince >= dormantDays)) {
+      badges.push({
+        productId: p.id, productName: p.name, label: 'Dormant Product',
+        explain: neverSold
+          ? `No sales recorded since it was added.`
+          : `No sales for ${daysSince} days.`,
+      });
+    }
+  });
+
+  return badges;
 }
 
 // ─── Recommendations (original, enhanced) ─────────────────────────────────────

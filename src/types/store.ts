@@ -33,6 +33,10 @@ export interface Product {
   needsStockSetup?: boolean; // true when product was auto-created from a sale and hasn't had cost price / stock confirmed by the owner yet
   source?: 'voice_sale' | 'manual' | 'scan'; // how this product was first created
   backorderedQty?: number; // units sold while stock was at 0 (only when backorderSellingEnabled is on) — owed stock, settled via sync or cleared via delete
+  reorderLevel?: number; // owner-set (or Auto Fix-set) stock threshold that should trigger a restock advice card
+  promoPrice?: number; // temporary discounted sellingPrice, set by Auto Fix "create promotion" or manually
+  promoUntil?: string; // ISO date the promo price expires — POS/customer app should stop honoring it after this
+  promoReason?: string; // short human-readable reason the promo was created (e.g. "Clearing dead stock")
 }
 
 export interface InventoryMovement {

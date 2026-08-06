@@ -353,10 +353,12 @@ export default function Index() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Ensure body scroll is never left locked when switching tabs
+  // Ensure body scroll is never left locked on app load or when switching tabs
   useEffect(() => {
     forceUnlockBodyScroll();
-  }, [tab]);
+    const t = setTimeout(() => forceUnlockBodyScroll(), 50);
+    return () => clearTimeout(t);
+  }, [tab, store?.accessCode]);
 
   // Helper to normalize order status casing and old values
   const getNormalizedStatus = useCallback((status?: string): string => {

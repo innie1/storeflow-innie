@@ -23,5 +23,8 @@ export function useBodyScrollLock(isLocked: boolean = true) {
  */
 export function forceUnlockBodyScroll() {
   lockCount = 0;
-  document.body.style.overflow = '';
+  if (typeof document !== 'undefined') {
+    document.body.style.overflow = '';
+  }
 }
+

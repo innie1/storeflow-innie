@@ -8,7 +8,8 @@ import {
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
   generateNotifications, ActivityRange, ActivityBucket, generateFlowReport,
-  getTopOpportunities, getProfitLeaks, getRepaymentInsights, getSeasonalPredictions, getWeatherInsights, generateWeeklyRecap
+  getTopOpportunities, getProfitLeaks, getRepaymentInsights, getSeasonalPredictions, getWeatherInsights, generateWeeklyRecap,
+  getProductInsightBadges
 } from '@/lib/manager-intel';
 import { getLowStockThreshold } from '@/lib/settings';
 import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward, hydrateFlowMemoryFromCloud } from '@/lib/flow-memory';
@@ -16,6 +17,10 @@ import { showToast } from '@/components/Toast';
 import Mascot, { MascotBadge } from '@/components/Mascot';
 import { FlowIcon } from '@/components/FlowIcon';
 import NotificationDrawer from '@/components/NotificationDrawer';
+import AutoFixConfirmDialog from '@/components/AutoFixConfirmDialog';
+import FlowChat from '@/components/FlowChat';
+import { executeAutoFix, AutoFixSpec } from '@/lib/auto-fix';
+import { MessageCircle } from 'lucide-react';
 
 interface ManagerProps {
   store: StoreData;
@@ -540,6 +545,9 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   const [showPerformanceCalendar, setShowPerformanceCalendar] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [adviceLoading, setAdviceLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [autoFixTarget, setAutoFixTarget] = useState<AutoFixSpec | null>(null);
+  const [autoFixBusy, setAutoFixBusy] = useState(false);
   const [hasPatted, setHasPatted] = useState(() => localStorage.getItem('storeflow_flow_patted') === new Date().toISOString().split('T')[0]);
   const [showArchive, setShowArchive] = useState(false);
   const [showPatHearts, setShowPatHearts] = useState(false);
@@ -683,6 +691,15 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
       setAdviceReport(generateFlowReport(store));
       setAdviceReportVisible(true);
     }, 1500);
+  };
+
+  const handleAutoFixConfirmed = async () => {
+    if (!autoFixTarget) return;
+    setAutoFixBusy(true);
+    const result = await executeAutoFix(store, autoFixTarget, onUpdate);
+    setAutoFixBusy(false);
+    setAutoFixTarget(null);
+    showToast(result.message, result.ok ? 'success' : 'error');
   };
 
   const tabs: { id: ManagerTab; label: string; badge?: number }[] = [
@@ -1086,7 +1103,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     <div className="text-left min-w-0">
                       <h3 className="font-display font-bold text-sm truncate">Smart Restocking List</h3>
                       <p className="text-[10px] text-slate-400 leading-normal">
-                        {autoSuggest ? 'Capped to Business Balance & prioritized by velocity' : 'Estimated capital required to replenish low stock'}
+                        {autoSuggest ? 'Capped to Net Income & prioritized by velocity' : 'Estimated capital required to replenish low stock'}
                       </p>
                     </div>
                   </div>
@@ -1534,11 +1551,44 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               return (
                 <div key={i.id} className={`p-3 rounded-xl border flex items-start gap-3 ${tones[i.tone]}`}>
                   <span className="text-xl">{i.icon}</span>
-                  <p className="font-display font-semibold text-sm flex-1">{i.text}</p>
+                  <div className="flex-1">
+                    <p className="font-display font-semibold text-sm">{i.text}</p>
+                    <p className="text-xs opacity-70 mt-0.5">{i.explain}</p>
+                  </div>
                 </div>
               );
             })}
           </div>
+
+          {/* Product Insight Badges */}
+          {(() => {
+            const badges = getProductInsightBadges(store);
+            if (badges.length === 0) return null;
+            const badgeStyle: Record<string, string> = {
+              'Best Seller': 'bg-warning/10 border-warning/30 text-warning',
+              'Fast Mover': 'bg-primary/10 border-primary/30 text-primary',
+              'High Sales': 'bg-success/10 border-success/30 text-success',
+              'Dormant Product': 'bg-muted/40 border-border text-muted-foreground',
+            };
+            return (
+              <div className="space-y-2">
+                <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider">Product Insights</h3>
+                <div className="space-y-2">
+                  {badges.slice(0, 8).map((b, idx) => (
+                    <div key={`${b.productId}-${b.label}-${idx}`} className={`p-3 rounded-xl border flex items-start gap-3 ${badgeStyle[b.label]}`}>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-display font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full border border-current/30">{b.label}</span>
+                          <p className="font-display font-semibold text-sm">{b.productName}</p>
+                        </div>
+                        <p className="text-xs opacity-70 mt-0.5">{b.explain}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1554,10 +1604,17 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 <p className="text-xs text-muted-foreground">Analysing your sales, inventory, expenses &amp; debts</p>
               </div>
             </div>
-            <button onClick={handleGetAdvice} disabled={adviceLoading}
-              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-70">
-              {adviceLoading ? '⏳ Analysing...' : '✨ Get Fresh Advice'}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={handleGetAdvice} disabled={adviceLoading}
+                className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-70">
+                {adviceLoading ? '⏳ Analysing...' : '✨ Get Advice'}
+              </button>
+              <button onClick={() => setChatOpen(true)}
+                className="flex-1 py-3 rounded-xl bg-surface-2/60 border border-primary/30 text-foreground font-display font-bold text-sm flex items-center justify-center gap-2">
+                <MessageCircle className="w-4 h-4" />
+                Chat with Flow
+              </button>
+            </div>
           </div>
 
           {/* Past Notifications Archive Button */}
@@ -1659,6 +1716,26 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                           ))}
                         </div>
                       )}
+                      {(a.goTo || a.autoFix) && (
+                        <div className="flex gap-2 mt-2.5">
+                          {a.goTo && (
+                            <button
+                              onClick={() => onNavigate?.(a.goTo!)}
+                              className="flex-1 py-2 rounded-lg text-xs font-display font-bold border border-current/25 active:scale-[0.97] transition"
+                            >
+                              Go to Action
+                            </button>
+                          )}
+                          {a.autoFix && (
+                            <button
+                              onClick={() => setAutoFixTarget(a.autoFix!)}
+                              className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-foreground/90 text-background active:scale-[0.97] transition"
+                            >
+                              ⚡ Auto Fix
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1729,6 +1806,25 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           onClose={() => setShowNotifications(false)}
           onUpdate={onUpdate}
           onNavigate={onNavigate}
+        />,
+        document.body
+      )}
+      {chatOpen && createPortal(
+        <FlowChat
+          store={store}
+          orders={orders}
+          onClose={() => setChatOpen(false)}
+          onNavigate={onNavigate}
+        />,
+        document.body
+      )}
+      {autoFixTarget && createPortal(
+        <AutoFixConfirmDialog
+          store={store}
+          spec={autoFixTarget}
+          busy={autoFixBusy}
+          onCancel={() => (autoFixBusy ? null : setAutoFixTarget(null))}
+          onConfirm={handleAutoFixConfirmed}
         />,
         document.body
       )}

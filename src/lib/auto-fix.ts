@@ -1,0 +1,146 @@
+// Flow Auto Fix — turns an AdviceCard's suggestion into an applied change.
+//
+// Design choices, on purpose:
+// - Every local (non-PO) fix goes through the same `updateProduct()` used by
+//   manual edits elsewhere in the app, so price history, sync flags, and
+//   validation all behave identically to a human making the same edit.
+// - Nothing here writes anywhere without the caller having already passed
+//   the store-code confirmation gate (see AutoFixConfirmDialog.tsx). This
+//   file assumes confirmation already happened — it does not re-check it.
+// - Purchase orders are the one exception that isn't a local store mutation:
+//   they're a new Supabase-only record (public.purchase_orders), since nothing
+//   like it exists in the local StoreData shape today.
+
+import { StoreData, Product } from '@/types/store';
+import { updateProduct } from '@/lib/store-data';
+import type { Json } from '@/integrations/supabase/types';
+
+export type AutoFixType =
+  | 'adjust_reorder_level'
+  | 'update_price'
+  | 'create_promotion'
+  | 'archive_product'
+  | 'generate_purchase_order';
+
+export interface AutoFixSpec {
+  type: AutoFixType;
+  // One human-readable line describing exactly what will change — shown in
+  // the confirmation dialog verbatim, so it must be accurate and complete.
+  summary: string;
+  payload: any;
+}
+
+export interface AutoFixResult {
+  ok: boolean;
+  store?: StoreData;
+  message: string;
+}
+
+// Applies every Auto Fix type EXCEPT generate_purchase_order (that one is
+// async / cloud-only — see createPurchaseOrder below). Returns the updated
+// store; caller is responsible for calling saveStore + onUpdate, same as
+// every other mutation path in this app.
+export function applyAutoFix(store: StoreData, spec: AutoFixSpec): AutoFixResult {
+  switch (spec.type) {
+    case 'adjust_reorder_level': {
+      const items: { productId: string; reorderLevel: number }[] = spec.payload.items || [
+        { productId: spec.payload.productId, reorderLevel: spec.payload.reorderLevel },
+      ];
+      let updated = store;
+      for (const item of items) {
+        updated = updateProduct(updated, item.productId, { reorderLevel: item.reorderLevel });
+      }
+      return { ok: true, store: updated, message: `Reorder level${items.length === 1 ? '' : 's'} updated on ${items.length} product${items.length === 1 ? '' : 's'}.` };
+    }
+
+    case 'update_price': {
+      const { productId, newPrice } = spec.payload;
+      if (typeof newPrice !== 'number' || newPrice <= 0) {
+        return { ok: false, message: 'Invalid price — nothing changed.' };
+      }
+      const updated = updateProduct(store, productId, { sellingPrice: newPrice });
+      return { ok: true, store: updated, message: `Price updated to ₦${newPrice.toLocaleString()}.` };
+    }
+
+    case 'create_promotion': {
+      const { productIds, discountPct, days } = spec.payload as { productIds: string[]; discountPct: number; days: number; reason?: string };
+      const until = new Date();
+      until.setDate(until.getDate() + (days || 14));
+      let updated = store;
+      for (const id of productIds) {
+        const p = updated.products.find(pr => pr.id === id);
+        if (!p) continue;
+        const promoPrice = Math.max(1, Math.round(p.sellingPrice * (1 - discountPct / 100)));
+        updated = updateProduct(updated, id, {
+          promoPrice,
+          promoUntil: until.toISOString(),
+          promoReason: spec.payload.reason || `${discountPct}% promo`,
+        } as Partial<Product>);
+      }
+      return { ok: true, store: updated, message: `Promo price applied to ${productIds.length} product${productIds.length === 1 ? '' : 's'} for ${days || 14} days.` };
+    }
+
+    case 'archive_product': {
+      const { productId } = spec.payload;
+      const updated = updateProduct(store, productId, { discontinued: true });
+      return { ok: true, store: updated, message: 'Product archived — hidden from active inventory, sales history kept.' };
+    }
+
+    default:
+      return { ok: false, message: 'This Auto Fix type is handled separately.' };
+  }
+}
+
+export interface PurchaseOrderItem {
+  productId: string;
+  name: string;
+  qty: number;
+  costPrice: number;
+}
+
+// Purchase orders are stored in Supabase only (public.purchase_orders),
+// scoped by store_id + is_store_member() RLS — same pattern as `restocks`.
+// Requires store.id (the Supabase stores.id UUID, present once the store
+// has synced to the cloud at least once).
+export async function createPurchaseOrder(store: StoreData, items: PurchaseOrderItem[], supplierName?: string): Promise<AutoFixResult> {
+  if (!store.id) {
+    return { ok: false, message: "Can't create a purchase order until this store has synced to the cloud at least once." };
+  }
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const totalCost = items.reduce((s, it) => s + it.qty * it.costPrice, 0);
+    const { error } = await supabase.from('purchase_orders').insert({
+      store_id: store.id,
+      supplier_name: supplierName || null,
+      items: items as unknown as Json,
+      total_cost: totalCost,
+      status: 'draft',
+      source: 'auto_fix',
+    });
+    if (error) return { ok: false, message: `Couldn't save the purchase order: ${error.message}` };
+    return { ok: true, message: `Draft purchase order created — ${items.length} item${items.length === 1 ? '' : 's'}, ₦${totalCost.toLocaleString()} total.` };
+  } catch (e: any) {
+    return { ok: false, message: `Couldn't reach the server: ${e?.message || 'unknown error'}` };
+  }
+}
+
+// Convenience wrapper matching the AdviceCard.autoFix shape produced by
+// generateAdvice() for generate_purchase_order cards.
+export async function runGeneratePurchaseOrder(store: StoreData, spec: AutoFixSpec): Promise<AutoFixResult> {
+  const items: PurchaseOrderItem[] = spec.payload.items;
+  return createPurchaseOrder(store, items, spec.payload.supplierName);
+}
+
+// Single entry point the UI calls — handles both the synchronous local
+// fixes and the async purchase-order path, and persists local changes via
+// saveStore the same way every other edit in the app does.
+export async function executeAutoFix(store: StoreData, spec: AutoFixSpec, onUpdate: (s: StoreData) => void): Promise<AutoFixResult> {
+  if (spec.type === 'generate_purchase_order') {
+    return runGeneratePurchaseOrder(store, spec);
+  }
+  const result = applyAutoFix(store, spec);
+  if (result.ok && result.store) {
+    onUpdate(result.store);
+  }
+  return result;
+}
