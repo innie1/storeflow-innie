@@ -1,11 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { getDashboardStats, getTopSellers, getSalesTargetStatus } from '@/lib/store-data';
 import { generatePerformanceSummary } from '@/lib/reports';
 import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import Mascot, { MascotBadge } from '@/components/Mascot';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ChevronDown, Check } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths } from 'date-fns';
 
@@ -70,6 +69,21 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
   const [revenuePeriod, setRevenuePeriod] = useState<MetricPeriod>(() => loadStoredPeriod(store.accessCode, 'revenue'));
   const [netProfitPeriod, setNetProfitPeriod] = useState<MetricPeriod>(() => loadStoredPeriod(store.accessCode, 'netProfit'));
   const [periodSheetFor, setPeriodSheetFor] = useState<'revenue' | 'netProfit' | null>(null);
+
+  // Scroll lock for the period picker sheet below. Deliberately not using
+  // Radix's built-in scroll lock here (react-remove-scroll) — on mobile it
+  // was occasionally failing to release its touchmove blocker on close,
+  // freezing page scroll app-wide while taps still worked. A plain
+  // useEffect cleanup is guaranteed to run on close/unmount, so it can't
+  // leak the same way.
+  useEffect(() => {
+    if (periodSheetFor === null) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [periodSheetFor]);
 
   const getPeriodTotals = (period: MetricPeriod) => {
     const start = periodStart(period);
@@ -543,32 +557,39 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
             </div>
           </button>
 
-          <Sheet open={periodSheetFor !== null} onOpenChange={(open) => !open && setPeriodSheetFor(null)}>
-            <SheetContent side="bottom" className="rounded-t-2xl p-4 max-h-[60vh]">
-              <SheetHeader className="mb-2">
-                <SheetTitle className="text-base">
+          {periodSheetFor !== null && (
+            <div
+              className="fixed inset-0 z-50"
+              onClick={() => setPeriodSheetFor(null)}
+            >
+              <div className="absolute inset-0 bg-black/80 animate-in fade-in-0 duration-200" />
+              <div
+                className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-background p-4 max-h-[60vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-base font-display font-bold mb-2">
                   {periodSheetFor === 'revenue' ? 'Revenue period' : 'Net Profit period'}
-                </SheetTitle>
-              </SheetHeader>
-              <div className="flex flex-col gap-1 pb-2">
-                {PERIOD_OPTIONS.map((period) => {
-                  const active = periodSheetFor === 'revenue' ? revenuePeriod === period : netProfitPeriod === period;
-                  return (
-                    <button
-                      key={period}
-                      onClick={() => selectPeriod(period)}
-                      className={`w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-display font-semibold transition active:scale-[0.98] cursor-pointer ${
-                        active ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2/60'
-                      }`}
-                    >
-                      {PERIOD_LABELS[period]}
-                      {active && <Check className="w-4 h-4" />}
-                    </button>
-                  );
-                })}
+                </h3>
+                <div className="flex flex-col gap-1 pb-2">
+                  {PERIOD_OPTIONS.map((period) => {
+                    const active = periodSheetFor === 'revenue' ? revenuePeriod === period : netProfitPeriod === period;
+                    return (
+                      <button
+                        key={period}
+                        onClick={() => selectPeriod(period)}
+                        className={`w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-display font-semibold transition active:scale-[0.98] cursor-pointer ${
+                          active ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2/60'
+                        }`}
+                      >
+                        {PERIOD_LABELS[period]}
+                        {active && <Check className="w-4 h-4" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </SheetContent>
-          </Sheet>
+            </div>
+          )}
 
           <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card">
             <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5">
