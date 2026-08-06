@@ -21,7 +21,10 @@ export default defineConfig(({ mode }) => ({
       srcDir: "src",
       filename: "sw.ts",
       registerType: "autoUpdate",
-      devOptions: { enabled: true, type: "module" },
+      // Disabled in dev: an active SW during `vite dev` intercepts requests with
+      // NetworkFirst/StaleWhileRevalidate, which fights Vite's HMR and serves stale
+      // files after edits — this was the cause of the "stuck / changes not showing" bug.
+      devOptions: { enabled: false },
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
       manifest: {
         name: "StoreFlow",

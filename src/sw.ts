@@ -19,7 +19,22 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 self.skipWaiting();
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      // The 'html' runtime cache (NetworkFirst below) can hold a stale
+      // index.html from a previous deploy, referencing JS chunk filenames
+      // that no longer exist on the server post-deploy. On slow networks
+      // NetworkFirst silently falls back to that stale HTML, the browser
+      // requests the old hashed chunks, gets 404s, and the app fails to
+      // boot — looking "stuck" until some interaction forces a fresh
+      // navigation. Purge it on every activation so the very next
+      // navigation is guaranteed to be fresh (or fall through to the
+      // precached index.html via setCatchHandler below, which always
+      // matches the current deploy).
+      caches.delete('html'),
+    ])
+  );
 });
 
 registerRoute(
