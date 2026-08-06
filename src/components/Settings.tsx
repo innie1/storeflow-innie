@@ -4016,7 +4016,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           ['Is my data safe?', 'Yes. StoreFlow stores and protects your business information securely on your device, with cloud backup to Supabase for stores that enable it.'],
           ['Can I print receipts on a Bluetooth thermal printer?', 'Yes. Go to Settings → Printer Settings, choose Bluetooth, then tap "Pair Printer & Test Print". This only works in Chrome or Edge (Android or desktop) — not on iPhone/Safari, which will automatically use the regular print dialog instead.'],
           ['Will I get notified when a new order comes in, even if the app is closed?', 'Yes, if you turn it on. Go to Marketplace Settings → Notifications and enable "Push Notifications". This sends a real phone notification, not just an in-app one — supported on Chrome/Edge (Android or desktop) and Safari 16.4+ on iOS when the app is added to your home screen.'],
-          ['Why does Smart Restock sometimes show items I can\u2019t afford yet?', 'Smart Restock\u2019s budget is based on your Net Income. If it\u2019s too low (or negative) to fund a full restock, the list still shows what\u2019s most critical, ranked by priority, so you know what to prioritize even before you have the cash — you can still select items to fund with new money (a loan, top-up, etc.) if something can\u2019t wait.'],
+          ['Why does Smart Restock sometimes show items I can\u2019t afford yet?', 'Smart Restock\u2019s budget is based on your Business Balance. If it\u2019s too low (or negative) to fund a full restock, the list still shows what\u2019s most critical, ranked by priority, so you know what to prioritize even before you have the cash — you can still select items to fund with new money (a loan, top-up, etc.) if something can\u2019t wait.'],
           ['What happens after I approve a Smart Restock buy list?', 'Approved items are added to Inventory → Planned Restocks. Stock is NOT added automatically — go buy the goods, then come back and mark each item received to add it to your actual inventory.'],
           ['What\u2019s the Restock Score on my dashboard?', 'It shows what percentage of your restock spending over the last 90 days went into products that are actually selling, versus products that are dead stock or moving slowly. Higher is better.'],
           ['Can I get reminders for rent or loan repayments?', 'Yes. Set up a recurring bill in Expenses → Recurring Bills, or add a due date when registering a loan in ROI Tracker → Loans. You\u2019ll get a reminder starting 3 days before it\u2019s due.'],
@@ -4774,7 +4774,7 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
             </div>
           )}
           <label className="flex items-center justify-between text-xs font-bold text-foreground cursor-pointer select-none pt-1.5 border-t border-border/60">
-            <span>Automated Net Income Deduction</span>
+            <span>Automated Business Balance Deduction</span>
             <input 
               type="checkbox" 
               checked={!!g.autoSaveEnabled} 
@@ -4834,7 +4834,7 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
         </div>
 
         <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 text-xs text-primary">
-          ✨ Auto-deductions occur on login/save. Capped to available Net Income to prevent negative balances.
+          ✨ Auto-deductions occur on login/save. Capped to available Business Balance to prevent negative balances.
         </div>
 
         <button onClick={() => onSave(g)} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 cursor-pointer">Save Plan</button>
@@ -4909,8 +4909,8 @@ function ExportSheet({ store, onClose }: { store: StoreData; onClose: () => void
       heading('OVERVIEW');
       row('Gross Revenue', `\u20a6${stats.totalRevenue.toLocaleString()}`);
       row('Total Expenses', `\u20a6${stats.totalExpenses.toLocaleString()}`);
-      row('Net Income', `\u20a6${stats.netIncome.toLocaleString()}`, true);
-      row('Profit', `\u20a6${stats.totalProfit.toLocaleString()}`, true);
+      row('Business Balance', `\u20a6${stats.netIncome.toLocaleString()}`, true);
+      row('Net Profit', `\u20a6${stats.totalProfit.toLocaleString()}`, true);
       row('Inventory Value', `\u20a6${stats.inventoryValue.toLocaleString()}`);
       row('Total Sales', `${stats.totalSales}`);
       row('Products', `${stats.totalProducts}`);

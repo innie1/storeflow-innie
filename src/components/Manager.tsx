@@ -1086,7 +1086,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     <div className="text-left min-w-0">
                       <h3 className="font-display font-bold text-sm truncate">Smart Restocking List</h3>
                       <p className="text-[10px] text-slate-400 leading-normal">
-                        {autoSuggest ? 'Capped to Net Income & prioritized by velocity' : 'Estimated capital required to replenish low stock'}
+                        {autoSuggest ? 'Capped to Business Balance & prioritized by velocity' : 'Estimated capital required to replenish low stock'}
                       </p>
                     </div>
                   </div>

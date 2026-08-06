@@ -21,8 +21,8 @@ export function generatePerformanceSummary(store: StoreData): string {
   r += `💰 OVERVIEW\n`;
   r += `Gross Revenue: ₦${stats.totalRevenue.toLocaleString()}\n`;
   r += `Total Expenses: ₦${stats.totalExpenses.toLocaleString()}\n`;
-  r += `Net Income: ₦${stats.netIncome.toLocaleString()}\n`;
-  r += `Profit: ₦${stats.totalProfit.toLocaleString()}\n`;
+  r += `Business Balance: ₦${stats.netIncome.toLocaleString()}\n`;
+  r += `Net Profit: ₦${stats.totalProfit.toLocaleString()}\n`;
   r += `Inventory Value: ₦${stats.inventoryValue.toLocaleString()}\n`;
   r += `Total Sales: ${stats.totalSales}\n`;
   r += `Products: ${stats.totalProducts}\n\n`;
@@ -79,8 +79,8 @@ export function generateFullTextReport(store: StoreData): string {
   lines.push(`💰 OVERVIEW`);
   lines.push(`Gross Revenue: ₦${stats.totalRevenue.toLocaleString()}`);
   lines.push(`Total Expenses: ₦${stats.totalExpenses.toLocaleString()}`);
-  lines.push(`Net Income: ₦${stats.netIncome.toLocaleString()}`);
-  lines.push(`Profit: ₦${stats.totalProfit.toLocaleString()}`);
+  lines.push(`Business Balance: ₦${stats.netIncome.toLocaleString()}`);
+  lines.push(`Net Profit: ₦${stats.totalProfit.toLocaleString()}`);
   lines.push(`Inventory Value: ₦${stats.inventoryValue.toLocaleString()}`);
   lines.push(`Cash Balance: ₦${(store.cashBalance || 0).toLocaleString()}`);
   lines.push(`Bank Balance: ₦${(store.bankBalance || 0).toLocaleString()}`);

@@ -348,7 +348,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
                 </p>
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground uppercase font-bold">Net Income</span>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold">Business Balance</span>
                 <p className={`font-display font-bold text-lg mt-0.5 ${netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
                   ₦{netIncome.toLocaleString()}
                 </p>

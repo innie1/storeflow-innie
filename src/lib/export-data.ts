@@ -69,9 +69,9 @@ export function exportHistoryPDF(store: StoreData) {
   doc.setFontSize(10);
   const summary = [
     `Revenue: NGN ${stats.totalRevenue.toLocaleString()}`,
-    `Profit: NGN ${stats.totalProfit.toLocaleString()}`,
+    `Net Profit: NGN ${stats.totalProfit.toLocaleString()}`,
     `Expenses: NGN ${stats.totalExpenses.toLocaleString()}`,
-    `Net Income: NGN ${stats.netIncome.toLocaleString()}`,
+    `Business Balance: NGN ${stats.netIncome.toLocaleString()}`,
     `Sales count: ${stats.totalSales}`,
   ];
   summary.forEach(line => { doc.text(line, margin, y); y += 5; });
@@ -142,9 +142,9 @@ export function exportROICSV(store: StoreData) {
     ['Generated', new Date().toLocaleString()],
     ['Total Invested', totalInvested],
     ['Total Revenue', stats.totalRevenue],
-    ['Total Profit', stats.totalProfit],
+    ['Total Net Profit', stats.totalProfit],
     ['Total Expenses', stats.totalExpenses],
-    ['Net Income', stats.netIncome],
+    ['Business Balance', stats.netIncome],
     ['ROI %', roi.toFixed(2)],
     [],
     ['Investment Date', 'Type', 'Amount', 'Note'],
@@ -184,9 +184,9 @@ export function exportROIPDF(store: StoreData) {
   const lines = [
     `Total Invested:   NGN ${totalInvested.toLocaleString()}`,
     `Total Revenue:    NGN ${stats.totalRevenue.toLocaleString()}`,
-    `Total Profit:     NGN ${stats.totalProfit.toLocaleString()}`,
+    `Total Net Profit: NGN ${stats.totalProfit.toLocaleString()}`,
     `Total Expenses:   NGN ${stats.totalExpenses.toLocaleString()}`,
-    `Net Income:       NGN ${stats.netIncome.toLocaleString()}`,
+    `Business Balance: NGN ${stats.netIncome.toLocaleString()}`,
     `Inventory Value:  NGN ${stats.inventoryValue.toLocaleString()}`,
   ];
   lines.forEach(l => { doc.text(l, margin, y); y += 6; });

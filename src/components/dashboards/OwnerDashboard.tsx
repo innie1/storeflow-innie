@@ -5,6 +5,42 @@ import { generatePerformanceSummary } from '@/lib/reports';
 import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import Mascot, { MascotBadge } from '@/components/Mascot';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { ChevronDown, Check } from 'lucide-react';
+import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths } from 'date-fns';
+
+// ---------- Metric reporting period (Revenue / Net Profit) ----------
+
+type MetricPeriod = 'today' | 'week' | 'month' | '3months' | 'year' | 'lifetime';
+
+const PERIOD_LABELS: Record<MetricPeriod, string> = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  '3months': 'Last 3 Months',
+  year: 'This Year',
+  lifetime: 'Lifetime',
+};
+
+const PERIOD_OPTIONS: MetricPeriod[] = ['today', 'week', 'month', '3months', 'year', 'lifetime'];
+
+function periodStart(period: MetricPeriod): number | null {
+  const now = new Date();
+  switch (period) {
+    case 'today': return startOfDay(now).getTime();
+    case 'week': return startOfWeek(now).getTime();
+    case 'month': return startOfMonth(now).getTime();
+    case '3months': return startOfDay(subMonths(now, 3)).getTime();
+    case 'year': return startOfYear(now).getTime();
+    case 'lifetime': return null;
+  }
+}
+
+function loadStoredPeriod(accessCode: string, metric: 'revenue' | 'netProfit'): MetricPeriod {
+  if (typeof localStorage === 'undefined') return 'lifetime';
+  const raw = localStorage.getItem(`storeflow_dash_period_${accessCode}_${metric}`);
+  return (PERIOD_OPTIONS as string[]).includes(raw || '') ? (raw as MetricPeriod) : 'lifetime';
+}
 
 interface OwnerDashboardProps {
   store: StoreData;
@@ -29,6 +65,34 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
   const [trendRange, setTrendRange] = useState<'today' | '1w' | '14d' | '30d' | 'all'>('14d');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+
+  // Revenue / Net Profit reporting period — remembered per store, per metric
+  const [revenuePeriod, setRevenuePeriod] = useState<MetricPeriod>(() => loadStoredPeriod(store.accessCode, 'revenue'));
+  const [netProfitPeriod, setNetProfitPeriod] = useState<MetricPeriod>(() => loadStoredPeriod(store.accessCode, 'netProfit'));
+  const [periodSheetFor, setPeriodSheetFor] = useState<'revenue' | 'netProfit' | null>(null);
+
+  const getPeriodTotals = (period: MetricPeriod) => {
+    const start = periodStart(period);
+    const sales = start === null ? store.sales : store.sales.filter(s => new Date(s.date).getTime() >= start);
+    return {
+      revenue: sales.reduce((sum, s) => sum + s.total, 0),
+      profit: sales.reduce((sum, s) => sum + s.profit, 0),
+    };
+  };
+
+  const revenuePeriodStats = useMemo(() => getPeriodTotals(revenuePeriod), [store.sales, revenuePeriod]);
+  const netProfitPeriodStats = useMemo(() => getPeriodTotals(netProfitPeriod), [store.sales, netProfitPeriod]);
+
+  const selectPeriod = (period: MetricPeriod) => {
+    if (periodSheetFor === 'revenue') {
+      setRevenuePeriod(period);
+      if (typeof localStorage !== 'undefined') localStorage.setItem(`storeflow_dash_period_${store.accessCode}_revenue`, period);
+    } else if (periodSheetFor === 'netProfit') {
+      setNetProfitPeriod(period);
+      if (typeof localStorage !== 'undefined') localStorage.setItem(`storeflow_dash_period_${store.accessCode}_netProfit`, period);
+    }
+    setPeriodSheetFor(null);
+  };
 
   const toggleBreakdown = (type: BreakdownType) => {
     setActiveBreakdown(prev => (prev === type ? null : type));
@@ -292,9 +356,9 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
     return buckets;
   }, [store.sales, trendRange]);
 
-  const profitTone = stats.totalProfit >= 0 ? 'text-success' : 'text-destructive';
-  const profitSign = stats.totalProfit >= 0 ? '+' : '−';
-  const profitAbs = Math.abs(stats.totalProfit);
+  const profitTone = netProfitPeriodStats.profit >= 0 ? 'text-success' : 'text-destructive';
+  const profitSign = netProfitPeriodStats.profit >= 0 ? '+' : '−';
+  const profitAbs = Math.abs(netProfitPeriodStats.profit);
 
   const managerEnabled = (store.managerSettings ?? DEFAULT_MANAGER_SETTINGS).enabled;
   const mgrSettings = store.managerSettings ?? DEFAULT_MANAGER_SETTINGS;
@@ -436,16 +500,38 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
               activeBreakdown === 'revenue' ? 'border-yellow-500/80 ring-1 ring-yellow-500/40 bg-surface-2/40' : 'border-border/40 hover:bg-surface-2/40'
             }`}
           >
-            <p className="text-sm text-muted-foreground font-display">Revenue</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground font-display">Revenue</p>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); setPeriodSheetFor('revenue'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPeriodSheetFor('revenue'); } }}
+                className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground font-display font-semibold uppercase tracking-wide hover:text-foreground active:scale-95 transition cursor-pointer"
+              >
+                {PERIOD_LABELS[revenuePeriod]} <ChevronDown className="w-3 h-3" />
+              </span>
+            </div>
             <p className="font-display font-bold text-[2.4rem] leading-tight text-yellow-500 tracking-tight">
-              ₦{stats.totalRevenue.toLocaleString()}
+              ₦{revenuePeriodStats.revenue.toLocaleString()}
             </p>
-            <p className={`text-sm font-display font-semibold mt-1 ${profitTone}`}>
-              {profitSign}₦{profitAbs.toLocaleString()} profit
-            </p>
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <p className={`text-sm font-display font-semibold ${profitTone}`}>
+                {profitSign}₦{profitAbs.toLocaleString()} Net Profit
+              </p>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); setPeriodSheetFor('netProfit'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPeriodSheetFor('netProfit'); } }}
+                className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground font-display font-semibold uppercase tracking-wide hover:text-foreground active:scale-95 transition cursor-pointer shrink-0"
+              >
+                {PERIOD_LABELS[netProfitPeriod]} <ChevronDown className="w-3 h-3" />
+              </span>
+            </div>
             <div className="mt-2 pt-2 border-t border-border flex items-end justify-between">
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Net Income</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Business Balance</p>
                 <p className={`font-display font-bold text-lg ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {stats.netIncome >= 0 ? '' : '−'}₦{Math.abs(stats.netIncome).toLocaleString()}
                 </p>
@@ -456,6 +542,33 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
               </div>
             </div>
           </button>
+
+          <Sheet open={periodSheetFor !== null} onOpenChange={(open) => !open && setPeriodSheetFor(null)}>
+            <SheetContent side="bottom" className="rounded-t-2xl p-4 max-h-[60vh]">
+              <SheetHeader className="mb-2">
+                <SheetTitle className="text-base">
+                  {periodSheetFor === 'revenue' ? 'Revenue period' : 'Net Profit period'}
+                </SheetTitle>
+              </SheetHeader>
+              <div className="flex flex-col gap-1 pb-2">
+                {PERIOD_OPTIONS.map((period) => {
+                  const active = periodSheetFor === 'revenue' ? revenuePeriod === period : netProfitPeriod === period;
+                  return (
+                    <button
+                      key={period}
+                      onClick={() => selectPeriod(period)}
+                      className={`w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-display font-semibold transition active:scale-[0.98] cursor-pointer ${
+                        active ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2/60'
+                      }`}
+                    >
+                      {PERIOD_LABELS[period]}
+                      {active && <Check className="w-4 h-4" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </SheetContent>
+          </Sheet>
 
           <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card">
             <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5">
@@ -624,7 +737,7 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
 
           {activeBreakdown === 'profit' && (
             <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card space-y-2 animate-fade-in text-left">
-              <h3 className="font-display font-bold text-sm text-success">Profit Breakdown</h3>
+              <h3 className="font-display font-bold text-sm text-success">Net Profit Breakdown</h3>
               {getProfitBreakdown().length === 0 ? (
                 <p className="text-sm text-muted-foreground">No sales yet</p>
               ) : (
@@ -852,7 +965,7 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
                       wrapperStyle={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}
                     />
                     <Line type="monotone" dataKey="total" name="Revenue" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="profit" name="Profit" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 2 }} />
+                    <Line type="monotone" dataKey="profit" name="Net Profit" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 2 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
