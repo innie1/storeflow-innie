@@ -267,7 +267,7 @@ export function healthScore(store: StoreData): HealthScore {
 export interface SalesAnalysis {
   fastMovers: { name: string; qty: number; revenue: number }[];
   slowMovers: { name: string; qty: number; daysInStock: number }[];
-  neverSold: { name: string; daysInStock: number }[];
+  neverSold: { id: string; name: string; daysInStock: number }[];
   coPurchases: { a: string; b: string; count: number }[];
   topDay: string;
   topDayRevenue: number;
@@ -292,7 +292,7 @@ export function analyzeSales(store: StoreData): SalesAnalysis {
   store.products.filter(p => !p.discontinued).forEach(p => {
     const daysInStock = p.addedAt ? Math.floor((Date.now() - new Date(p.addedAt).getTime()) / 86400000) : 0;
     if (!soldIds.has(p.id)) {
-      if (daysInStock > 7) neverSold.push({ name: p.name, daysInStock });
+      if (daysInStock > 7) neverSold.push({ id: p.id, name: p.name, daysInStock });
     } else {
       const qty = tally.get(p.id)?.qty || 0;
       if (qty < 3) slowMovers.push({ name: p.name, qty, daysInStock });
@@ -1533,7 +1533,7 @@ export function generateFlowReport(store: StoreData): string {
   // 4. Debt & Cash Flow
   text += `### 💳 Outstanding Debts & Cash Flow\n`;
   if (pending.totalOwed > 0) {
-    text += `Customers owe your store **₦${pending.totalOwed.toLocaleString()}** across ${pending.pendingCount} pending payment(s). `;
+    text += `Customers owe your store **₦${pending.totalOwed.toLocaleString()}** across ${pending.list.length} pending payment(s). `;
     if (pending.overdue.length > 0) {
       text += `Of these, **${pending.overdue.length} payment(s) are overdue**. This is tying up your working capital, making it harder to restock. I suggest sending a WhatsApp reminder directly from the 'Pending' tab to collect these funds. \n\n`;
     } else {

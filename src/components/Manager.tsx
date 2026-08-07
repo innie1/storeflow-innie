@@ -18,9 +18,10 @@ import Mascot, { MascotBadge } from '@/components/Mascot';
 import { FlowIcon } from '@/components/FlowIcon';
 import NotificationDrawer from '@/components/NotificationDrawer';
 import AutoFixConfirmDialog from '@/components/AutoFixConfirmDialog';
+import PurchaseOrdersList from '@/components/PurchaseOrdersList';
 import FlowChat from '@/components/FlowChat';
 import { executeAutoFix, AutoFixSpec } from '@/lib/auto-fix';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Package } from 'lucide-react';
 
 interface ManagerProps {
   store: StoreData;
@@ -546,6 +547,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   const [showNotifications, setShowNotifications] = useState(false);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [poListOpen, setPoListOpen] = useState(false);
   const [autoFixTarget, setAutoFixTarget] = useState<AutoFixSpec | null>(null);
   const [autoFixBusy, setAutoFixBusy] = useState(false);
   const [hasPatted, setHasPatted] = useState(() => localStorage.getItem('storeflow_flow_patted') === new Date().toISOString().split('T')[0]);
@@ -696,7 +698,11 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   const handleAutoFixConfirmed = async () => {
     if (!autoFixTarget) return;
     setAutoFixBusy(true);
-    const result = await executeAutoFix(store, autoFixTarget, onUpdate);
+    const minVisible = new Promise(resolve => setTimeout(resolve, 850));
+    const [result] = await Promise.all([
+      executeAutoFix(store, autoFixTarget, onUpdate),
+      minVisible,
+    ]);
     setAutoFixBusy(false);
     setAutoFixTarget(null);
     showToast(result.message, result.ok ? 'success' : 'error');
@@ -1115,7 +1121,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                         checked={autoSuggest}
                         onChange={e => {
                           const nextSettings = { 
-                            ...(store.managerSettings || {}), 
+                            ...(store.managerSettings || DEFAULT_MANAGER_SETTINGS), 
                             autoSuggestRestock: e.target.checked 
                           };
                           onUpdate({
@@ -1615,6 +1621,13 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 Chat with Flow
               </button>
             </div>
+            <button
+              onClick={() => setPoListOpen(true)}
+              className="w-full mt-2 py-2 rounded-lg text-xs font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center justify-center gap-1.5"
+            >
+              <Package className="w-3.5 h-3.5" />
+              View Purchase Orders
+            </button>
           </div>
 
           {/* Past Notifications Archive Button */}
@@ -1818,9 +1831,12 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
         />,
         document.body
       )}
+      {poListOpen && createPortal(
+        <PurchaseOrdersList store={store} onClose={() => setPoListOpen(false)} />,
+        document.body
+      )}
       {autoFixTarget && createPortal(
         <AutoFixConfirmDialog
-          store={store}
           spec={autoFixTarget}
           busy={autoFixBusy}
           onCancel={() => (autoFixBusy ? null : setAutoFixTarget(null))}

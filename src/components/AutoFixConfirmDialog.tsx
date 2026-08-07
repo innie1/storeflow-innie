@@ -1,47 +1,54 @@
-import { useState } from 'react';
-import { StoreData } from '@/types/store';
-import { AutoFixSpec } from '@/lib/auto-fix';
-import { X, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AutoFixSpec, AutoFixType } from '@/lib/auto-fix';
+import { X, Zap, Check } from 'lucide-react';
 
 interface AutoFixConfirmDialogProps {
-  store: StoreData;
   spec: AutoFixSpec;
   onCancel: () => void;
   onConfirm: () => void;
   busy?: boolean;
 }
 
-// Same store-code confirmation pattern as Settings.tsx's Store Type change —
-// Auto Fix changes pricing/inventory/promotions, so it gets the same gate.
-export default function AutoFixConfirmDialog({ store, spec, onCancel, onConfirm, busy }: AutoFixConfirmDialogProps) {
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
+// Short, type-specific progress steps shown while the fix is applying.
+// Purely cosmetic — the underlying work is already fast (local state
+// mutation for everything except purchase orders, which is one insert) —
+// this just gives the tap something to look at for the ~0.3-1s it takes,
+// instead of a single frozen "Applying..." label.
+const STEPS: Record<AutoFixType, string[]> = {
+  adjust_reorder_level: ['Scanning inventory…', 'Calculating reorder levels…', 'Saving…'],
+  update_price: ['Scanning inventory…', 'Recalculating margin…', 'Updating price…'],
+  create_promotion: ['Scanning inventory…', 'Finding affected products…', 'Applying promo pricing…'],
+  archive_product: ['Scanning inventory…', 'Archiving product…'],
+  generate_purchase_order: ['Scanning inventory…', 'Calculating order quantities…', 'Creating purchase order…'],
+};
 
-  const matches = code.trim().toLowerCase() === (store.accessCode || '').trim().toLowerCase();
+export default function AutoFixConfirmDialog({ spec, onCancel, onConfirm, busy }: AutoFixConfirmDialogProps) {
+  const steps = STEPS[spec.type] || ['Applying…'];
+  const [stepIndex, setStepIndex] = useState(0);
 
-  const handleConfirm = () => {
-    if (!matches) {
-      setError('That code doesn\u2019t match your store code.');
-      return;
-    }
-    onConfirm();
-  };
+  useEffect(() => {
+    if (!busy) { setStepIndex(0); return; }
+    if (stepIndex >= steps.length - 1) return;
+    const t = setTimeout(() => setStepIndex(i => i + 1), 320);
+    return () => clearTimeout(t);
+  }, [busy, stepIndex, steps.length]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/80 animate-in fade-in-0 duration-200" onClick={busy ? undefined : onCancel} />
       <div className="relative w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl bg-background p-5 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
-        <button
-          onClick={onCancel}
-          disabled={busy}
-          className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-2/60"
-          aria-label="Cancel"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        {!busy && (
+          <button
+            onClick={onCancel}
+            className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-2/60"
+            aria-label="Cancel"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
 
         <div className="flex items-center gap-2 mb-1">
-          <ShieldCheck className="w-5 h-5 text-primary" />
+          <Zap className="w-5 h-5 text-primary" />
           <h3 className="text-base font-display font-bold">Confirm Auto Fix</h3>
         </div>
 
@@ -49,34 +56,37 @@ export default function AutoFixConfirmDialog({ store, spec, onCancel, onConfirm,
           {spec.summary}
         </p>
 
-        <label className="text-xs font-display font-semibold uppercase text-muted-foreground mb-1 block">
-          Enter your store code to apply
-        </label>
-        <input
-          autoFocus
-          value={code}
-          onChange={(e) => { setCode(e.target.value); setError(''); }}
-          placeholder="Store code"
-          className="w-full rounded-xl border border-border bg-surface-2/40 px-3 py-3 text-sm font-mono mb-1"
-        />
-        {error && <p className="text-xs text-destructive mb-2">{error}</p>}
-
-        <div className="flex gap-2 mt-4">
-          <button
-            onClick={onCancel}
-            disabled={busy}
-            className="flex-1 py-3 rounded-xl text-sm font-display font-semibold border border-border active:scale-[0.98] transition"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={busy || code.trim().length === 0}
-            className="flex-1 py-3 rounded-xl text-sm font-display font-semibold bg-primary text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition"
-          >
-            {busy ? 'Applying…' : 'Apply Fix'}
-          </button>
-        </div>
+        {busy ? (
+          <div className="py-2">
+            {steps.map((label, i) => (
+              <div key={label} className={`flex items-center gap-2 py-1.5 text-sm transition-opacity ${i > stepIndex ? 'opacity-30' : 'opacity-100'}`}>
+                {i < stepIndex ? (
+                  <Check className="w-4 h-4 text-success flex-shrink-0" />
+                ) : i === stepIndex ? (
+                  <span className="w-4 h-4 flex-shrink-0 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                ) : (
+                  <span className="w-4 h-4 flex-shrink-0" />
+                )}
+                <span className={i === stepIndex ? 'font-display font-semibold text-foreground' : 'text-muted-foreground'}>{label}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex gap-2 mt-1">
+            <button
+              onClick={onCancel}
+              className="flex-1 py-3 rounded-xl text-sm font-display font-semibold border border-border active:scale-[0.98] transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className="flex-1 py-3 rounded-xl text-sm font-display font-semibold bg-primary text-primary-foreground active:scale-[0.98] transition"
+            >
+              Confirm
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
