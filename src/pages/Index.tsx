@@ -353,10 +353,25 @@ export default function Index() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Ensure body scroll is never left locked when switching tabs
+  // Ensure body scroll is never left locked on initial app load, store load, or when switching tabs
   useEffect(() => {
     forceUnlockBodyScroll();
-  }, [tab]);
+    const t1 = setTimeout(() => forceUnlockBodyScroll(), 50);
+    const t2 = setTimeout(() => forceUnlockBodyScroll(), 250);
+
+    const handleInitialTouch = () => {
+      forceUnlockBodyScroll();
+    };
+    window.addEventListener('touchstart', handleInitialTouch, { passive: true, once: true });
+    window.addEventListener('pointerdown', handleInitialTouch, { passive: true, once: true });
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('touchstart', handleInitialTouch);
+      window.removeEventListener('pointerdown', handleInitialTouch);
+    };
+  }, [tab, store?.accessCode]);
 
   // Helper to normalize order status casing and old values
   const getNormalizedStatus = useCallback((status?: string): string => {

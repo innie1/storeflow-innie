@@ -1918,7 +1918,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
         document.body
       )}
       {poListOpen && createPortal(
-        <PurchaseOrdersList store={store} onClose={() => setPoListOpen(false)} />,
+        <PurchaseOrdersList store={store} onClose={() => setPoListOpen(false)} onUpdate={onUpdate} />,
         document.body
       )}
       {ratingsOpen && createPortal(

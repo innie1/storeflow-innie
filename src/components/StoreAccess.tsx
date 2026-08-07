@@ -1031,8 +1031,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md animate-fade-in">
+    <div className="w-full min-h-screen overflow-y-auto flex flex-col items-center justify-center p-4 py-8">
+      <div className="w-full max-w-md animate-fade-in my-auto">
         <div className="flex flex-col items-center text-center mb-6">
           <Mascot
             size={mode === 'choose' ? 96 : (mode === 'setup-security' || mode === 'create' && !!newCode) && accessMood === 'celebrating' ? 100 : 76}

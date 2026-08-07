@@ -12,7 +12,7 @@
 //   like it exists in the local StoreData shape today.
 
 import { StoreData, Product } from '@/types/store';
-import { updateProduct } from '@/lib/store-data';
+import { updateProduct, addPurchaseOrder } from '@/lib/store-data';
 import type { Json } from '@/integrations/supabase/types';
 
 export type AutoFixType =
@@ -98,47 +98,57 @@ export interface PurchaseOrderItem {
   costPrice: number;
 }
 
-// Purchase orders are stored in Supabase only (public.purchase_orders),
-// scoped by store_id + is_store_member() RLS — same pattern as `restocks`.
-// Requires store.id (the Supabase stores.id UUID, present once the store
-// has synced to the cloud at least once).
-export async function createPurchaseOrder(store: StoreData, items: PurchaseOrderItem[], supplierName?: string): Promise<AutoFixResult> {
-  if (!store.id) {
-    return { ok: false, message: "Can't create a purchase order until this store has synced to the cloud at least once." };
-  }
-  try {
-    const { supabase } = await import('@/integrations/supabase/client');
-    const totalCost = items.reduce((s, it) => s + it.qty * it.costPrice, 0);
-    const { error } = await supabase.from('purchase_orders').insert({
-      store_id: store.id,
-      supplier_name: supplierName || null,
-      items: items as unknown as Json,
-      total_cost: totalCost,
-      status: 'draft',
-      source: 'auto_fix',
+// Local-first, like every other write in this app: the store.purchaseOrders
+// array (synced via saveStore -> stores.data JSONB, same as products/sales)
+// is the source of truth, so this always succeeds even offline or if the
+// cloud insert below fails. The Supabase purchase_orders table is a
+// best-effort mirror for cross-device visibility, not the primary record.
+export function createPurchaseOrder(store: StoreData, items: PurchaseOrderItem[], supplierName?: string): AutoFixResult {
+  const totalCost = items.reduce((s, it) => s + it.qty * it.costPrice, 0);
+  const updated = addPurchaseOrder(store, {
+    supplierName,
+    items,
+    totalCost,
+    status: 'draft',
+    source: 'auto_fix',
+  });
+
+  // Best-effort cloud mirror — fire and forget, never blocks or fails the
+  // local save. If it fails (offline, RLS, whatever), the purchase order
+  // still exists locally and will simply be missing from other devices
+  // until the next successful sync of this kind.
+  if (store.id) {
+    import('@/integrations/supabase/client').then(({ supabase }) => {
+      supabase.from('purchase_orders').insert({
+        store_id: store.id!,
+        supplier_name: supplierName || null,
+        items: items as unknown as Json,
+        total_cost: totalCost,
+        status: 'draft',
+        source: 'auto_fix',
+      }).then(({ error }) => {
+        if (error) console.warn('[auto-fix] purchase order cloud mirror failed (saved locally):', error.message);
+      });
     });
-    if (error) return { ok: false, message: `Couldn't save the purchase order: ${error.message}` };
-    return { ok: true, message: `Draft purchase order created — ${items.length} item${items.length === 1 ? '' : 's'}, ₦${totalCost.toLocaleString()} total.` };
-  } catch (e: any) {
-    return { ok: false, message: `Couldn't reach the server: ${e?.message || 'unknown error'}` };
   }
+
+  return { ok: true, store: updated, message: `Draft purchase order created — ${items.length} item${items.length === 1 ? '' : 's'}, ₦${totalCost.toLocaleString()} total.` };
 }
 
 // Convenience wrapper matching the AdviceCard.autoFix shape produced by
 // generateAdvice() for generate_purchase_order cards.
-export async function runGeneratePurchaseOrder(store: StoreData, spec: AutoFixSpec): Promise<AutoFixResult> {
+export function runGeneratePurchaseOrder(store: StoreData, spec: AutoFixSpec): AutoFixResult {
   const items: PurchaseOrderItem[] = spec.payload.items;
   return createPurchaseOrder(store, items, spec.payload.supplierName);
 }
 
-// Single entry point the UI calls — handles both the synchronous local
-// fixes and the async purchase-order path, and persists local changes via
-// saveStore the same way every other edit in the app does.
+// Single entry point the UI calls — every Auto Fix type, including
+// purchase orders now, resolves synchronously and persists via the same
+// local-first path.
 export async function executeAutoFix(store: StoreData, spec: AutoFixSpec, onUpdate: (s: StoreData) => void): Promise<AutoFixResult> {
-  if (spec.type === 'generate_purchase_order') {
-    return runGeneratePurchaseOrder(store, spec);
-  }
-  const result = applyAutoFix(store, spec);
+  const result = spec.type === 'generate_purchase_order'
+    ? runGeneratePurchaseOrder(store, spec)
+    : applyAutoFix(store, spec);
   if (result.ok && result.store) {
     onUpdate(result.store);
   }

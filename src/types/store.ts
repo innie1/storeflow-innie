@@ -666,10 +666,21 @@ export interface StreakData {
   openedDates?: string[];         // YYYY-MM-DD, last ~14 days the store was opened — powers the week-log dropdown
 }
 
+export interface PurchaseOrderRecord {
+  id: string;
+  supplierName?: string;
+  items: { productId: string; name: string; qty: number; costPrice: number }[];
+  totalCost: number;
+  status: 'draft' | 'ordered' | 'received' | 'cancelled';
+  source: 'manual' | 'auto_fix';
+  createdAt: string;
+}
+
 export interface StoreData {
   id?: string;               // Supabase 'stores' table row id (UUID) — used for cloud sync, realtime channel scoping, and Edge Function calls. Not to be confused with storeId below.
   storeId?: string;          // Permanent immutable ID — never changes; generated once at store creation
   qrDesignVersion?: number;  // Permanent QR code design version
+  purchaseOrders?: PurchaseOrderRecord[]; // Local-first list — this is the source of truth for the Purchase Orders UI; also best-effort mirrored to the cloud purchase_orders table for cross-device visibility.
   streak?: StreakData;
   learnedProducts?: LearnedProduct[];
   dismissedSimilarPairs?: string[];

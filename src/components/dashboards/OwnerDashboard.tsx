@@ -78,10 +78,9 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
   // leak the same way.
   useEffect(() => {
     if (periodSheetFor === null) return;
-    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = prevOverflow;
+      document.body.style.overflow = '';
     };
   }, [periodSheetFor]);
 

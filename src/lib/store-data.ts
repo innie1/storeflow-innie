@@ -3,7 +3,7 @@ import {
   Investment, StoreCategory, StoreType, GameService, GameSession,
   Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift, 
   CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
-  DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent
+  DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent, PurchaseOrderRecord
 } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
@@ -706,6 +706,29 @@ function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | 
     payload,
   };
   return [item, ...(store.trash || [])];
+}
+
+export function addPurchaseOrder(store: StoreData, order: Omit<PurchaseOrderRecord, 'id' | 'createdAt'>): StoreData {
+  const record: PurchaseOrderRecord = {
+    ...order,
+    id: generateId(),
+    createdAt: new Date().toISOString(),
+  };
+  const updated: StoreData = {
+    ...store,
+    purchaseOrders: [record, ...(store.purchaseOrders || [])].slice(0, 200), // cap to keep the local blob bounded
+  };
+  saveStore(updated);
+  return updated;
+}
+
+export function updatePurchaseOrderStatus(store: StoreData, id: string, status: PurchaseOrderRecord['status']): StoreData {
+  const updated: StoreData = {
+    ...store,
+    purchaseOrders: (store.purchaseOrders || []).map(po => po.id === id ? { ...po, status } : po),
+  };
+  saveStore(updated);
+  return updated;
 }
 
 export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actorName?: string, actorRole?: string): StoreData {
