@@ -306,7 +306,7 @@ const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
   { name: 'VR Games', icon: '🥽', price: 2000, enabled: false, order: 6 },
 ];
 
-export function createStore(storeName: string, category: StoreCategory = 'retail', retailType?: string, logoStyle?: string, storeTypeOverride?: StoreType): StoreData {
+export function createStore(storeName: string, category: StoreCategory = 'retail', retailType?: string, logoStyle?: string, storeTypeOverride?: StoreType, uiMode: 'simple' | 'full' = 'simple'): StoreData {
   const code = generateCode();
   const now = new Date().toISOString();
   // New stores always start with an empty catalogue — no auto-imported starter products.
@@ -330,7 +330,7 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
     category,
     retailType,
     storeType: storeTypeOverride || (category === 'restaurant' ? 'restaurant' : category === 'games' ? 'games' : category === 'other' ? 'other' : 'provision'),
-    uiMode: 'simple',
+    uiMode: uiMode,
     simpleOnboarding: { complete: false },
     products,
     sales: [],

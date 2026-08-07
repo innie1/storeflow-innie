@@ -70,7 +70,7 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
               <div key={n.id} className={`p-3 rounded-xl border flex gap-3 text-left ${toneStyle[n.tone] || 'bg-surface-2 border-border/40'}`}>
                 <span className="text-lg shrink-0 mt-0.5">{n.icon || '🔔'}</span>
                 <div className="space-y-1.5 flex-1 min-w-0">
-                  <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'System Alert'}</p>
+                  <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'Flow Alert'}</p>
                   <p className="text-[11px] text-muted-foreground leading-normal">{n.description || n.text}</p>
                   <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-border/10">
                     <p className="text-[9px] text-muted-foreground/80 font-mono">

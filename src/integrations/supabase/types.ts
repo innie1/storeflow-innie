@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -874,6 +872,63 @@ export type Database = {
           },
           {
             foreignKeyName: "orders_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prediction_log: {
+        Row: {
+          created_at: string
+          feedback: string | null
+          feedback_at: string | null
+          horizon_days: number
+          id: string
+          label: string
+          log_date: string
+          predicted_profit: number
+          predicted_revenue: number
+          store_id: string
+          target_date: string
+        }
+        Insert: {
+          created_at?: string
+          feedback?: string | null
+          feedback_at?: string | null
+          horizon_days: number
+          id?: string
+          label: string
+          log_date?: string
+          predicted_profit?: number
+          predicted_revenue?: number
+          store_id: string
+          target_date: string
+        }
+        Update: {
+          created_at?: string
+          feedback?: string | null
+          feedback_at?: string | null
+          horizon_days?: number
+          id?: string
+          label?: string
+          log_date?: string
+          predicted_profit?: number
+          predicted_revenue?: number
+          store_id?: string
+          target_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prediction_log_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prediction_log_store_id_fkey"
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores_public"

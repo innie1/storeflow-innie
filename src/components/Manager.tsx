@@ -9,7 +9,7 @@ import {
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
   generateNotifications, ActivityRange, ActivityBucket, generateFlowReport,
   getTopOpportunities, getProfitLeaks, getRepaymentInsights, getSeasonalPredictions, getWeatherInsights, generateWeeklyRecap,
-  getProductInsightBadges
+  getProductInsightBadges, filterDismissedAdvice, dismissAdvice, markAdviceHelpful
 } from '@/lib/manager-intel';
 import { getLowStockThreshold } from '@/lib/settings';
 import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward, hydrateFlowMemoryFromCloud } from '@/lib/flow-memory';
@@ -19,9 +19,12 @@ import { FlowIcon } from '@/components/FlowIcon';
 import NotificationDrawer from '@/components/NotificationDrawer';
 import AutoFixConfirmDialog from '@/components/AutoFixConfirmDialog';
 import PurchaseOrdersList from '@/components/PurchaseOrdersList';
+import MerchantRatings from '@/components/MerchantRatings';
 import FlowChat from '@/components/FlowChat';
 import { executeAutoFix, AutoFixSpec } from '@/lib/auto-fix';
-import { MessageCircle, Package } from 'lucide-react';
+import { logPrediction, submitPredictionFeedback } from '@/lib/prediction-log';
+import PredictionHistory from '@/components/PredictionHistory';
+import { MessageCircle, Package, Star } from 'lucide-react';
 
 interface ManagerProps {
   store: StoreData;
@@ -548,6 +551,17 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [poListOpen, setPoListOpen] = useState(false);
+  const [ratingsOpen, setRatingsOpen] = useState(false);
+  const [predictionHistoryOpen, setPredictionHistoryOpen] = useState(false);
+  const [forecastFeedback, setForecastFeedback] = useState<Record<number, 'correct' | 'incorrect'>>({});
+
+  const handleForecastFeedback = (horizonDays: number, feedback: 'correct' | 'incorrect') => {
+    setForecastFeedback(prev => ({ ...prev, [horizonDays]: feedback }));
+    submitPredictionFeedback(store, horizonDays, feedback).then(ok => {
+      if (ok) showToast(feedback === 'correct' ? 'Thanks — noted as correct 👍' : 'Thanks — noted as incorrect, Flow will learn from this', 'success');
+    });
+  };
+
   const [autoFixTarget, setAutoFixTarget] = useState<AutoFixSpec | null>(null);
   const [autoFixBusy, setAutoFixBusy] = useState(false);
   const [hasPatted, setHasPatted] = useState(() => localStorage.getItem('storeflow_flow_patted') === new Date().toISOString().split('T')[0]);
@@ -665,6 +679,18 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   // Forecasts for Predictions tab
   const horizons = [1, 7, 14, 30, 90, 180, 365];
 
+  useEffect(() => {
+    if (tab !== 'predictions') return;
+    if (!settings.revenueForecasts && !settings.profitForecasts) return;
+    horizons.forEach(h => {
+      logPrediction(store, forecastHorizon(store, h));
+    });
+    // Deliberately store/settings omitted — this should log once per tab
+    // visit, not re-fire on every store update while the tab stays open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+
   const addRequest = () => {
     const text = requestText.trim();
     if (!text) return;
@@ -715,7 +741,19 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     { id: 'advice', label: 'Advice', badge: settings.businessAdvice ? (generateAdvice(store, orders).filter(a => (a.priority === 'critical' || a.priority === 'high') && !seenAdviceIds.has(a.id)).length || undefined) : undefined },
   ];
 
-  const advice = settings.businessAdvice ? generateAdvice(store, orders) : [];
+  const advice = settings.businessAdvice ? filterDismissedAdvice(generateAdvice(store, orders)) : [];
+  const [justDismissed, setJustDismissed] = useState<Set<string>>(new Set());
+  const visibleAdvice = advice.filter(a => !justDismissed.has(a.id));
+
+  const handleDismissAdvice = (id: string) => {
+    dismissAdvice(id);
+    setJustDismissed(prev => new Set(prev).add(id));
+  };
+
+  const handleHelpfulAdvice = (id: string) => {
+    markAdviceHelpful(id);
+    showToast('Thanks — good to know 👍', 'success');
+  };
   const [pendingPriceAccept, setPendingPriceAccept] = useState<string | null>(null);
 
   // Auto-Apply Prices — only runs when the toggle is on, and only touches
@@ -1293,7 +1331,15 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
       {tab === 'predictions' && (
         <div className="space-y-4 animate-fade-in">
           <div className="p-4 rounded-2xl bg-card shadow-card">
-            <h3 className="font-display font-bold text-base mb-1">Revenue Forecasts</h3>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-display font-bold text-base">Revenue Forecasts</h3>
+              <button
+                onClick={() => setPredictionHistoryOpen(true)}
+                className="text-[11px] font-display font-semibold text-primary"
+              >
+                History
+              </button>
+            </div>
             <p className="text-xs text-muted-foreground mb-4">Based on your last 30 days of sales using linear trend analysis.</p>
             {!settings.revenueForecasts && !settings.profitForecasts ? (
               <p className="text-xs text-muted-foreground p-3 rounded-lg bg-surface-2 border border-border">Revenue and Profit Forecasts are both turned off in Settings.</p>
@@ -1302,6 +1348,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               {horizons.map(h => {
                 const f = forecastHorizon(store, h);
                 const confColor = f.confidence === 'High' ? 'text-success' : f.confidence === 'Medium' ? 'text-warning' : 'text-muted-foreground';
+                const feedbackGiven = forecastFeedback[h];
                 return (
                   <div key={h} className="p-3 rounded-xl bg-surface-2 border border-border">
                     <div className="flex items-center justify-between mb-2">
@@ -1319,6 +1366,21 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     {f.caveat && (
                       <p className="text-[10px] text-muted-foreground mt-1.5 italic bg-surface-3/50 p-1.5 rounded">ℹ️ {f.caveat}</p>
                     )}
+                    <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-border/40">
+                      <span className="text-[10px] text-muted-foreground mr-auto">Was this accurate?</span>
+                      <button
+                        onClick={() => handleForecastFeedback(h, 'correct')}
+                        className={`text-xs px-2 py-1 rounded-lg transition ${feedbackGiven === 'correct' ? 'bg-success/20 text-success' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        👍 Correct
+                      </button>
+                      <button
+                        onClick={() => handleForecastFeedback(h, 'incorrect')}
+                        className={`text-xs px-2 py-1 rounded-lg transition ${feedbackGiven === 'incorrect' ? 'bg-destructive/20 text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        👎 Incorrect
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1621,13 +1683,22 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 Chat with Flow
               </button>
             </div>
-            <button
-              onClick={() => setPoListOpen(true)}
-              className="w-full mt-2 py-2 rounded-lg text-xs font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center justify-center gap-1.5"
-            >
-              <Package className="w-3.5 h-3.5" />
-              View Purchase Orders
-            </button>
+            <div className="flex gap-3 mt-2">
+              <button
+                onClick={() => setPoListOpen(true)}
+                className="flex-1 py-2 rounded-lg text-xs font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center justify-center gap-1.5"
+              >
+                <Package className="w-3.5 h-3.5" />
+                Purchase Orders
+              </button>
+              <button
+                onClick={() => setRatingsOpen(true)}
+                className="flex-1 py-2 rounded-lg text-xs font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center justify-center gap-1.5"
+              >
+                <Star className="w-3.5 h-3.5" />
+                Ratings
+              </button>
+            </div>
           </div>
 
           {/* Past Notifications Archive Button */}
@@ -1636,7 +1707,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               <span className="text-2xl">📂</span>
               <div className="text-left">
                 <p className="font-display font-bold text-xs text-foreground">Past Notifications Archive</p>
-                <p className="text-[10px] text-muted-foreground">View all read and closed system alerts ({store.flowNotifications?.length || 0})</p>
+                <p className="text-[10px] text-muted-foreground">View all read and closed Flow alerts ({store.flowNotifications?.length || 0})</p>
               </div>
             </div>
             <button
@@ -1671,7 +1742,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                       <div key={n.id} className={`p-3 rounded-xl border flex gap-3 text-left bg-surface-2 border-border/40`}>
                         <span className="text-lg shrink-0 mt-0.5">{n.icon || '🔔'}</span>
                         <div className="space-y-1 flex-1 min-w-0">
-                          <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'System Alert'}</p>
+                          <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'Flow Alert'}</p>
                           <p className="text-[11px] text-muted-foreground leading-normal">{n.description || n.text}</p>
                           <p className="text-[9px] text-muted-foreground/60 font-mono pt-1">
                             {new Date(n.date).toLocaleDateString()} · {new Date(n.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1707,9 +1778,9 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           )}
 
           {/* Advice cards */}
-          {advice.length > 0 ? (
+          {visibleAdvice.length > 0 ? (
             <div className="space-y-2">
-              {advice.map(a => (
+              {visibleAdvice.map(a => (
                 <div key={a.id} className={`p-3.5 rounded-xl border shadow-card ${advicePriorityColor[a.priority]}`}>
                   <div className="flex items-start gap-2.5">
                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base flex-shrink-0 ${adviceIconBg[a.priority]}`}>{a.icon}</div>
@@ -1749,6 +1820,20 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                           )}
                         </div>
                       )}
+                      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-current/10">
+                        <button
+                          onClick={() => handleHelpfulAdvice(a.id)}
+                          className="text-xs text-muted-foreground hover:text-foreground transition flex items-center gap-1"
+                        >
+                          👍 Helpful
+                        </button>
+                        <button
+                          onClick={() => handleDismissAdvice(a.id)}
+                          className="text-xs text-muted-foreground hover:text-foreground transition flex items-center gap-1"
+                        >
+                          👎 Not relevant
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1828,11 +1913,20 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           orders={orders}
           onClose={() => setChatOpen(false)}
           onNavigate={onNavigate}
+          onUpdate={onUpdate}
         />,
         document.body
       )}
       {poListOpen && createPortal(
         <PurchaseOrdersList store={store} onClose={() => setPoListOpen(false)} />,
+        document.body
+      )}
+      {ratingsOpen && createPortal(
+        <MerchantRatings store={store} onClose={() => setRatingsOpen(false)} />,
+        document.body
+      )}
+      {predictionHistoryOpen && createPortal(
+        <PredictionHistory store={store} onClose={() => setPredictionHistoryOpen(false)} />,
         document.body
       )}
       {autoFixTarget && createPortal(

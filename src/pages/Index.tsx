@@ -353,12 +353,10 @@ export default function Index() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Ensure body scroll is never left locked on app load or when switching tabs
+  // Ensure body scroll is never left locked when switching tabs
   useEffect(() => {
     forceUnlockBodyScroll();
-    const t = setTimeout(() => forceUnlockBodyScroll(), 50);
-    return () => clearTimeout(t);
-  }, [tab, store?.accessCode]);
+  }, [tab]);
 
   // Helper to normalize order status casing and old values
   const getNormalizedStatus = useCallback((status?: string): string => {
@@ -446,7 +444,7 @@ export default function Index() {
         if (!notifsError && dbNotifs && dbNotifs.length > 0 && active) {
           const newItems = dbNotifs.map(n => ({
             id: n.id,
-            title: n.title || 'System Alert',
+            title: n.title || 'Flow Alert',
             message: n.message || '',
             date: n.created_at || new Date().toISOString(),
             read: n.is_read || false,
@@ -595,7 +593,7 @@ export default function Index() {
 
           const newNotification = {
             id: newNotif.id || 'notif-' + Date.now(),
-            title: newNotif.title || 'System Alert',
+            title: newNotif.title || 'Flow Alert',
             message: newNotif.message || '',
             date: newNotif.created_at || new Date().toISOString(),
             read: newNotif.is_read || false,
