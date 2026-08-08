@@ -58,6 +58,8 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   const suppliers = useMemo(() => store.suppliers || [], [store.suppliers]);
   const sales = useMemo(() => store.sales || [], [store.sales]);
   const requests = useMemo(() => store.customerRequests || [], [store.customerRequests]);
+  const restockHistory = useMemo(() => store.restocks || [], [store.restocks]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // 1. Run the Restock recommendation engine
   const generatedRecommendations = useMemo(() => {
@@ -130,27 +132,43 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
 
       const suggestedQty = Math.max(1, targetStock - p.quantity);
 
+      // "How you usually buy it" — blend the stock-gap number with what this
+      // merchant has actually ordered for this product in the past, so the
+      // suggestion isn't just a mechanical target-minus-current-stock number.
+      const pastOrders = restockHistory
+        .filter(r => r.productId === p.id)
+        .slice(-3)
+        .map(r => r.quantity)
+        .filter(q => q > 0);
+      const usualOrderQty = pastOrders.length > 0
+        ? Math.round(pastOrders.reduce((a, b) => a + b, 0) / pastOrders.length)
+        : null;
+      const finalQty = usualOrderQty
+        ? Math.max(1, Math.round((suggestedQty + usualOrderQty) / 2))
+        : suggestedQty;
+
       // Explanation reason
       let reason = 'Restock suggested to maintain minimum stock level.';
       if (p.quantity <= 0) reason = 'Product is completely out of stock.';
       else if (reqCount >= 5) reason = `Frequently requested by ${reqCount} customers this month.`;
       else if (avgDailySales >= 2) reason = `High sales velocity (${avgDailySales.toFixed(1)} sold daily).`;
       else if (isBelowMin) reason = 'Current quantity is below minimum stock threshold.';
+      if (usualOrderQty) reason += ` You've typically ordered ~${usualOrderQty} at a time.`;
 
       list.push({
         id: p.id,
         name: p.name,
         category: p.category || 'General',
         currentStock: p.quantity,
-        suggestedQty,
-        idealQty: suggestedQty,
+        suggestedQty: finalQty,
+        idealQty: finalQty,
         costPrice: p.costPrice || 100,
         sellingPrice: p.sellingPrice || 150,
         priorityScore,
         priorityLabel,
         reason,
         supplier: suppliers[0]?.name || 'Default Supplier',
-        selected: true
+        selected: false
       });
     });
 
@@ -186,14 +204,14 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           supplier: suppliers[0]?.name || 'Default Supplier',
           isNewProduct: true,
           requestsCount: count,
-          selected: true
+          selected: false
         });
       }
     });
 
     // Sort by Priority Score descending
     return list.sort((a, b) => b.priorityScore - a.priorityScore);
-  }, [store.products, sales, requests, suppliers, buyOnlyToMin]);
+  }, [store.products, sales, requests, suppliers, buyOnlyToMin, restockHistory]);
 
   // Intelligent Proportionate Budget Distribution (AI Optimizer - Step 5 & 6)
   const allocateBudgetProportionally = (list: BuyListItem[], budget: number): BuyListItem[] => {
@@ -441,12 +459,16 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   // when the engine opens.
   //
   // Default population is the item's real restocking need (idealQty),
-  // pre-selected — NOT clamped to the available balance. Squashing
-  // quantities (or zeroing them) around a ₦0 balance on open was the
-  // original source of confusion: it looked like the list itself was
-  // broken instead of just "pick what you want." Budget-fitted quantities
-  // are now something the merchant opts into via "Optimize Buy List" in
-  // Smart Budget mode, not something forced on every open.
+  // NOTHING selected by default. Two problems this fixes at once:
+  // 1) Squashing quantities around a ₦0 balance on open used to look like
+  //    the list itself was broken instead of just "pick what you want."
+  // 2) Opening with every item pre-checked at a flat default meant the
+  //    merchant had to manually deselect things they didn't want, rather
+  //    than opting in to what they do. Selection now only happens by the
+  //    merchant tapping items themselves, or tapping "Smart Pick" to have
+  //    the priority engine choose for them.
+  // Budget-fitted quantities remain opt-in via "Optimize Buy List" in
+  // Smart Budget mode.
   const hasInitialized = useRef(false);
   useEffect(() => {
     if (hasInitialized.current) return;
@@ -454,9 +476,36 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     setItemsList(generatedRecommendations.map(item => ({
       ...item,
       suggestedQty: item.idealQty || 1,
-      selected: true,
+      selected: false,
     })));
   }, [generatedRecommendations]);
+
+  // Smart Pick — auto-selects items using the same priority scoring as the
+  // table (stock urgency, sales velocity, recency, margin, customer
+  // requests) plus each item's blended "usual order size". Doesn't touch
+  // anything the merchant has already hand-picked or hand-edited; only
+  // fills in a sensible starting selection.
+  const handleSmartPick = () => {
+    setItemsList(prev => {
+      const picked = prev.map(it => {
+        const shouldPick = it.priorityLabel === '🔴 High' || it.priorityLabel === '🟡 Medium' || it.priorityScore >= 55;
+        return shouldPick ? { ...it, selected: true, suggestedQty: it.idealQty || it.suggestedQty || 1 } : it;
+      });
+      const pickedCount = picked.filter(it => it.selected).length;
+      showToast(pickedCount > 0 ? `Smart Pick selected ${pickedCount} item${pickedCount === 1 ? '' : 's'}` : 'Nothing urgent right now — everything looks well stocked.', 'success');
+      return picked;
+    });
+  };
+
+  const handleClearList = () => {
+    setItemsList(prev => prev.map(it => ({ ...it, selected: false })));
+  };
+
+  const filteredItemsList = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return itemsList;
+    return itemsList.filter(it => it.name.toLowerCase().includes(q) || it.category.toLowerCase().includes(q));
+  }, [itemsList, searchQuery]);
 
   // Calculations on selected Buy List items
   const totals = useMemo(() => {
@@ -825,6 +874,35 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           </div>
         </div>
 
+        {/* Search + Smart Pick + Clear List */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="🔍 Search products..."
+            className="flex-1 px-3.5 py-2.5 rounded-xl bg-surface-2/60 border border-border text-xs focus:outline-none focus:border-primary"
+          />
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={handleSmartPick}
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/25 text-primary font-display font-bold text-xs transition"
+            >
+              🧠 Smart Pick
+            </button>
+            <button
+              onClick={handleClearList}
+              disabled={totals.count === 0}
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-surface-2/60 hover:bg-surface-3 border border-border text-muted-foreground disabled:opacity-40 font-display font-bold text-xs transition"
+            >
+              ✕ Clear List
+            </button>
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-2">
+          Smart Pick considers what's low or out of stock, what's actually selling, what customers have asked for, and how much you usually order — it won't touch anything you've already picked by hand.
+        </p>
+
         {/* Live suggestions & forms row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
           {/* AI Suggestions */}
@@ -907,7 +985,12 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                 Generating restock recommendations...
               </div>
             )}
-            {itemsList.map(it => (
+            {itemsList.length > 0 && filteredItemsList.length === 0 && (
+              <div className="p-8 text-center text-muted-foreground text-xs border border-border/60 rounded-xl">
+                No products match "{searchQuery}".
+              </div>
+            )}
+            {filteredItemsList.map(it => (
               <div
                 key={it.id}
                 className={`border rounded-xl p-3 flex items-center gap-3 transition-colors ${
@@ -978,7 +1061,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {itemsList.map(it => (
+              {filteredItemsList.map(it => (
                 <tr 
                   key={it.id} 
                   className={`hover:bg-surface-2/40 transition-colors ${
@@ -1053,6 +1136,13 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                 <tr>
                   <td colSpan={9} className="p-8 text-center text-muted-foreground text-xs">
                     Generating restock recommendations...
+                  </td>
+                </tr>
+              )}
+              {itemsList.length > 0 && filteredItemsList.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="p-8 text-center text-muted-foreground text-xs">
+                    No products match "{searchQuery}".
                   </td>
                 </tr>
               )}
