@@ -27,6 +27,7 @@ export const DEFAULT_FLOW_NOTIFICATION_PREFERENCES: FlowNotificationPreferences 
 const DB_NAME = 'storeflow-notifications';
 const STORE_NAME = 'preferences';
 const KEY = 'global';
+const LOCAL_KEY = 'storeflow_notification_preferences_v1';
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -38,21 +39,34 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+function readLocal(): FlowNotificationPreferences | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    return raw ? { ...DEFAULT_FLOW_NOTIFICATION_PREFERENCES, ...JSON.parse(raw) } : null;
+  } catch { return null; }
+}
+
 export async function getFlowNotificationPreferences(): Promise<FlowNotificationPreferences> {
+  const local = readLocal();
   try {
     const db = await openDb();
     return await new Promise(resolve => {
       const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(KEY);
-      request.onsuccess = () => resolve({ ...DEFAULT_FLOW_NOTIFICATION_PREFERENCES, ...(request.result || {}) });
-      request.onerror = () => resolve(DEFAULT_FLOW_NOTIFICATION_PREFERENCES);
+      request.onsuccess = () => {
+        const next = { ...DEFAULT_FLOW_NOTIFICATION_PREFERENCES, ...(request.result || local || {}) };
+        try { localStorage.setItem(LOCAL_KEY, JSON.stringify(next)); } catch {}
+        resolve(next);
+      };
+      request.onerror = () => resolve(local || DEFAULT_FLOW_NOTIFICATION_PREFERENCES);
     });
   } catch {
-    return DEFAULT_FLOW_NOTIFICATION_PREFERENCES;
+    return local || DEFAULT_FLOW_NOTIFICATION_PREFERENCES;
   }
 }
 
 export async function saveFlowNotificationPreferences(patch: Partial<FlowNotificationPreferences>): Promise<FlowNotificationPreferences> {
   const next = { ...(await getFlowNotificationPreferences()), ...patch };
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(next)); } catch {}
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -62,9 +76,6 @@ export async function saveFlowNotificationPreferences(patch: Partial<FlowNotific
       tx.onerror = () => reject(tx.error);
     });
   } catch {}
-
-  // Keep the active Service Worker in sync. It can read the same IndexedDB
-  // even when the PWA is completely closed.
   try {
     const registration = await navigator.serviceWorker?.ready;
     registration?.active?.postMessage({ type: 'SET_NOTIFICATION_PREFERENCES', preferences: next });
