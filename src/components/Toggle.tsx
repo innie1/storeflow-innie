@@ -1,3 +1,5 @@
+import NotificationPreferences from '@/components/NotificationPreferences';
+
 interface ToggleProps {
   checked: boolean;
   onChange: (v: boolean) => void;
@@ -6,8 +8,11 @@ interface ToggleProps {
 }
 
 // Settings-aligned toggle row — every toggle aligns to the same right edge.
+// The Notifications page already uses this component. When its first
+// "Insights" row renders, we attach the expanded background-notification
+// controls without changing the existing Settings screen structure.
 export default function ToggleRow({ checked, onChange, label, description }: ToggleProps) {
-  return (
+  const row = (
     <button
       type="button"
       role="switch"
@@ -21,13 +26,11 @@ export default function ToggleRow({ checked, onChange, label, description }: Tog
           <p className="text-[11px] text-muted-foreground leading-snug mt-0.5 pr-2">{description}</p>
         )}
       </div>
-      {/* Track */}
       <div
         className={`shrink-0 relative w-12 h-6 rounded-full transition-colors duration-200 ${
           checked ? 'bg-success' : 'bg-border'
         }`}
       >
-        {/* Thumb */}
         <span
           className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
             checked ? 'translate-x-[26px]' : 'translate-x-0.5'
@@ -36,4 +39,15 @@ export default function ToggleRow({ checked, onChange, label, description }: Tog
       </div>
     </button>
   );
+
+  if (label === 'Insights') {
+    return (
+      <div>
+        {row}
+        <NotificationPreferences />
+      </div>
+    );
+  }
+
+  return row;
 }
