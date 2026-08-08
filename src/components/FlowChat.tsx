@@ -134,8 +134,44 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     setAddDraft(d);
   };
 
+  const handleAppControl = (raw: string): boolean => {
+    const text = clean(raw);
+    const q = text.toLowerCase();
+    const themeRequest = /\b(change|switch|choose|pick|set)\s+(the\s+)?theme\b|\btheme\s*(settings|options)?\b/.test(q);
+    if (themeRequest && !/\b(dark|light|system)\b/.test(q)) {
+      const actions = THEMES.map(theme => ({ label: theme.label, onClick: () => { applyTheme(theme.id); flow(`${theme.label} mode is on.`); } }));
+      flow('Sure. Which theme would you like?', actions);
+      return true;
+    }
+    const explicitTheme = q.match(/\b(dark|light|system)\s*(?:theme|mode)?\b/)?.[1] as ThemeMode | undefined;
+    if (explicitTheme) { setThemeMode(explicitTheme); flow(`${explicitTheme[0].toUpperCase() + explicitTheme.slice(1)} mode is on.`); return true; }
+
+    const match = q.match(/\b(turn|switch)\s+(on|off)\s+(.+)$|\b(enable|disable)\s+(.+)$|\btoggle\s+(.+)$/);
+    if (!match) return false;
+    const requested = (match[3] || match[5] || match[6] || '').trim();
+    const action = match[2] || (match[1] === 'enable' ? 'on' : match[1] === 'disable' ? 'off' : undefined);
+    const aliases: Array<[RegExp, string, string]> = [
+      [/^(?:device\s+)?notifications?(?:\s+and\s+check.?ins)?$/, 'notifications', 'Notifications'],
+      [/^(?:flow\s+)?voice$/, 'voice', 'Voice'],
+      [/^sound$/, 'sound', 'Sound'],
+      [/^(?:compact\s+mode|compact)$/, 'compact_mode', 'Compact mode'],
+      [/^(?:reduced\s+motion|reduce\s+motion|motion)$/, 'reduced_motion', 'Reduced motion'],
+      [/^(?:customer\s+ordering|customer\s+orders?|online\s+ordering)$/, 'customer_ordering', 'Customer ordering']
+    ];
+    const found = aliases.find(([pattern]) => pattern.test(requested));
+    if (!found) return false;
+    const name = found[1] as any;
+    if (name === 'notifications' && action === 'on') { enableDeviceCheckins(); return true; }
+    const enabled = action ? action === 'on' : !getFlowControl(name, true);
+    if (name === 'voice') setVoiceOn(enabled);
+    else setFlowControl(name, enabled);
+    flow(`${found[2]} is ${enabled ? 'on' : 'off'}.`);
+    return true;
+  };
+
   const ask = (raw: string) => {
     const text = clean(raw); if (!text) return; you(text);
+    if (handleAppControl(text)) return;
     if (/^(undo|undo that|reverse that|take that back)$/i.test(text)) { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
     if (addDraft) { handleAddWizard(text); return; }
     const lastProduct = lastProductId ? store.products.find(p => p.id === lastProductId) || null : null;
@@ -144,21 +180,17 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     else rememberBrainContext(store, { lastIntent: plan.intent, lastTopic: plan.intent });
     if (plan.intent === 'navigation' && plan.tab) { onNavigate?.(plan.tab); flow(`Opening **${plan.tab.replace(/-/g, ' ')}**.`); return; }
     if (plan.intent === 'settings') {
-      if (/\b(change|switch|choose|pick)\s+(the\s+)?theme\b/i.test(text)) {
-        const actions = THEMES.map(theme => ({ label: theme.label, onClick: () => { applyTheme(theme.id); flow(`${theme.label} mode is on.`); } }));
-        flow('Sure. Which theme would you like?', actions);
-        return;
-      }
+      if (/\b(change|switch|choose|pick)\s+(the\s+)?theme\b/i.test(text)) { handleAppControl(text); return; }
       const mode = text.match(/\b(dark|light|system)\b/i)?.[1]?.toLowerCase() as ThemeMode | undefined;
       if (mode) { setThemeMode(mode); flow(`${mode[0].toUpperCase() + mode.slice(1)} mode is on.`); return; }
-      if (/turn (on|off) (voice|sound)/i.test(text)) { const on = /turn on/i.test(text); setVoiceOn(on); setFlowControl(/voice/i.test(text) ? 'voice' : 'sound', on); flow(`${/voice/i.test(text) ? 'Voice' : 'Sound'} is ${on ? 'on' : 'off'}.`); return; }
-      if (/turn (on|off) notifications?/i.test(text)) { const on = /turn on/i.test(text); if (on) enableDeviceCheckins(); else { setFlowControl('notifications', false); flow('Notifications are off. I will stop Flow device check-ins.'); } return; }
-      if (/turn (on|off) compact mode/i.test(text)) { const on = /turn on/i.test(text); setFlowControl('compact_mode', on); flow(`Compact mode is ${on ? 'on' : 'off'}.`); return; }
-      if (/reduce motion|turn (on|off) reduced motion/i.test(text)) { const on = /reduce motion/i.test(text) || /turn on/i.test(text); setFlowControl('reduced_motion', on); flow(`Reduced motion is ${on ? 'on' : 'off'}.`); return; }
-      if (/customer ordering.*(on|off)|turn (on|off).*customer ordering/i.test(text)) { const on = /turn on/i.test(text) || /customer ordering.*on/i.test(text); setFlowControl('customer_ordering', on); flow(`Customer ordering is ${on ? 'on' : 'off'}.`); return; }
+      if (/turn (on|off) (voice|sound)/i.test(text)) { handleAppControl(text); return; }
+      if (/turn (on|off) notifications?/i.test(text)) { handleAppControl(text); return; }
+      if (/turn (on|off) compact mode/i.test(text)) { handleAppControl(text); return; }
+      if (/reduce motion|turn (on|off) reduced motion/i.test(text)) { handleAppControl(text); return; }
+      if (/customer ordering.*(on|off)|turn (on|off).*customer ordering/i.test(text)) { handleAppControl(text); return; }
       const theme = THEMES.find(t => text.toLowerCase().includes(t.id as string)) as { id: ThemeId; label: string } | undefined; if (theme) { applyTheme(theme.id); flow(`Switched to ${theme.label}.`); return; }
       if (/enable device check.?ins|allow flow notifications/i.test(text)) { enableDeviceCheckins(); return; }
-      flow('I can control your theme, voice, sound, notifications and other StoreFlow settings.'); return;
+      flow('I can control your StoreFlow settings. Tell me what you want to turn on, turn off, or change.'); return;
     }
     if (plan.intent === 'undo') { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
     if (plan.intent === 'sell') { executeSales(plan.items); return; }
@@ -180,7 +212,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const deleteSession = (sid: string) => setSessions(prev => { const n = prev.filter(s => s.id !== sid); saveSessions(storeKey, n); return n; });
 
   return (<div className="fixed inset-0 z-50 flex flex-col bg-background">
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border"><div className="flex items-center gap-2"><div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full"><Mascot size={28} /></div><h3 className="text-base font-display font-bold">Flow</h3><span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">Local Brain</span></div><div className="flex items-center gap-1"><button onClick={newChat} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><Plus className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => setShowHistory(true)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><History className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => lastUndo && (onUpdate(lastUndo), setLastUndo(null), flow('Undone.'))} disabled={!lastUndo} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60 disabled:opacity-30"><RotateCcw className="w-4 h-4" /></button><button onClick={() => enableDeviceCheckins()} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60" title="Enable Flow device check-ins"><Bell className="w-4 h-4 text-muted-foreground" /></button><button onClick={() => setVoiceOn(v => !v)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60">{voiceOn ? <Volume2 className="w-5 h-5 text-primary" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}</button><button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><X className="w-5 h-5" /></button></div></div>
+    <div className="flex items-center justify-between px-4 py-3 border-b border-border"><div className="flex items-center gap-2"><div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full"><Mascot size={28} /></div><h3 className="text-base font-display font-bold">Flow</h3></div><div className="flex items-center gap-1"><button onClick={newChat} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><Plus className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => setShowHistory(true)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><History className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => lastUndo && (onUpdate(lastUndo), setLastUndo(null), flow('Undone.'))} disabled={!lastUndo} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60 disabled:opacity-30"><RotateCcw className="w-4 h-4" /></button><button onClick={() => enableDeviceCheckins()} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60" title="Enable Flow device check-ins"><Bell className="w-4 h-4 text-muted-foreground" /></button><button onClick={() => setVoiceOn(v => !v)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60">{voiceOn ? <Volume2 className="w-5 h-5 text-primary" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}</button><button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><X className="w-5 h-5" /></button></div></div>
     {showHistory && <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setShowHistory(false)}><div className="w-full sm:max-w-sm max-h-[75vh] bg-background border border-border rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between px-4 py-3 border-b border-border"><h4 className="font-display font-bold text-sm">Chat history</h4><button onClick={() => setShowHistory(false)}><X className="w-4 h-4" /></button></div><div className="overflow-y-auto">{sessions.length === 0 ? <p className="text-xs text-muted-foreground text-center py-8">No past chats yet.</p> : sessions.map(s => <div key={s.id} className="flex items-center gap-2 px-4 py-3 border-b border-border/60 cursor-pointer hover:bg-surface-2/40" onClick={() => openSession(s)}><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{s.title}</p><p className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleString()}</p></div><button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}><Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" /></button></div>)}</div></div></div>}
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">{messages.map(m => <div key={m.id} className="flex flex-col gap-1.5" style={{ alignItems: m.from === 'you' ? 'flex-end' : 'flex-start' }}><div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.from === 'flow' ? 'bg-surface-2/60 text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>{m.from === 'flow' ? renderFlowText(m.text) : m.text}</div>{m.actions && <div className="flex gap-2 flex-wrap">{m.actions.map(a => <button key={a.label} onClick={a.onClick} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">{a.label}</button>)}</div>}</div>)}{!addDraft && QUICK.map(q => <button key={q} onClick={() => ask(q)} className="self-start px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30">{q}</button>)}</div>
     <form className="flex items-center gap-2 px-4 py-3 border-t border-border" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'} className="flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm" /><button type="submit" disabled={!input.trim()} className="w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button></form>
