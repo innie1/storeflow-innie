@@ -6,6 +6,7 @@ import { showToast } from '@/components/Toast';
 import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';
 import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/flow-brain-memory';
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
+import { resolveFlowSettingCommand, flowSettingsHelp } from '@/lib/flow-settings-resolver';
 import { getNextFlowCheckIn, notifyFlowCheckIn, requestFlowNotificationPermission, checkInsQuiet } from '@/lib/flow-checkins';
 import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell } from 'lucide-react';
 import Mascot from '@/components/Mascot';
@@ -137,19 +138,49 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const handleAppControl = (raw: string): boolean => {
     const text = clean(raw);
     const q = text.toLowerCase();
+
+    if (/^(?:what\s+settings|which\s+settings|what\s+can\s+you\s+control|what\s+can\s+flow\s+control)$/i.test(q)) {
+      flow(flowSettingsHelp());
+      return true;
+    }
+
     const themeRequest = /\b(change|switch|choose|pick|set)\s+(the\s+)?theme\b|\btheme\s*(settings|options)?\b/.test(q);
-    if (themeRequest && !/\b(dark|light|system)\b/.test(q)) {
+    if (themeRequest && !/\b(dark|light|system)\b/.test(q) && !/\btheme\s+(?:to|as)\s+/.test(q)) {
       const actions = THEMES.map(theme => ({ label: theme.label, onClick: () => { applyTheme(theme.id); flow(`${theme.label} mode is on.`); } }));
       flow('Sure. Which theme would you like?', actions);
       return true;
     }
     const explicitTheme = q.match(/\b(dark|light|system)\s*(?:theme|mode)?\b/)?.[1] as ThemeMode | undefined;
     if (explicitTheme) { setThemeMode(explicitTheme); flow(`${explicitTheme[0].toUpperCase() + explicitTheme.slice(1)} mode is on.`); return true; }
+    const namedTheme = q.match(/\btheme\s+(?:to|as)\s+(.+)$/)?.[1]?.trim();
+    if (namedTheme) {
+      const theme = THEMES.find(t => t.id.toLowerCase() === namedTheme || t.label.toLowerCase() === namedTheme || t.label.toLowerCase().includes(namedTheme));
+      if (theme) { applyTheme(theme.id); flow(`${theme.label} mode is on.`); return true; }
+      flow(`I don't recognize that theme. Try one of: ${THEMES.map(t => t.label).join(', ')}.`);
+      return true;
+    }
+
+    const universal = resolveFlowSettingCommand(store, text);
+    if (universal.handled) {
+      if (universal.needsConfirmation && universal.store) {
+        flow(`${universal.label} is about to be turned on. This changes a security or automatic-control setting. Continue?`, [
+          { label: 'Confirm', onClick: () => { onUpdate(universal.store!); flow(universal.message || `${universal.label} updated.`); showToast(`${universal.label} updated`, 'success'); } },
+          { label: 'Cancel', onClick: () => flow('Cancelled.') }
+        ]);
+      } else if (universal.store) {
+        onUpdate(universal.store);
+        flow(universal.message || `${universal.label || 'Setting'} updated.`);
+        showToast(`${universal.label || 'Setting'} updated`, 'success');
+      } else {
+        flow(universal.message || 'I could not change that setting.');
+      }
+      return true;
+    }
 
     const match = q.match(/\b(turn|switch)\s+(on|off)\s+(.+)$|\b(enable|disable)\s+(.+)$|\btoggle\s+(.+)$/);
     if (!match) return false;
     const requested = (match[3] || match[5] || match[6] || '').trim();
-    const action = match[2] || (match[1] === 'enable' ? 'on' : match[1] === 'disable' ? 'off' : undefined);
+    const action = match[2] || (match[4] === 'enable' ? 'on' : match[4] === 'disable' ? 'off' : undefined);
     const aliases: Array<[RegExp, string, string]> = [
       [/^(?:device\s+)?notifications?(?:\s+and\s+check.?ins)?$/, 'notifications', 'Notifications'],
       [/^(?:flow\s+)?voice$/, 'voice', 'Voice'],
@@ -180,16 +211,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     else rememberBrainContext(store, { lastIntent: plan.intent, lastTopic: plan.intent });
     if (plan.intent === 'navigation' && plan.tab) { onNavigate?.(plan.tab); flow(`Opening **${plan.tab.replace(/-/g, ' ')}**.`); return; }
     if (plan.intent === 'settings') {
-      if (/\b(change|switch|choose|pick)\s+(the\s+)?theme\b/i.test(text)) { handleAppControl(text); return; }
-      const mode = text.match(/\b(dark|light|system)\b/i)?.[1]?.toLowerCase() as ThemeMode | undefined;
-      if (mode) { setThemeMode(mode); flow(`${mode[0].toUpperCase() + mode.slice(1)} mode is on.`); return; }
-      if (/turn (on|off) (voice|sound)/i.test(text)) { handleAppControl(text); return; }
-      if (/turn (on|off) notifications?/i.test(text)) { handleAppControl(text); return; }
-      if (/turn (on|off) compact mode/i.test(text)) { handleAppControl(text); return; }
-      if (/reduce motion|turn (on|off) reduced motion/i.test(text)) { handleAppControl(text); return; }
-      if (/customer ordering.*(on|off)|turn (on|off).*customer ordering/i.test(text)) { handleAppControl(text); return; }
-      const theme = THEMES.find(t => text.toLowerCase().includes(t.id as string)) as { id: ThemeId; label: string } | undefined; if (theme) { applyTheme(theme.id); flow(`Switched to ${theme.label}.`); return; }
-      if (/enable device check.?ins|allow flow notifications/i.test(text)) { enableDeviceCheckins(); return; }
+      if (handleAppControl(text)) return;
       flow('I can control your StoreFlow settings. Tell me what you want to turn on, turn off, or change.'); return;
     }
     if (plan.intent === 'undo') { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
