@@ -1291,25 +1291,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   };
 
   const generateBuyList = () => {
-    // Items needing restock: out of stock first, then low stock, sorted by quantity ascending
-    const needing = store.products
-      .filter(p => p.quantity <= lowThreshold)
-      .sort((a, b) => a.quantity - b.quantity);
-    if (needing.length === 0) {
-      showToast('No items below threshold', 'error');
-      return;
-    }
-    const items: ShoppingListItem[] = needing.map(p => {
-      const target = Math.max(lowThreshold * 4, 10);
-      const suggested = Math.max(1, target - p.quantity);
-      return { productId: p.id, name: p.name, quantity: suggested, category: p.category };
-    });
-    // Merge with any existing list (replace duplicates with suggested qty)
-    const existingIds = new Set(items.map(i => i.productId));
-    const merged = [...items, ...shoppingList.filter(i => !existingIds.has(i.productId))];
-    setShoppingList(merged);
+    // Buy List opens the manual/simple restock screen only.
+    // Do NOT copy low-stock items or pre-populate selections here.
+    // Automatic recommendations and budget allocation belong exclusively to Smart Restock.
     setShowShoppingList(true);
-    showToast(`${items.length} items added to buy list`);
   };
 
   const generateListText = () => {
