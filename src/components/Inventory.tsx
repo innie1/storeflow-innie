@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product, SimilarProductReview } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore, saveStore, syncBackorder, clearBackorder } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore, saveStore, syncBackorder, clearBackorder, importPurchaseOrderByCode } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
 import { playProductAddedSound } from '@/lib/sound-effects';
@@ -396,7 +396,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [editCustomCategoryActive, setEditCustomCategoryActive] = useState(false);
   const [editCustomCategoryVal, setEditCustomCategoryVal] = useState('');
   const [showAddConfirm, setShowAddConfirm] = useState(false);
-  const [importMode, setImportMode] = useState<'text' | 'image'>('text');
+  const [importMode, setImportMode] = useState<'text' | 'image' | 'code'>('text');
+  const [purchaseCodeInput, setPurchaseCodeInput] = useState('');
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const ocrFileRef = useRef<HTMLInputElement>(null);
@@ -1182,6 +1183,18 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     setImportText('');
     setImportPreview(null);
     showToast(`${cleaned.length} products imported`);
+  };
+
+  const handlePurchaseCodeImport = () => {
+    const result = importPurchaseOrderByCode(store, purchaseCodeInput);
+    if (result.success) {
+      onUpdate(result.store);
+      showToast(result.message, 'success');
+      setPurchaseCodeInput('');
+      setShowImportModal(false);
+    } else {
+      showToast(result.message, 'error');
+    }
   };
 
 
@@ -2715,9 +2728,41 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 >
                   📷 Receipt Scan (OCR)
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setImportMode('code')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-display font-bold transition-all ${
+                    importMode === 'code' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  🔑 Purchase Code
+                </button>
               </div>
 
-              {importMode === 'text' ? (
+              {importMode === 'code' ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Already bought goods from a Buy List you approved? Enter its code here to add those exact items to stock. Each code works once.
+                  </p>
+                  <input
+                    value={purchaseCodeInput}
+                    onChange={e => setPurchaseCodeInput(e.target.value.toUpperCase())}
+                    placeholder="PO-XXXXXX"
+                    autoCapitalize="characters"
+                    className={`${inputClass} text-center font-mono font-bold tracking-widest`}
+                  />
+                  <button
+                    onClick={handlePurchaseCodeImport}
+                    disabled={!purchaseCodeInput.trim()}
+                    className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-40 font-display font-semibold hover:opacity-90"
+                  >
+                    Import Stock
+                  </button>
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Codes are generated when you Approve &amp; Share a Buy List. Check Purchase Orders history if you've lost one.
+                  </p>
+                </div>
+              ) : importMode === 'text' ? (
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">Format: Name, Cost, Selling Price, Quantity, Category (one per line)</p>
                   <textarea value={importText} onChange={e => setImportText(e.target.value)}

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product, CustomerRequest, PlannedRestock } from '@/types/store';
-import { receiveStock } from '@/lib/store-data';
+import { receiveStock, addPurchaseOrder } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { 
   TrendingUp, AlertTriangle, Coins, Sparkles, CheckCircle, 
@@ -604,9 +604,31 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       showToast(`Heads up: this list costs ₦${(totals.totalCost - Math.max(0, availableBudget)).toLocaleString()} more than your available balance — you'll need new money to cover it.`, 'info');
     }
 
+    // Create a Purchase Order record for this list — this is what gives it
+    // a Purchase Import Code. Existing products only: brand-new product
+    // opportunities and manually-typed items don't have a real productId
+    // yet, so a code covering them would fail to import cleanly. They still
+    // appear in the shared text, just aren't part of the redeemable code.
+    const codableItems = selectedItems.filter(it => !it.isNewProduct && !it.id.startsWith('manual-'));
+    let importCode: string | null = null;
+    let storeAfterPO = store;
+    if (codableItems.length > 0) {
+      storeAfterPO = addPurchaseOrder(store, {
+        items: codableItems.map(it => ({ productId: it.id, name: it.name, qty: it.suggestedQty, costPrice: it.costPrice })),
+        totalCost: codableItems.reduce((sum, it) => sum + it.suggestedQty * it.costPrice, 0),
+        status: 'ordered',
+        source: 'manual',
+      });
+      importCode = storeAfterPO.purchaseOrders?.[0]?.importCode || null;
+    }
+
     // Format list details
     let text = `📋 StoreFlow Restock Buy List — ${store.storeName}\n`;
     text += `Date: ${new Date().toLocaleDateString()}\n`;
+    if (importCode) {
+      text += `🔑 Purchase Import Code: ${importCode}\n`;
+      text += `   (After buying, enter this code in Inventory > Import to add these items to stock)\n`;
+    }
     text += `==========================\n\n`;
     
     selectedItems.forEach((it, idx) => {
@@ -633,7 +655,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           title: `Buy List - ${store.storeName}`,
           text: text
         });
-        showToast('✓ Buy List shared successfully!', 'success');
+        showToast(importCode ? `✓ Shared! Import code: ${importCode}` : '✓ Buy List shared successfully!', 'success');
       } catch (err) {
         // user aborted or sharing failed
         navigator.clipboard.writeText(text);
@@ -641,7 +663,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       }
     } else {
       navigator.clipboard.writeText(text);
-      showToast('✓ Copied to clipboard! Share via WhatsApp or Messenger.', 'success');
+      showToast(importCode ? `✓ Copied! Import code: ${importCode}` : '✓ Copied to clipboard! Share via WhatsApp or Messenger.', 'success');
     }
 
     // Push approved items for existing products into Planned Restocks so
@@ -668,17 +690,19 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       id: Math.random().toString(36).slice(2, 9),
       store_id: store.accessCode,
       action: 'Approved & Shared Buy List',
-      description: `Approved & Shared Buy List with ${selectedItems.length} items (Total: ₦${totals.totalCost.toLocaleString()})`,
+      description: `Approved & Shared Buy List with ${selectedItems.length} items (Total: ₦${totals.totalCost.toLocaleString()})${importCode ? ` — code ${importCode}` : ''}`,
       created_at: new Date().toISOString()
     };
 
     onUpdate({
-      ...store,
+      ...storeAfterPO,
       activityLogs: [newLog as any, ...logs],
       plannedRestocks: [...newPlannedRestocks, ...(store.plannedRestocks || [])]
     });
 
-    if (newPlannedRestocks.length > 0) {
+    if (importCode) {
+      showToast(`Purchase Import Code: ${importCode} — also saved under Purchase Orders history.`, 'success');
+    } else if (newPlannedRestocks.length > 0) {
       showToast(`✓ ${newPlannedRestocks.length} item(s) added to Planned Restocks — receive them from Inventory once they arrive.`, 'success');
     }
 

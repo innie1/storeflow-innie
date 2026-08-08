@@ -674,6 +674,9 @@ export interface PurchaseOrderRecord {
   status: 'draft' | 'ordered' | 'received' | 'cancelled';
   source: 'manual' | 'auto_fix';
   createdAt: string;
+  importCode: string;      // short code shared with self/staff to import this exact list into stock later
+  imported?: boolean;      // true once the code has been redeemed — prevents duplicate imports
+  importedAt?: string;
 }
 
 export interface StoreData {
