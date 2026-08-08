@@ -21,11 +21,12 @@ const BOOLEAN_ALIASES: Array<[RegExp, BooleanKey, string]> = [
   [/^(?:voice|flow\s+voice|voice\s+features?)$/, 'voiceFeatures', 'Voice features'],
   [/^(?:auto\s+voice|automatic\s+voice|auto\s+listen)$/, 'autoVoiceListen', 'Auto voice listening'],
   [/^(?:weekly\s+recap|weekly\s+report)$/, 'weeklyRecap', 'Weekly recap'],
-  [/^(?:customer\s+requests?|customer\s+request\s+notifications?)$/, 'notifyCustomerRequests', 'Customer request notifications'],
+  [/^(?:customer\s+request\s+notifications?|customer\s+requests?)$/, 'notifyCustomerRequests', 'Customer request notifications'],
   [/^(?:low\s+stock|low\s+stock\s+alerts?)$/, 'notifyLowStock', 'Low-stock notifications'],
   [/^(?:insights?|insight\s+notifications?)$/, 'notifyInsights', 'Insight notifications'],
   [/^(?:recommendations?|recommendation\s+notifications?)$/, 'notifyRecommendations', 'Recommendation notifications'],
   [/^(?:alerts?|alert\s+notifications?)$/, 'notifyAlerts', 'Alert notifications'],
+  [/^(?:weekly\s+report\s+notifications?)$/, 'notifyWeeklyRecap', 'Weekly recap notifications'],
   [/^(?:monthly\s+reports?|monthly\s+report\s+notifications?)$/, 'notifyMonthlyReports', 'Monthly reports'],
   [/^(?:savings?|savings\s+reminders?)$/, 'notifySavingsReminders', 'Savings reminders'],
   [/^(?:revenue\s+forecasts?|revenue\s+forecast)$/, 'revenueForecasts', 'Revenue forecasts'],
@@ -35,7 +36,6 @@ const BOOLEAN_ALIASES: Array<[RegExp, BooleanKey, string]> = [
   [/^(?:smart\s+pricing|pricing\s+assistant)$/, 'smartPricing', 'Smart pricing'],
   [/^(?:product\s+suggestions?|product\s+recommendations?)$/, 'productSuggestions', 'Product suggestions'],
   [/^(?:savings\s+planner|savings\s+planning)$/, 'savingsPlanner', 'Savings planner'],
-  [/^(?:customer\s+requests?)$/, 'customerRequests', 'Customer requests'],
   [/^(?:business\s+advice|business\s+advisor)$/, 'businessAdvice', 'Business advice'],
   [/^(?:business\s+expansion|expansion\s+advice)$/, 'businessExpansion', 'Business expansion'],
   [/^(?:business\s+questions?)$/, 'businessQuestions', 'Business questions'],
@@ -59,8 +59,8 @@ const NUMERIC_ALIASES: Array<[RegExp, NumericKey, string]> = [
   [/^(?:default\s+)?margin$/, 'defaultMargin', 'Default margin'],
   [/^(?:critical\s+stock|critical\s+stock\s+threshold)$/, 'criticalStockThreshold', 'Critical stock threshold'],
   [/^(?:minimum|min|reorder)\s+stock(?:\s+threshold)?$/, 'minStockThreshold', 'Minimum stock threshold'],
-  [/^(?:default\s+purchase\s+quantity|purchase\s+quantity)$/, 'defaultPurchaseQty', 'Default purchase quantity'],
-  [/^(?:default\s+restock\s+quantity|restock\s+quantity)$/, 'defaultRestockQty', 'Default restock quantity'],
+  [/^(?:default\s+)?purchase\s+quantity$/, 'defaultPurchaseQty', 'Default purchase quantity'],
+  [/^(?:default\s+)?restock\s+quantity$/, 'defaultRestockQty', 'Default restock quantity'],
   [/^(?:graph|chart)\s+(?:interval|refresh)$/, 'graphInterval', 'Graph interval'],
   [/^(?:maximum\s+automatic\s+price\s+change|auto\s+price\s+change\s+limit|price\s+change\s+limit)$/, 'autoApplyMaxChangeAmount', 'Automatic price-change limit'],
   [/^(?:discount\s+value|automatic\s+discount\s+value)$/, 'autoDiscountValue', 'Automatic discount value'],
@@ -102,6 +102,35 @@ export function resolveFlowSettingCommand(store: StoreData, raw: string): FlowSe
   if (!op) return { handled: false };
   const target = normalize(op.target);
 
+  if (['all notifications', 'all notification', 'every notification'].includes(target) && (op.mode === 'bool' || op.mode === 'toggle')) {
+    const current = manager(store);
+    const enabled = op.mode === 'toggle' ? !(current.notifyInsights && current.notifyRecommendations && current.notifyAlerts && current.notifyWeeklyRecap && current.notifyMonthlyReports && current.notifySavingsReminders && current.notifyCustomerRequests && current.notifyLowStock) : op.enabled;
+    const nextSettings = {
+      ...current,
+      notifyInsights: enabled,
+      notifyRecommendations: enabled,
+      notifyAlerts: enabled,
+      notifyWeeklyRecap: enabled,
+      notifyMonthlyReports: enabled,
+      notifySavingsReminders: enabled,
+      notifyCustomerRequests: enabled,
+      notifyLowStock: enabled,
+    };
+    return { handled: true, store: { ...store, managerSettings: nextSettings }, label: 'All notifications', value: enabled, message: `All notification categories are ${enabled ? 'on' : 'off'}.` };
+  }
+
+  if (/^(?:customer\s+ordering|customer\s+orders?|online\s+ordering)$/.test(target) && (op.mode === 'bool' || op.mode === 'toggle')) {
+    const current = store.profile?.payment?.acceptWebsiteOrders ?? true;
+    const enabled = op.mode === 'toggle' ? !current : op.enabled;
+    return {
+      handled: true,
+      store: { ...store, profile: { ...(store.profile || { storeType: '', location: '', phone: '', email: '' }), payment: { ...(store.profile?.payment || {}), acceptWebsiteOrders: enabled } } },
+      label: 'Customer ordering',
+      value: enabled,
+      message: `Customer ordering is ${enabled ? 'on' : 'off'}.`,
+    };
+  }
+
   const bool = BOOLEAN_ALIASES.find(([pattern]) => pattern.test(target));
   if (bool && (op.mode === 'bool' || op.mode === 'toggle')) {
     const current = Boolean(manager(store)[bool[1]]);
@@ -140,7 +169,8 @@ export function flowSettingsHelp() {
     'I can operate your StoreFlow settings, including:',
     '• Turn mascot, number or reduced-motion animations on/off',
     '• Turn voice, auto-listening and sounds on/off',
-    '• Control low-stock, insight, recommendation, alert and report notifications',
+    '• Control all notification categories, including low-stock, insights, recommendations, alerts, reports and savings reminders',
+    '• Turn customer ordering on/off',
     '• Turn forecasts, smart pricing, savings and business tools on/off',
     '• Control automatic backups, discounts and receipt printing',
     '• Turn biometric/PIN lock and other security controls on/off',
