@@ -7,10 +7,9 @@ const source = readFileSync(file, 'utf8');
 // The orders response contains an apostrophe inside a single-quoted fallback string.
 // Keep the runtime response identical while making the TypeScript parser happy.
 const broken = ":'I don't see any orders recorded in this store yet.';}";
-const fixed = ':"I don\\'t see any orders recorded in this store yet.";}';
+const fixed = `:"I don't see any orders recorded in this store yet.";}`;
 
 if (!source.includes(broken)) {
-  // Already fixed, or the source has changed. Do not mutate anything unnecessarily.
   process.exit(0);
 }
 
