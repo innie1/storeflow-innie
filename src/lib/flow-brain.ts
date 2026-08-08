@@ -1,432 +1,78 @@
 import { Product, StoreData, TabId } from '@/types/store';
 
-/**
- * Flow Brain
- *
- * A completely local, deterministic command/intent layer for FlowChat.
- * No API, model, network request, or external service is used here.
- *
- * The brain has four jobs:
- * 1. Understand what the merchant is trying to do.
- * 2. Resolve product names against the real store catalog (including aliases).
- * 3. Turn the store data into useful business context and priorities.
- * 4. Return a safe, structured plan that the UI can execute/confirm.
- *
- * Keep execution in the UI/store-data layer. This module decides WHAT should
- * happen; it does not mutate the store by itself.
- */
+export type FlowIntent = 'store_overview'|'product_lookup'|'sell'|'add_product'|'edit_product'|'restock'|'mark_out_of_stock'|'discount'|'remove_product'|'inventory'|'pricing'|'sales'|'slow_products'|'customers'|'expenses'|'cash'|'improvement'|'navigation'|'settings'|'help'|'unknown';
+export interface ProductMatch { product: Product; score: number; matchedBy: 'exact'|'alias'|'word'|'fuzzy'; }
+export interface FlowPlan { intent: FlowIntent; confidence: number; product?: ProductMatch; productName?: string; quantity?: number; amount?: number; percentage?: number; tab?: TabId; fields?: Partial<Pick<Product,'name'|'costPrice'|'sellingPrice'|'quantity'|'category'>>; needsConfirmation: boolean; reason: string; }
+export interface StoreSnapshot { productCount:number; activeProductCount:number; stockUnits:number; outOfStock:Product[]; lowStock:Product[]; revenue30:number; revenue7:number; previousRevenue7:number; profit30:number; profit7:number; sales30:number; unitsSold30:number; expenses30:number; pendingDebt:number; topSellers:{product:Product;units:number;revenue:number}[]; deadStock:Product[]; underpriced:Product[]; }
+export interface FlowPriority { level:'urgent'|'important'|'opportunity'; title:string; detail:string; productId?:string; }
 
-export type FlowIntent =
-  | 'store_overview'
-  | 'product_lookup'
-  | 'sell'
-  | 'add_product'
-  | 'edit_product'
-  | 'restock'
-  | 'mark_out_of_stock'
-  | 'discount'
-  | 'remove_product'
-  | 'inventory'
-  | 'pricing'
-  | 'sales'
-  | 'slow_products'
-  | 'customers'
-  | 'expenses'
-  | 'cash'
-  | 'improvement'
-  | 'navigation'
-  | 'settings'
-  | 'help'
-  | 'unknown';
-
-export interface ProductMatch {
-  product: Product;
-  score: number;
-  matchedBy: 'exact' | 'alias' | 'word' | 'fuzzy';
-}
-
-export interface FlowPlan {
-  intent: FlowIntent;
-  confidence: number;
-  product?: ProductMatch;
-  productName?: string;
-  quantity?: number;
-  amount?: number;
-  percentage?: number;
-  tab?: TabId;
-  fields?: Partial<Pick<Product, 'name' | 'costPrice' | 'sellingPrice' | 'quantity' | 'category'>>;
-  needsConfirmation: boolean;
-  reason: string;
-}
-
-export interface StoreSnapshot {
-  productCount: number;
-  activeProductCount: number;
-  stockUnits: number;
-  outOfStock: Product[];
-  lowStock: Product[];
-  revenue30: number;
-  revenue7: number;
-  previousRevenue7: number;
-  profit30: number;
-  profit7: number;
-  sales30: number;
-  unitsSold30: number;
-  expenses30: number;
-  pendingDebt: number;
-  topSellers: { product: Product; units: number; revenue: number }[];
-  deadStock: Product[];
-  underpriced: Product[];
-}
-
-export interface FlowPriority {
-  level: 'urgent' | 'important' | 'opportunity';
-  title: string;
-  detail: string;
-  productId?: string;
-}
-
-const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'my', 'me', 'please', 'product', 'item', 'store',
-  'stock', 'inventory', 'now', 'today', 'please', 'for', 'of', 'to', 'on',
-]);
-
-function normalize(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-function tokens(value: string): string[] {
-  return normalize(value).split(' ').filter(Boolean).filter(t => !STOP_WORDS.has(t));
-}
-
-function editDistance(a: string, b: string): number {
-  const aa = normalize(a);
-  const bb = normalize(b);
-  if (!aa) return bb.length;
-  if (!bb) return aa.length;
-  const prev = Array.from({ length: bb.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= aa.length; i++) {
-    const cur = [i];
-    for (let j = 1; j <= bb.length; j++) {
-      cur[j] = aa[i - 1] === bb[j - 1]
-        ? prev[j - 1]
-        : Math.min(prev[j - 1] + 1, prev[j] + 1, cur[j - 1] + 1);
-    }
-    for (let j = 0; j < cur.length; j++) prev[j] = cur[j];
-  }
-  return prev[bb.length];
-}
-
-function similarity(a: string, b: string): number {
-  const aa = normalize(a);
-  const bb = normalize(b);
-  if (!aa || !bb) return 0;
-  if (aa === bb) return 1;
-  if (aa.includes(bb) || bb.includes(aa)) return 0.92;
-  const ta = new Set(tokens(aa));
-  const tb = new Set(tokens(bb));
-  const overlap = [...ta].filter(x => tb.has(x)).length;
-  const union = new Set([...ta, ...tb]).size || 1;
-  const jaccard = overlap / union;
-  const maxLen = Math.max(aa.length, bb.length);
-  const fuzzy = maxLen ? 1 - editDistance(aa, bb) / maxLen : 0;
-  return Math.max(jaccard * 0.9, fuzzy * 0.8);
-}
-
-function productNames(product: Product): string[] {
-  return [product.name, ...(product.voiceAliases || [])].filter(Boolean);
-}
-
-/** Resolve a merchant's wording to the real catalog item. */
-export function resolveProduct(store: StoreData, query: string): ProductMatch | null {
-  const q = normalize(query);
-  if (!q) return null;
-  let best: ProductMatch | null = null;
-
-  for (const product of store.products || []) {
-    for (const name of productNames(product)) {
-      const n = normalize(name);
-      if (n === q) return { product, score: 1, matchedBy: name === product.name ? 'exact' : 'alias' };
-
-      const score = similarity(q, n);
-      const wordMatch = tokens(q).length > 0 && tokens(q).every(t => tokens(n).includes(t));
-      const finalScore = wordMatch ? Math.max(score, 0.94) : score;
-      if (!best || finalScore > best.score) {
-        best = {
-          product,
-          score: finalScore,
-          matchedBy: wordMatch ? 'word' : 'fuzzy',
-        };
-      }
-    }
-  }
-
-  // Avoid dangerous guesses. A product should be considered resolved only
-  // when the match is genuinely strong.
-  return best && best.score >= 0.68 ? best : null;
-}
-
-function numberAfter(text: string, patterns: RegExp[]): number | undefined {
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      const value = Number(match[1].replace(/,/g, ''));
-      if (Number.isFinite(value)) return value;
-    }
-  }
-  return undefined;
-}
-
-function extractProductText(text: string): string | null {
-  const patterns = [
-    /^(?:how is|how's|tell me about|what about|show me)\s+(.+?)(?:\s+(?:doing|performing|selling))?\??$/i,
-    /^(?:sell|sale|restock|receive|add|remove|delete|edit|update|change|discount|mark)\s+(?:\d+\s+)?(.+?)\s*$/i,
-    /^(.+?)\s+(?:performance|sales|stock|price|pricing)\??$/i,
-  ];
-  for (const pattern of patterns) {
-    const match = text.trim().match(pattern);
-    if (match?.[1]) return match[1].trim();
-  }
-  return null;
-}
-
-const NAVIGATION: Array<{ words: string[]; tab: TabId }> = [
-  { words: ['dashboard', 'home', 'overview'], tab: 'dashboard' },
-  { words: ['inventory', 'stock', 'products'], tab: 'inventory' },
-  { words: ['sell', 'sales', 'pos'], tab: 'sales' },
-  { words: ['history', 'sales history'], tab: 'history' },
-  { words: ['expenses', 'expense'], tab: 'expenses' },
-  { words: ['settings', 'setting'], tab: 'settings' },
-  { words: ['orders', 'order'], tab: 'orders' },
-  { words: ['customers', 'customer'], tab: 'customers' },
-  { words: ['suppliers', 'supplier'], tab: 'suppliers' },
-  { words: ['goals', 'goal'], tab: 'goals' },
-  { words: ['finance', 'finances'], tab: 'finance' },
-  { words: ['reports', 'report'], tab: 'reports' },
-  { words: ['staff', 'employees', 'team'], tab: 'staff' },
-  { words: ['cash drawer', 'cash'], tab: 'cash-drawer' },
-  { words: ['wishlist', 'wish list'], tab: 'wishlist' },
-  { words: ['profile'], tab: 'profile' },
+const STOP = new Set(['the','a','an','my','me','please','product','products','item','items','store','stock','inventory','now','today','for','of','to','on','is','are','what','whats','show','tell','about','do','i','can','you','give','get','some','something','thing','things','with','and','or','in','at','from']);
+const NAV:Array<{words:string[];tab:TabId}> = [
+ {words:['dashboard','home'],tab:'dashboard'},{words:['inventory','stock','products'],tab:'inventory'},
+ {words:['sell','sales','pos'],tab:'sales'},{words:['history','sales history'],tab:'history'},
+ {words:['expenses','expense'],tab:'expenses'},{words:['settings','setting'],tab:'settings'},
+ {words:['orders','order'],tab:'orders'},{words:['customers','customer'],tab:'customers'},
+ {words:['suppliers','supplier'],tab:'suppliers'},{words:['goals','goal'],tab:'goals'},
+ {words:['finance','finances'],tab:'finance'},{words:['reports','report'],tab:'reports'},
+ {words:['staff','employees','team'],tab:'staff'},{words:['cash drawer'],tab:'cash-drawer'},
+ {words:['wishlist','wish list'],tab:'wishlist'},{words:['profile'],tab:'profile'}
 ];
+function norm(v:string){return v.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,' and ').replace(/[^a-z0-9%₦]+/g,' ').trim().replace(/\s+/g,' ');}
+function toks(v:string){return norm(v).split(' ').filter(Boolean).filter(x=>!STOP.has(x));}
+function distance(a:string,b:string){const aa=norm(a),bb=norm(b),prev=Array.from({length:bb.length+1},(_,i)=>i);for(let i=1;i<=aa.length;i++){const cur=[i];for(let j=1;j<=bb.length;j++)cur[j]=aa[i-1]===bb[j-1]?prev[j-1]:Math.min(prev[j-1]+1,prev[j]+1,cur[j-1]+1);for(let j=0;j<cur.length;j++)prev[j]=cur[j];}return prev[bb.length];}
+function similarity(a:string,b:string){const aa=norm(a),bb=norm(b);if(!aa||!bb)return 0;if(aa===bb)return 1;if(aa.includes(bb)||bb.includes(aa))return .94;const ta=new Set(toks(aa)),tb=new Set(toks(bb));const overlap=[...ta].filter(x=>tb.has(x)).length;const union=new Set([...ta,...tb]).size||1;const fuzzy=1-distance(aa,bb)/Math.max(aa.length,bb.length);return Math.max(overlap/union*.92,fuzzy*.82);}
+function names(p:Product){return [p.name,...(p.voiceAliases||[])].filter(Boolean);}
 
-function navigationFor(text: string): TabId | undefined {
-  const q = normalize(text);
-  if (!/^(open|go to|show|take me to|navigate to)\b/.test(q)) return undefined;
-  return NAVIGATION.find(n => n.words.some(word => q.includes(word)))?.tab;
+/** Product matching is deliberately independent of sentence structure. */
+export function resolveProduct(store:StoreData,query:string):ProductMatch|null{
+ const q=norm(query);if(!q)return null;let best:ProductMatch|null=null;
+ for(const p of store.products||[])for(const name of names(p)){const n=norm(name);if(n===q)return{product:p,score:1,matchedBy:name===p.name?'exact':'alias'};const qt=toks(q),nt=toks(n);let score=similarity(q,n);if(qt.length&&qt.every(t=>nt.includes(t)))score=Math.max(score,.96);if(qt.length===1&&nt.some(t=>t.startsWith(qt[0])))score=Math.max(score,.88);if(!best||score>best.score)best={product:p,score,matchedBy:qt.every(t=>nt.includes(t))?'word':'fuzzy'};}
+ return best&&best.score>=.72?best:null;
+}
+function mentioned(store:StoreData,text:string){const q=norm(text);let best:ProductMatch|null=null;for(const p of store.products||[])for(const name of names(p)){const n=norm(name);if(n.length>1&&q.includes(n)&&(!best||n.length>norm(best.product.name).length))best={product:p,score:.97,matchedBy:name===p.name?'exact':'alias'};}return best;}
+function number(text:string,rs:RegExp[]){for(const r of rs){const m=text.match(r);if(m){const n=Number(m[1].replace(/[₦,]/g,''));if(Number.isFinite(n))return n;}}return undefined;}
+function qty(t:string){return number(t,[/\b(?:sell|sold|sale|restock|receive|add|buy)\s+(?:me\s+)?(\d+(?:\.\d+)?)\b/i,/\b(?:qty|quantity|units?)\s*[:=]?\s*(\d+(?:\.\d+)?)\b/i,/\bx\s*(\d+(?:\.\d+)?)\b/i]);}
+function pct(t:string){return number(t,[/\b(\d{1,2}(?:\.\d+)?)\s*%/i]);}
+function fields(t:string){const f:Partial<Pick<Product,'name'|'costPrice'|'sellingPrice'|'quantity'|'category'>>={};const name=t.match(/(?:name|called)\s*[:=]?\s*([^,;]+?)(?=\s+(?:cost|buy|sell|qty|quantity|stock|category)\b|[,;]|$)/i);const cost=t.match(/\b(?:cost|buy|buying)(?:\s+price)?\s*[:=]?\s*₦?([\d,]+)/i);const sell=t.match(/\b(?:sell|selling)(?:\s+price)?\s*[:=]?\s*₦?([\d,]+)/i);const q=t.match(/\b(?:qty|quantity|stock)\s*[:=]?\s*(\d+)/i);const cat=t.match(/\bcategory\s*[:=]?\s*([^,;]+)$/i);if(name)f.name=name[1].trim();if(cost)f.costPrice=Number(cost[1].replace(/,/g,''));if(sell)f.sellingPrice=Number(sell[1].replace(/,/g,''));if(q)f.quantity=Number(q[1]);if(cat)f.category=cat[1].trim();return f;}
+function productText(t:string){return t.replace(/^(?:please\s+)?(?:sell|sold|sale|restock|receive|buy|remove|delete|discontinue|edit|update|change|discount|mark|show|tell me about|how is|how's)\b/i,'').replace(/^\s*(?:me|my|the)\s+/i,'').replace(/\b(?:out of stock|sold out|off|discount)\b/ig,'').replace(/\b\d+(?:\.\d+)?\s*%/g,'').replace(/\b(?:qty|quantity|units?|stock)\s*[:=]?\s*\d+/ig,'').replace(/\b(?:cost|buy|buying|sell|selling)(?:\s+price)?\s*[:=]?\s*₦?[\d,]+/ig,'').trim();}
+function nav(t:string){const q=norm(t);if(!/^(open|go to|take me to|navigate to|switch to|show me)\b/.test(q))return undefined;return NAV.find(n=>n.words.some(w=>q.includes(w)))?.tab;}
+
+export function understand(store:StoreData,raw:string):FlowPlan{
+ const text=raw.trim(),q=norm(text);if(!q)return{intent:'unknown',confidence:0,needsConfirmation:false,reason:'empty input'};
+ if(/^(hi|hello|hey|yo|good morning|good afternoon|good evening)\b/.test(q))return{intent:'store_overview',confidence:.95,needsConfirmation:false,reason:'greeting'};
+ const tab=nav(text);if(tab)return{intent:'navigation',confidence:.99,tab,needsConfirmation:false,reason:'explicit navigation'};
+ if(/\b(?:dark|light|system)\s+(?:theme|mode)\b|\b(?:change|switch|set)\s+(?:the\s+)?theme\b|\b(?:turn|switch)\s+(?:on|off)\s+(?:voice|sound)\b/.test(q))return{intent:'settings',confidence:.98,needsConfirmation:false,reason:'local setting command'};
+ if(/\b(?:how'?s|how is|tell me about|give me an overview of)\s+(?:my\s+)?(?:store|business|shop)\b|\bmy store\b.*\b(?:doing|performance|health)\b/.test(q))return{intent:'store_overview',confidence:.99,needsConfirmation:false,reason:'store-level question'};
+ if(/\b(?:best sellers?|top sellers?|fastest sellers?|what sells best|what are my best)\b/.test(q))return{intent:'store_overview',confidence:.99,needsConfirmation:false,reason:'best-seller query'};
+ if(/\b(?:what should i|what do i need to|which items should i|what needs to)\s+restock\b|\b(?:restock|buy)\b.*\b(?:recommend|suggest|need|list)\b/.test(q))return{intent:'inventory',confidence:.98,needsConfirmation:false,reason:'restock recommendation'};
+ if(/\b(?:what'?s|what is|show me)\s+(?:not selling|slow|dead)\b|\bslow(?:-| )moving\b|\bdead stock\b|\bno sales?\b/.test(q))return{intent:'slow_products',confidence:.98,needsConfirmation:false,reason:'slow/dead stock analysis'};
+ if(/\b(?:improve|grow|growth|ideas?|advice|recommendations?)\b/.test(q))return{intent:'improvement',confidence:.97,needsConfirmation:false,reason:'growth advice'};
+ if(/\b(?:pricing|price|prices|margin|underpriced|overpriced|markup)\b/.test(q)&&!/\b(?:discount|off)\b/.test(q)){const pq=productText(text),p=resolveProduct(store,pq)||mentioned(store,text);return{intent:'pricing',confidence:p?.score||.88,product:p||undefined,productName:p?.product.name,needsConfirmation:false,reason:'pricing analysis'};}
+ if(/\b(?:sales|revenue|profit|sold|selling)\b/.test(q)&&/\b(?:show|how|what|why|today|week|month|last|recent|performance)\b/.test(q)){const pq=productText(text),p=resolveProduct(store,pq)||mentioned(store,text);return{intent:'sales',confidence:p?.score||.9,product:p||undefined,productName:p?.product.name,needsConfirmation:false,reason:'sales analysis'};}
+ if(/\b(?:customer|customers|buyers?|debt|debts|credit)\b/.test(q))return{intent:'customers',confidence:.92,needsConfirmation:false,reason:'customer query'};
+ if(/\b(?:expense|expenses|spending|costs)\b/.test(q))return{intent:'expenses',confidence:.92,needsConfirmation:false,reason:'expense query'};
+ if(/\b(?:cash|cash drawer|balance|money in the business)\b/.test(q))return{intent:'cash',confidence:.9,needsConfirmation:false,reason:'cash query'};
+ const add=/\b(?:add|create|register|put)\b/.test(q);if(add){const f=fields(text);if(!f.name){const body=text.replace(/^(?:please\s+)?(?:add|create|register|put)\s+(?:a\s+|an\s+|the\s+)?(?:product|item|products|items)?\s*/i,'').trim();if(body)f.name=body.split(/\s+(?:cost|buy|sell|qty|quantity|stock|category)\b/i)[0].trim();}return{intent:'add_product',confidence:.96,fields:f,productName:f.name,needsConfirmation:true,reason:'product creation command'};}
+ if(/^(?:please\s+)?(?:sell|record sale|i sold)\b/i.test(text)){const pq=productText(text),p=resolveProduct(store,pq)||mentioned(store,text);return{intent:'sell',confidence:p?.score||.78,product:p||undefined,productName:p?.product.name||pq,quantity:qty(text)||1,needsConfirmation:true,reason:'sale command'};}
+ if(/\b(?:restock|receive|stock up)\b/i.test(q)){const pq=productText(text),p=resolveProduct(store,pq)||mentioned(store,text);return{intent:'restock',confidence:p?.score||.78,product:p||undefined,productName:p?.product.name||pq,quantity:qty(text)||1,needsConfirmation:true,reason:'inventory quantity change'};}
+ if(/\b(?:mark|set)\b.*\b(?:out of stock|sold out)\b/.test(q)){const pq=productText(text),p=resolveProduct(store,pq)||mentioned(store,text);return{intent:'mark_out_of_stock',confidence:p?.score||.78,product:p||undefined,productName:p?.product.name||pq,quantity:0,needsConfirmation:false,reason:'stock availability change'};}
+ const percent=pct(text);if(percent!==undefined||/\b(?:discount|off)\b/.test(q)){const pq=productText(text),p=resolveProduct(store,pq)||mentioned(store,text);return{intent:'discount',confidence:p?.score||.78,product:p||undefined,productName:p?.product.name||pq,percentage:percent||10,needsConfirmation:true,reason:'price change'};}
+ if(/\b(?:remove|delete|discontinue)\b/.test(q)){const pq=productText(text),p=resolveProduct(store,pq)||mentioned(store,text);return{intent:'remove_product',confidence:p?.score||.78,product:p||undefined,productName:p?.product.name||pq,needsConfirmation:true,reason:'catalog removal'};}
+ if(/\b(?:edit|update|change|set)\b/.test(q)&&/\b(?:product|item|price|category|quantity|stock)\b/.test(q)){const pq=productText(text),p=resolveProduct(store,pq)||mentioned(store,text);return{intent:'edit_product',confidence:p?.score||.78,product:p||undefined,productName:p?.product.name||pq,fields:fields(text),needsConfirmation:true,reason:'catalog edit'};}
+ const p=resolveProduct(store,text)||mentioned(store,text);if(p)return{intent:'product_lookup',confidence:p.score,product:p,productName:p.product.name,needsConfirmation:false,reason:'catalog product match'};
+ return{intent:'help',confidence:.65,needsConfirmation:false,reason:'no safe command match'};
 }
 
-function parseFields(text: string): Partial<Pick<Product, 'name' | 'costPrice' | 'sellingPrice' | 'quantity' | 'category'>> {
-  const fields: Partial<Pick<Product, 'name' | 'costPrice' | 'sellingPrice' | 'quantity' | 'category'>> = {};
-  const clean = text.trim();
-  const name = clean.match(/(?:name|called)\s*[:=]?\s*([^,;]+?)(?=\s+(?:cost|price|sell|selling|qty|quantity|category)\b|[,;]|$)/i);
-  const cost = clean.match(/(?:cost|buy|buying)\s*(?:price)?\s*[:=]?\s*₦?([\d,]+(?:\.\d+)?)/i);
-  const selling = clean.match(/(?:sell|selling)\s*(?:price)?\s*[:=]?\s*₦?([\d,]+(?:\.\d+)?)/i);
-  const quantity = clean.match(/(?:qty|quantity|stock)\s*[:=]?\s*(\d+)/i);
-  const category = clean.match(/category\s*[:=]?\s*([^,;]+)$/i);
-  if (name) fields.name = name[1].trim();
-  if (cost) fields.costPrice = Number(cost[1].replace(/,/g, ''));
-  if (selling) fields.sellingPrice = Number(selling[1].replace(/,/g, ''));
-  if (quantity) fields.quantity = Number(quantity[1]);
-  if (category) fields.category = category[1].trim();
-  return fields;
+function recent(store:StoreData,days:number){const cutoff=Date.now()-days*86400000;return(store.sales||[]).filter(s=>{const t=new Date(s.date).getTime();return Number.isFinite(t)&&t>=cutoff;});}
+function money(n:number){return`₦${Math.round(n||0).toLocaleString()}`;}
+export function snapshot(store:StoreData):StoreSnapshot{
+ const active=(store.products||[]).filter(p=>!p.discontinued),s30=recent(store,30),s7=recent(store,7),threshold=store.managerSettings?.minStockThreshold??store.managerSettings?.criticalStockThreshold??5;
+ const prev=s30.filter(s=>{const t=new Date(s.date).getTime();return t<Date.now()-7*86400000&&t>=Date.now()-14*86400000;});const units=new Map<string,number>(),rev=new Map<string,number>();for(const s of s30){units.set(s.productId,(units.get(s.productId)||0)+s.quantity);rev.set(s.productId,(rev.get(s.productId)||0)+s.total);}
+ const topSellers=active.map(product=>({product,units:units.get(product.id)||0,revenue:rev.get(product.id)||0})).filter(x=>x.units>0).sort((a,b)=>b.revenue-a.revenue).slice(0,10);
+ const deadStock=active.filter(p=>(units.get(p.id)||0)===0&&p.quantity>0).sort((a,b)=>b.quantity*b.costPrice-a.quantity*a.costPrice).slice(0,10);
+ const outOfStock=active.filter(p=>p.quantity<=0),lowStock=active.filter(p=>p.quantity>0&&p.quantity<=threshold),revenue30=s30.reduce((a,s)=>a+s.total,0),revenue7=s7.reduce((a,s)=>a+s.total,0),profit30=s30.reduce((a,s)=>a+s.profit,0),profit7=s7.reduce((a,s)=>a+s.profit,0),expenses30=(store.expenses||[]).filter(e=>{const t=new Date(e.date).getTime();return Number.isFinite(t)&&t>=Date.now()-30*86400000;}).reduce((a,e)=>a+e.amount,0),pendingDebt=(store.pendingPayments||[]).filter(p=>p.status==='pending').reduce((a,p)=>a+Math.max(0,p.balance),0),underpriced=active.filter(p=>p.sellingPrice>0&&p.costPrice>0&&(p.sellingPrice-p.costPrice)/p.sellingPrice<.15);
+ return{productCount:(store.products||[]).length,activeProductCount:active.length,stockUnits:active.reduce((a,p)=>a+Math.max(0,p.quantity||0),0),outOfStock,lowStock,revenue30,revenue7,previousRevenue7:prev.reduce((a,s)=>a+s.total,0),profit30,profit7,sales30:s30.length,unitsSold30:s30.reduce((a,s)=>a+s.quantity,0),expenses30,pendingDebt,topSellers,deadStock,underpriced};
 }
-
-/** Convert natural-ish local text into a safe action plan. */
-export function understand(store: StoreData, raw: string): FlowPlan {
-  const text = raw.trim();
-  const q = normalize(text);
-  const productQuery = extractProductText(text);
-  const product = productQuery ? resolveProduct(store, productQuery) : null;
-  const nav = navigationFor(text);
-
-  if (!q) return { intent: 'unknown', confidence: 0, needsConfirmation: false, reason: 'empty input' };
-  if (/^(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(q)) {
-    return { intent: 'store_overview', confidence: 0.95, needsConfirmation: false, reason: 'greeting should surface a useful store snapshot' };
-  }
-  if (nav) return { intent: 'navigation', confidence: 0.99, tab: nav, needsConfirmation: false, reason: 'explicit navigation command' };
-  if (/\b(?:dark|light|system)\s+mode\b|\bturn (?:on|off) voice\b/.test(q)) {
-    return { intent: 'settings', confidence: 0.98, needsConfirmation: false, reason: 'reversible local setting change' };
-  }
-  if (/^(?:what|how).*\b(?:store|business)\b|\bhow'?s my store\b|\bmy store\b.*\b(?:doing|performance|health)\b/.test(q)) {
-    return { intent: 'store_overview', confidence: 0.99, needsConfirmation: false, reason: 'merchant asked for business-level context, not a product lookup' };
-  }
-  if (/\b(?:what should i|what do i need to)\s+restock\b|\brestock\b.*\b(?:suggest|recommend|need)\b/.test(q)) {
-    return { intent: 'inventory', confidence: 0.96, needsConfirmation: false, reason: 'merchant wants a restock recommendation' };
-  }
-  if (/\b(?:what'?s|what is)\s+(?:not selling|slow|dead)\b|\bslow (?:moving|sellers?)\b|\bdead stock\b/.test(q)) {
-    return { intent: 'slow_products', confidence: 0.96, needsConfirmation: false, reason: 'merchant wants slow/dead inventory analysis' };
-  }
-  if (/\b(?:pricing|price|margin|underpriced|overpriced)\b/.test(q) && !/\b(?:discount|off)\b/.test(q)) {
-    return { intent: 'pricing', confidence: 0.9, product: product || undefined, productName: productQuery || undefined, needsConfirmation: false, reason: 'merchant is asking for pricing intelligence' };
-  }
-  if (/\b(?:sales|revenue|selling|sold)\b/.test(q) && /\b(?:how|why|what|show|today|week|month)\b/.test(q)) {
-    return { intent: 'sales', confidence: 0.88, product: product || undefined, productName: productQuery || undefined, needsConfirmation: false, reason: 'merchant wants sales performance' };
-  }
-  if (/\b(?:customers?|buyers?)\b/.test(q)) return { intent: 'customers', confidence: 0.9, needsConfirmation: false, reason: 'customer/business relationship query' };
-  if (/\b(?:expense|expenses|spending|costs?)\b/.test(q)) return { intent: 'expenses', confidence: 0.9, needsConfirmation: false, reason: 'expense query' };
-  if (/\b(?:cash|balance|money in the business|bank)\b/.test(q)) return { intent: 'cash', confidence: 0.88, needsConfirmation: false, reason: 'cash/balance query' };
-  if (/\b(?:improve|improvement|grow|growth|idea|ideas|advice|recommend)\b/.test(q)) return { intent: 'improvement', confidence: 0.92, needsConfirmation: false, reason: 'merchant wants actionable growth advice' };
-
-  const saleQty = numberAfter(text, [/(?:sell|sold|sale)\s+(?:me\s+)?(\d+)\s+/i, /(?:\bx\s*)(\d+)\b/i]);
-  if (/^(?:sell|i sold|record sale)\b/i.test(text)) {
-    return {
-      intent: 'sell', confidence: product ? 0.96 : 0.78, product, productName: productQuery || undefined,
-      quantity: saleQty || 1, needsConfirmation: true,
-      reason: product ? 'sale command resolved to a real catalog item' : 'sale needs a product before execution',
-    };
-  }
-
-  const restockQty = numberAfter(text, [/\b(?:restock|receive|add)\s+(.+?)\s+(?:by\s+)?(\d+)\b/i]);
-  if (/\b(?:restock|receive)\b/.test(q)) {
-    return { intent: 'restock', confidence: product ? 0.97 : 0.78, product, productName: productQuery || undefined, quantity: restockQty || 1, needsConfirmation: true, reason: 'restocking changes inventory and may spend money' };
-  }
-  if (/\b(?:mark|set)\b.*\b(?:out of stock|sold out)\b/.test(q)) {
-    return { intent: 'mark_out_of_stock', confidence: product ? 0.97 : 0.78, product, productName: productQuery || undefined, quantity: 0, needsConfirmation: false, reason: 'inventory availability change is reversible and non-financial' };
-  }
-  const discount = numberAfter(text, [/\b(\d{1,2})\s*%\s*(?:off|discount)\b/i]);
-  if (discount !== undefined || /\bdiscount\b|\boff\b/.test(q)) {
-    return { intent: 'discount', confidence: product ? 0.97 : 0.78, product, productName: productQuery || undefined, percentage: discount, needsConfirmation: true, reason: 'changing a customer price requires confirmation' };
-  }
-  if (/\b(?:add|create)\b.*\b(?:product|item)\b/.test(q)) {
-    return { intent: 'add_product', confidence: 0.96, fields: parseFields(text), needsConfirmation: true, reason: 'adding a product changes the catalog' };
-  }
-  if (/\b(?:edit|update|change)\b.*\b(?:product|item|price|stock|category)\b/.test(q)) {
-    return { intent: 'edit_product', confidence: product ? 0.95 : 0.76, product, productName: productQuery || undefined, fields: parseFields(text), needsConfirmation: true, reason: 'editing catalog data should be confirmed' };
-  }
-  if (/\b(?:remove|delete|discontinue)\b.*\b(?:product|item)\b/.test(q)) {
-    return { intent: 'remove_product', confidence: product ? 0.95 : 0.76, product, productName: productQuery || undefined, needsConfirmation: true, reason: 'destructive catalog action' };
-  }
-  if (product) return { intent: 'product_lookup', confidence: product.score, product, productName: product.product.name, needsConfirmation: false, reason: 'input resolved to a known product' };
-
-  return { intent: 'help', confidence: 0.55, needsConfirmation: false, reason: 'no safe command match; answer with store-aware help instead of claiming a product is missing' };
-}
-
-function daysAgo(date: string | Date, days: number): boolean {
-  const d = new Date(date).getTime();
-  return Number.isFinite(d) && d >= Date.now() - days * 86400000;
-}
-
-function revenue(sales: StoreData['sales'], days: number): number {
-  return sales.filter(s => daysAgo(s.date, days)).reduce((sum, s) => sum + s.total, 0);
-}
-
-function profit(sales: StoreData['sales'], days: number): number {
-  return sales.filter(s => daysAgo(s.date, days)).reduce((sum, s) => sum + s.profit, 0);
-}
-
-/** One cheap, reusable snapshot so every answer starts from the same store truth. */
-export function snapshot(store: StoreData): StoreSnapshot {
-  const active = (store.products || []).filter(p => !p.discontinued);
-  const threshold = store.managerSettings?.minStockThreshold ?? store.managerSettings?.criticalStockThreshold ?? 5;
-  const sales30 = (store.sales || []).filter(s => daysAgo(s.date, 30));
-  const sales7 = sales30.filter(s => daysAgo(s.date, 7));
-  const previous7 = sales30.filter(s => {
-    const t = new Date(s.date).getTime();
-    return t >= Date.now() - 14 * 86400000 && t < Date.now() - 7 * 86400000;
-  });
-  const unitsByProduct = new Map<string, number>();
-  const revenueByProduct = new Map<string, number>();
-  for (const sale of sales30) {
-    unitsByProduct.set(sale.productId, (unitsByProduct.get(sale.productId) || 0) + sale.quantity);
-    revenueByProduct.set(sale.productId, (revenueByProduct.get(sale.productId) || 0) + sale.total);
-  }
-  const topSellers = active
-    .map(product => ({ product, units: unitsByProduct.get(product.id) || 0, revenue: revenueByProduct.get(product.id) || 0 }))
-    .filter(x => x.units > 0)
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
-
-  const deadStock = active
-    .filter(p => (unitsByProduct.get(p.id) || 0) === 0 && p.quantity > 0)
-    .sort((a, b) => b.quantity * b.costPrice - a.quantity * a.costPrice)
-    .slice(0, 10);
-  const underpriced = active.filter(p => p.sellingPrice > 0 && p.costPrice > 0 && (p.sellingPrice - p.costPrice) / p.sellingPrice < 0.15);
-  const outOfStock = active.filter(p => p.quantity <= 0);
-  const lowStock = active.filter(p => p.quantity > 0 && p.quantity <= threshold);
-  const stockUnits = active.reduce((sum, p) => sum + Math.max(0, p.quantity || 0), 0);
-  const expenses30 = (store.expenses || []).filter(e => daysAgo(e.date, 30)).reduce((sum, e) => sum + e.amount, 0);
-  const pendingDebt = (store.pendingPayments || []).filter(p => p.status === 'pending').reduce((sum, p) => sum + Math.max(0, p.balance), 0);
-
-  return {
-    productCount: (store.products || []).length,
-    activeProductCount: active.length,
-    stockUnits,
-    outOfStock,
-    lowStock,
-    revenue30: revenue(store.sales || [], 30),
-    revenue7: revenue(store.sales || [], 7),
-    previousRevenue7: previous7.reduce((sum, s) => sum + s.total, 0),
-    profit30: profit(store.sales || [], 30),
-    profit7: profit(store.sales || [], 7),
-    sales30: sales30.length,
-    unitsSold30: sales30.reduce((sum, s) => sum + s.quantity, 0),
-    expenses30,
-    pendingDebt,
-    topSellers,
-    deadStock,
-    underpriced,
-  };
-}
-
-/** Ranked recommendations — the assistant's local "what should I do next?" brain. */
-export function priorities(store: StoreData): FlowPriority[] {
-  const s = snapshot(store);
-  const result: FlowPriority[] = [];
-  const weekGrowth = s.previousRevenue7 > 0 ? (s.revenue7 - s.previousRevenue7) / s.previousRevenue7 : 0;
-
-  for (const p of s.outOfStock.slice(0, 5)) {
-    const sold = (store.sales || []).filter(x => x.productId === p.id && daysAgo(x.date, 30)).reduce((sum, x) => sum + x.quantity, 0);
-    result.push({ level: sold >= 5 ? 'urgent' : 'important', title: `Restock ${p.name}`, detail: sold > 0 ? `${sold} units sold in 30 days and stock is now zero.` : `${p.name} is unavailable; decide whether to restock or discontinue it.`, productId: p.id });
-  }
-  for (const p of s.lowStock.slice(0, 5)) {
-    if (result.some(x => x.productId === p.id)) continue;
-    const sold = (store.sales || []).filter(x => x.productId === p.id && daysAgo(x.date, 30)).reduce((sum, x) => sum + x.quantity, 0);
-    result.push({ level: sold >= 5 ? 'urgent' : 'important', title: `Watch ${p.name}`, detail: `Only ${p.quantity} left${sold ? ` after ${sold} sold in 30 days` : ''}.`, productId: p.id });
-  }
-  for (const p of s.underpriced.slice(0, 5)) {
-    const margin = p.sellingPrice > 0 ? ((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100 : 0;
-    result.push({ level: 'opportunity', title: `Review ${p.name}'s price`, detail: `Current gross margin is only ${margin.toFixed(0)}%. Check competitors and your target margin before changing it.`, productId: p.id });
-  }
-  for (const p of s.deadStock.slice(0, 5)) {
-    result.push({ level: 'opportunity', title: `Move ${p.name}`, detail: `No units sold in the last 30 days while ${p.quantity} remain. Consider a promotion, bundle, or discontinuation.`, productId: p.id });
-  }
-  if (s.pendingDebt > 0) result.push({ level: 'important', title: 'Collect outstanding payments', detail: `₦${s.pendingDebt.toLocaleString()} is currently owed by customers.` });
-  if (weekGrowth < -0.15 && s.revenue7 > 0) result.push({ level: 'important', title: 'Investigate the sales drop', detail: `Revenue is down ${Math.abs(weekGrowth * 100).toFixed(0)}% versus the previous 7 days. Check stockouts, pricing changes and your best sellers.` });
-  if (result.length === 0) result.push({ level: 'opportunity', title: 'Improve your best sellers', detail: s.topSellers[0] ? `${s.topSellers[0].product.name} is your strongest seller over 30 days. Protect its stock and test a small margin improvement before changing slower products.` : 'Start recording sales consistently. Flow will learn which products and categories deserve more attention.' });
-
-  const rank = { urgent: 0, important: 1, opportunity: 2 } as const;
-  return result.sort((a, b) => rank[a.level] - rank[b.level]).slice(0, 10);
-}
-
-export function storeBrief(store: StoreData): string {
-  const s = snapshot(store);
-  const p = priorities(store)[0];
-  const weekChange = s.previousRevenue7 > 0 ? ((s.revenue7 - s.previousRevenue7) / s.previousRevenue7) * 100 : null;
-  const lines = [
-    `**${store.storeName || 'Your store'}**`,
-    `${s.activeProductCount} active products · ${s.stockUnits} units in stock`,
-    `Last 7 days: ₦${s.revenue7.toLocaleString()} revenue · ₦${s.profit7.toLocaleString()} profit${weekChange === null ? '' : ` · ${weekChange >= 0 ? '+' : ''}${weekChange.toFixed(0)}% vs previous 7 days`}`,
-    `Last 30 days: ₦${s.revenue30.toLocaleString()} revenue · ${s.unitsSold30} units sold · ₦${s.expenses30.toLocaleString()} expenses`,
-    `${s.outOfStock.length} out of stock · ${s.lowStock.length} low stock · ${s.deadStock.length} with no sale in 30 days`,
-    s.pendingDebt > 0 ? `Customer debt: ₦${s.pendingDebt.toLocaleString()}` : 'Customer debt: none outstanding',
-    p ? `**Next best action:** ${p.title} — ${p.detail}` : '',
-  ];
-  return lines.filter(Boolean).join('\n');
-}
-
-export function productBrief(product: Product, store: StoreData): string {
-  const sales = (store.sales || []).filter(s => s.productId === product.id);
-  const last30 = sales.filter(s => daysAgo(s.date, 30));
-  const units30 = last30.reduce((sum, s) => sum + s.quantity, 0);
-  const revenue30 = last30.reduce((sum, s) => sum + s.total, 0);
-  const margin = product.sellingPrice > 0 ? ((product.sellingPrice - product.costPrice) / product.sellingPrice) * 100 : 0;
-  const aliases = product.voiceAliases?.length ? ` · also known as ${product.voiceAliases.join(', ')}` : '';
-  return `**${product.name}**${aliases}\nStock: ${product.quantity} · Sold (30d): ${units30} · Revenue (30d): ₦${revenue30.toLocaleString()} · Margin: ${margin.toFixed(0)}%\nCost: ₦${product.costPrice.toLocaleString()} · Selling: ₦${product.sellingPrice.toLocaleString()}${product.promoPrice ? ` · Promo: ₦${product.promoPrice.toLocaleString()}` : ''}`;
-}
+export function priorities(store:StoreData):FlowPriority[]{const s=snapshot(store),r:FlowPriority[]=[];for(const p of s.outOfStock){const sold=recent(store,30).filter(x=>x.productId===p.id).reduce((a,x)=>a+x.quantity,0);r.push({level:sold?'urgent':'important',title:`Restock ${p.name}`,detail:sold?`${sold} units sold in 30 days and stock is now zero.`:'Stock is zero.',productId:p.id});}for(const p of s.lowStock){if(r.some(x=>x.productId===p.id))continue;const sold=recent(store,30).filter(x=>x.productId===p.id).reduce((a,x)=>a+x.quantity,0);r.push({level:sold>=3?'urgent':'important',title:`Watch ${p.name}`,detail:`Only ${p.quantity} left${sold?`; ${sold} sold in 30 days.`:'.'}`,productId:p.id});}for(const p of s.underpriced.slice(0,5))r.push({level:'opportunity',title:`Review price of ${p.name}`,detail:`Margin is only ${Math.round((p.sellingPrice-p.costPrice)/Math.max(1,p.sellingPrice)*100)}%.`,productId:p.id});for(const p of s.deadStock.slice(0,5))r.push({level:'opportunity',title:`Move ${p.name}`,detail:`No units sold in 30 days; ${p.quantity} in stock. Consider a bundle or controlled discount.`,productId:p.id});return r.slice(0,15);}
+export function storeBrief(store:StoreData){const s=snapshot(store),change=s.previousRevenue7?((s.revenue7-s.previousRevenue7)/s.previousRevenue7)*100:null,top=s.topSellers.slice(0,5).map(x=>`${x.product.name} (${x.units})`).join(', ')||'No sales yet',next=priorities(store)[0];return[`**${store.name||'Your store'}**`,`${s.activeProductCount} active products · ${s.stockUnits} units in stock`,`Last 7 days: ${money(s.revenue7)} revenue · ${money(s.profit7)} profit${change===null?'':` · ${change>=0?'+':''}${Math.round(change)}% vs previous 7 days`}`,`Last 30 days: ${money(s.revenue30)} revenue · ${s.unitsSold30} units sold · ${money(s.expenses30)} expenses`,`${s.outOfStock.length} out of stock · ${s.lowStock.length} low stock · ${s.deadStock.length} with no sale in 30 days`,`Customer debt: ${s.pendingDebt?money(s.pendingDebt):'none outstanding'}`,`**Best sellers (30d):** ${top}`,next?`**Next best action:** ${next.title} — ${next.detail}`:'**Next best action:** Keep selling and monitor the store.'].join('\n');}
+export function productBrief(match:ProductMatch,store:StoreData){const p=match.product,s=recent(store,30).filter(x=>x.productId===p.id),u=s.reduce((a,x)=>a+x.quantity,0),r=s.reduce((a,x)=>a+x.total,0),m=p.sellingPrice>0?(p.sellingPrice-p.costPrice)/p.sellingPrice*100:0;return[`**${p.name}**`,`Stock: ${p.quantity} · Sold (30d): ${u} · Revenue (30d): ${money(r)}`,`Price: ${money(p.sellingPrice)} · Cost: ${money(p.costPrice)} · Margin: ${Math.round(m)}%`,u===0&&p.quantity>0?'No sales in 30 days — consider a bundle or controlled promotion.':u>0&&p.quantity===0?'Selling item with zero stock — restock should be considered.':'I can use this product in a sale, restock, edit, or pricing action.'].join('\n');}
