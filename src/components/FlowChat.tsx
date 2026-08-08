@@ -4,6 +4,7 @@ import { addProduct, recordSale, receiveStock } from '@/lib/store-data';
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
 import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';
+import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/flow-brain-memory';
 import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw } from 'lucide-react';
 import Mascot from '@/components/Mascot';
 
@@ -29,9 +30,10 @@ function parseNewProduct(text: string): AddDraft | null {
 
 export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowChatProps) {
   const storeKey = store.id || store.storeId || store.accessCode || 'default';
+  const savedBrain = loadBrainMemory(store);
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: id('greet'), from: 'flow', text: "I'm Flow. I can operate your store locally — sales, stock, products, analysis and app controls. Try 'Sell 2 Indomie'." }]);
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions(storeKey)); const [sessionId, setSessionId] = useState(() => id('session')); const [input, setInput] = useState(''); const [showHistory, setShowHistory] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(() => localStorage.getItem('storeflow_flow_voice') === '1'); const [lastProductId, setLastProductId] = useState<string | null>(null); const [lastIntent, setLastIntent] = useState<OperatingIntent | undefined>(); const [lastUndo, setLastUndo] = useState<StoreData | null>(null);
+  const [voiceOn, setVoiceOn] = useState(() => localStorage.getItem('storeflow_flow_voice') === '1'); const [lastProductId, setLastProductId] = useState<string | null>(savedBrain.lastProductId || null); const [lastIntent, setLastIntent] = useState<OperatingIntent | undefined>(savedBrain.lastIntent as OperatingIntent | undefined); const [lastUndo, setLastUndo] = useState<StoreData | null>(null);
   const [addDraft, setAddDraft] = useState<AddDraft | null>(null); const [addStep, setAddStep] = useState<'cost'|'sell'|'qty'|'category'|'confirm'>('cost'); const scrollRef = useRef<HTMLDivElement>(null);
   useMemo(() => storeAnalysis(store), [store]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages]);
@@ -46,12 +48,12 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     if (!items.length) { flow('I could not match those products to your catalog. Try the exact product name, or teach me an alias.'); return; }
     rememberUndo(); let next = store; let total = 0; let profit = 0; const done: string[] = [];
     for (const item of items) { const p = next.products.find(x => x.id === item.product.product.id); if (!p) continue; if (p.quantity < item.quantity && !next.managerSettings?.backorderSellingEnabled) { flow(`I stopped before changing anything. **${p.name}** only has ${p.quantity} in stock, but you asked for ${item.quantity}.`); setLastUndo(null); return; } next = recordSale(next, p.id, item.quantity, 'Flow', 'FlowChat'); total += item.quantity * p.sellingPrice; profit += item.quantity * (p.sellingPrice - p.costPrice); done.push(`${item.quantity} ${p.name}`); }
-    onUpdate(next); if (items.length === 1) { const p = next.products.find(x => x.id === items[0].product.product.id)!; setLastProductId(p.id); flow(`Done — sold **${items[0].quantity} ${p.name}**.\nTotal: **${money(total)}**\nProfit: **${money(profit)}**\nStock: **${p.quantity} remaining**${p.quantity === 0 ? '\n⚠️ Now out of stock.' : ''}`); } else flow(`Done — **${done.length} products sold**.\n${done.map(x => `• ${x}`).join('\n')}\n\nTotal: **${money(total)}**\nProfit: **${money(profit)}**`); showToast('Sale recorded by Flow', 'success');
+    onUpdate(next); if (items.length === 1) { const p = next.products.find(x => x.id === items[0].product.product.id)!; setLastProductId(p.id); rememberBrainContext(next, { lastIntent: 'sell', lastProductId: p.id, lastTopic: 'sales', lastAction: 'sell' }); flow(`Done — sold **${items[0].quantity} ${p.name}**.\nTotal: **${money(total)}**\nProfit: **${money(profit)}**\nStock: **${p.quantity} remaining**${p.quantity === 0 ? '\n⚠️ Now out of stock.' : ''}`); } else { rememberBrainContext(next, { lastIntent: 'sell', lastTopic: 'sales', lastAction: 'batch sell' }); flow(`Done — **${done.length} products sold**.\n${done.map(x => `• ${x}`).join('\n')}\n\nTotal: **${money(total)}**\nProfit: **${money(profit)}**`); } showToast('Sale recorded by Flow', 'success');
   };
   const executeRestock = (items: FlowLineItem[]) => {
     if (!items.length) { flow('I could not match the products. Tell me the exact catalog names, for example **Add 5 Milo, 3 Peak Milk and 10 Indomie**.'); return; }
     rememberUndo(); let next = store; const done: string[] = []; for (const item of items) { const p = next.products.find(x => x.id === item.product.product.id); if (!p) continue; next = receiveStock(next, [{ productId: p.id, quantity: item.quantity, costPrice: p.costPrice }], 'balance', 'FlowChat'); done.push(`${item.quantity} ${p.name}`); }
-    onUpdate(next); setLastProductId(items[0].product.product.id); flow(`Done — added stock for **${done.length} products**.\n${done.map(x => `• ${x}`).join('\n')}`); showToast('Stock updated by Flow', 'success');
+    onUpdate(next); setLastProductId(items[0].product.product.id); rememberBrainContext(next, { lastIntent: 'restock', lastProductId: items[0].product.product.id, lastTopic: 'inventory', lastAction: 'restock' }); flow(`Done — added stock for **${done.length} products**.\n${done.map(x => `• ${x}`).join('\n')}`); showToast('Stock updated by Flow', 'success');
   };
   const finishAdd = (draft: AddDraft) => {
     if (draft.costPrice == null || draft.sellingPrice == null || draft.quantity == null || !draft.category) { flow('I still need cost, selling price, quantity and category.'); return; }
@@ -69,19 +71,19 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
   const ask = (raw: string) => {
     const text = clean(raw); if (!text) return; you(text);
-    if (/^(undo|undo that|reverse that|take that back)$/i.test(text)) { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); flow('Done — I reversed my last change.'); } return; }
+    if (/^(undo|undo that|reverse that|take that back)$/i.test(text)) { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
     if (addDraft) { handleAddWizard(text); return; }
-    const lastProduct = lastProductId ? store.products.find(p => p.id === lastProductId) || null : null; const plan = understand(store, text, lastProduct, lastIntent); setLastIntent(plan.intent); if (plan.product) setLastProductId(plan.product.product.id);
+    const lastProduct = lastProductId ? store.products.find(p => p.id === lastProductId) || null : null; const plan = understand(store, text, lastProduct, lastIntent); setLastIntent(plan.intent); if (plan.product) { setLastProductId(plan.product.product.id); rememberBrainContext(store, { lastIntent: plan.intent, lastProductId: plan.product.product.id, lastTopic: plan.intent === 'product_lookup' ? 'product' : plan.intent, lastAction: plan.intent }); } else rememberBrainContext(store, { lastIntent: plan.intent, lastTopic: plan.intent });
     if (plan.intent === 'navigation' && plan.tab) { onNavigate?.(plan.tab); flow(`Opening **${plan.tab.replace(/-/g, ' ')}**.`); return; }
     if (plan.intent === 'settings') { const mode = text.match(/\b(dark|light|system)\b/i)?.[1]?.toLowerCase() as ThemeMode | undefined; if (mode) { setThemeMode(mode); flow(`${mode[0].toUpperCase() + mode.slice(1)} mode is on.`); return; } if (/turn on (voice|sound)/i.test(text)) { setVoiceOn(true); flow('Voice is on.'); return; } if (/turn off (voice|sound)/i.test(text)) { setVoiceOn(false); flow('Voice is off.'); return; } const theme = THEMES.find(t => text.toLowerCase().includes(t.id as string)) as { id: ThemeId; label: string } | undefined; if (theme) { applyTheme(theme.id); flow(`Switched to ${theme.label}.`); return; } }
     if (plan.intent === 'undo') { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); flow('Done — I reversed my last change.'); } return; }
     if (plan.intent === 'sell') { executeSales(plan.items); return; }
     if (plan.intent === 'restock') { if (plan.items.length) { executeRestock(plan.items); return; } const draft = parseNewProduct(text); if (draft && !resolveProduct(store, draft.name)) { setAddDraft(draft); setAddStep(draft.costPrice == null ? 'cost' : draft.sellingPrice == null ? 'sell' : draft.quantity == null ? 'qty' : draft.category == null ? 'category' : 'confirm'); flow(`I don't have **${draft.name}** in your catalog. I can add it. ${draft.costPrice == null ? 'What is your cost?' : draft.sellingPrice == null ? 'Selling price?' : draft.quantity == null ? 'Quantity?' : draft.category == null ? 'Category?' : 'Confirm?'}`); return; } flow('I could not match that product to your catalog. I will not invent one.'); return; }
-    if (plan.intent === 'product_lookup' && plan.product && plan.product.score < .9) { const p = plan.product.product; flow(`I think you mean **${p.name}**. Is that right?`, [{ label: 'Yes — use it', onClick: () => { setLastProductId(p.id); flow(`Got it. I'll remember **${p.name}** for this chat.`); } }]); return; }
+    if (plan.intent === 'product_lookup' && plan.product && plan.product.score < .9) { const p = plan.product.product; flow(`I think you mean **${p.name}**. Is that right?`, [{ label: 'Yes — use it', onClick: () => { learnBrainAlias(store, text, p); setLastProductId(p.id); rememberBrainContext(store, { lastProductId: p.id, lastTopic: 'product', lastAction: 'learned alias' }); flow(`Got it. I’ll remember **${text}** as **${p.name}** on this device.`); } }]); return; }
     flow(responseFor(store, plan));
   };
 
-  const newChat = () => { setSessionId(id('session')); setMessages([{ id: id('greet'), from: 'flow', text: 'Fresh chat. I still have your live store data. What should we do?' }]); setLastProductId(null); setLastIntent(undefined); setLastUndo(null); setShowHistory(false); };
+  const newChat = () => { setSessionId(id('session')); setMessages([{ id: id('greet'), from: 'flow', text: 'Fresh chat. I still have your live store data and learned product names. What should we do?' }]); setLastProductId(loadBrainMemory(store).lastProductId || null); setLastIntent(loadBrainMemory(store).lastIntent as OperatingIntent | undefined); setLastUndo(null); setShowHistory(false); };
   const openSession = (s: ChatSession) => { setSessionId(s.id); setMessages(s.messages); setShowHistory(false); };
   const deleteSession = (sid: string) => setSessions(prev => { const n = prev.filter(s => s.id !== sid); saveSessions(storeKey, n); return n; });
 
