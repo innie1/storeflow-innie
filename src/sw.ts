@@ -14,7 +14,10 @@ registerRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ c
 registerRoute(({ request }) => ['style','script','worker','image','font'].includes(request.destination), new StaleWhileRevalidate({ cacheName: 'assets' }));
 setCatchHandler(async ({ event }) => event.request.mode === 'navigate' ? ((await matchPrecache('/index.html')) || Response.error()) : Response.error());
 
-interface PushPayload { title?: string; body?: string; tag?: string; url?: string; priority?: 'critical'|'normal'; notification_id?: string; orderId?: string; orderNumber?: string; actions?: { action:string; title:string }[]; }
+interface PushPayload { title?: string; body?: string; tag?: string; url?: string; priority?: 'critical'|'normal'; notification_id?: string; orderId?: string; orderNumber?: string; actions?: { action:string; title:string }[]; type?: string; category?: string; }
+interface NotificationPreferences { enabled:boolean; orders:boolean; flowCheckins:boolean; businessInsights:boolean; debtReminders:boolean; sounds:boolean; criticalAlerts:boolean; quietHoursEnabled:boolean; quietStart:string; quietEnd:string; }
+const DEFAULT_PREFS: NotificationPreferences = { enabled:true, orders:true, flowCheckins:true, businessInsights:true, debtReminders:true, sounds:true, criticalAlerts:true, quietHoursEnabled:true, quietStart:'22:00', quietEnd:'07:00' };
+
 function buildActions(data: PushPayload) {
   if (data.actions?.length) return data.actions;
   const tag = (data.tag || '').toLowerCase(), title = (data.title || '').toLowerCase();
@@ -25,6 +28,46 @@ function buildActions(data: PushPayload) {
   return [{ action:'open', title:'⚡ Open StoreFlow' }];
 }
 function notificationUrl(data: PushPayload) { return data.url || (data.orderId ? `/?tab=orders&order_id=${encodeURIComponent(data.orderId)}` : '/?tab=dashboard'); }
+function categoryOf(data: PushPayload): 'order'|'flow'|'insight'|'debt'|'other' {
+  const raw = `${data.type || ''} ${data.category || ''} ${data.tag || ''} ${data.title || ''}`.toLowerCase();
+  if (data.orderId || raw.includes('order')) return 'order';
+  if (raw.includes('flow') || raw.includes('check-in') || raw.includes('checkin')) return 'flow';
+  if (raw.includes('debt') || raw.includes('repayment') || raw.includes('pending')) return 'debt';
+  if (raw.includes('insight') || raw.includes('stock') || raw.includes('sales') || raw.includes('recommend')) return 'insight';
+  return 'other';
+}
+function quietNow(start:string,end:string) {
+  const [sh,sm] = start.split(':').map(Number), [eh,em] = end.split(':').map(Number);
+  const current = new Date().getHours()*60 + new Date().getMinutes(), from=sh*60+sm, to=eh*60+em;
+  if (from === to) return true;
+  return from < to ? current >= from && current < to : current >= from || current < to;
+}
+async function readPreferences(): Promise<NotificationPreferences> {
+  try {
+    const db = await new Promise<IDBDatabase>((resolve,reject)=>{
+      const req = indexedDB.open('storeflow-notifications',1);
+      req.onupgradeneeded = () => req.result.createObjectStore('preferences');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return await new Promise(resolve=>{
+      const req=db.transaction('preferences','readonly').objectStore('preferences').get('global');
+      req.onsuccess=()=>resolve({ ...DEFAULT_PREFS, ...(req.result || {}) } as NotificationPreferences);
+      req.onerror=()=>resolve(DEFAULT_PREFS);
+    });
+  } catch { return DEFAULT_PREFS; }
+}
+function allowed(data:PushPayload,prefs:NotificationPreferences) {
+  if (!prefs.enabled) return false;
+  const category=categoryOf(data);
+  if (category==='order' && !prefs.orders) return false;
+  if (category==='flow' && !prefs.flowCheckins) return false;
+  if (category==='insight' && !prefs.businessInsights) return false;
+  if (category==='debt' && !prefs.debtReminders) return false;
+  const priority=data.priority || 'normal';
+  if (prefs.quietHoursEnabled && quietNow(prefs.quietStart,prefs.quietEnd) && !(priority==='critical' && prefs.criticalAlerts)) return false;
+  return true;
+}
 
 self.addEventListener('push', event => {
   let data: PushPayload = {};
@@ -33,18 +76,19 @@ self.addEventListener('push', event => {
   const tag = data.tag || data.notification_id || (data.orderId ? `order-${data.orderId}` : 'storeflow-alert');
   const url = notificationUrl(data), priority = data.priority || 'normal';
   event.waitUntil((async () => {
+    const prefs=await readPreferences();
+    if (!allowed(data,prefs)) return;
     const clients = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
     const visible = clients.find(c => (c as WindowClient).visibilityState === 'visible') as WindowClient | undefined;
     if (visible) {
       visible.postMessage({ type:'STOREFLOW_PUSH_RECEIVED', title, body:data.body || '', url, orderId:data.orderId || null, orderNumber:data.orderNumber || null, tag, priority });
       return;
     }
-    // This path executes inside the service worker. The StoreFlow page can be fully closed.
     await self.registration.showNotification(title, {
       body:data.body || 'New StoreFlow alert', icon:'/icons/icon-192.png', badge:'/icons/icon-192.png', tag,
-      renotify:false, requireInteraction:priority === 'critical', timestamp:Date.now(),
-      data:{ url, orderId:data.orderId || null, orderNumber:data.orderNumber || null, tag },
-      vibrate:priority === 'critical' ? [300,100,300,100,300] : [180,80,180], actions:buildActions(data),
+      renotify:false, silent:!prefs.sounds, requireInteraction:priority === 'critical', timestamp:Date.now(),
+      data:{ url, orderId:data.orderId || null, orderNumber:data.orderNumber || null, tag, category:categoryOf(data) },
+      vibrate:prefs.sounds ? (priority === 'critical' ? [300,100,300,100,300] : [180,80,180]) : [], actions:buildActions(data),
     } as NotificationOptions);
     try { const current = await self.registration.getNotifications(); if ('setAppBadge' in navigator) await (navigator as any).setAppBadge(current.length); } catch {}
   })());
@@ -65,6 +109,14 @@ self.addEventListener('notificationclick', event => {
 
 self.addEventListener('message', event => {
   const msg = event.data; if (!msg) return;
+  if (msg.type === 'SET_NOTIFICATION_PREFERENCES' && msg.preferences) {
+    event.waitUntil((async()=>{
+      try {
+        const db=await new Promise<IDBDatabase>((resolve,reject)=>{const req=indexedDB.open('storeflow-notifications',1);req.onupgradeneeded=()=>req.result.createObjectStore('preferences');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
+        await new Promise<void>((resolve,reject)=>{const tx=db.transaction('preferences','readwrite');tx.objectStore('preferences').put(msg.preferences,'global');tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});
+      } catch {}
+    })());
+  }
   if (msg.type === 'CLEAR_NOTIFICATIONS') event.waitUntil((async () => {
     const notifications = await self.registration.getNotifications();
     for (const n of notifications) if (!msg.orderId || n.data?.orderId === msg.orderId || n.tag?.includes(msg.orderId)) n.close();
