@@ -774,8 +774,8 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
 
       {/* Reject Prompt Overlay Dialog */}
       {promptType === 'reject' && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md space-y-4 shadow-xl text-left">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setPromptType(null); setPromptOrderId(null); setPromptText(''); }}>
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md space-y-4 shadow-xl text-left" onClick={e => e.stopPropagation()}>
             <h3 className="font-display font-black text-lg text-foreground">Reject Order</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Enter the reason for rejecting this order. The customer will receive this message immediately.

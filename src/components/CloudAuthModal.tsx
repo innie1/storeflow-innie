@@ -272,8 +272,8 @@ export default function CloudAuthModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-surface-1 border border-border rounded-2xl shadow-xl overflow-hidden animate-scale-up relative">
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-md bg-surface-1 border border-border rounded-2xl shadow-xl overflow-hidden animate-scale-up relative" onClick={e => e.stopPropagation()}>
         <button
           type="button"
           onClick={onClose}

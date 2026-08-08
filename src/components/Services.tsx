@@ -136,8 +136,8 @@ export default function Services({ store, onUpdate, currentUser }: ServicesProps
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 animate-fade-in">
-          <div className="w-full max-w-sm bg-background rounded-t-2xl sm:rounded-2xl p-5 pb-6">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 animate-fade-in" onClick={() => setShowForm(false)}>
+          <div className="w-full max-w-sm bg-background rounded-t-2xl sm:rounded-2xl p-5 pb-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-bold text-base">{editingId ? 'Edit Service' : 'New Service'}</h3>
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
@@ -194,8 +194,8 @@ export default function Services({ store, onUpdate, currentUser }: ServicesProps
       )}
 
       {confirmDeleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in px-5">
-          <div className="w-full max-w-sm bg-background rounded-2xl p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in px-5" onClick={() => setConfirmDeleteId(null)}>
+          <div className="w-full max-w-sm bg-background rounded-2xl p-5" onClick={e => e.stopPropagation()}>
             <p className="font-display font-bold text-sm text-foreground">Remove this service?</p>
             <p className="text-xs text-muted-foreground mt-1">Customers won't be able to book it anymore.</p>
             <div className="flex gap-3 mt-4">

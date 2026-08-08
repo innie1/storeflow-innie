@@ -75,3 +75,6 @@
 
 
 
+[2026-08-08] v0.2.8 — 🔴 Critical fixed (Supabase): customer app products RLS bug — anon role had no SELECT grant on `products` table at all, so any store using the relational catalog (not JSONB) showed no products to customers, including product-QR deep links. Fixed via column-level GRANT SELECT to anon, excluding cost_price/total_profit.
+[2026-08-08] v0.2.9 — Modal close-on-outside-click fixed across 13 components that were missing it (CashDrawer, CloudAuthModal, Customers, Goals, Inventory x2, Orders, PerformanceCalendar x2, StaffManagement, Suppliers, Wishlist). All other modals already had it correctly — improvement.
+[2026-08-08] v0.3.0 — Restock/Buy List rebuild (SmartRestockEngine): added a Simple mode (mobile card list, pick items + edit quantity freely, running Items/Quantity/Total bar, no auto-calculation) alongside the existing Smart Budget mode. Root-cause fix: quantities no longer get silently clamped to ₦0 when Business Balance is low/negative on open — default is now the real restocking need, editable. Budget-based auto-allocation is now opt-in via "Optimize Buy List" in Smart mode only. Share text reordered to lead with items/total instead of "Available Budget: ₦0" — feature/improvement

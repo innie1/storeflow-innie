@@ -341,10 +341,11 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
 
       {/* Account Creation Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
           <form 
             onSubmit={editingStaff ? handleEditStaff : handleAddStaff}
             className="w-full max-w-md bg-card border border-border rounded-2xl p-6 animate-slide-up space-y-4"
+            onClick={e => e.stopPropagation()}
           >
             <div>
               <h3 className="font-display font-bold text-lg">{editingStaff ? 'Edit Staff Profile' : 'Add Employee'}</h3>

@@ -97,8 +97,8 @@ export default function PerformanceCalendar({ store, onClose }: PerformanceCalen
   const weekRows = Array.from({ length: 5 }, (_, i) => i).filter(i => i * 7 + 1 <= daysInMonth);
 
   return (
-    <div className="fixed inset-0 z-[9998] bg-black/50 flex items-end sm:items-center justify-center">
-      <div className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto bg-background rounded-t-3xl sm:rounded-3xl p-4 space-y-4">
+    <div className="fixed inset-0 z-[9998] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto bg-background rounded-t-3xl sm:rounded-3xl p-4 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="font-display font-bold text-base">📅 Performance Calendar</h2>
           <button onClick={onClose} className="p-1.5 rounded-full bg-surface-2"><X className="w-4 h-4" /></button>

@@ -43,6 +43,10 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   const [coverageDays, setCoverageDays] = useState(14);
   const [buyOnlyToMin, setBuyOnlyToMin] = useState(false);
   const [itemsList, setItemsList] = useState<BuyListItem[]>([]);
+  // Simple = pick items, edit quantity freely, see a running total, approve & share.
+  // Smart Budget = the AI proportional-allocation engine (existing behaviour), for
+  // merchants who specifically want quantities auto-fitted to their available balance.
+  const [mode, setMode] = useState<'simple' | 'smart'>('simple');
   const [showAddNewForm, setShowAddNewForm] = useState(false);
   const [newProductName, setNewProductName] = useState('');
   const [newProductCost, setNewProductCost] = useState('');
@@ -434,15 +438,25 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   // merchant had made) every time `store` changed identity — which happens
   // on background realtime sync from another device, not just when the
   // merchant themselves changes something. Now it only auto-populates once
-  // when the engine opens; use "Optimize Budget" to intentionally
-  // re-allocate after that.
+  // when the engine opens.
+  //
+  // Default population is the item's real restocking need (idealQty),
+  // pre-selected — NOT clamped to the available balance. Squashing
+  // quantities (or zeroing them) around a ₦0 balance on open was the
+  // original source of confusion: it looked like the list itself was
+  // broken instead of just "pick what you want." Budget-fitted quantities
+  // are now something the merchant opts into via "Optimize Buy List" in
+  // Smart Budget mode, not something forced on every open.
   const hasInitialized = useRef(false);
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
-    setItemsList(allocateBudgetProportionally(generatedRecommendations, availableBudget));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generatedRecommendations, availableBudget]);
+    setItemsList(generatedRecommendations.map(item => ({
+      ...item,
+      suggestedQty: item.idealQty || 1,
+      selected: true,
+    })));
+  }, [generatedRecommendations]);
 
   // Calculations on selected Buy List items
   const totals = useMemo(() => {
@@ -537,7 +551,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     // critical restocks with new money (a loan, personal top-up) rather
     // than balance, which is a legitimate real scenario — not an error.
     // Just make sure they know before it goes out.
-    if (totals.totalCost > availableBudget) {
+    if (mode === 'smart' && totals.totalCost > availableBudget) {
       showToast(`Heads up: this list costs ₦${(totals.totalCost - Math.max(0, availableBudget)).toLocaleString()} more than your available balance — you'll need new money to cover it.`, 'info');
     }
 
@@ -555,10 +569,14 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     });
 
     text += `==========================\n`;
-    text += `💰 Available Budget: ₦${availableBudget.toLocaleString()}\n`;
-    text += `📉 Estimated Cost: ₦${totals.totalCost.toLocaleString()}\n`;
+    text += `🧾 Total Items: ${selectedItems.length}\n`;
+    text += `📦 Total Quantity: ${totals.qty}\n`;
+    text += `📉 Total Cost: ₦${totals.totalCost.toLocaleString()}\n`;
     text += `📈 Expected Revenue: ₦${totals.estRevenue.toLocaleString()}\n`;
     text += `💎 Expected Profit: ₦${totals.estProfit.toLocaleString()}\n`;
+    if (availableBudget > 0) {
+      text += `💰 Business Balance: ₦${availableBudget.toLocaleString()}\n`;
+    }
 
     if (navigator.share) {
       try {
@@ -647,8 +665,8 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   }, [itemsList, totals, availableBudget]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl bg-card border border-border/50 rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto space-y-4 animate-scale-in text-left flex flex-col no-scrollbar">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-5xl bg-card border border-border/50 rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto space-y-4 animate-scale-in text-left flex flex-col no-scrollbar" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex justify-between items-start border-b border-border pb-3">
           <div>
@@ -660,55 +678,77 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground">✕</button>
         </div>
 
-        {/* Mode Toggle Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-border/40 text-xs">
-          <div className="flex items-center gap-2.5">
-            <span className="text-muted-foreground font-semibold">Buy Only to Minimum Stock</span>
-            <button
-              onClick={() => setBuyOnlyToMin(!buyOnlyToMin)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-outline-none ${
-                buyOnlyToMin ? 'bg-success' : 'bg-surface-3 border-border'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                  buyOnlyToMin ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleOptimizeBudget}
-              className="px-3.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary font-display font-bold text-xs rounded-xl transition border border-primary/20 cursor-pointer"
-            >
-              🪄 Optimize Buy List
-            </button>
-            <div className="text-muted-foreground">
-              Current Target Stock: <span className="font-bold text-white">{buyOnlyToMin ? 'Minimum Stock Level' : 'Maximum Stock Level'}</span>
-            </div>
-          </div>
+        {/* Simple / Smart Budget mode switch */}
+        <div className="flex items-center gap-1.5 p-1 bg-surface-2/60 border border-border/40 rounded-xl w-full sm:w-fit">
+          <button
+            onClick={() => setMode('simple')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-display font-bold transition ${
+              mode === 'simple' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'
+            }`}
+          >
+            ✅ Simple
+          </button>
+          <button
+            onClick={() => setMode('smart')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-display font-bold transition ${
+              mode === 'smart' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'
+            }`}
+          >
+            🪄 Smart Budget
+          </button>
         </div>
+        <p className="text-[11px] text-muted-foreground -mt-2">
+          {mode === 'simple'
+            ? 'Pick items, set your own quantities, and share the list — no auto-calculation.'
+            : 'Quantities are auto-fitted to your available Business Balance. Switch to Simple to set quantities yourself.'}
+        </p>
 
-        {(availableBudget <= 0 || (itemsList.length > 0 && itemsList.every(it => !it.selected && it.suggestedQty === (it.idealQty || 1)))) && (
-          <div className="p-3.5 bg-warning/10 border border-warning/25 rounded-xl flex items-start gap-2.5">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-warning mt-0.5" />
-            <div className="text-xs text-foreground leading-snug">
-              <p className="font-display font-bold text-warning">
-                {availableBudget <= 0 ? 'No cash available to restock right now' : 'Available cash can\'t cover even one item yet'}
-              </p>
-              <p className="text-muted-foreground mt-0.5">
-                {availableBudget <= 0
-                  ? 'Net income is at or below zero, so nothing here can be funded from your balance yet.'
-                  : `Your available budget (₦${availableBudget.toLocaleString()}) is smaller than the cheapest item that needs restocking.`}
-                {' '}The list below still shows what's most critical, ranked by priority — select what you can fund with new money (a loan, personal top-up, etc.) if it can't wait.
-              </p>
+        {mode === 'smart' && (
+          <>
+            {/* Mode Toggle Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-border/40 text-xs">
+              <div className="flex items-center gap-2.5">
+                <span className="text-muted-foreground font-semibold">Buy Only to Minimum Stock</span>
+                <button
+                  onClick={() => setBuyOnlyToMin(!buyOnlyToMin)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-outline-none ${
+                    buyOnlyToMin ? 'bg-success' : 'bg-surface-3 border-border'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      buyOnlyToMin ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleOptimizeBudget}
+                  className="px-3.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary font-display font-bold text-xs rounded-xl transition border border-primary/20 cursor-pointer"
+                >
+                  🪄 Optimize Buy List
+                </button>
+                <div className="text-muted-foreground">
+                  Current Target Stock: <span className="font-bold text-white">{buyOnlyToMin ? 'Minimum Stock Level' : 'Maximum Stock Level'}</span>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
 
-        {/* Dashboard Metrics Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {availableBudget <= 0 && (
+              <div className="p-3.5 bg-warning/10 border border-warning/25 rounded-xl flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-warning mt-0.5" />
+                <div className="text-xs text-foreground leading-snug">
+                  <p className="font-display font-bold text-warning">Business Balance is at or below zero</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    "Optimize Buy List" won't be able to auto-fund anything until your balance recovers. You can still tick items and set quantities yourself — that always works regardless of balance.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Dashboard Metrics Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="p-3 bg-surface-2/40 border border-border/40 rounded-xl">
             <span className="text-[10px] text-muted-foreground uppercase font-bold">Available Budget</span>
             <p className="font-display font-bold text-lg text-success mt-0.5">₦{availableBudget.toLocaleString()}</p>
@@ -763,6 +803,26 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
               </button>
             </div>
           )}
+            </div>
+          </>
+        )}
+
+        {/* Running total — visible in both modes, this is the "how many, how much" summary */}
+        <div className="flex items-center justify-between gap-3 p-3.5 bg-primary/5 border border-primary/20 rounded-xl">
+          <div className="flex gap-4 text-xs">
+            <div>
+              <span className="text-muted-foreground block text-[10px] uppercase font-bold">Items Selected</span>
+              <span className="font-display font-bold text-base text-foreground">{totals.count}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground block text-[10px] uppercase font-bold">Total Quantity</span>
+              <span className="font-display font-bold text-base text-foreground">{totals.qty}</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">Total Amount</span>
+            <span className="font-display font-bold text-lg text-primary">₦{totals.totalCost.toLocaleString()}</span>
+          </div>
         </div>
 
         {/* Live suggestions & forms row */}
@@ -839,7 +899,69 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           </div>
         </div>
 
-        {/* Buy List Table */}
+        {/* Buy List — Simple mode: mobile-friendly cards. Smart mode: full table. */}
+        {mode === 'simple' ? (
+          <div className="flex-1 min-h-[250px] overflow-y-auto space-y-2">
+            {itemsList.length === 0 && (
+              <div className="p-8 text-center text-muted-foreground text-xs border border-border/60 rounded-xl">
+                Generating restock recommendations...
+              </div>
+            )}
+            {itemsList.map(it => (
+              <div
+                key={it.id}
+                className={`border rounded-xl p-3 flex items-center gap-3 transition-colors ${
+                  it.selected ? 'bg-primary/5 border-primary/25' : 'bg-surface-2/30 border-border/40 opacity-60'
+                }`}
+              >
+                <button onClick={() => toggleSelectItem(it.id)} className="shrink-0 text-primary">
+                  {it.selected ? (
+                    <CheckSquare className="w-5 h-5 text-primary fill-primary/10" />
+                  ) : (
+                    <Square className="w-5 h-5 text-muted-foreground/60" />
+                  )}
+                </button>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {it.isNewProduct && (
+                      <span className="px-1.5 py-0.5 rounded bg-success/20 text-success text-[9px] font-bold uppercase tracking-wider">🆕 New</span>
+                    )}
+                    <span className="font-display font-bold text-sm text-foreground truncate">{it.name}</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    In stock: {it.currentStock} · ₦{it.costPrice.toLocaleString()} each
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handleUpdateQty(it.id, it.suggestedQty - 1)}
+                    className="w-7 h-7 rounded-lg bg-surface-3 border border-border flex items-center justify-center font-bold text-muted-foreground hover:bg-surface-2"
+                  >
+                    –
+                  </button>
+                  <input
+                    type="number"
+                    value={it.suggestedQty}
+                    onChange={e => handleUpdateQty(it.id, parseFloat(e.target.value) || 1)}
+                    className="w-12 h-7 rounded-lg bg-surface-2 border border-border text-center font-mono text-xs focus:outline-none"
+                  />
+                  <button
+                    onClick={() => handleUpdateQty(it.id, it.suggestedQty + 1)}
+                    className="w-7 h-7 rounded-lg bg-surface-3 border border-border flex items-center justify-center font-bold text-muted-foreground hover:bg-surface-2"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div className="text-right shrink-0 w-20">
+                  <span className="font-display font-bold text-sm text-foreground">₦{(it.suggestedQty * it.costPrice).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="border border-border/60 rounded-xl overflow-hidden bg-card flex-1 min-h-[250px] overflow-y-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
@@ -937,14 +1059,17 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
             </tbody>
           </table>
         </div>
+        )}
 
         {/* Action Controls */}
         <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-3 border-t border-border">
           <div className="text-xs text-muted-foreground text-center sm:text-left">
-            {availableBudget <= 0 ? (
-              <span className="text-destructive font-semibold">⚠️ No available funds for restocking. Recommendations marked as Pending.</span>
-            ) : (
+            {mode === 'smart' && availableBudget <= 0 ? (
+              <span className="text-warning font-semibold">⚠️ Balance is at ₦0 — quantities above are your real restocking need, not budget-fitted.</span>
+            ) : mode === 'smart' ? (
               <span>Remaining budget after this purchase: <strong>₦{totals.remaining.toLocaleString()}</strong></span>
+            ) : (
+              <span>{totals.count} item{totals.count === 1 ? '' : 's'} · {totals.qty} unit{totals.qty === 1 ? '' : 's'} total</span>
             )}
           </div>
           

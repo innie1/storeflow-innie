@@ -3925,8 +3925,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       )}
 
       {notFoundBarcode && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-up space-y-4 text-center">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNotFoundBarcode(null)}>
+          <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-up space-y-4 text-center" onClick={e => e.stopPropagation()}>
             <span className="text-4xl">🔍</span>
             <div>
               <h3 className="font-display font-bold text-base text-foreground">Product Not Found</h3>
@@ -4171,8 +4171,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         </Modal>
       )}
       {highConfidencePair && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 shadow-2xl animate-scale-in space-y-4 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => handleResolveSimilarPair(highConfidencePair.p1, highConfidencePair.p2, 'separate')}>
+          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 shadow-2xl animate-scale-in space-y-4 text-left" onClick={e => e.stopPropagation()}>
             <div className="text-center space-y-2">
               <div className="text-3xl">🔀</div>
               <h3 className="font-display font-bold text-lg text-white">Possible Duplicate Found</h3>
