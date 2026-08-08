@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StoreData, TabId } from '@/types/store';
 import { addProduct, recordSale, receiveStock } from '@/lib/store-data';
+import { flowAddExpense, flowRecordPayment, flowAddInvestment, flowAddLoan, flowAddWithdrawal, flowReceiveStock } from '@/lib/flow-finance-actions';
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
 import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';
@@ -113,11 +114,11 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     showToast('Sale recorded by Flow', 'success');
   };
 
-  const executeRestock = (items: FlowLineItem[]) => {
+  const executeRestock = (items: FlowLineItem[], funding: 'balance' | 'new_money' = 'balance') => {
     if (!items.length) { flow('I could not match the products. Tell me the exact catalog names, for example **Add 5 Milo, 3 Peak Milk and 10 Indomie**.'); return; }
     rememberUndo(); let next = store; const done: string[] = [];
-    for (const item of items) { const p = next.products.find(x => x.id === item.product.product.id); if (!p) continue; next = receiveStock(next, [{ productId: p.id, quantity: item.quantity, costPrice: p.costPrice }], 'balance', 'FlowChat'); done.push(`${item.quantity} ${p.name}`); }
-    onUpdate(next); setLastProductId(items[0].product.product.id); rememberBrainContext(next, { lastIntent: 'restock', lastProductId: items[0].product.product.id, lastTopic: 'inventory', lastAction: 'restock' }); flow(`Done — added stock for **${done.length} products**.\n${done.map(x => `• ${x}`).join('\n')}`); showToast('Stock updated by Flow', 'success');
+    for (const item of items) { const p = next.products.find(x => x.id === item.product.product.id); if (!p) continue; next = flowReceiveStock(next, [{ productId: p.id, quantity: item.quantity, costPrice: p.costPrice }], funding, 'FlowChat'); done.push(`${item.quantity} ${p.name}`); }
+    onUpdate(next); setLastProductId(items[0].product.product.id); rememberBrainContext(next, { lastIntent: 'restock', lastProductId: items[0].product.product.id, lastTopic: 'inventory', lastAction: `restock:${funding}` }); flow(`Done — added stock for **${done.length} products** using **${funding === 'new_money' ? 'new money' : 'business balance'}**.\n${done.map(x => `• ${x}`).join('\n')}${funding === 'new_money' ? '\n\nBusiness cash/bank/wallet balances were not reduced.' : ''}`); showToast('Stock updated by Flow', 'success');
   };
 
   const finishAdd = (draft: AddDraft) => {
@@ -133,6 +134,62 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     else if (addStep === 'category') { d.category = text; setAddStep('confirm'); flow(`Add **${d.name}** — cost ${money(d.costPrice || 0)}, sells ${money(d.sellingPrice || 0)}, ${d.quantity} units, category ${d.category}?`, [{ label: 'Add', onClick: () => finishAdd(d) }, { label: 'Cancel', onClick: () => { setAddDraft(null); flow('Cancelled.'); } }]); }
     else if (/^(yes|y|add|confirm|ok|okay)$/i.test(text)) finishAdd(d); else { setAddDraft(null); flow('Cancelled.'); }
     setAddDraft(d);
+  };
+
+  const handleFinanceMutation = (raw: string): boolean => {
+    const text = clean(raw);
+    const q = text.toLowerCase();
+    const amountMatch = q.match(/(?:₦\s*)?([\d,]+(?:\.\d+)?)/);
+    const amount = amountMatch ? num(amountMatch[1]) : undefined;
+    if (!amount || amount <= 0) return false;
+
+    const confirm = (label: string, action: () => void) => {
+      flow(`${label}\n\nThis changes your financial records. Continue?`, [
+        { label: 'Confirm', onClick: action },
+        { label: 'Cancel', onClick: () => flow('Cancelled.') },
+      ]);
+    };
+
+    const expenseMatch = q.match(/^(?:add|record|log)\s+(?:an?\s+)?expense\s+(?:of\s+)?₦?[\d,]+(?:\.\d+)?(?:\s+(?:for|on)\s+(.+))?$/i);
+    if (expenseMatch) {
+      const note = expenseMatch[1]?.trim() || 'Recorded by Flow';
+      const category = /transport/i.test(note) ? 'Transport' : /rent/i.test(note) ? 'Rent' : /salary|wage/i.test(note) ? 'Salaries' : /utility|electric|power|water/i.test(note) ? 'Utilities' : 'Other';
+      confirm(`Record ${money(amount)} as ${category.toLowerCase()} expense${note !== 'Recorded by Flow' ? ` for ${note}` : ''}?`, () => { rememberUndo(); const next = flowAddExpense(store, amount, category, note); onUpdate(next); flow(`Done. Recorded **${money(amount)}** expense.`); showToast('Expense recorded by Flow', 'success'); });
+      return true;
+    }
+
+    const paymentMatch = q.match(/^(?:record|add|log)\s+(?:a\s+)?payment\s+(?:of\s+)?₦?[\d,]+(?:\.\d+)?\s+(?:from|by)\s+(.+)$/i) || q.match(/^(.+?)\s+(?:paid|has paid)\s+₦?[\d,]+(?:\.\d+)?$/i);
+    if (paymentMatch) {
+      const customerName = paymentMatch[1].trim();
+      const customer = (store.customers || []).find(c => c.name.toLowerCase() === customerName.toLowerCase() || c.name.toLowerCase().includes(customerName.toLowerCase()));
+      const pending = customer ? (store.pendingPayments || []).find(p => p.customerName.toLowerCase() === customer.name.toLowerCase() && p.status === 'pending') : undefined;
+      if (!pending) { flow(`I couldn't find a pending debt for **${customerName}**. I won't record a payment against the wrong customer.`); return true; }
+      const effective = Math.min(amount, pending.balance);
+      confirm(`Record ${money(effective)} payment from **${pending.customerName}**?`, () => { rememberUndo(); const next = flowRecordPayment(store, pending.id, effective, 'cash'); onUpdate(next); flow(`Done. **${pending.customerName}** now owes about **${money(Math.max(0, pending.balance - effective))}**.`); showToast('Payment recorded by Flow', 'success'); });
+      return true;
+    }
+
+    const investmentMatch = q.match(/^(?:add|record)\s+(?:an?\s+)?investment\s+(?:of\s+)?₦?[\d,]+(?:\.\d+)?(?:\s+(?:from|using)\s+(.+))?$/i);
+    if (investmentMatch) {
+      const source = investmentMatch[1]?.trim() || 'Cash Drawer';
+      confirm(`Record ${money(amount)} as a new business investment from ${source}?`, () => { rememberUndo(); const next = flowAddInvestment(store, amount, source, 'Investment recorded by Flow'); onUpdate(next); flow(`Done. Added **${money(amount)}** investment.`); showToast('Investment recorded by Flow', 'success'); });
+      return true;
+    }
+
+    const loanMatch = q.match(/^(?:add|record|take)\s+(?:a\s+)?loan\s+(?:of\s+)?₦?[\d,]+(?:\.\d+)?(?:\s+from\s+(.+))?$/i);
+    if (loanMatch) {
+      const source = loanMatch[1]?.trim() || 'Cash Drawer';
+      confirm(`Record a **${money(amount)}** loan from ${source}?`, () => { rememberUndo(); const next = flowAddLoan(store, amount, source); onUpdate(next); flow(`Done. Recorded the **${money(amount)}** loan.`); showToast('Loan recorded by Flow', 'success'); });
+      return true;
+    }
+
+    const withdrawalMatch = q.match(/^(?:record|add|make)\s+(?:an?\s+)?withdrawal\s+(?:of\s+)?₦?[\d,]+(?:\.\d+)?(?:\s+(?:for|on)\s+(.+))?$/i);
+    if (withdrawalMatch) {
+      const note = withdrawalMatch[1]?.trim() || 'Withdrawal recorded by Flow';
+      confirm(`Record a **${money(amount)}** owner withdrawal${note !== 'Withdrawal recorded by Flow' ? ` for ${note}` : ''}?`, () => { rememberUndo(); const next = flowAddWithdrawal(store, amount, note); onUpdate(next); flow(`Done. Recorded **${money(amount)}** withdrawal.`); showToast('Withdrawal recorded by Flow', 'success'); });
+      return true;
+    }
+    return false;
   };
 
   const handleAppControl = (raw: string): boolean => {
@@ -203,6 +260,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const ask = (raw: string) => {
     const text = clean(raw); if (!text) return; you(text);
     if (handleAppControl(text)) return;
+    if (handleFinanceMutation(text)) return;
     if (/^(undo|undo that|reverse that|take that back)$/i.test(text)) { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
     if (addDraft) { handleAddWizard(text); return; }
     const lastProduct = lastProductId ? store.products.find(p => p.id === lastProductId) || null : null;
@@ -215,9 +273,20 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       flow('I can control your StoreFlow settings. Tell me what you want to turn on, turn off, or change.'); return;
     }
     if (plan.intent === 'undo') { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
-    if (plan.intent === 'sell') { executeSales(plan.items); return; }
+    if (plan.intent === 'sell') {
+      if (!plan.items.length) { flow('I could not match those products to your catalog.'); return; }
+      flow(`You are about to sell:\n${plan.items.map(i => `• ${i.quantity} ${i.product.product.name}`).join('\n')}\n\nConfirm the sale?`, [
+        { label: 'Confirm sale', onClick: () => executeSales(plan.items) },
+        { label: 'Cancel', onClick: () => flow('Sale cancelled.') },
+      ]);
+      return;
+    }
     if (plan.intent === 'restock') {
-      if (plan.items.length) { executeRestock(plan.items); return; }
+      if (plan.items.length) {
+        const wantsNewMoney = /\b(new\s+money|personal\s+money|outside\s+money|my\s+money)\b/i.test(text);
+        executeRestock(plan.items, wantsNewMoney ? 'new_money' : 'balance');
+        return;
+      }
       const draft = parseNewProduct(text);
       if (draft && !resolveProduct(store, draft.name)) { setAddDraft(draft); setAddStep(draft.costPrice == null ? 'cost' : draft.sellingPrice == null ? 'sell' : draft.quantity == null ? 'qty' : draft.category == null ? 'category' : 'confirm'); flow(`I don't have **${draft.name}** in your catalog. I can add it. ${draft.costPrice == null ? 'What is your cost?' : draft.sellingPrice == null ? 'Selling price?' : draft.quantity == null ? 'Quantity?' : draft.category == null ? 'Category?' : 'Confirm?'}`); return; }
       flow('I could not match that product to your catalog. I will not invent one.'); return;
