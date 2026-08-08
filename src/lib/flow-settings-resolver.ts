@@ -1,4 +1,5 @@
 import { DEFAULT_MANAGER_SETTINGS, ManagerSettings, StoreData } from '@/types/store';
+import { changeCustomerDebt, changeProductCost, changeProductPrice, changeProductStock, findFlowCustomer, findFlowProduct, addFlowCustomer, recordCustomerPayment, archiveProduct, restoreProduct } from '@/lib/flow-store-actions';
 
 export interface FlowSettingResult {
   handled: boolean;
@@ -96,8 +97,117 @@ function parseOperation(q: string) {
   return { mode: 'value' as const, target: m[5], value: m[6] };
 }
 
+function productControl(store: StoreData, q: string): FlowSettingResult | null {
+  let m = q.match(/^(?:set|change|update)\s+(.+?)\s+(?:selling\s+)?price\s+(?:to|=)\s+₦?([\d,]+)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const price = Number(m[2].replace(/,/g, ''));
+    if (!Number.isFinite(price) || price <= 0) return { handled: true, message: 'Give me a valid selling price.' };
+    const next = changeProductPrice(store, match, price);
+    return { handled: true, store: next, label: `${match.product.name} price`, value: price, message: `Done — **${match.product.name}** now sells for ₦${price.toLocaleString()}.` };
+  }
+
+  m = q.match(/^(?:set|change|update)\s+(.+?)\s+cost\s+(?:price\s+)?(?:to|=)\s+₦?([\d,]+)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const cost = Number(m[2].replace(/,/g, ''));
+    if (!Number.isFinite(cost) || cost < 0) return { handled: true, message: 'Give me a valid cost price.' };
+    const next = changeProductCost(store, match, cost);
+    return { handled: true, store: next, label: `${match.product.name} cost price`, value: cost, message: `Done — **${match.product.name}** cost price is now ₦${cost.toLocaleString()}.` };
+  }
+
+  m = q.match(/^(?:set|change|update)\s+(.+?)\s+(?:stock|quantity)\s+(?:to|=)\s+(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const quantity = Number(m[2]);
+    const next = changeProductStock(store, match, quantity);
+    return { handled: true, store: next, label: `${match.product.name} stock`, value: quantity, message: `Done — **${match.product.name}** stock is now ${quantity}.` };
+  }
+
+  m = q.match(/^(?:increase|add)\s+(.+?)\s+(?:stock|quantity)\s+by\s+(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const quantity = Number(m[2]);
+    const next = changeProductStock(store, match, match.product.quantity + quantity);
+    return { handled: true, store: next, label: `${match.product.name} stock`, value: next.products.find(p => p.id === match.product.id)?.quantity || 0, message: `Done — added ${quantity} to **${match.product.name}**. Stock is now ${next.products.find(p => p.id === match.product.id)?.quantity || 0}.` };
+  }
+
+  m = q.match(/^(?:reduce|decrease|remove)\s+(.+?)\s+(?:stock|quantity)\s+by\s+(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const quantity = Number(m[2]);
+    if (quantity > match.product.quantity) return { handled: true, message: `I won't reduce it below zero. **${match.product.name}** only has ${match.product.quantity} in stock.` };
+    const next = changeProductStock(store, match, match.product.quantity - quantity);
+    return { handled: true, store: next, label: `${match.product.name} stock`, value: next.products.find(p => p.id === match.product.id)?.quantity || 0, message: `Done — removed ${quantity} from **${match.product.name}**. Stock is now ${next.products.find(p => p.id === match.product.id)?.quantity || 0}.` };
+  }
+
+  m = q.match(/^(?:archive|discontinue|deactivate)\s+(.+)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const next = archiveProduct(store, match);
+    return { handled: true, store: next, label: `${match.product.name}`, message: `Archived **${match.product.name}**. You can restore it later.` };
+  }
+
+  m = q.match(/^(?:restore|reactivate|activate)\s+(.+)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]) || (() => {
+      const p = store.products.find(x => normalize(x.name) === normalize(m![1]));
+      return p ? { product: p, score: 1 } : null;
+    })();
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const next = restoreProduct(store, match);
+    return { handled: true, store: next, label: `${match.product.name}`, message: `Restored **${match.product.name}**.` };
+  }
+  return null;
+}
+
+function customerControl(store: StoreData, q: string): FlowSettingResult | null {
+  let m = q.match(/^(?:add|create|register)\s+(?:a\s+)?customer\s+(.+?)(?:\s+(?:phone|number)\s*[:=]?\s*(\+?\d[\d\s-]{6,}))?$/);
+  if (m) {
+    const name = m[1].trim();
+    if (!name) return { handled: true, message: 'Give me the customer name.' };
+    if (findFlowCustomer(store, name)) return { handled: true, message: `I already have a customer named **${name}**.` };
+    const next = addFlowCustomer(store, name, (m[2] || '').replace(/\D/g, ''));
+    return { handled: true, store: next, label: 'Customer', message: `Added **${name}** to your Customer Book.` };
+  }
+
+  m = q.match(/^(?:add|record|give)\s+(?:a\s+)?(?:debt|credit)\s+of\s+₦?([\d,]+)\s+(?:to|for)\s+(.+)$/);
+  if (m) {
+    const amount = Number(m[1].replace(/,/g, ''));
+    const customer = findFlowCustomer(store, m[2]);
+    if (!customer) return { handled: true, message: `I couldn't find customer **${m[2]}**.` };
+    const next = changeCustomerDebt(store, customer, amount);
+    const updated = next.customers?.find(c => c.id === customer.id)?.outstandingDebt || 0;
+    return { handled: true, store: next, label: `${customer.name} debt`, value: updated, message: `Recorded ₦${amount.toLocaleString()} for **${customer.name}**. Outstanding debt: ₦${updated.toLocaleString()}.` };
+  }
+
+  m = q.match(/^(?:record\s+)?(?:payment|paid)\s+₦?([\d,]+)\s+(?:from|by)\s+(.+)$/);
+  if (m) {
+    const amount = Number(m[1].replace(/,/g, ''));
+    const customer = findFlowCustomer(store, m[2]);
+    if (!customer) return { handled: true, message: `I couldn't find customer **${m[2]}**.` };
+    const next = recordCustomerPayment(store, customer, amount);
+    const updated = next.customers?.find(c => c.id === customer.id)?.outstandingDebt || 0;
+    return { handled: true, store: next, label: `${customer.name} payment`, value: amount, message: `Recorded ₦${amount.toLocaleString()} from **${customer.name}**. Remaining debt: ₦${updated.toLocaleString()}.` };
+  }
+
+  return null;
+}
+
 export function resolveFlowSettingCommand(store: StoreData, raw: string): FlowSettingResult {
   const q = normalize(raw);
+
+  const productAction = productControl(store, q);
+  if (productAction) return productAction;
+  const customerAction = customerControl(store, q);
+  if (customerAction) return customerAction;
+
   const op = parseOperation(q);
   if (!op) return { handled: false };
   const target = normalize(op.target);
@@ -105,30 +215,14 @@ export function resolveFlowSettingCommand(store: StoreData, raw: string): FlowSe
   if (['all notifications', 'all notification', 'every notification'].includes(target) && (op.mode === 'bool' || op.mode === 'toggle')) {
     const current = manager(store);
     const enabled = op.mode === 'toggle' ? !(current.notifyInsights && current.notifyRecommendations && current.notifyAlerts && current.notifyWeeklyRecap && current.notifyMonthlyReports && current.notifySavingsReminders && current.notifyCustomerRequests && current.notifyLowStock) : op.enabled;
-    const nextSettings = {
-      ...current,
-      notifyInsights: enabled,
-      notifyRecommendations: enabled,
-      notifyAlerts: enabled,
-      notifyWeeklyRecap: enabled,
-      notifyMonthlyReports: enabled,
-      notifySavingsReminders: enabled,
-      notifyCustomerRequests: enabled,
-      notifyLowStock: enabled,
-    };
+    const nextSettings = { ...current, notifyInsights: enabled, notifyRecommendations: enabled, notifyAlerts: enabled, notifyWeeklyRecap: enabled, notifyMonthlyReports: enabled, notifySavingsReminders: enabled, notifyCustomerRequests: enabled, notifyLowStock: enabled };
     return { handled: true, store: { ...store, managerSettings: nextSettings }, label: 'All notifications', value: enabled, message: `All notification categories are ${enabled ? 'on' : 'off'}.` };
   }
 
   if (/^(?:customer\s+ordering|customer\s+orders?|online\s+ordering)$/.test(target) && (op.mode === 'bool' || op.mode === 'toggle')) {
     const current = store.profile?.payment?.acceptWebsiteOrders ?? true;
     const enabled = op.mode === 'toggle' ? !current : op.enabled;
-    return {
-      handled: true,
-      store: { ...store, profile: { ...(store.profile || { storeType: '', location: '', phone: '', email: '' }), payment: { ...(store.profile?.payment || {}), acceptWebsiteOrders: enabled } } },
-      label: 'Customer ordering',
-      value: enabled,
-      message: `Customer ordering is ${enabled ? 'on' : 'off'}.`,
-    };
+    return { handled: true, store: { ...store, profile: { ...(store.profile || { storeType: '', location: '', phone: '', email: '' }), payment: { ...(store.profile?.payment || {}), acceptWebsiteOrders: enabled } } }, label: 'Customer ordering', value: enabled, message: `Customer ordering is ${enabled ? 'on' : 'off'}.` };
   }
 
   const bool = BOOLEAN_ALIASES.find(([pattern]) => pattern.test(target));
@@ -166,11 +260,15 @@ export function resolveFlowSettingCommand(store: StoreData, raw: string): FlowSe
 
 export function flowSettingsHelp() {
   return [
-    'I can operate your StoreFlow settings, including:',
+    'I can operate your StoreFlow settings and store controls, including:',
     '• Turn mascot, number or reduced-motion animations on/off',
     '• Turn voice, auto-listening and sounds on/off',
     '• Control all notification categories, including low-stock, insights, recommendations, alerts, reports and savings reminders',
     '• Turn customer ordering on/off',
+    '• Add, change and adjust inventory products',
+    '• Change selling price, cost price and stock',
+    '• Archive and restore products',
+    '• Add customers and record customer debts/payments',
     '• Turn forecasts, smart pricing, savings and business tools on/off',
     '• Control automatic backups, discounts and receipt printing',
     '• Turn biometric/PIN lock and other security controls on/off',
