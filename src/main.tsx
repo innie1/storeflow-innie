@@ -16,26 +16,26 @@ const applyStoreFlowNavigation = () => {
 
   const buttons = Array.from(nav.querySelectorAll("button"));
   for (const button of buttons) {
-    const label = button.querySelector("span:last-child")?.textContent?.trim();
-    if (!label) continue;
+    const labelNode = button.querySelector("span:last-child");
+    const label = labelNode?.textContent?.trim();
+    if (!label || !labelNode) continue;
 
-    // Mobile navigation is intentionally action-oriented.
-    if (label === "Dashboard") {
-      const span = button.querySelector("span:last-child");
-      if (span) span.textContent = "Home";
-    }
-    if (label === "Inventory") {
-      const span = button.querySelector("span:last-child");
-      if (span) span.textContent = "Stock";
-    }
-    if (label === "Sales") {
-      const span = button.querySelector("span:last-child");
-      if (span) span.textContent = "Sell";
+    // Mobile navigation is intentionally action-oriented:
+    // Home · Sell · Stock · Flow · More.
+    if (label === "Dashboard") labelNode.textContent = "Home";
+    if (label === "Inventory") labelNode.textContent = "Stock";
+    if (label === "Sales") labelNode.textContent = "Sell";
+
+    // Orders remains available from More/desktop, but it should not consume
+    // a primary mobile slot. This keeps the five-slot mobile shell focused
+    // on the owner's most frequent jobs without removing the feature.
+    if (label === "Orders") {
+      button.style.display = "none";
     }
   }
 };
 
-// React owns the markup, so observe only the small navigation-label change.
+// React owns the markup, so observe only this presentation layer.
 const navigationObserver = new MutationObserver(() => applyStoreFlowNavigation());
 navigationObserver.observe(document.documentElement, { childList: true, subtree: true });
 
