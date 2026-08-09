@@ -18,6 +18,13 @@ interface PushPayload { title?: string; body?: string; tag?: string; url?: strin
 interface NotificationPreferences { enabled:boolean; orders:boolean; flowCheckins:boolean; businessInsights:boolean; debtReminders:boolean; sounds:boolean; criticalAlerts:boolean; quietHoursEnabled:boolean; quietStart:string; quietEnd:string; }
 const DEFAULT_PREFS: NotificationPreferences = { enabled:true, orders:true, flowCheckins:true, businessInsights:true, debtReminders:true, sounds:true, criticalAlerts:true, quietHoursEnabled:true, quietStart:'22:00', quietEnd:'07:00' };
 
+function versionedAsset(path:string) {
+  const normalized = path.replace(/^\//, '');
+  const entries = self.__WB_MANIFEST as Array<{ url:string; revision?:string }>;
+  const entry = entries.find(item => item.url.replace(/^\//, '') === normalized);
+  return entry?.revision ? `${path}?v=${encodeURIComponent(entry.revision)}` : path;
+}
+
 function buildActions(data: PushPayload) {
   if (data.actions?.length) return data.actions;
   const tag = (data.tag || '').toLowerCase(), title = (data.title || '').toLowerCase();
@@ -93,8 +100,9 @@ self.addEventListener('push', event => {
       return;
     }
     const absoluteUrl = new URL(url, self.location.origin).href;
+    const appIcon = versionedAsset('/icons/icon-192.png');
     await self.registration.showNotification(title, {
-      body:data.body || 'New StoreFlow alert', icon:'/icons/icon-192.png', badge:'/icons/icon-192.png', tag,
+      body:data.body || 'New StoreFlow alert', icon:appIcon, badge:appIcon, tag,
       renotify:false, silent:!prefs.sounds, requireInteraction:priority === 'critical', timestamp:Date.now(),
       data:{ url:absoluteUrl, orderId:data.orderId || null, orderNumber:data.orderNumber || null, tag, category:categoryOf(data) },
       vibrate:prefs.sounds ? (priority === 'critical' ? [300,100,300,100,300] : [180,80,180]) : [], actions:buildActions(data),
