@@ -1,0 +1,44 @@
+name: Patch Flow chat flexible routing
+
+on:
+  push:
+    branches: [fix/flow-chat-flexible]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Patch FlowChat
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/FlowChat.tsx')
+          s = p.read_text()
+          old_import = "import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';"
+          new_import = old_import + "\nimport { understandFlexible } from '@/lib/flow-understanding';"
+          if new_import not in s:
+              if old_import not in s:
+                  raise SystemExit('FlowChat engine import not found')
+              s = s.replace(old_import, new_import, 1)
+
+          old = """    if (addDraft) { handleAddWizard(text); return; }\n    const lastProduct = lastProductId ? store.products.find(p => p.id === lastProductId) || null : null;\n"""
+          new = """    if (addDraft) { handleAddWizard(text); return; }\n\n    // Flexible conversational layer: short topics, partial product names and\n    // store-level questions are resolved before the command engine can guess.\n    const flexible = understandFlexible(store, text);\n    if (flexible.kind === 'store') {\n      const overview = responseFor(store, { intent: 'store_overview', confidence: 1, items: [], reason: 'flexible store question' });\n      flow(overview);\n      rememberBrainContext(store, { lastIntent: 'store_overview', lastTopic: 'store', lastAction: 'store overview' });\n      return;\n    }\n    if (flexible.kind === 'topic') {\n      const topicActions: Record<string, ChatAction[]> = {\n        theme: [\n          { label: 'Change theme', onClick: () => handleAppControl('theme') },\n          { label: 'Change color', onClick: () => flow('Which theme color would you like to change?') },\n        ],\n        settings: [\n          { label: 'Settings help', onClick: () => flow(flowSettingsHelp()) },\n          { label: 'Theme', onClick: () => handleAppControl('theme') },\n        ],\n        stock: [\n          { label: 'What is low?', onClick: () => ask("What's low?") },\n          { label: 'What is out?', onClick: () => ask('What is out of stock?') },\n          { label: 'What should I restock?', onClick: () => ask('What should I restock?') },\n        ],\n        sales: [\n          { label: 'Today', onClick: () => ask('How were sales today?') },\n          { label: 'Best sellers', onClick: () => ask('Show my best sellers') },\n          { label: 'Recent sales', onClick: () => ask('Show my recent sales') },\n        ],\n        customers: [\n          { label: 'Customer count', onClick: () => ask('How many customers do I have?') },\n          { label: 'Outstanding debt', onClick: () => ask('How much customer debt do I have?') },\n        ],\n        expenses: [\n          { label: 'Last 30 days', onClick: () => ask('How much did I spend in the last 30 days?') },\n          { label: 'Recent expenses', onClick: () => ask('Show my recent expenses') },\n        ],\n        price: [\n          { label: 'Choose a product', onClick: () => flow('Tell me the product name and I’ll check its price.') },\n        ],\n        restock: [\n          { label: 'Simple buy list', onClick: () => { onNavigate?.('inventory'); flow('Open Buy List in Simple mode and choose the products you want.'); } },\n          { label: 'Smart Restock', onClick: () => { onNavigate?.('inventory'); flow('Open Smart Restock to automatically build recommendations and allocate the available budget.'); } },\n        ],\n      };\n      flow(flexible.reply, topicActions[flexible.topic]);\n      return;\n    }\n    if (flexible.kind === 'product_choices') {\n      const actions = flexible.products.map(product => ({\n        label: product.name,\n        onClick: () => {\n          setLastProductId(product.id);\n          rememberBrainContext(store, { lastIntent: 'product_lookup', lastProductId: product.id, lastTopic: 'product', lastAction: 'product selection' });\n          flow(responseFor(store, { intent: 'product_lookup', confidence: 1, items: [], product: { product, score: 1, matchedBy: 'exact' }, reason: 'selected product match' }));\n        }\n      }));\n      flow(`I found ${flexible.products.length} products matching **${flexible.query}**. Which one do you mean?`, actions);\n      return;\n    }\n    if (flexible.kind === 'product') {\n      const p = flexible.product;\n      setLastProductId(p.id);\n      rememberBrainContext(store, { lastIntent: 'product_lookup', lastProductId: p.id, lastTopic: 'product', lastAction: 'flexible product lookup' });\n      flow(responseFor(store, { intent: 'product_lookup', confidence: flexible.score, items: [], product: { product: p, score: flexible.score, matchedBy: 'fuzzy' }, reason: 'flexible product lookup' }));\n      return;\n    }\n\n    const lastProduct = lastProductId ? store.products.find(p => p.id === lastProductId) || null : null;\n"""
+          if old not in s:
+              raise SystemExit('FlowChat ask insertion point not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Commit patched FlowChat
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/FlowChat.tsx
+          git diff --cached --quiet || git commit -m "fix(flow): wire flexible conversational routing into chat"
+          git push
