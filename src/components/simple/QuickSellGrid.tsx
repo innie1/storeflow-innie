@@ -7,11 +7,9 @@ interface QuickSellGridProps {
   onSell: (productId: string, quantity: number) => void;
 }
 
-const GRID_SIZE = 9;
+const GRID_SIZE = 6;
 
-// Recent sales are deliberately first so the things the owner just sold stay
-// close to the mic. After that we keep the owner's pinned products and
-// best-sellers, preserving the old quick-sell behavior for everything else.
+// Recently sold products stay at the top of the quick-sell list.
 function getLastSaleTimes(store: StoreData): Map<string, number> {
   const lastSale = new Map<string, number>();
   for (const sale of store.sales) {
@@ -32,9 +30,6 @@ function sortSellProducts(store: StoreData): Product[] {
     .sort((a, b) => {
       const aRecent = lastSale.get(a.id) || 0;
       const bRecent = lastSale.get(b.id) || 0;
-
-      // Recently sold products always rise to the top. This also applies when
-      // the owner expands the list with More.
       if (aRecent !== bRecent) return bRecent - aRecent;
 
       const aPinned = pinned.has(a.id) ? 0 : 1;
@@ -43,7 +38,6 @@ function sortSellProducts(store: StoreData): Product[] {
 
       const unitDiff = (b.units_sold || 0) - (a.units_sold || 0);
       if (unitDiff !== 0) return unitDiff;
-
       return a.name.localeCompare(b.name);
     });
 }
