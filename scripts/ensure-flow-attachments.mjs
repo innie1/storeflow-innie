@@ -38,7 +38,7 @@ if (!flow.includes('const createBuyListFromFlow')) {
     }
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'tsv', 'txt', 'json'].includes(ext)) {
-      showToast(`${file.name} selected. Open Inventory to import this stock file.`, 'info');
+      showToast(file.name + ' selected. Open Inventory to import this stock file.', 'info');
       onNavigate?.('inventory');
       return;
     }
