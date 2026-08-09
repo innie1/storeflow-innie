@@ -122,7 +122,7 @@ if (!receipt.includes('initialFile && initialProcessedRef')) {
   const effect = `  useEffect(() => {
     if (!initialFile || initialProcessedRef.current === initialFile) return;
     initialProcessedRef.current = initialFile;
-    const synthetic = { target: { files: [initialFile] } };
+    const synthetic = { target: { files: [initialFile] } } as unknown as React.ChangeEvent<HTMLInputElement>;
     void handleFileSelect(synthetic);
   }, [initialFile]);
 
