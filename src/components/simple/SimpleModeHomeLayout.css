@@ -5,7 +5,7 @@
   justify-content: center;
 }
 
-/* Restore the intended voice layout: Sell/Add toggle above the microphone,
+/* Keep the intended voice layout: Sell/Add toggle above the microphone,
    with the microphone back in its original position. */
 .simple-mode-voice-shell > div {
   gap: 0.5rem;
@@ -13,7 +13,7 @@
 
 .simple-mode-voice-shell > div > div:first-child {
   order: 1;
-  margin-top: 0;
+  margin-top: -0.5rem;
 }
 
 .simple-mode-voice-shell > div > div:first-child button {
@@ -38,10 +38,10 @@
   order: 4;
 }
 
-/* Search stays beside the toggle without pushing the toggle too far left. */
+/* Search stays beside the toggle and moves up with it. */
 .simple-mode-search-near-toggle {
   position: absolute;
-  top: 0.25rem;
+  top: -0.25rem;
   left: calc(50% + 6.5rem);
   width: 2.25rem;
   height: 2.25rem;
