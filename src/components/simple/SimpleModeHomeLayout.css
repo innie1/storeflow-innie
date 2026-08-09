@@ -1,0 +1,55 @@
+.simple-mode-voice-shell {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* Keep the existing SimpleVoiceSell logic/UI, but place the Sell/Add toggle
+   directly under the microphone and tighten the vertical rhythm. */
+.simple-mode-voice-shell > div {
+  gap: 0.5rem;
+}
+
+.simple-mode-voice-shell > div > div:first-child {
+  order: 2;
+  margin-top: -0.125rem;
+}
+
+.simple-mode-voice-shell > div > div:first-child button {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.simple-mode-voice-shell > div > button {
+  order: 1;
+}
+
+.simple-mode-voice-shell > div > p {
+  order: 3;
+  margin-top: 0;
+}
+
+.simple-mode-voice-shell > div > div:last-child:not(:first-child) {
+  order: 4;
+}
+
+/* The search action now sits beside the Sell/Add toggle rather than floating
+   at the top of the screen. */
+.simple-mode-search-near-toggle {
+  position: absolute;
+  top: 7.4rem;
+  left: calc(50% + 6.5rem);
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  z-index: 10;
+}
+
+@media (max-width: 380px) {
+  .simple-mode-search-near-toggle {
+    left: calc(50% + 5.8rem);
+  }
+}
