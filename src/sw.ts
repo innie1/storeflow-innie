@@ -27,7 +27,15 @@ function buildActions(data: PushPayload) {
   if (tag.includes('debt') || tag.includes('bill') || title.includes('repayment')) return [{ action:'open', title:'💰 View Pending' }];
   return [{ action:'open', title:'⚡ Open StoreFlow' }];
 }
-function notificationUrl(data: PushPayload) { return data.url || (data.orderId ? `/?tab=orders&order_id=${encodeURIComponent(data.orderId)}` : '/?tab=dashboard'); }
+function notificationUrl(data: PushPayload) {
+  if (data.url) return data.url;
+  if (data.orderId) {
+    const params = new URLSearchParams({ tab:'orders', order_id:data.orderId });
+    if (data.orderNumber) params.set('order_number', data.orderNumber);
+    return `/?${params.toString()}`;
+  }
+  return '/?tab=dashboard';
+}
 function categoryOf(data: PushPayload): 'order'|'flow'|'insight'|'debt'|'other' {
   const raw = `${data.type || ''} ${data.category || ''} ${data.tag || ''} ${data.title || ''}`.toLowerCase();
   if (data.orderId || raw.includes('order')) return 'order';
@@ -95,17 +103,12 @@ self.addEventListener('push', event => {
   })());
 });
 
-// System notification click handler.
-// Always resolves the target to an absolute same-origin URL, then reuses an
-// existing StoreFlow window when possible. If the PWA/app is closed, openWindow
-// launches the app's top-level context; on Chrome Android this can resolve to
-// the installed standalone PWA. The previous implementation could silently
-// fail on some Android/PWA states because it attempted to navigate a generic
-// client with a relative URL and returned before confirming the target window.
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const data = event.notification.data || {};
-  const rawUrl = data.url || (data.orderId ? `/?tab=orders&order_id=${encodeURIComponent(data.orderId)}` : '/?tab=dashboard');
+  const rawUrl = data.url || (data.orderId
+    ? `/?tab=orders&order_id=${encodeURIComponent(data.orderId)}${data.orderNumber ? `&order_number=${encodeURIComponent(data.orderNumber)}` : ''}`
+    : '/?tab=dashboard');
   const targetUrl = new URL(rawUrl, self.location.origin).href;
   event.waitUntil((async () => {
     if ('clearAppBadge' in navigator) { try { await (navigator as any).clearAppBadge(); } catch {} }
@@ -115,9 +118,6 @@ self.addEventListener('notificationclick', event => {
       try { return new URL(c.url).origin === self.location.origin; } catch { return false; }
     }) as WindowClient[];
 
-    // Prefer an existing StoreFlow window. Navigate it to the exact order URL
-    // before focusing it, so clicking an order alert doesn't merely bring the
-    // app to whatever screen happened to be open previously.
     const existing = sameOrigin[0];
     if (existing) {
       try {
@@ -130,8 +130,6 @@ self.addEventListener('notificationclick', event => {
       }
     }
 
-    // No app window exists: explicitly open the absolute target URL. Chrome
-    // Android may map this to the installed standalone StoreFlow PWA.
     try {
       const opened = await self.clients.openWindow(targetUrl);
       if (opened) {
