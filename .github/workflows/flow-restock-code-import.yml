@@ -1,0 +1,73 @@
+name: Wire Flow restock code import
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.event.head_commit.message != 'feat(flow): add restock code import'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch FlowChat
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/components/FlowChat.tsx')
+          text = path.read_text()
+
+          text = text.replace(
+              "import { addProduct, recordSale, receiveStock } from '@/lib/store-data';",
+              "import { addProduct, recordSale, receiveStock, importPurchaseOrderByCode } from '@/lib/store-data';",
+              1,
+          )
+          text = text.replace(
+              "RotateCcw, Bell, FileUp, FileText } from 'lucide-react';",
+              "RotateCcw, Bell, FileUp, FileText, KeyRound } from 'lucide-react';",
+              1,
+          )
+          text = text.replace(
+              "  const [showReceiptImport, setShowReceiptImport] = useState(false);",
+              "  const [showReceiptImport, setShowReceiptImport] = useState(false);\n  const [showRestockCodeImport, setShowRestockCodeImport] = useState(false);\n  const [restockCodeInput, setRestockCodeInput] = useState('');",
+              1,
+          )
+
+          anchor = "  const executeSales = (items: FlowLineItem[]) => {"
+          handler = '''  const importRestockCode = () => {\n    const code = restockCodeInput.trim();\n    if (!code) return;\n    const result = importPurchaseOrderByCode(store, code, 'Flow', 'Flow');\n    if (!result.success) {\n      showToast(result.message, 'error');\n      return;\n    }\n    onUpdate(result.store);\n    setRestockCodeInput('');\n    setShowRestockCodeImport(false);\n    const count = result.po?.items?.length || 0;\n    flow(`Done — imported **${code.toUpperCase()}** and added **${count} products** to stock.`);\n    showToast('Restock code imported', 'success');\n  };\n\n'''
+          if handler.strip() not in text:
+              text = text.replace(anchor, handler + anchor, 1)
+
+          old = '''        <button onClick={() => onNavigate?.('inventory')} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 flex items-center gap-1.5">\n          <FileText className="w-3.5 h-3.5" /> Import stock file\n        </button>'''
+          new = old + '''\n        <button onClick={() => setShowRestockCodeImport(true)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary flex items-center gap-1.5">\n          <KeyRound className="w-3.5 h-3.5" /> Import restock code\n        </button>'''
+          if old in text and 'Import restock code' not in text:
+              text = text.replace(old, new, 1)
+
+          modal_anchor = "    {showReceiptImport && <ReceiptScanner store={store} onUpdate={onUpdate} onClose={() => setShowReceiptImport(false)} />}"
+          modal = '''    {showRestockCodeImport && <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={() => setShowRestockCodeImport(false)}>\n      <div className="w-full max-w-sm bg-background border border-border rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>\n        <div className="flex items-center justify-between">\n          <div>\n            <h4 className="font-display font-bold text-base">Import restock code</h4>\n            <p className="text-xs text-muted-foreground mt-1">Enter the PO code generated from a restock list.</p>\n          </div>\n          <button onClick={() => setShowRestockCodeImport(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-2/60"><X className="w-4 h-4" /></button>\n        </div>\n        <input\n          autoFocus\n          value={restockCodeInput}\n          onChange={e => setRestockCodeInput(e.target.value.toUpperCase())}\n          onKeyDown={e => { if (e.key === 'Enter') importRestockCode(); }}\n          placeholder="PO-ABC123"\n          className="w-full rounded-xl border border-border bg-surface-2/40 px-4 py-3 text-sm font-mono tracking-wider uppercase"\n        />\n        <button onClick={importRestockCode} disabled={!restockCodeInput.trim()} className="w-full rounded-xl bg-primary text-primary-foreground px-4 py-3 text-sm font-display font-bold disabled:opacity-40">\n          Import stock\n        </button>\n      </div>\n    </div>}\n'''
+          if modal_anchor in text and 'showRestockCodeImport &&' not in text:
+              text = text.replace(modal_anchor, modal + modal_anchor, 1)
+
+          path.write_text(text)
+
+          if 'Import restock code' not in text or 'importPurchaseOrderByCode' not in text:
+              raise SystemExit('FlowChat patch did not apply completely')
+
+      - name: Typecheck and build
+        run: |
+          npm ci
+          npx tsc --noEmit -p tsconfig.app.json
+          npm run build
+
+      - name: Commit patch and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/FlowChat.tsx .github/workflows/flow-restock-code-import.yml
+          git commit -m "feat(flow): add restock code import" --allow-empty
+          git push
