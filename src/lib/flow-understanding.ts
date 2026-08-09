@@ -45,24 +45,26 @@ function lowStockReply(store:StoreData){
 }
 
 function isStoreQuestion(q:string){
- return /^(hows|how is|how are|how's)\s+(my\s+|the\s+)?(store|shop|business)\b/.test(q)
+ return /^(hows|how s|how is|how are|how's)\s+(my\s+|the\s+)?(store|shop|business)\b/.test(q)
    || /^(tell me about|give me an overview of|show me|what about)\s+(my\s+|the\s+)?(store|shop|business)\b/.test(q)
    || /^(is|how)\s+(my\s+)?(store|shop|business)\s+(doing|performing|going)\b/.test(q)
    || /^(store|shop|business)\s+(health|overview|performance)$/.test(q)
-   || q==='store'||q==='my store'||q==='my business';
+   || q==='store'||q==='my store'||q==='business'||q==='my business';
 }
 
 function isLowStockQuestion(q:string){
- return /^(what is|whats|what's|show me|show|tell me)\s+(my\s+)?(?:items?\s+)?(?:that\s+are\s+)?(?:low|low stock|running low|almost out|nearly out)\b/.test(q)
-   || /^(what|which)\s+(products?|items?)\s+(are\s+)?(?:low|running low|almost out|nearly out)\b/.test(q)
-   || /^(low stock|running low|almost out|nearly out|what's low|whats low|what is low)$/.test(q)
-   || /^(what do i need|what needs)\s+(to be\s+)?restocked\b/.test(q);
+ return /^(what is|whats|what s|what's|show me|show|tell me)\s+(my\s+)?(?:items?\s+)?(?:that\s+are\s+)?(?:low|low stock|running low|almost out|nearly out)\b/.test(q)
+   || /^(what|which)\s+(?:products?|items?)\s+(?:that\s+)?(?:are\s+)?(?:low|running low|almost out|nearly out)\b/.test(q)
+   || /^(?:products?|items?)\s+(?:that\s+)?(?:are\s+)?(?:low|running low|almost out|nearly out)\b/.test(q)
+   || /^(low stock|running low|almost out|nearly out|what s low|what's low|whats low|what is low)$/.test(q)
+   || /^(what do i need|what needs)\s+(?:to be\s+)?restocked\b/.test(q)
+   || /^(?:which|what)\s+(?:products?|items?)\s+(?:need|needs)\s+restocking\b/.test(q);
 }
 
 /** Intent-first conversational resolver. Product matching is deliberately last. */
 export function understandFlexible(store:StoreData,input:string):FlowUnderstanding{
  const q=norm(input); if(!q)return{kind:'unknown',reply:'What would you like Flow to help you with?'};
- if(isStoreQuestion(q))return{kind:'store',reply:'I’ll give you an overview of your store.'};
+ if(isStoreQuestion(q))return{kind:'store',reply:'I’ll give you an overview of your business.'};
  if(isLowStockQuestion(q))return{kind:'topic',topic:'stock',reply:lowStockReply(store)};
  for(const [topic,re,reply] of TOPICS)if(re.test(q)&&tokens(q).length<=3)return{kind:'topic',topic,reply};
  const products=store.products||[];
