@@ -99,8 +99,6 @@ if (!flow.includes('initialFile={pendingImportFile}')) {
   }
 }
 
-write(flowPath, flow);
-
 let receipt = read(receiptPath);
 if (!receipt.includes('initialFile?: File | null;')) {
   receipt = receipt.replace('  currentUser?: any;\n}', '  currentUser?: any;\n  initialFile?: File | null;\n}');
@@ -130,6 +128,14 @@ if (!receipt.includes('initialFile && initialProcessedRef')) {
   if (!receipt.includes(anchor)) throw new Error('ReceiptScanner applyStructure anchor not found');
   receipt = receipt.replace(anchor, effect + anchor);
 }
-write(receiptPath, receipt);
 
-console.log('Flow attachment/buy-list wiring ensured.');
+if (!flow.includes('<FlowAttachmentMenu') || !flow.includes('onClick={() => setShowAttachments(v => !v)}') || !flow.includes('createBuyListFromFlow(); return;')) {
+  throw new Error('Flow attachment wiring was not applied; refusing to build stale Flow UI.');
+}
+if (!receipt.includes('initialFile?: File | null;') || !receipt.includes('initialProcessedRef')) {
+  throw new Error('Receipt import wiring was not applied; refusing to build stale import UI.');
+}
+
+write(flowPath, flow);
+write(receiptPath, receipt);
+console.log('Flow attachment/buy-list wiring verified and ensured.');
