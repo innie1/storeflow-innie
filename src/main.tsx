@@ -1,9 +1,43 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import "./storeflow-ui-overhaul.css";
 import { initTheme } from "./lib/theme";
 
 initTheme();
+
+// StoreFlow UI overhaul is intentionally mounted outside the business logic.
+// It only adjusts presentation/navigation labels and never changes store data.
+document.body.classList.add("storeflow-ui-overhaul");
+
+const applyStoreFlowNavigation = () => {
+  const nav = document.querySelector("nav.fixed.bottom-0");
+  if (!nav) return;
+
+  const buttons = Array.from(nav.querySelectorAll("button"));
+  for (const button of buttons) {
+    const label = button.querySelector("span:last-child")?.textContent?.trim();
+    if (!label) continue;
+
+    // Mobile navigation is intentionally action-oriented.
+    if (label === "Dashboard") {
+      const span = button.querySelector("span:last-child");
+      if (span) span.textContent = "Home";
+    }
+    if (label === "Inventory") {
+      const span = button.querySelector("span:last-child");
+      if (span) span.textContent = "Stock";
+    }
+    if (label === "Sales") {
+      const span = button.querySelector("span:last-child");
+      if (span) span.textContent = "Sell";
+    }
+  }
+};
+
+// React owns the markup, so observe only the small navigation-label change.
+const navigationObserver = new MutationObserver(() => applyStoreFlowNavigation());
+navigationObserver.observe(document.documentElement, { childList: true, subtree: true });
 
 // Service worker registration — guarded against Lovable preview/iframe contexts.
 const isInIframe = (() => {
