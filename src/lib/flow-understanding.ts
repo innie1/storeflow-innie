@@ -33,10 +33,24 @@ function similarity(a:string,b:string){
  return Math.max(overlap/union*.92,(1-prev[y.length]/Math.max(x.length,y.length))*.82);
 }
 
+function lowStockReply(store:StoreData){
+ const products=(store.products||[]).filter(p=>!p.discontinued&&!p.isService);
+ const threshold=store.managerSettings?.criticalStockThreshold ?? 5;
+ const out=products.filter(p=>p.quantity<=0);
+ const low=products.filter(p=>p.quantity>0&&p.quantity<=threshold);
+ const items=[...out,...low];
+ if(!items.length)return 'Your stock looks good right now. I do not see any products at or below the low-stock threshold.';
+ const lines=items.slice(0,20).map(p=>`• **${p.name}** — ${p.quantity<=0?'Out of stock':`${p.quantity} left`}`);
+ return `Here’s what’s low:\n${lines.join('\n')}${items.length>20?`\n• ...and ${items.length-20} more`:''}\n\nLow-stock threshold: **${threshold} units**.`;
+}
+
 /** Conversational resolver for short words, partial names and ambiguous catalog matches. */
 export function understandFlexible(store:StoreData,input:string):FlowUnderstanding{
  const q=norm(input); if(!q)return{kind:'unknown',reply:'What would you like Flow to help you with?'};
- if(/^(how'?s|how is|how are)\s+(my\s+|the\s+)?(store|shop|business)\b/.test(q)||q==='store'||q==='my store')return{kind:'store',reply:'I’ll give you an overview of your store.'};
+ // High-priority natural-language intents must win before product fuzzy matching.
+ // This prevents phrases such as "what's low?" from accidentally matching a product name.
+ if(/^(hows|how is|how are)\s+(my\s+|the\s+)?(store|shop|business)\b/.test(q)||q==='store'||q==='my store')return{kind:'store',reply:'I’ll give you an overview of your store.'};
+ if(/^(what is|whats|what's)\s+(low|low stock)\b|^what'?s\s+low$|^low stock$|^running low$|^what is running low$/.test(q))return{kind:'topic',topic:'stock',reply:lowStockReply(store)};
  for(const [topic,re,reply] of TOPICS)if(re.test(q)&&tokens(q).length<=3)return{kind:'topic',topic,reply};
  const products=store.products||[];
  const scored=products.map(product=>({product,score:Math.max(...[product.name,...(product.voiceAliases||[])].map(name=>similarity(q,name)))})).filter(x=>x.score>=.55).sort((a,b)=>b.score-a.score);
