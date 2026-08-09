@@ -7,7 +7,8 @@ import { NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 
 declare const self: ServiceWorkerGlobalScope;
 cleanupOutdatedCaches();
-precacheAndRoute(self.__WB_MANIFEST);
+const STOREFLOW_PRECACHE = self.__WB_MANIFEST;
+precacheAndRoute(STOREFLOW_PRECACHE);
 self.skipWaiting();
 self.addEventListener('activate', event => event.waitUntil(Promise.all([self.clients.claim(), caches.delete('html')])));
 registerRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ cacheName: 'html', networkTimeoutSeconds: 2 }));
@@ -20,7 +21,7 @@ const DEFAULT_PREFS: NotificationPreferences = { enabled:true, orders:true, flow
 
 function versionedAsset(path:string) {
   const normalized = path.replace(/^\//, '');
-  const entries = self.__WB_MANIFEST as Array<{ url:string; revision?:string }>;
+  const entries = STOREFLOW_PRECACHE as Array<{ url:string; revision?:string }>;
   const entry = entries.find(item => item.url.replace(/^\//, '') === normalized);
   return entry?.revision ? `${path}?v=${encodeURIComponent(entry.revision)}` : path;
 }
