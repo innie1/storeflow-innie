@@ -1,0 +1,59 @@
+name: Apply Flow attachments and buy-list wiring
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'feat(flow): wire attachments and buy-list command'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch FlowChat and ReceiptScanner
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/components/FlowChat.tsx')
+          s = p.read_text()
+          s = s.replace("import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/flow-brain-memory';", "import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/flow-brain-memory';\nimport { createFlowBuyList, formatFlowBuyList } from '@/lib/flow-buy-list';\nimport FlowAttachmentMenu from '@/components/FlowAttachmentMenu';\nimport FlowCameraCapture from '@/components/FlowCameraCapture';")
+          s = s.replace("  const [showReceiptImport, setShowReceiptImport] = useState(false);", "  const [showReceiptImport, setShowReceiptImport] = useState(false);\n  const [showAttachments, setShowAttachments] = useState(false);\n  const [showFlowCamera, setShowFlowCamera] = useState(false);\n  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);")
+          anchor = "  const importRestockCode = () => {"
+          handler = '''  const createBuyListFromFlow = () => {\n    const items = createFlowBuyList(store);\n    flow(formatFlowBuyList(items), items.length ? [{ label: 'Open Buy List', onClick: () => onNavigate?.('inventory') }] : undefined);\n    rememberBrainContext(store, { lastTopic: 'inventory', lastAction: 'flow buy list recommendation' });\n  };\n\n  const handleFlowAttachment = (file: File) => {\n    if (file.type.startsWith('image/')) { setPendingImportFile(file); setShowReceiptImport(true); return; }\n    const ext = file.name.split('.').pop()?.toLowerCase() || 'file';\n    if (['csv','tsv','txt','json','xls','xlsx','pdf','doc','docx'].includes(ext)) {\n      showToast(`${file.name} selected. Open Inventory to use the stock importer for this file.`, 'info');\n      onNavigate?.('inventory');\n      return;\n    }\n    showToast('That file type is not supported for stock import.', 'error');\n  };\n\n'''
+          if handler.strip() not in s: s = s.replace(anchor, handler + anchor, 1)
+          old = '''    {showReceiptImport && <ReceiptScanner store={store} onUpdate={onUpdate} onClose={() => setShowReceiptImport(false)} />}\n    <form className="flex items-center gap-2 px-4 py-3 border-t border-border" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'} className="flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm" /><button type="submit" disabled={!input.trim()} className="w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button></form>'''
+          new = '''    {showReceiptImport && <ReceiptScanner store={store} onUpdate={onUpdate} onClose={() => { setShowReceiptImport(false); setPendingImportFile(null); }} initialFile={pendingImportFile} />}\n    {showFlowCamera && <FlowCameraCapture onClose={() => setShowFlowCamera(false)} onCapture={(file) => { setShowFlowCamera(false); setPendingImportFile(file); setShowReceiptImport(true); }} />}\n    <form className="relative flex items-center gap-2 px-4 py-3 border-t border-border" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><button type="button" onClick={() => setShowAttachments(v => !v)} className="w-10 h-10 shrink-0 flex items-center justify-center rounded-full border border-border bg-surface-2/40" aria-label="Add attachment"><Plus className="w-5 h-5" /></button><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'} className="flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm" /><button type="submit" disabled={!input.trim()} className="w-11 h-11 shrink-0 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button>{showAttachments && <FlowAttachmentMenu onClose={() => setShowAttachments(false)} onCamera={() => { setShowAttachments(false); setShowFlowCamera(true); }} onImage={handleFlowAttachment} onFile={handleFlowAttachment} onRestockCode={() => { setShowAttachments(false); setShowRestockCodeImport(true); }} onBuyList={() => { setShowAttachments(false); createBuyListFromFlow(); }} />}</form>'''
+          if old not in s: raise SystemExit('FlowChat anchor not found')
+          s = s.replace(old, new, 1)
+          # Make the natural-language command work before the generic help matcher.
+          marker = "    if (handleAppControl(text)) return;\n    if (handleFinanceMutation(text)) return;"
+          replacement = "    if (handleAppControl(text)) return;\n    if (/\\b(?:create|make|build|generate)\\b.*\\bbuy list\\b|\\bbuy list\\b.*\\b(?:create|make|build|generate)\\b/i.test(text)) { createBuyListFromFlow(); return; }\n    if (handleFinanceMutation(text)) return;"
+          if replacement not in s: s = s.replace(marker, replacement, 1)
+          p.write_text(s)
+
+          r = Path('src/components/ReceiptScanner.tsx')
+          rs = r.read_text()
+          rs = rs.replace("  currentUser?: any;\n}", "  currentUser?: any;\n  initialFile?: File | null;\n}")
+          rs = rs.replace("export default function ReceiptScanner({ store, onUpdate, onClose, currentUser }: ReceiptScannerProps) {", "export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, initialFile }: ReceiptScannerProps) {")
+          rs = rs.replace("  const fileRef = useRef<HTMLInputElement>(null);", "  const fileRef = useRef<HTMLInputElement>(null);\n  const initialProcessedRef = useRef<File | null>(null);")
+          needle = "  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {\n    const file = e.target.files?.[0];\n    if (!file) return;"
+          if needle not in rs: raise SystemExit('ReceiptScanner handler not found')
+          replacement = "  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {\n    const file = e.target.files?.[0];\n    if (!file) return;"
+          rs = rs.replace(needle, replacement, 1)
+          effect_anchor = "  const applyStructureToItems = (targetItems: ScannedItem[], pUnit: string, sUnit: string, unitsPerPurchase: number) => {"
+          effect = "  useEffect(() => { if (initialFile && initialProcessedRef.current !== initialFile) { initialProcessedRef.current = initialFile; const synthetic = { target: { files: [initialFile] } } as unknown as React.ChangeEvent<HTMLInputElement>; void handleFileSelect(synthetic); } }, [initialFile]);\n\n"
+          if effect not in rs: rs = rs.replace(effect_anchor, effect + effect_anchor, 1)
+          r.write_text(rs)
+      - name: Verify build
+        run: |
+          npm ci
+          npm run build
+      - name: Commit and remove one-time workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/FlowChat.tsx src/components/ReceiptScanner.tsx .github/workflows/apply-flow-attachments.yml
+          git rm .github/workflows/apply-flow-attachments.yml
+          git commit -m "feat(flow): wire attachments and buy-list command"
+          git push
