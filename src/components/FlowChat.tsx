@@ -5,6 +5,7 @@ import { flowAddExpense, flowRecordPayment, flowAddInvestment, flowAddLoan, flow
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
 import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';
+import { understandFlexible } from '@/lib/flow-understanding';
 import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/flow-brain-memory';
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
 import { resolveFlowSettingCommand, flowSettingsHelp } from '@/lib/flow-settings-resolver';
@@ -263,6 +264,75 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     if (handleFinanceMutation(text)) return;
     if (/^(undo|undo that|reverse that|take that back)$/i.test(text)) { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
     if (addDraft) { handleAddWizard(text); return; }
+
+    // Flexible conversational layer: short topics, partial product names and
+    // store-level questions are resolved before the command engine can guess.
+    const flexible = understandFlexible(store, text);
+    if (flexible.kind === 'store') {
+      const overview = responseFor(store, { intent: 'store_overview', confidence: 1, items: [], reason: 'flexible store question' });
+      flow(overview);
+      rememberBrainContext(store, { lastIntent: 'store_overview', lastTopic: 'store', lastAction: 'store overview' });
+      return;
+    }
+    if (flexible.kind === 'topic') {
+      const topicActions: Record<string, ChatAction[]> = {
+        theme: [
+          { label: 'Change theme', onClick: () => handleAppControl('theme') },
+          { label: 'Change color', onClick: () => flow('Which theme color would you like to change?') },
+        ],
+        settings: [
+          { label: 'Settings help', onClick: () => flow(flowSettingsHelp()) },
+          { label: 'Theme', onClick: () => handleAppControl('theme') },
+        ],
+        stock: [
+          { label: 'What is low?', onClick: () => ask("What's low?") },
+          { label: 'What is out?', onClick: () => ask('What is out of stock?') },
+          { label: 'What should I restock?', onClick: () => ask('What should I restock?') },
+        ],
+        sales: [
+          { label: 'Today', onClick: () => ask('How were sales today?') },
+          { label: 'Best sellers', onClick: () => ask('Show my best sellers') },
+          { label: 'Recent sales', onClick: () => ask('Show my recent sales') },
+        ],
+        customers: [
+          { label: 'Customer count', onClick: () => ask('How many customers do I have?') },
+          { label: 'Outstanding debt', onClick: () => ask('How much customer debt do I have?') },
+        ],
+        expenses: [
+          { label: 'Last 30 days', onClick: () => ask('How much did I spend in the last 30 days?') },
+          { label: 'Recent expenses', onClick: () => ask('Show my recent expenses') },
+        ],
+        price: [
+          { label: 'Choose a product', onClick: () => flow('Tell me the product name and I’ll check its price.') },
+        ],
+        restock: [
+          { label: 'Simple buy list', onClick: () => { onNavigate?.('inventory'); flow('Open Buy List in Simple mode and choose the products you want.'); } },
+          { label: 'Smart Restock', onClick: () => { onNavigate?.('inventory'); flow('Open Smart Restock to automatically build recommendations and allocate the available budget.'); } },
+        ],
+      };
+      flow(flexible.reply, topicActions[flexible.topic]);
+      return;
+    }
+    if (flexible.kind === 'product_choices') {
+      const actions = flexible.products.map(product => ({
+        label: product.name,
+        onClick: () => {
+          setLastProductId(product.id);
+          rememberBrainContext(store, { lastIntent: 'product_lookup', lastProductId: product.id, lastTopic: 'product', lastAction: 'product selection' });
+          flow(responseFor(store, { intent: 'product_lookup', confidence: 1, items: [], product: { product, score: 1, matchedBy: 'exact' }, reason: 'selected product match' }));
+        }
+      }));
+      flow(`I found ${flexible.products.length} products matching **${flexible.query}**. Which one do you mean?`, actions);
+      return;
+    }
+    if (flexible.kind === 'product') {
+      const p = flexible.product;
+      setLastProductId(p.id);
+      rememberBrainContext(store, { lastIntent: 'product_lookup', lastProductId: p.id, lastTopic: 'product', lastAction: 'flexible product lookup' });
+      flow(responseFor(store, { intent: 'product_lookup', confidence: flexible.score, items: [], product: { product: p, score: flexible.score, matchedBy: 'fuzzy' }, reason: 'flexible product lookup' }));
+      return;
+    }
+
     const lastProduct = lastProductId ? store.products.find(p => p.id === lastProductId) || null : null;
     const plan = understand(store, text, lastProduct, lastIntent); setLastIntent(plan.intent);
     if (plan.product) { setLastProductId(plan.product.product.id); rememberBrainContext(store, { lastIntent: plan.intent, lastProductId: plan.product.product.id, lastTopic: plan.intent === 'product_lookup' ? 'product' : plan.intent, lastAction: plan.intent }); }
