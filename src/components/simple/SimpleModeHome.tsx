@@ -12,6 +12,7 @@ import CostPricePrompt from './CostPricePrompt';
 import QuickSellGrid from './QuickSellGrid';
 import SimpleSearch from './SimpleSearch';
 import { History, Search } from 'lucide-react';
+import './SimpleModeHomeLayout.css';
 
 interface SimpleModeHomeProps {
   store: StoreData;
@@ -47,26 +48,14 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     const newMilestone = checkNewMilestone(updated);
     if (newMilestone) setActiveMilestone(newMilestone);
 
-    // Screen 11 — ask for cost price if this product doesn't have one yet, unless the owner opted out
     if (!store.simpleModeSettings?.skipCostPricePrompt && (!product.costPrice || product.costPrice <= 0)) {
       setCostPricePromptProductId(productId);
     }
   };
 
-  // Records several items from one voice sale ("Indomitable, Garri and
-  // onions") in one go. Uses a running accumulator instead of calling
-  // handleConfirmSale in a loop — looping calls to recordSale against the
-  // same stale `store` closure would silently drop all but the last item.
   const handleConfirmMultiSale = (items: { productId: string; quantity: number }[]) => {
     let updated = store;
     let blockedAny = false;
-
-    // One shared transactionId links every item into a single order — same
-    // pattern recordCheckout uses for the main POS cart. Without this, each
-    // voice-sold item lands as its own disconnected sale row: no combined
-    // receipt in Sales History, and it gets silently skipped by the
-    // transaction-basket analytics in manager-intel.ts (which requires a
-    // transactionId to group items together).
     const transactionId = generateId();
 
     items.forEach(({ productId, quantity }) => {
@@ -102,9 +91,6 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       category: store.storeType || 'others',
       addedAt: new Date().toISOString(),
       source: 'voice_sale',
-      // No cost price yet means the owner just called out a sale, not a full
-      // product setup — flag it so it shows a Pending Inventory badge until
-      // they come back and fill in cost price / supplier / etc.
       needsStockSetup: !costPrice,
     };
     const updated: StoreData = { ...store, products: [...store.products, newProduct] };
@@ -131,11 +117,6 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     setStore(updated);
   };
 
-  // First-time-only setup — Screens 2, 3, 4.
-  // Only new stores get a `simpleOnboarding` object at creation time (see createStore()).
-  // Existing/legacy stores never had this field set, so they must NOT be routed
-  // through onboarding just because the field is missing — that would incorrectly
-  // interrupt shops that are already up and running.
   if (store.simpleOnboarding && !store.simpleOnboarding.complete) {
     return (
       <SimpleOnboarding
@@ -154,16 +135,6 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
     <div className="relative flex flex-col items-center px-3 pt-0 pb-6 max-w-sm mx-auto">
       <OfflineQueueBanner store={store} setStore={setStore} />
 
-      {/* Small search icon — browse inventory, customers, receipts without leaving Simple Mode */}
-      <button
-        onClick={() => setShowSearch(true)}
-        className="absolute top-4 right-4 w-9 h-9 rounded-full bg-surface-2 border border-border flex items-center justify-center hover:bg-surface-3 active:scale-95 transition-all cursor-pointer shadow-sm z-20"
-        title="Search products, customers, receipts"
-      >
-        <Search className="w-4.5 h-4.5 text-foreground/80" />
-      </button>
-
-      {/* Today's total */}
       <div className="w-full text-center mb-10">
         <p className="text-xs text-muted-foreground font-display font-semibold uppercase tracking-wide">Today's Sales</p>
         <h1 className="text-4xl font-display font-black text-foreground mt-1">₦{todayRevenue.toLocaleString()}</h1>
@@ -177,7 +148,6 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
           </p>
         </div>
 
-        {/* Sales target — auto (daily/weekly, based on how often this store sells) unless the owner set one manually */}
         <div className="mt-3 max-w-[220px] mx-auto">
           <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
             <span className="uppercase font-bold tracking-wide">
@@ -195,24 +165,31 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
         </div>
       </div>
 
-      {/* Big mic — the whole point of Simple Mode */}
-      <SimpleVoiceSell
-        products={store.products}
-        onConfirmSale={handleConfirmSale}
-        onConfirmMultiSale={handleConfirmMultiSale}
-        onCreateProduct={handleCreateProduct}
-        onSaveAlias={handleSaveAlias}
-      />
+      <div className="simple-mode-voice-shell">
+        <SimpleVoiceSell
+          products={store.products}
+          onConfirmSale={handleConfirmSale}
+          onConfirmMultiSale={handleConfirmMultiSale}
+          onCreateProduct={handleCreateProduct}
+          onSaveAlias={handleSaveAlias}
+        />
+        <button
+          onClick={() => setShowSearch(true)}
+          className="simple-mode-search-near-toggle bg-surface-2 border border-border flex items-center justify-center hover:bg-surface-3 active:scale-95 transition-all cursor-pointer shadow-sm"
+          title="Search products, customers, receipts"
+          aria-label="Search products, customers, receipts"
+        >
+          <Search className="w-4 h-4 text-foreground/80" />
+        </button>
+      </div>
 
-      {/* Light secondary action — history only, nothing else competes for attention here */}
       <button
         onClick={() => onNavigate('history')}
-        className="mt-10 flex items-center gap-1.5 text-xs text-muted-foreground font-display font-semibold"
+        className="mt-6 flex items-center gap-1.5 text-xs text-muted-foreground font-display font-semibold"
       >
         <History className="w-3.5 h-3.5" /> View Sales History
       </button>
 
-      {/* Nine-tile quick-tap grid — onboarding top products first, then best-sellers */}
       <QuickSellGrid store={store} onSell={handleConfirmSale} />
 
       {promptProduct && (
