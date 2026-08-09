@@ -18,6 +18,13 @@ interface PushPayload { title?: string; body?: string; tag?: string; url?: strin
 interface NotificationPreferences { enabled:boolean; orders:boolean; flowCheckins:boolean; businessInsights:boolean; debtReminders:boolean; sounds:boolean; criticalAlerts:boolean; quietHoursEnabled:boolean; quietStart:string; quietEnd:string; }
 const DEFAULT_PREFS: NotificationPreferences = { enabled:true, orders:true, flowCheckins:true, businessInsights:true, debtReminders:true, sounds:true, criticalAlerts:true, quietHoursEnabled:true, quietStart:'22:00', quietEnd:'07:00' };
 
+function versionedAsset(path:string) {
+  const normalized = path.replace(/^\//, '');
+  const entries = self.__WB_MANIFEST as Array<{ url:string; revision?:string }>;
+  const entry = entries.find(item => item.url.replace(/^\//, '') === normalized);
+  return entry?.revision ? `${path}?v=${encodeURIComponent(entry.revision)}` : path;
+}
+
 function buildActions(data: PushPayload) {
   if (data.actions?.length) return data.actions;
   const tag = (data.tag || '').toLowerCase(), title = (data.title || '').toLowerCase();
@@ -27,7 +34,15 @@ function buildActions(data: PushPayload) {
   if (tag.includes('debt') || tag.includes('bill') || title.includes('repayment')) return [{ action:'open', title:'💰 View Pending' }];
   return [{ action:'open', title:'⚡ Open StoreFlow' }];
 }
-function notificationUrl(data: PushPayload) { return data.url || (data.orderId ? `/?tab=orders&order_id=${encodeURIComponent(data.orderId)}` : '/?tab=dashboard'); }
+function notificationUrl(data: PushPayload) {
+  if (data.url) return data.url;
+  if (data.orderId) {
+    const params = new URLSearchParams({ tab:'orders', order_id:data.orderId });
+    if (data.orderNumber) params.set('order_number', data.orderNumber);
+    return `/?${params.toString()}`;
+  }
+  return '/?tab=dashboard';
+}
 function categoryOf(data: PushPayload): 'order'|'flow'|'insight'|'debt'|'other' {
   const raw = `${data.type || ''} ${data.category || ''} ${data.tag || ''} ${data.title || ''}`.toLowerCase();
   if (data.orderId || raw.includes('order')) return 'order';
@@ -84,10 +99,12 @@ self.addEventListener('push', event => {
       visible.postMessage({ type:'STOREFLOW_PUSH_RECEIVED', title, body:data.body || '', url, orderId:data.orderId || null, orderNumber:data.orderNumber || null, tag, priority });
       return;
     }
+    const absoluteUrl = new URL(url, self.location.origin).href;
+    const appIcon = versionedAsset('/icons/icon-192.png');
     await self.registration.showNotification(title, {
-      body:data.body || 'New StoreFlow alert', icon:'/icons/icon-192.png', badge:'/icons/icon-192.png', tag,
+      body:data.body || 'New StoreFlow alert', icon:appIcon, badge:appIcon, tag,
       renotify:false, silent:!prefs.sounds, requireInteraction:priority === 'critical', timestamp:Date.now(),
-      data:{ url, orderId:data.orderId || null, orderNumber:data.orderNumber || null, tag, category:categoryOf(data) },
+      data:{ url:absoluteUrl, orderId:data.orderId || null, orderNumber:data.orderNumber || null, tag, category:categoryOf(data) },
       vibrate:prefs.sounds ? (priority === 'critical' ? [300,100,300,100,300] : [180,80,180]) : [], actions:buildActions(data),
     } as NotificationOptions);
     try { const current = await self.registration.getNotifications(); if ('setAppBadge' in navigator) await (navigator as any).setAppBadge(current.length); } catch {}
@@ -97,13 +114,40 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const data = event.notification.data || {};
-  const url = data.url || (data.orderId ? `/?tab=orders&order_id=${encodeURIComponent(data.orderId)}` : '/?tab=dashboard');
+  const rawUrl = data.url || (data.orderId
+    ? `/?tab=orders&order_id=${encodeURIComponent(data.orderId)}${data.orderNumber ? `&order_number=${encodeURIComponent(data.orderNumber)}` : ''}`
+    : '/?tab=dashboard');
+  const targetUrl = new URL(rawUrl, self.location.origin).href;
   event.waitUntil((async () => {
     if ('clearAppBadge' in navigator) { try { await (navigator as any).clearAppBadge(); } catch {} }
+
     const clients = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
-    const existing = clients.find(c => 'focus' in c) as WindowClient | undefined;
-    if (existing) { try { await existing.navigate(url); } catch {} return existing.focus(); }
-    return self.clients.openWindow(url);
+    const sameOrigin = clients.filter(c => {
+      try { return new URL(c.url).origin === self.location.origin; } catch { return false; }
+    }) as WindowClient[];
+
+    const existing = sameOrigin[0];
+    if (existing) {
+      try {
+        const navigated = await existing.navigate(targetUrl);
+        const client = navigated || existing;
+        await client.focus();
+        return client;
+      } catch {
+        try { await existing.focus(); } catch {}
+      }
+    }
+
+    try {
+      const opened = await self.clients.openWindow(targetUrl);
+      if (opened) {
+        try { await opened.focus(); } catch {}
+      }
+      return opened;
+    } catch (error) {
+      console.warn('[StoreFlow Push] Failed to open notification target:', error);
+      return null;
+    }
   })());
 });
 
