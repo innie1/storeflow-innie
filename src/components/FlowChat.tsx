@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StoreData, TabId } from '@/types/store';
-import { addProduct, recordSale, receiveStock } from '@/lib/store-data';
+import { addProduct, recordSale, receiveStock, importPurchaseOrderByCode } from '@/lib/store-data';
 import { flowAddExpense, flowRecordPayment, flowAddInvestment, flowAddLoan, flowAddWithdrawal, flowReceiveStock } from '@/lib/flow-finance-actions';
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
@@ -10,7 +10,7 @@ import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/fl
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
 import { resolveFlowSettingCommand, flowSettingsHelp } from '@/lib/flow-settings-resolver';
 import { getNextFlowCheckIn, notifyFlowCheckIn, requestFlowNotificationPermission, checkInsQuiet } from '@/lib/flow-checkins';
-import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText } from 'lucide-react';
+import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText, KeyRound } from 'lucide-react';
 import Mascot from '@/components/Mascot';
 import ReceiptScanner from '@/components/ReceiptScanner';
 
@@ -69,6 +69,8 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const [addDraft, setAddDraft] = useState<AddDraft | null>(null);
   const [addStep, setAddStep] = useState<'cost'|'sell'|'qty'|'category'|'confirm'>('cost');
   const [showReceiptImport, setShowReceiptImport] = useState(false);
+  const [showRestockCodeImport, setShowRestockCodeImport] = useState(false);
+  const [restockCodeInput, setRestockCodeInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   useMemo(() => storeAnalysis(store), [store]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages]);
@@ -101,6 +103,22 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     if (permission === 'granted') { setFlowControl('notifications', true); flow('Done. I can now send Flow check-ins to this device when I notice something worth your attention.'); const check = getNextFlowCheckIn(store); if (check) notifyFlowCheckIn(check); }
     else if (permission === 'denied') flow('Notifications are blocked by your device/browser. You can allow them in StoreFlow site/app settings.');
     else flow('This device does not support browser notifications here.');
+  };
+
+  const importRestockCode = () => {
+    const code = restockCodeInput.trim();
+    if (!code) return;
+    const result = importPurchaseOrderByCode(store, code, 'Flow', 'Flow');
+    if (!result.success) {
+      showToast(result.message, 'error');
+      return;
+    }
+    onUpdate(result.store);
+    setRestockCodeInput('');
+    setShowRestockCodeImport(false);
+    const count = result.po?.items?.length || 0;
+    flow(`Done — imported **${code.toUpperCase()}** and added **${count} products** to stock.`);
+    showToast('Restock code imported', 'success');
   };
 
   const executeSales = (items: FlowLineItem[]) => {
@@ -386,8 +404,33 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
         <button onClick={() => onNavigate?.('inventory')} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 flex items-center gap-1.5">
           <FileText className="w-3.5 h-3.5" /> Import stock file
         </button>
+        <button onClick={() => setShowRestockCodeImport(true)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary flex items-center gap-1.5">
+          <KeyRound className="w-3.5 h-3.5" /> Import restock code
+        </button>
       </div>
     )}</div>
+    {showRestockCodeImport && <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={() => setShowRestockCodeImport(false)}>
+      <div className="w-full max-w-sm bg-background border border-border rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="font-display font-bold text-base">Import restock code</h4>
+            <p className="text-xs text-muted-foreground mt-1">Enter the PO code generated from a restock list.</p>
+          </div>
+          <button onClick={() => setShowRestockCodeImport(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-2/60"><X className="w-4 h-4" /></button>
+        </div>
+        <input
+          autoFocus
+          value={restockCodeInput}
+          onChange={e => setRestockCodeInput(e.target.value.toUpperCase())}
+          onKeyDown={e => { if (e.key === 'Enter') importRestockCode(); }}
+          placeholder="PO-ABC123"
+          className="w-full rounded-xl border border-border bg-surface-2/40 px-4 py-3 text-sm font-mono tracking-wider uppercase"
+        />
+        <button onClick={importRestockCode} disabled={!restockCodeInput.trim()} className="w-full rounded-xl bg-primary text-primary-foreground px-4 py-3 text-sm font-display font-bold disabled:opacity-40">
+          Import stock
+        </button>
+      </div>
+    </div>}
     {showReceiptImport && <ReceiptScanner store={store} onUpdate={onUpdate} onClose={() => setShowReceiptImport(false)} />}
     <form className="flex items-center gap-2 px-4 py-3 border-t border-border" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'} className="flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm" /><button type="submit" disabled={!input.trim()} className="w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button></form>
   </div>);
