@@ -10,8 +10,9 @@ import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/fl
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
 import { resolveFlowSettingCommand, flowSettingsHelp } from '@/lib/flow-settings-resolver';
 import { getNextFlowCheckIn, notifyFlowCheckIn, requestFlowNotificationPermission, checkInsQuiet } from '@/lib/flow-checkins';
-import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell } from 'lucide-react';
+import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText } from 'lucide-react';
 import Mascot from '@/components/Mascot';
+import ReceiptScanner from '@/components/ReceiptScanner';
 
 interface FlowChatProps { store: StoreData; orders?: any[]; onClose: () => void; onNavigate?: (tab: TabId) => void; onUpdate: (s: StoreData) => void; }
 interface ChatAction { label: string; onClick: () => void; }
@@ -20,7 +21,7 @@ interface ChatSession { id: string; title: string; updatedAt: string; messages: 
 interface AddDraft { name: string; costPrice?: number; sellingPrice?: number; quantity?: number; category?: string; }
 
 const SESSION_PREFIX = 'storeflow_flow_sessions_';
-const QUICK = ["How's my store?", "What's low?", 'Show my best sellers', "What's not selling?", 'What should I fix?'];
+const QUICK = ["How's my business?", "What's low?", 'Show my best sellers', "What's not selling?", 'What should I fix?'];
 function loadSessions(key: string): ChatSession[] { try { const v = JSON.parse(localStorage.getItem(SESSION_PREFIX + key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } }
 function saveSessions(key: string, sessions: ChatSession[]) { try { localStorage.setItem(SESSION_PREFIX + key, JSON.stringify(sessions.slice(0, 30))); } catch {} }
 function id(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
@@ -67,6 +68,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const [lastUndo, setLastUndo] = useState<StoreData | null>(null);
   const [addDraft, setAddDraft] = useState<AddDraft | null>(null);
   const [addStep, setAddStep] = useState<'cost'|'sell'|'qty'|'category'|'confirm'>('cost');
+  const [showReceiptImport, setShowReceiptImport] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   useMemo(() => storeAnalysis(store), [store]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages]);
@@ -375,7 +377,18 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   return (<div className="fixed inset-0 z-50 flex flex-col bg-background">
     <div className="flex items-center justify-between px-4 py-3 border-b border-border"><div className="flex items-center gap-2"><div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full"><Mascot size={28} /></div><h3 className="text-base font-display font-bold">Flow</h3></div><div className="flex items-center gap-1"><button onClick={newChat} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><Plus className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => setShowHistory(true)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><History className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => lastUndo && (onUpdate(lastUndo), setLastUndo(null), flow('Undone.'))} disabled={!lastUndo} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60 disabled:opacity-30"><RotateCcw className="w-4 h-4" /></button><button onClick={() => enableDeviceCheckins()} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60" title="Enable Flow device check-ins"><Bell className="w-4 h-4 text-muted-foreground" /></button><button onClick={() => setVoiceOn(v => !v)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60">{voiceOn ? <Volume2 className="w-5 h-5 text-primary" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}</button><button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><X className="w-5 h-5" /></button></div></div>
     {showHistory && <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setShowHistory(false)}><div className="w-full sm:max-w-sm max-h-[75vh] bg-background border border-border rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between px-4 py-3 border-b border-border"><h4 className="font-display font-bold text-sm">Chat history</h4><button onClick={() => setShowHistory(false)}><X className="w-4 h-4" /></button></div><div className="overflow-y-auto">{sessions.length === 0 ? <p className="text-xs text-muted-foreground text-center py-8">No past chats yet.</p> : sessions.map(s => <div key={s.id} className="flex items-center gap-2 px-4 py-3 border-b border-border/60 cursor-pointer hover:bg-surface-2/40" onClick={() => openSession(s)}><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{s.title}</p><p className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleString()}</p></div><button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}><Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" /></button></div>)}</div></div></div>}
-    <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">{messages.map(m => <div key={m.id} className="flex flex-col gap-1.5" style={{ alignItems: m.from === 'you' ? 'flex-end' : 'flex-start' }}><div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.from === 'flow' ? 'bg-surface-2/60 text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>{m.from === 'flow' ? renderFlowText(m.text) : m.text}</div>{m.actions && <div className="flex gap-2 flex-wrap">{m.actions.map(a => <button key={a.label} onClick={a.onClick} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">{a.label}</button>)}</div>}</div>)}{!addDraft && QUICK.map(q => <button key={q} onClick={() => ask(q)} className="self-start px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30">{q}</button>)}</div>
+    <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">{messages.map(m => <div key={m.id} className="flex flex-col gap-1.5" style={{ alignItems: m.from === 'you' ? 'flex-end' : 'flex-start' }}><div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.from === 'flow' ? 'bg-surface-2/60 text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>{m.from === 'flow' ? renderFlowText(m.text) : m.text}</div>{m.actions && <div className="flex gap-2 flex-wrap">{m.actions.map(a => <button key={a.label} onClick={a.onClick} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">{a.label}</button>)}</div>}</div>)}{messages.length === 1 && !addDraft && (
+      <div className="flex flex-wrap gap-2 pt-1 pb-2">
+        {QUICK.map(q => <button key={q} onClick={() => ask(q)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 hover:bg-surface-2/60">{q}</button>)}
+        <button onClick={() => setShowReceiptImport(true)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary flex items-center gap-1.5">
+          <FileUp className="w-3.5 h-3.5" /> Import receipt
+        </button>
+        <button onClick={() => onNavigate?.('inventory')} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 flex items-center gap-1.5">
+          <FileText className="w-3.5 h-3.5" /> Import stock file
+        </button>
+      </div>
+    )}</div>
+    {showReceiptImport && <ReceiptScanner store={store} onUpdate={onUpdate} onClose={() => setShowReceiptImport(false)} />}
     <form className="flex items-center gap-2 px-4 py-3 border-t border-border" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'} className="flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm" /><button type="submit" disabled={!input.trim()} className="w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button></form>
   </div>);
 }
