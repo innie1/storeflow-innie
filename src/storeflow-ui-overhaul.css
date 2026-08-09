@@ -95,3 +95,12 @@ body.storeflow-ui-overhaul textarea:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
+
+/* Customer Orders must remain a primary mobile navigation destination.
+   The navigation presentation script may hide the second button; override
+   that presentation-only rule so the existing Orders tab stays visible. */
+@media (max-width: 767px) {
+  body.storeflow-ui-overhaul nav.fixed.bottom-0 button:nth-child(2) {
+    display: flex !important;
+  }
+}
