@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Product, StoreData } from '@/types/store';
-import { Check, X } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface QuickSellGridProps {
   store: StoreData;
@@ -9,42 +9,55 @@ interface QuickSellGridProps {
 
 const GRID_SIZE = 9;
 
-// Picks up to 9 products to show as quick-tap tiles:
-// 1) Whatever the owner named during Top 5 Products Setup, first
-// 2) Then filled up with their best-sellers (by units_sold)
-// 3) Then filled up with whatever's left, so the grid isn't sparse for new shops
-function pickGridProducts(store: StoreData): Product[] {
-  const byId = new Map(store.products.map(p => [p.id, p]));
-  const picked: Product[] = [];
-  const seen = new Set<string>();
-
-  for (const id of store.simpleOnboarding?.topProductIds || []) {
-    const p = byId.get(id);
-    if (p && !p.discontinued && !seen.has(p.id)) {
-      picked.push(p);
-      seen.add(p.id);
-    }
+// Recent sales are deliberately first so the things the owner just sold stay
+// close to the mic. After that we keep the owner's pinned products and
+// best-sellers, preserving the old quick-sell behavior for everything else.
+function getLastSaleTimes(store: StoreData): Map<string, number> {
+  const lastSale = new Map<string, number>();
+  for (const sale of store.sales) {
+    const timestamp = new Date(sale.date).getTime();
+    if (!Number.isFinite(timestamp)) continue;
+    const current = lastSale.get(sale.productId) || 0;
+    if (timestamp > current) lastSale.set(sale.productId, timestamp);
   }
+  return lastSale;
+}
 
-  const bySales = [...store.products]
-    .filter(p => !p.discontinued && !seen.has(p.id))
-    .sort((a, b) => (b.units_sold || 0) - (a.units_sold || 0));
+function sortSellProducts(store: StoreData): Product[] {
+  const lastSale = getLastSaleTimes(store);
+  const pinned = new Set(store.simpleOnboarding?.topProductIds || []);
 
-  for (const p of bySales) {
-    if (picked.length >= GRID_SIZE) break;
-    picked.push(p);
-    seen.add(p.id);
-  }
+  return [...store.products]
+    .filter(p => !p.discontinued)
+    .sort((a, b) => {
+      const aRecent = lastSale.get(a.id) || 0;
+      const bRecent = lastSale.get(b.id) || 0;
 
-  return picked.slice(0, GRID_SIZE);
+      // Recently sold products always rise to the top. This also applies when
+      // the owner expands the list with More.
+      if (aRecent !== bRecent) return bRecent - aRecent;
+
+      const aPinned = pinned.has(a.id) ? 0 : 1;
+      const bPinned = pinned.has(b.id) ? 0 : 1;
+      if (aPinned !== bPinned) return aPinned - bPinned;
+
+      const unitDiff = (b.units_sold || 0) - (a.units_sold || 0);
+      if (unitDiff !== 0) return unitDiff;
+
+      return a.name.localeCompare(b.name);
+    });
 }
 
 export default function QuickSellGrid({ store, onSell }: QuickSellGridProps) {
-  const products = useMemo(() => pickGridProducts(store), [store]);
+  const allProducts = useMemo(() => sortSellProducts(store), [store]);
+  const [showAll, setShowAll] = useState(false);
   const [active, setActive] = useState<Product | null>(null);
   const [qty, setQty] = useState(1);
 
-  if (products.length === 0) return null;
+  const products = showAll ? allProducts : allProducts.slice(0, GRID_SIZE);
+  const hasMore = allProducts.length > GRID_SIZE;
+
+  if (allProducts.length === 0) return null;
 
   const openTile = (p: Product) => {
     setActive(p);
@@ -58,10 +71,11 @@ export default function QuickSellGrid({ store, onSell }: QuickSellGridProps) {
   };
 
   return (
-    <div className="w-full mt-10">
+    <div className="w-full mt-6">
       <p className="text-xs text-muted-foreground font-display font-semibold uppercase tracking-wide text-center mb-3">
         Or Tap To Sell
       </p>
+
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
         {products.map(p => (
           <button
@@ -83,6 +97,17 @@ export default function QuickSellGrid({ store, onSell }: QuickSellGridProps) {
           </button>
         ))}
       </div>
+
+      {hasMore && (
+        <button
+          onClick={() => setShowAll(prev => !prev)}
+          className="w-full mt-3 py-2.5 rounded-xl border border-border bg-surface-2/60 text-muted-foreground hover:text-foreground hover:bg-surface-2 font-display font-bold text-xs flex items-center justify-center gap-1.5 active:scale-[0.99] transition-all"
+          aria-expanded={showAll}
+        >
+          {showAll ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {showAll ? 'Show less' : `More · ${allProducts.length - GRID_SIZE} more items`}
+        </button>
+      )}
 
       {active && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 animate-fade-in">
