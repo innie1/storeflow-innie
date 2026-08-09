@@ -5,15 +5,15 @@
   justify-content: center;
 }
 
-/* Keep the existing SimpleVoiceSell logic/UI, but place the Sell/Add toggle
-   directly under the microphone and tighten the vertical rhythm. */
+/* Restore the intended voice layout: Sell/Add toggle above the microphone,
+   with the microphone back in its original position. */
 .simple-mode-voice-shell > div {
   gap: 0.5rem;
 }
 
 .simple-mode-voice-shell > div > div:first-child {
-  order: 2;
-  margin-top: -0.125rem;
+  order: 1;
+  margin-top: 0;
 }
 
 .simple-mode-voice-shell > div > div:first-child button {
@@ -24,23 +24,24 @@
 }
 
 .simple-mode-voice-shell > div > button {
-  order: 1;
+  order: 2;
 }
 
+/* Keep “Tap and say what you sold” immediately below the mic. */
 .simple-mode-voice-shell > div > p {
   order: 3;
-  margin-top: 0;
+  margin-top: -0.125rem;
+  margin-bottom: 0;
 }
 
 .simple-mode-voice-shell > div > div:last-child:not(:first-child) {
   order: 4;
 }
 
-/* The search action now sits beside the Sell/Add toggle rather than floating
-   at the top of the screen. */
+/* Search stays beside the toggle without pushing the toggle too far left. */
 .simple-mode-search-near-toggle {
   position: absolute;
-  top: 7.4rem;
+  top: 0.25rem;
   left: calc(50% + 6.5rem);
   width: 2.25rem;
   height: 2.25rem;
@@ -52,4 +53,14 @@
   .simple-mode-search-near-toggle {
     left: calc(50% + 5.8rem);
   }
+}
+
+/* Pull the three small sell-area labels closer together. */
+.simple-mode-voice-shell + button {
+  margin-top: 0.5rem !important;
+  margin-bottom: 0;
+}
+
+.simple-mode-voice-shell + button + div {
+  margin-top: 0.5rem !important;
 }
