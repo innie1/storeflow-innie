@@ -1,0 +1,74 @@
+name: Flow quick actions fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Patch FlowChat
+        env:
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/FlowChat.tsx')
+          s = p.read_text()
+
+          old = "import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell } from 'lucide-react';"
+          new = "import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText } from 'lucide-react';"
+          if old not in s:
+              raise SystemExit('lucide import anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "import Mascot from '@/components/Mascot';"
+          new = "import Mascot from '@/components/Mascot';\nimport ReceiptScanner from '@/components/ReceiptScanner';"
+          if old not in s:
+              raise SystemExit('Mascot import anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "const QUICK = [\"How's my store?\", \"What's low?\", 'Show my best sellers', \"What's not selling?\", 'What should I fix?'];"
+          new = "const QUICK = [\"How's my business?\", \"What's low?\", 'Show my best sellers', \"What's not selling?\", 'What should I fix?'];"
+          if old not in s:
+              raise SystemExit('QUICK anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "const [addStep, setAddStep] = useState<'cost'|'sell'|'qty'|'category'|'confirm'>('cost');"
+          new = old + "\n  const [showReceiptImport, setShowReceiptImport] = useState(false);"
+          if old not in s:
+              raise SystemExit('state anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "{!addDraft && QUICK.map(q => <button key={q} onClick={() => ask(q)} className=\"self-start px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30\">{q}</button>)}"
+          new = "{messages.length === 1 && !addDraft && (\n      <div className=\"flex flex-wrap gap-2 pt-1 pb-2\">\n        {QUICK.map(q => <button key={q} onClick={() => ask(q)} className=\"px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 hover:bg-surface-2/60\">{q}</button>)}\n        <button onClick={() => setShowReceiptImport(true)} className=\"px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary flex items-center gap-1.5\">\n          <FileUp className=\"w-3.5 h-3.5\" /> Import receipt\n        </button>\n        <button onClick={() => onNavigate?.('inventory')} className=\"px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 flex items-center gap-1.5\">\n          <FileText className=\"w-3.5 h-3.5\" /> Import stock file\n        </button>\n      </div>\n    )}"
+          if old not in s:
+              raise SystemExit('quick JSX anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "    <form className=\"flex items-center gap-2 px-4 py-3 border-t border-border\" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'} className=\"flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm\" /><button type=\"submit\" disabled={!input.trim()} className=\"w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40\" aria-label=\"Send\"><Send className=\"w-4 h-4\" /></button></form>"
+          new = "    {showReceiptImport && <ReceiptScanner store={store} onUpdate={onUpdate} onClose={() => setShowReceiptImport(false)} />}\n    <form className=\"flex items-center gap-2 px-4 py-3 border-t border-border\" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'} className=\"flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm\" /><button type=\"submit\" disabled={!input.trim()} className=\"w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40\" aria-label=\"Send\"><Send className=\"w-4 h-4\" /></button></form>"
+          if old not in s:
+              raise SystemExit('form JSX anchor not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Commit Flow changes and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/FlowChat.tsx .github/workflows/flow-quick-actions-fix.yml
+          git rm .github/workflows/flow-quick-actions-fix.yml
+          git commit -m "fix(flow): use working quick actions and add stock import entry points" || exit 0
+          git push origin main
