@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { recordSale, saveStore, generateId, getSalesTargetStatus } from '@/lib/store-data';
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
-import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
 import { playSoldSound, playProductAddedSound } from '@/lib/sound-effects';
 import SimpleVoiceSell from './SimpleVoiceSell';
 import SimpleOnboarding from './SimpleOnboarding';
+import BusinessSimpleHome from './BusinessSimpleHome';
 import OfflineQueueBanner, { markSaleQueuedIfOffline } from './OfflineQueueBanner';
 import CostPricePrompt from './CostPricePrompt';
 import QuickSellGrid from './QuickSellGrid';
@@ -23,12 +23,10 @@ interface SimpleModeHomeProps {
 }
 
 export default function SimpleModeHome({ store, setStore, currentUser, onNavigate }: SimpleModeHomeProps) {
-  // A Gaming Centre is not a product-selling store. Index.tsx can still render
-  // the dashboard component briefly because it keeps tab panels mounted, so a
-  // gaming store must never enter the generic SimpleMode sales UI. That UI
-  // expects product/sales fields and was the source of the render crash seen
-  // immediately after choosing "Games & Entertainment".
-  if (store.category === 'games' || store.storeType === 'games') {
+  const businessType = String((store as any).businessType || store.storeType || 'provision');
+
+  // Gaming Centre is a session business, not a product-selling store.
+  if (store.category === 'games' || store.storeType === 'games' || businessType === 'games') {
     return (
       <GamesDashboard
         store={store}
@@ -36,6 +34,14 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
         onGoToSettings={() => onNavigate('games-settings')}
       />
     );
+  }
+
+  // Service, appointment and metered businesses get their own simple workflow.
+  // They should never be pushed through the "What 5 products do you sell?"
+  // onboarding screen because that question only makes sense for product stores.
+  const nonProductBusiness = ['laundry', 'gas_filling', 'barber', 'salon', 'tailoring', 'repair', 'printing', 'car_wash', 'cyber_cafe', 'photography', 'spa', 'cleaning'].includes(businessType);
+  if (nonProductBusiness) {
+    return <BusinessSimpleHome store={store} onNavigate={onNavigate} />;
   }
 
   const today = new Date().toISOString().split('T')[0];
