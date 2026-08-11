@@ -11,6 +11,7 @@ import OfflineQueueBanner, { markSaleQueuedIfOffline } from './OfflineQueueBanne
 import CostPricePrompt from './CostPricePrompt';
 import QuickSellGrid from './QuickSellGrid';
 import SimpleSearch from './SimpleSearch';
+import GamesDashboard from '@/components/games/GamesDashboard';
 import { History, Search } from 'lucide-react';
 import './SimpleModeHomeLayout.css';
 
@@ -22,6 +23,21 @@ interface SimpleModeHomeProps {
 }
 
 export default function SimpleModeHome({ store, setStore, currentUser, onNavigate }: SimpleModeHomeProps) {
+  // A Gaming Centre is not a product-selling store. Index.tsx can still render
+  // the dashboard component briefly because it keeps tab panels mounted, so a
+  // gaming store must never enter the generic SimpleMode sales UI. That UI
+  // expects product/sales fields and was the source of the render crash seen
+  // immediately after choosing "Games & Entertainment".
+  if (store.category === 'games' || store.storeType === 'games') {
+    return (
+      <GamesDashboard
+        store={store}
+        onUpdate={setStore}
+        onGoToSettings={() => onNavigate('games-settings')}
+      />
+    );
+  }
+
   const today = new Date().toISOString().split('T')[0];
   const todaySales = useMemo(() => store.sales.filter(s => s.date.startsWith(today)), [store.sales, today]);
   const todayRevenue = todaySales.reduce((s, x) => s + x.total, 0);
