@@ -19,6 +19,12 @@ const quickActions: Record<string, { label: string; tab: string; icon: string }[
     { label: 'Orders', tab: 'orders', icon: '📋' },
     { label: 'Customers', tab: 'customers', icon: '👥' },
   ],
+  games: [
+    { label: 'Start Session', tab: 'games-dashboard', icon: '🎮' },
+    { label: 'Games & Prices', tab: 'games-settings', icon: '🕹️' },
+    { label: 'Session History', tab: 'games-history', icon: '📋' },
+    { label: 'Analytics', tab: 'games-analytics', icon: '📈' },
+  ],
   restaurant: [
     { label: 'New Order', tab: 'orders', icon: '🍔' },
     { label: 'Menu / Products', tab: 'inventory', icon: '📋' },
@@ -51,15 +57,21 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
   const today = new Date().toISOString().slice(0, 10);
   const todaySales = (store.sales || []).filter(s => s.date?.slice(0, 10) === today);
   const revenue = todaySales.reduce((sum, s) => sum + Number(s.total || 0), 0);
-  const activeOrders = store.storeType === 'laundry'
-    ? 0
-    : 0;
+  const serviceCount = Math.max(
+    (store.products || []).filter(p => p.isService).length,
+    template.offerings.filter(o => o.mode === 'services').length,
+  );
+  const gameCount = (store.games || []).filter(g => g.enabled).length || (store.games || []).length;
+  const todaySessions = (store.gameSessions || []).filter(s => s.date?.slice(0, 10) === today).length;
+  const todaySessionRevenue = (store.gameSessions || [])
+    .filter(s => s.date?.slice(0, 10) === today)
+    .reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
   const stats = store.storeType === 'laundry'
     ? [
         { label: 'Today Revenue', value: `₦${revenue.toLocaleString()}`, icon: '💰' },
-        { label: 'Laundry Orders', value: '—', icon: '🧺' },
-        { label: 'Ready for Pickup', value: '—', icon: '✅' },
+        { label: 'Services', value: String(serviceCount), icon: '🧺' },
+        { label: 'Customers', value: String((store.customers || []).length), icon: '👥' },
       ]
     : store.storeType === 'gas_filling'
       ? [
@@ -67,11 +79,17 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
           { label: 'Gas Sold', value: '—', icon: '⛽' },
           { label: 'Deliveries', value: '—', icon: '🚚' },
         ]
-      : [
-          { label: 'Today Revenue', value: `₦${revenue.toLocaleString()}`, icon: '💰' },
-          { label: 'Products', value: String((store.products || []).length), icon: '📦' },
-          { label: 'Customers', value: String((store.customers || []).length), icon: '👥' },
-        ];
+      : store.storeType === 'games'
+        ? [
+            { label: 'Today Revenue', value: `₦${(revenue + todaySessionRevenue).toLocaleString()}`, icon: '💰' },
+            { label: 'Games', value: String(gameCount), icon: '🎮' },
+            { label: 'Sessions Today', value: String(todaySessions), icon: '⏱️' },
+          ]
+        : [
+            { label: 'Today Revenue', value: `₦${revenue.toLocaleString()}`, icon: '💰' },
+            { label: 'Products', value: String((store.products || []).length), icon: '📦' },
+            { label: 'Customers', value: String((store.customers || []).length), icon: '👥' },
+          ];
 
   return (
     <div className="space-y-5 animate-fade-in">
