@@ -11,7 +11,7 @@ let flow = read(flowPath);
 if (!flow.includes("@/components/FlowAttachmentMenu")) {
   flow = flow.replace(
     "import ReceiptScanner from '@/components/ReceiptScanner';",
-    "import ReceiptScanner from '@/components/ReceiptScanner';\nimport FlowAttachmentMenu from '@/components/FlowAttachmentMenu';\nimport FlowCameraCapture from '@/components/FlowCameraCapture';\nimport { createFlowBuyList, formatFlowBuyList } from '@/lib/flow-buy-list';"
+    "import ReceiptScanner from '@/components/ReceiptScanner';\nimport FlowAttachmentMenu from '@/components/FlowAttachmentMenu';\nimport FlowCameraCapture from '@/components/FlowCameraCapture';"
   );
 }
 
@@ -22,14 +22,8 @@ if (!flow.includes('const [showAttachments, setShowAttachments]')) {
   );
 }
 
-if (!flow.includes('const createBuyListFromFlow')) {
+if (!flow.includes('const handleFlowAttachment')) {
   const helper = `
-  const createBuyListFromFlow = () => {
-    const items = createFlowBuyList(store);
-    flow(formatFlowBuyList(items), items.length ? [{ label: 'Open Buy List', onClick: () => onNavigate?.('inventory') }] : undefined);
-    rememberBrainContext(store, { lastTopic: 'inventory', lastAction: 'flow buy list recommendation' });
-  };
-
   const handleFlowAttachment = (file: File) => {
     if (file.type.startsWith('image/')) {
       setPendingImportFile(file);
@@ -50,11 +44,26 @@ if (!flow.includes('const createBuyListFromFlow')) {
   flow = flow.replace(marker, helper + '\n' + marker);
 }
 
-if (!flow.includes('createBuyListFromFlow(); return;')) {
-  const marker = '    if (handleFinanceMutation(text)) return;';
-  const addition = "    if (/\\b(?:create|make|build|generate)\\b.*\\bbuy list\\b|\\bbuy list\\b.*\\b(?:create|make|build|generate)\\b/i.test(text)) { createBuyListFromFlow(); return; }\n";
-  if (!flow.includes(marker)) throw new Error('FlowChat command anchor not found');
-  flow = flow.replace(marker, addition + marker);
+const flexibleMarker = '    const flexible = understandFlexible(store, text);';
+if (flow.includes(flexibleMarker) && !flow.includes('const flexibleStore =')) {
+  const addition = `${flexibleMarker}\n    const flexibleStore = 'nextStore' in flexible ? flexible.nextStore : undefined;\n    if (flexibleStore) onUpdate(flexibleStore);`;
+  flow = flow.replace(flexibleMarker, addition);
+}
+
+const flexibleFlowMarker = '      flow(flexible.reply, topicActions[flexible.topic]);';
+if (flow.includes(flexibleFlowMarker)) {
+  const replacement = `      if (flexibleStore) {
+        flow(flexible.reply, [{ label: 'Send', onClick: async () => {
+          const textToShare = flexible.reply;
+          try {
+            if (navigator.share) await navigator.share({ title: 'StoreFlow Buy List', text: textToShare });
+            else { await navigator.clipboard.writeText(textToShare); showToast('Buy List copied. You can paste it anywhere.', 'success'); }
+          } catch { /* user cancelled sharing */ }
+        }}]);
+      } else {
+        flow(flexible.reply, topicActions[flexible.topic]);
+      }`;
+  flow = flow.replace(flexibleFlowMarker, replacement);
 }
 
 const placeholder = "placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'}";
@@ -79,7 +88,7 @@ if (flow.includes(placeholder) && !flow.includes('<FlowAttachmentMenu')) {
         onImage={handleFlowAttachment}
         onFile={handleFlowAttachment}
         onRestockCode={() => { setShowAttachments(false); setShowRestockCodeImport(true); }}
-        onBuyList={() => { setShowAttachments(false); createBuyListFromFlow(); }}
+        onBuyList={() => { setShowAttachments(false); ask('create list'); }}
       />}
     </form>`;
   flow = flow.slice(0, formStart) + newForm + flow.slice(formEnd + '</form>'.length);
@@ -129,8 +138,8 @@ if (!receipt.includes('initialFile && initialProcessedRef')) {
   receipt = receipt.replace(anchor, effect + anchor);
 }
 
-if (!flow.includes('<FlowAttachmentMenu') || !flow.includes('onClick={() => setShowAttachments(v => !v)}') || !flow.includes('createBuyListFromFlow(); return;')) {
-  throw new Error('Flow attachment wiring was not applied; refusing to build stale Flow UI.');
+if (!flow.includes('<FlowAttachmentMenu') || !flow.includes('onClick={() => setShowAttachments(v => !v)') || !flow.includes('const flexibleStore =')) {
+  throw new Error('Flow attachment/share wiring was not applied; refusing to build stale Flow UI.');
 }
 if (!receipt.includes('initialFile?: File | null;') || !receipt.includes('initialProcessedRef')) {
   throw new Error('Receipt import wiring was not applied; refusing to build stale import UI.');
