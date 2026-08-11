@@ -18,8 +18,6 @@ jobs:
           from pathlib import Path
           p = Path('src/components/StoreAccess.tsx')
           s = p.read_text()
-
-          # 1. Replace the small category picker with broad business families.
           old = """const CATEGORIES: { id: StoreCategory; label: string; icon: string; desc: string }[] = [
             { id: 'retail', label: 'Retail Store', icon: '🛒', desc: 'Products, inventory and sales' },
             { id: 'restaurant', label: 'Restaurant', icon: '🍽️', desc: 'Menu items and orders' },
@@ -33,35 +31,23 @@ jobs:
             { id: 'other', label: 'Services & Other', icon: '🛠️', desc: 'Laundry, barber, tailoring and more' },
           ];"""
           if old not in s: raise SystemExit('category block not found')
-          s = s.replace(old, new)
-
-          # 2. Add a business type state beside the existing retail state.
+          s=s.replace(old,new)
           needle = "  const [retailType, setRetailType] = useState('provision_retail');"
           if "const [businessType, setBusinessType]" not in s:
               if needle not in s: raise SystemExit('retail state not found')
-              s = s.replace(needle, needle + "\n  const [businessType, setBusinessType] = useState('provision');")
-
-          # 3. Add choices and map them to the existing dashboard/store types.
-          marker = "  const handleCreate = () => {"
+              s=s.replace(needle, needle+"\n  const [businessType, setBusinessType] = useState('provision');")
+          marker="  const handleCreate = () => {"
           if "const BUSINESS_CHOICES = [" not in s:
-              choices = """
+              choices="""
   const BUSINESS_CHOICES = [
-    ['provision', 'Provision / Supermarket', '🛒'],
-    ['pharmacy', 'Pharmacy / Chemist', '💊'],
-    ['laundry', 'Laundry / Dry Cleaning', '🧺'],
-    ['gas_filling', 'Gas Filling', '⛽'],
-    ['games', 'Gaming Centre', '🎮'],
-    ['barber', 'Barber Shop', '💈'],
-    ['salon', 'Salon / Beauty', '💇‍♀️'],
-    ['tailoring', 'Tailoring / Fashion Design', '🧵'],
-    ['repair', 'Repair Shop', '🛠️'],
-    ['printing', 'Printing / Cyber Cafe', '🖨️'],
-    ['car_wash', 'Car Wash', '🚗'],
-    ['photography', 'Photography', '📸'],
-    ['cleaning', 'Cleaning Service', '🧹'],
-    ['spa', 'Spa / Wellness', '🧖'],
-    ['clothing', 'Clothing / Fashion', '👕'],
-    ['electronics', 'Electronics', '📱'],
+    ['provision', 'Provision / Supermarket', '🛒'], ['pharmacy', 'Pharmacy / Chemist', '💊'],
+    ['laundry', 'Laundry / Dry Cleaning', '🧺'], ['gas_filling', 'Gas Filling', '⛽'],
+    ['games', 'Gaming Centre', '🎮'], ['barber', 'Barber Shop', '💈'],
+    ['salon', 'Salon / Beauty', '💇‍♀️'], ['tailoring', 'Tailoring / Fashion Design', '🧵'],
+    ['repair', 'Repair Shop', '🛠️'], ['printing', 'Printing / Cyber Cafe', '🖨️'],
+    ['car_wash', 'Car Wash', '🚗'], ['photography', 'Photography', '📸'],
+    ['cleaning', 'Cleaning Service', '🧹'], ['spa', 'Spa / Wellness', '🧖'],
+    ['clothing', 'Clothing / Fashion', '👕'], ['electronics', 'Electronics', '📱'],
     ['restaurant', 'Restaurant / Food', '🍔'],
   ] as const;
 
@@ -77,52 +63,39 @@ jobs:
     if (type === 'restaurant') return 'restaurant';
     if (type === 'gas_filling') return 'gas_filling';
     if (type === 'laundry') return 'laundry';
-    return (type || 'provision') as StoreType;
+    return 'other' as StoreType;
   };
 
 """
               if marker not in s: raise SystemExit('handleCreate marker not found')
-              s = s.replace(marker, choices + marker)
-
-          # 4. Make both update and create paths use the selected business type.
-          s = s.replace("""        category,
+              s=s.replace(marker,choices+marker)
+          s=s.replace("""        category,
         retailType: category === 'retail' ? retailType : undefined,
         storeType: category === 'retail' ? retailTypeToStoreType(retailType) : category,""", """        category: businessCategory(businessType),
         retailType: businessType,
         storeType: businessStoreType(businessType),""")
-          s = s.replace("""      category,
+          s=s.replace("""      category,
       category === 'retail' ? retailType : undefined,
       selectedLogoStyle,
       category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)""", """      businessCategory(businessType),
       businessType,
       selectedLogoStyle,
       businessStoreType(businessType)""")
-          # Persist the explicit type for the business-aware dashboard/customer flow.
-          s = s.replace("    setNewCode(store.accessCode);", "    (store as any).businessType = businessType;\n    saveStore(store);\n    setNewCode(store.accessCode);", 1)
-          s = s.replace("      saveStore(updated);", "      (updated as any).businessType = businessType;\n      saveStore(updated);", 1)
-
-          # 5. Replace the retail-only choice UI with a simple business picker.
-          start = "            {category === 'retail' && ("
-          marker2 = "            <div className=\"space-y-1\">\n              <label className=\"block text-xs text-muted-foreground uppercase font-bold mb-1\">Select Store Logo Concept</label>"
-          si = s.find(start)
-          if si >= 0:
-              ei = s.find(marker2, si)
-              if ei < 0: raise SystemExit('logo marker not found')
-              replacement = """            <div className=\"space-y-2\">
+          if "(store as any).businessType = businessType;" not in s:
+              s=s.replace("    setNewCode(store.accessCode);", "    (store as any).businessType = businessType;\n    saveStore(store);\n    setNewCode(store.accessCode);",1)
+          if "(updated as any).businessType = businessType;" not in s:
+              s=s.replace("      saveStore(updated);", "      (updated as any).businessType = businessType;\n      saveStore(updated);",1)
+          start="            {category === 'retail' && ("
+          marker2="            <div className=\"space-y-1\">\n              <label className=\"block text-xs text-muted-foreground uppercase font-bold mb-1\">Select Store Logo Concept</label>"
+          si=s.find(start)
+          if si<0: raise SystemExit('retail picker not found')
+          ei=s.find(marker2,si)
+          if ei<0: raise SystemExit('logo marker not found')
+          replacement="""            <div className=\"space-y-2\">
               <label className=\"block text-xs text-muted-foreground uppercase font-bold\">What kind of business do you run?</label>
               <div className=\"grid grid-cols-2 gap-2\">
                 {BUSINESS_CHOICES.map(([id, label, icon]) => (
-                  <button
-                    key={id}
-                    type=\"button\"
-                    onClick={() => {
-                      setBusinessType(id);
-                      setCategory(businessCategory(id));
-                      setRetailType(id);
-                      setAccessMood('thinking');
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${businessType === id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-primary/30'}`}
-                  >
+                  <button key={id} type=\"button\" onClick={() => { setBusinessType(id); setCategory(businessCategory(id)); setRetailType(id); setAccessMood('thinking'); }} className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${businessType === id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-primary/30'}`}>
                     <div className=\"text-xl mb-1\">{icon}</div>
                     <p className=\"font-display font-semibold text-xs text-foreground leading-tight\">{label}</p>
                   </button>
@@ -131,12 +104,15 @@ jobs:
               <p className=\"text-[10px] text-muted-foreground\">Pick the closest match. Manchant will prepare the right dashboard, customer flow and setup automatically.</p>
             </div>
 """
-              s = s[:si] + replacement + s[ei:]
-          else:
-              raise SystemExit('retail picker not found')
-
+          s=s[:si]+replacement+s[ei:]
+          # Also replace the cloud-store creation picker with the same business choices.
+          cloud_start="            {category === 'retail' && ("
+          csi=s.find(cloud_start)
+          if csi>=0:
+              cei=s.find(marker2,csi)
+              if cei>=0:
+                  s=s[:csi]+replacement+s[cei:]
           p.write_text(s)
-
       - name: Commit patch and remove workflow
         shell: bash
         run: |
