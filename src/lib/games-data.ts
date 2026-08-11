@@ -5,6 +5,25 @@ function gid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+export const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
+  { name: 'PlayStation', icon: '🎮', price: 500, enabled: true, order: 0 },
+  { name: 'Snooker', icon: '🎱', price: 1000, enabled: true, order: 1 },
+  { name: 'Xbox', icon: '🎮', price: 500, enabled: true, order: 2 },
+  { name: 'Table Tennis', icon: '🏓', price: 300, enabled: true, order: 3 },
+  { name: 'Darts', icon: '🎯', price: 200, enabled: true, order: 4 },
+  { name: 'Karaoke', icon: '🎤', price: 1500, enabled: true, order: 5 },
+  { name: 'VR Games', icon: '🥽', price: 2000, enabled: true, order: 6 },
+];
+
+export function ensureDefaultGames(store: StoreData): StoreData {
+  if (store.category !== 'games' && store.storeType !== 'games') return store;
+  if (store.games && store.games.length > 0) return store;
+  const games: GameService[] = DEFAULT_GAMES.map(g => ({ ...g, id: gid() }));
+  const updated = { ...store, games };
+  saveStore(updated);
+  return updated;
+}
+
 export function getGames(store: StoreData): GameService[] {
   return [...(store.games || [])].sort((a, b) => a.order - b.order);
 }
@@ -123,7 +142,6 @@ export function getAnalytics(store: StoreData) {
   const mostPlayed = [...games].sort((a, b) => b.sessions - a.sessions)[0];
   const topEarning = [...games].sort((a, b) => b.revenue - a.revenue)[0];
 
-  // 7-day chart
   const days: { label: string; amount: number }[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
