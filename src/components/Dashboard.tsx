@@ -15,11 +15,21 @@ interface DashboardProps {
 
 export default function Dashboard({ store, onNavigate, currentUser }: DashboardProps) {
   const role = currentUser?.role;
-  const isBusinessTemplateStore = ['laundry', 'gas_filling', 'restaurant', 'food', 'clothing', 'electronics', 'other'].includes(store.storeType);
+  const isBusinessTemplateStore = [
+    'laundry',
+    'gas_filling',
+    'restaurant',
+    'food',
+    'clothing',
+    'electronics',
+    'games',
+    'other',
+  ].includes(store.storeType || '');
 
-  // Owners get a business-specific workspace automatically. Staff roles keep
-  // their existing permission-focused dashboards so the new business templates
-  // never weaken access control or change the existing staff experience.
+  // Owners of configured business types get the lightweight business workspace.
+  // Gaming is included here deliberately: the generic OwnerDashboard assumes a
+  // normal product/inventory store and can fail on a freshly-created games store.
+  // Staff roles keep their existing permission-focused dashboards.
   if ((role === 'owner' || !role) && isBusinessTemplateStore) {
     return <BusinessOwnerDashboard store={store} onNavigate={onNavigate} />;
   }
