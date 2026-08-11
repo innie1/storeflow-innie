@@ -21,6 +21,14 @@ export interface BusinessOfferingTemplate {
   options?: string[];
 }
 
+export interface BusinessCustomerExperience {
+  primaryAction: string;
+  intro: string;
+  intake: ('quantity' | 'itemType' | 'options' | 'notes' | 'photo' | 'file' | 'date' | 'time' | 'pickup' | 'delivery' | 'meteredQuantity' | 'duration')[];
+  simpleChoiceLabel?: string;
+  simpleChoiceHint?: string;
+}
+
 export interface BusinessTemplate {
   type: StoreType;
   name: string;
@@ -42,6 +50,7 @@ export interface BusinessTemplate {
     sessions?: boolean;
     metering?: boolean;
   };
+  customerExperience: BusinessCustomerExperience;
   workflow: string[];
 }
 
@@ -53,28 +62,36 @@ export const BUSINESS_TEMPLATES: Record<StoreType, BusinessTemplate> = {
     description: 'Sell everyday products with inventory, sales, customers and suppliers.',
     modes: ['products'], modules: ['inventory', 'sales', 'suppliers', ...commerce], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Sale', offeringNoun: 'Product' },
-    customerFeatures: { quantity: true }, workflow: ['cart', 'checkout', 'complete']
+    customerFeatures: { quantity: true },
+    customerExperience: { primaryAction: 'Shop', intro: 'Choose what you want to buy.', intake: ['quantity'] },
+    workflow: ['cart', 'checkout', 'complete']
   },
   clothing: {
     type: 'clothing', name: 'Clothing / Fashion', icon: '👕',
     description: 'Sell clothing and fashion products.',
     modes: ['products'], modules: ['inventory', 'sales', 'suppliers', ...commerce], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Order', offeringNoun: 'Product' },
-    customerFeatures: { quantity: true, photos: true }, workflow: ['cart', 'checkout', 'complete']
+    customerFeatures: { quantity: true, photos: true },
+    customerExperience: { primaryAction: 'Shop', intro: 'Browse products and choose what you want.', intake: ['quantity', 'options', 'photo'] },
+    workflow: ['cart', 'checkout', 'complete']
   },
   food: {
     type: 'food', name: 'Food Business', icon: '🍲',
     description: 'Sell food and prepared items with simple ordering.',
     modes: ['products', 'services'], modules: ['inventory', 'sales', 'orders', ...commerce, 'delivery', 'pickup', 'queue'], offerings: [],
     labels: { primaryAction: 'Take Order', orderNoun: 'Order', offeringNoun: 'Menu Item' },
-    customerFeatures: { quantity: true, notes: true, pickup: true, delivery: true }, workflow: ['received', 'preparing', 'ready', 'completed']
+    customerFeatures: { quantity: true, notes: true, pickup: true, delivery: true },
+    customerExperience: { primaryAction: 'Order Food', intro: 'Choose your food and how you want to receive it.', intake: ['quantity', 'options', 'notes', 'pickup', 'delivery'] },
+    workflow: ['received', 'preparing', 'ready', 'completed']
   },
   electronics: {
     type: 'electronics', name: 'Electronics', icon: '📱',
     description: 'Sell electronics and accessories.',
     modes: ['products'], modules: ['inventory', 'sales', 'suppliers', ...commerce], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Sale', offeringNoun: 'Product' },
-    customerFeatures: { quantity: true, photos: true }, workflow: ['cart', 'checkout', 'complete']
+    customerFeatures: { quantity: true, photos: true },
+    customerExperience: { primaryAction: 'Shop', intro: 'Browse electronics and accessories.', intake: ['quantity', 'options'] },
+    workflow: ['cart', 'checkout', 'complete']
   },
   laundry: {
     type: 'laundry', name: 'Laundry', icon: '🧺',
@@ -89,6 +106,13 @@ export const BUSINESS_TEMPLATES: Record<StoreType, BusinessTemplate> = {
     ],
     labels: { primaryAction: 'New Laundry Order', orderNoun: 'Laundry Order', offeringNoun: 'Service' },
     customerFeatures: { quantity: true, clothingTypes: true, photos: true, files: true, notes: true, pickup: true, delivery: true },
+    customerExperience: {
+      primaryAction: 'Book Laundry',
+      intro: 'Tell us how many clothes you have. You can specify the types if you want.',
+      intake: ['quantity', 'itemType', 'options', 'notes', 'photo', 'file', 'pickup', 'delivery'],
+      simpleChoiceLabel: 'How many clothes?',
+      simpleChoiceHint: 'You can just enter the total number. Details are optional.'
+    },
     workflow: ['received', 'washing', 'drying', 'ironing', 'ready', 'collected']
   },
   gas_filling: {
@@ -102,6 +126,7 @@ export const BUSINESS_TEMPLATES: Record<StoreType, BusinessTemplate> = {
     ],
     labels: { primaryAction: 'New Gas Sale', orderNoun: 'Gas Order', offeringNoun: 'Gas / Service' },
     customerFeatures: { quantity: true, notes: true, delivery: true, pickup: true, metering: true },
+    customerExperience: { primaryAction: 'Order Gas', intro: 'Choose how much gas you need and how you want to receive it.', intake: ['meteredQuantity', 'options', 'notes', 'pickup', 'delivery'], simpleChoiceLabel: 'How much gas?', simpleChoiceHint: 'Enter a KG amount or choose a cylinder size.' },
     workflow: ['received', 'confirmed', 'ready', 'delivered']
   },
   restaurant: {
@@ -109,7 +134,9 @@ export const BUSINESS_TEMPLATES: Record<StoreType, BusinessTemplate> = {
     description: 'Take food orders, manage menu items and preparation.',
     modes: ['products', 'services'], modules: ['inventory', 'sales', 'orders', ...commerce, 'suppliers', 'delivery', 'pickup', 'queue'],
     offerings: [], labels: { primaryAction: 'New Order', orderNoun: 'Food Order', offeringNoun: 'Menu Item' },
-    customerFeatures: { quantity: true, notes: true, pickup: true, delivery: true }, workflow: ['received', 'preparing', 'ready', 'completed']
+    customerFeatures: { quantity: true, notes: true, pickup: true, delivery: true },
+    customerExperience: { primaryAction: 'Order Food', intro: 'Choose your meal, extras and how you want it delivered or prepared for pickup.', intake: ['quantity', 'options', 'notes', 'pickup', 'delivery'] },
+    workflow: ['received', 'preparing', 'ready', 'completed']
   },
   games: {
     type: 'games', name: 'Gaming Centre', icon: '🎮',
@@ -125,14 +152,18 @@ export const BUSINESS_TEMPLATES: Record<StoreType, BusinessTemplate> = {
       { id: 'vr', name: 'VR Games', icon: '🥽', mode: 'sessions', pricing: 'time' },
     ],
     labels: { primaryAction: 'Start Session', orderNoun: 'Session', offeringNoun: 'Game / Resource' },
-    customerFeatures: { sessions: true, scheduling: true }, workflow: ['booked', 'active', 'completed']
+    customerFeatures: { sessions: true, scheduling: true },
+    customerExperience: { primaryAction: 'Play', intro: 'Choose a game, machine or activity and reserve your time.', intake: ['options', 'duration', 'date', 'time'] },
+    workflow: ['booked', 'active', 'completed']
   },
   other: {
     type: 'other', name: 'Other Business', icon: '🏪',
     description: 'Start simple and add products or services as needed.',
     modes: ['products', 'services'], modules: ['inventory', 'sales', 'orders', ...commerce, 'attachments'], offerings: [],
     labels: { primaryAction: 'Get Started', orderNoun: 'Order', offeringNoun: 'Item / Service' },
-    customerFeatures: { quantity: true, photos: true, files: true, notes: true }, workflow: ['received', 'completed']
+    customerFeatures: { quantity: true, photos: true, files: true, notes: true },
+    customerExperience: { primaryAction: 'Get Started', intro: 'Choose what you need from this business.', intake: ['quantity', 'options', 'notes', 'photo', 'file'] },
+    workflow: ['received', 'completed']
   },
 };
 
@@ -162,6 +193,7 @@ export function applyBusinessTemplate(store: StoreData, type?: StoreType): Store
       offerings: template.offerings,
       labels: template.labels,
       customerFeatures: template.customerFeatures,
+      customerExperience: template.customerExperience,
       workflow: template.workflow,
     },
   } as StoreData;
