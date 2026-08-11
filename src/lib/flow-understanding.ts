@@ -67,10 +67,9 @@ function smartBuyConversation(store:StoreData,input:string):FlowUnderstanding|nu
  if(isYes(q)){
    const result=buildSmartBuyList(store,pending.budget);
    if(!result.items.length){clearPending();return{kind:'topic',topic:'product',reply:smartBuyListText(result)};}
-   const order=addPurchaseOrder(store,{items:result.items.map(i=>({productId:i.productId,name:i.name,qty:i.quantity,costPrice:i.unitCost})),totalCost:result.estimatedCost,status:'draft',source:'auto_fix'});
+   const nextStore=addPurchaseOrder(store,{items:result.items.map(i=>({productId:i.productId,name:i.name,qty:i.quantity,costPrice:i.unitCost})),totalCost:result.estimatedCost,status:'draft',source:'auto_fix'});
    clearPending();
-   const nextStore=order.purchaseOrders ? (order as any).store || (order as any).nextStore : undefined;
-   return {kind:'topic',topic:'product',nextStore,reply:`${smartBuyListText(result)}\n\n**List created in Buy List.**\nCode: **${order.purchaseOrders?.[0]?.importCode||'available in Buy List'}**\n\nReview it before ordering.`};
+   return {kind:'topic',topic:'product',nextStore,reply:`${smartBuyListText(result)}\n\n**List created in Buy List.**\nCode: **${nextStore.purchaseOrders?.[0]?.importCode||'available in Buy List'}**\n\nReview it before ordering.`};
  }
  return null;
 }
