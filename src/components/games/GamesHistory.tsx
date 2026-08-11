@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { StoreData } from '@/types/store';
 import { deleteSession, getAnalytics } from '@/lib/games-data';
 import { showToast } from '@/components/Toast';
