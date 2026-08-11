@@ -1,0 +1,21 @@
+name: inspect business onboarding
+on:
+  push:
+    branches: [feat/business-modes-polish]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: ${{ !contains(github.event.head_commit.message, 'inspect business onboarding') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find onboarding copy and likely components
+        shell: bash
+        run: |
+          echo '--- product onboarding strings ---'
+          grep -RniE "What 5 products|products do you sell|Prices only|Add a few now|Skip for now|most" src --include='*.tsx' --include='*.ts' || true
+          echo '--- files containing onboarding-like code ---'
+          grep -RliE "five products|5 products|product onboarding|onboarding" src --include='*.tsx' --include='*.ts' | head -50 || true
+          echo '--- StoreAccess business picker anchors ---'
+          grep -nE "CATEGORIES|retailTypeToStoreType|handleCreate|Select Retail Type" src/components/StoreAccess.tsx | head -80 || true
