@@ -15,19 +15,18 @@ export const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
   { name: 'VR Games', icon: '🥽', price: 2000, enabled: true, order: 6 },
 ];
 
+/** Ensure a games store has definitions without ever overwriting an owner's choices. */
 export function ensureDefaultGames(store: StoreData): StoreData {
   if (store.category !== 'games' && store.storeType !== 'games') return store;
   const existing = store.games || [];
-  const looksFresh = existing.length === 0 || (
-    existing.length === DEFAULT_GAMES.length &&
-    existing.every(g => !g.enabled && DEFAULT_GAMES.some(d => d.name === g.name)) &&
-    (store.gameSessions || []).length === 0
-  );
-  if (!looksFresh) return store;
-  const games: GameService[] = DEFAULT_GAMES.map((g, i) => {
-    const old = existing.find(x => x.name === g.name);
-    return { ...g, id: old?.id || gid(), order: i };
-  });
+  // An existing list — including an intentionally all-disabled list — is authoritative.
+  if (existing.length > 0) return store;
+
+  const games: GameService[] = DEFAULT_GAMES.map((g, i) => ({
+    ...g,
+    id: gid(),
+    order: i,
+  }));
   const updated = { ...store, games };
   saveStore(updated);
   return updated;
@@ -49,8 +48,10 @@ export function addGame(store: StoreData, partial: Omit<GameService, 'id' | 'ord
   return updated;
 }
 
+/** Update a game setting and persist the resulting store immediately. */
 export function updateGame(store: StoreData, id: string, updates: Partial<GameService>): StoreData {
-  const updated = { ...store, games: (store.games || []).map(g => (g.id === id ? { ...g, ...updates } : g)) };
+  const games = (store.games || []).map(g => g.id === id ? { ...g, ...updates } : g);
+  const updated = { ...store, games };
   saveStore(updated);
   return updated;
 }
