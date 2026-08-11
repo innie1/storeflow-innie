@@ -32,8 +32,10 @@ export default function GamesSettings({ store, onUpdate }: GamesSettingsProps) {
     });
   }, [store.games]);
 
-  const handleToggle = (id: string, current: boolean) => {
-    onUpdate(updateGame(store, id, { enabled: !current }));
+  const handleToggle = (id: string) => {
+    const game = games.find(g => g.id === id);
+    if (!game) return;
+    onUpdate(updateGame(store, id, { enabled: !game.enabled }));
   };
 
   const handlePriceChange = (id: string, value: string) => {
@@ -42,8 +44,6 @@ export default function GamesSettings({ store, onUpdate }: GamesSettingsProps) {
 
   const commitPrice = (id: string) => {
     const raw = priceDrafts[id] ?? '';
-    // Blank means "I'm still editing" — never force a visible 0 into the field.
-    // If the owner leaves it blank, the existing saved price remains unchanged.
     if (raw === '') return;
     const price = Number(raw);
     if (!Number.isFinite(price) || price < 0) return;
@@ -108,12 +108,16 @@ export default function GamesSettings({ store, onUpdate }: GamesSettingsProps) {
                   <p className="font-display font-bold text-sm truncate">{g.name}</p>
                   <p className="text-[11px] text-muted-foreground">{g.enabled ? 'Available to start from the dashboard' : 'Hidden from the dashboard'}</p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={g.enabled} onChange={e => handleToggle(g.id, e.target.checked)} />
-                  <div className="w-10 h-5 bg-surface-2 border border-border rounded-full peer-checked:bg-success transition-colors relative">
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-background transition-transform ${g.enabled ? 'translate-x-5' : ''}`} />
-                  </div>
-                </label>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={g.enabled}
+                  aria-label={`${g.enabled ? 'Disable' : 'Enable'} ${g.name}`}
+                  onClick={() => handleToggle(g.id)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40 ${g.enabled ? 'bg-success border-success' : 'bg-surface-2 border-border'}`}
+                >
+                  <span className={`block h-5 w-5 rounded-full bg-background shadow-sm transition-transform ${g.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
               </div>
 
               <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
