@@ -44,6 +44,28 @@ if (!flow.includes('const handleFlowAttachment')) {
   flow = flow.replace(marker, helper + '\n' + marker);
 }
 
+const flexibleMarker = '    const flexible = understandFlexible(store, text);';
+if (flow.includes(flexibleMarker) && !flow.includes('const flexibleStore =')) {
+  const addition = `${flexibleMarker}\n    const flexibleStore = 'nextStore' in flexible ? flexible.nextStore : undefined;\n    if (flexibleStore) onUpdate(flexibleStore);`;
+  flow = flow.replace(flexibleMarker, addition);
+}
+
+const flexibleFlowMarker = '      flow(flexible.reply, topicActions[flexible.topic]);';
+if (flow.includes(flexibleFlowMarker)) {
+  const replacement = `      if (flexibleStore) {
+        flow(flexible.reply, [{ label: 'Send', onClick: async () => {
+          const textToShare = flexible.reply;
+          try {
+            if (navigator.share) await navigator.share({ title: 'StoreFlow Buy List', text: textToShare });
+            else { await navigator.clipboard.writeText(textToShare); showToast('Buy List copied. You can paste it anywhere.', 'success'); }
+          } catch { /* user cancelled sharing */ }
+        }}]);
+      } else {
+        flow(flexible.reply, topicActions[flexible.topic]);
+      }`;
+  flow = flow.replace(flexibleFlowMarker, replacement);
+}
+
 const placeholder = "placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'}";
 if (flow.includes(placeholder) && !flow.includes('<FlowAttachmentMenu')) {
   const inputIndex = flow.indexOf(placeholder);
@@ -116,8 +138,8 @@ if (!receipt.includes('initialFile && initialProcessedRef')) {
   receipt = receipt.replace(anchor, effect + anchor);
 }
 
-if (!flow.includes('<FlowAttachmentMenu') || !flow.includes('onClick={() => setShowAttachments(v => !v)}')) {
-  throw new Error('Flow attachment wiring was not applied; refusing to build stale Flow UI.');
+if (!flow.includes('<FlowAttachmentMenu') || !flow.includes('onClick={() => setShowAttachments(v => !v)') || !flow.includes('const flexibleStore =')) {
+  throw new Error('Flow attachment/share wiring was not applied; refusing to build stale Flow UI.');
 }
 if (!receipt.includes('initialFile?: File | null;') || !receipt.includes('initialProcessedRef')) {
   throw new Error('Receipt import wiring was not applied; refusing to build stale import UI.');
