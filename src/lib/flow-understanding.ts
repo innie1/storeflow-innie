@@ -4,7 +4,7 @@ import { buildSmartBuyList, smartBuyListText } from '@/lib/flow-smart-buy-list';
 
 export type FlowTopic = 'theme'|'settings'|'stock'|'sales'|'customers'|'expenses'|'price'|'restock'|'product'|'store'|'unknown';
 export type FlowUnderstanding =
-  | { kind:'topic'; topic:FlowTopic; reply:string }
+  | { kind:'topic'; topic:FlowTopic; reply:string; nextStore?:StoreData }
   | { kind:'product'; product:Product; score:number }
   | { kind:'product_choices'; query:string; products:Product[] }
   | { kind:'store'; reply:string }
@@ -69,7 +69,8 @@ function smartBuyConversation(store:StoreData,input:string):FlowUnderstanding|nu
    if(!result.items.length){clearPending();return{kind:'topic',topic:'product',reply:smartBuyListText(result)};}
    const order=addPurchaseOrder(store,{items:result.items.map(i=>({productId:i.productId,name:i.name,qty:i.quantity,costPrice:i.unitCost})),totalCost:result.estimatedCost,status:'draft',source:'auto_fix'});
    clearPending();
-   return {kind:'topic',topic:'product',reply:`${smartBuyListText(result)}\n\n**List created in Buy List.**\nCode: **${order.purchaseOrders?.[0]?.importCode||'available in Buy List'}**\n\nReview it before ordering. **↗ Send/share** it from the Buy List when you’re ready.`};
+   const nextStore=order.purchaseOrders ? (order as any).store || (order as any).nextStore : undefined;
+   return {kind:'topic',topic:'product',nextStore,reply:`${smartBuyListText(result)}\n\n**List created in Buy List.**\nCode: **${order.purchaseOrders?.[0]?.importCode||'available in Buy List'}**\n\nReview it before ordering.`};
  }
  return null;
 }
