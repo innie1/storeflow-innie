@@ -1,7 +1,6 @@
 import { Product, StoreData } from '@/types/store';
 import { addPurchaseOrder } from '@/lib/store-data';
 import { buildSmartBuyList, smartBuyListText } from '@/lib/flow-smart-buy-list';
-import '@/lib/flow-attachment-ui';
 
 export type FlowTopic = 'theme'|'settings'|'stock'|'sales'|'customers'|'expenses'|'price'|'restock'|'product'|'store'|'unknown';
 export type FlowUnderstanding =
