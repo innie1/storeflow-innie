@@ -4,105 +4,49 @@ p = Path('src/components/StoreAccess.tsx')
 s = p.read_text()
 
 if "@/lib/business-templates" not in s:
-    s = s.replace(
-        "import { createStore, loadStore, saveStore } from '@/lib/store-data';",
-        "import { createStore, loadStore, saveStore } from '@/lib/store-data';\nimport { applyBusinessTemplate } from '@/lib/business-templates';"
-    )
+    s = s.replace("import { createStore, loadStore, saveStore } from '@/lib/store-data';", "import { createStore, loadStore, saveStore } from '@/lib/store-data';\nimport { applyBusinessTemplate } from '@/lib/business-templates';")
 
-old_categories = """const CATEGORIES: { id: StoreCategory; label: string; icon: string; desc: string }[] = [
-  { id: 'retail', label: 'Retail Store', icon: '🛒', desc: 'Products, inventory and sales' },
-  { id: 'restaurant', label: 'Restaurant', icon: '🍽️', desc: 'Menu items and orders' },
-  { id: 'games', label: 'Games & Entertainment', icon: '🎮', desc: 'PlayStation, Snooker, etc.' },
-  { id: 'other', label: 'Other', icon: '🏪', desc: 'Custom setup' },
-];"""
-new_categories = """const CATEGORIES: { id: StoreCategory; label: string; icon: string; desc: string }[] = [
-  { id: 'retail', label: 'Retail & Products', icon: '🛒', desc: 'Sell products, manage stock and sales' },
-  { id: 'restaurant', label: 'Food & Restaurant', icon: '🍽️', desc: 'Menus, orders and delivery' },
-  { id: 'games', label: 'Games & Entertainment', icon: '🎮', desc: 'Gaming, sessions and bookings' },
-  { id: 'other', label: 'Services & Other', icon: '🛠️', desc: 'Laundry, barber, tailoring and more' },
-];"""
-s = s.replace(old_categories, new_categories)
+s = s.replace("const businessCategory = (type: string): StoreCategory => type === 'games' ? 'games' : type === 'restaurant' ? 'restaurant' : 'other' as StoreCategory;", "const businessCategory = (type: string): StoreCategory => type === 'games' ? 'games' : type === 'restaurant' ? 'restaurant' : type === 'other' ? 'other' : 'retail';")
 
-needle = "  const [retailType, setRetailType] = useState('provision_retail');"
-if 'const [businessType, setBusinessType]' not in s:
-    s = s.replace(needle, needle + "\n  const [businessType, setBusinessType] = useState('provision');")
+cloud_old = """      const store = createStore(
+        storeName.trim(),
+        category,
+        category === 'retail' ? retailType : undefined,
+        selectedLogoStyle,
+        category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)
+      );"""
+cloud_new = """      const store = createStore(
+        storeName.trim(),
+        businessCategory(businessType),
+        businessType,
+        selectedLogoStyle,
+        businessStoreType(businessType)
+      );
+      const templatedStore = applyBusinessTemplate(store, businessType);"""
+s = s.replace(cloud_old, cloud_new)
+s = s.replace("      if (store.managerSettings) {", "      if (templatedStore.managerSettings) {")
+s = s.replace("        store.managerSettings.multiDeviceSync", "        templatedStore.managerSettings.multiDeviceSync")
+s = s.replace("        store.managerSettings.ownerPassword", "        templatedStore.managerSettings.ownerPassword")
+s = s.replace("      const storeId = store.storeId || store.accessCode;", "      const storeId = templatedStore.storeId || templatedStore.accessCode;")
+s = s.replace("          business_type: category,", "          business_type: businessType,")
+s = s.replace("          access_code: store.accessCode,", "          access_code: templatedStore.accessCode,")
+s = s.replace("          owner_password: store.managerSettings?.ownerPassword || 'owner',", "          owner_password: templatedStore.managerSettings?.ownerPassword || 'owner',")
+s = s.replace("          data: store as any", "          data: templatedStore as any")
+s = s.replace("      localStorage.setItem('storeflow_store_' + store.accessCode, JSON.stringify(store));", "      localStorage.setItem('storeflow_store_' + templatedStore.accessCode, JSON.stringify(templatedStore));")
+s = s.replace("            storeName: store.storeName,", "            storeName: templatedStore.storeName,")
+s = s.replace("            accessCode: store.accessCode,", "            accessCode: templatedStore.accessCode,")
+s = s.replace("      onStoreLoaded(store);", "      onStoreLoaded(templatedStore);")
 
-if 'const BUSINESS_CHOICES = [' not in s:
-    choices = """
-  const BUSINESS_CHOICES = [
-    ['provision','Provision / Supermarket','🛒'], ['pharmacy','Pharmacy / Chemist','💊'], ['clothing','Clothing / Fashion','👕'], ['electronics','Electronics','📱'], ['food','Food Business','🍲'],
-    ['laundry','Laundry / Dry Cleaning','🧺'], ['barber','Barber Shop','💈'], ['salon','Salon / Beauty','💇‍♀️'], ['tailoring','Tailoring / Fashion Design','🧵'], ['repair','Repair Shop','🛠️'],
-    ['printing','Printing / Cyber Cafe','🖨️'], ['cyber_cafe','Cyber Cafe','💻'], ['car_wash','Car Wash','🚗'], ['photography','Photography','📸'], ['cleaning','Cleaning Service','🧹'], ['spa','Spa / Wellness','🧖'],
-    ['gas_filling','Gas Filling','⛽'], ['games','Gaming Centre','🎮'], ['restaurant','Restaurant / Food','🍔'],
-  ] as const;
-  const businessCategory = (type: string): StoreCategory => type === 'games' ? 'games' : type === 'restaurant' ? 'restaurant' : 'other' as StoreCategory;
-  const businessStoreType = (type: string): StoreType => type as StoreType;
-
-"""
-    s = s.replace('  const handleCreate = () => {', choices + '  const handleCreate = () => {')
-
-s = s.replace(
-    """        category,
-        retailType: category === 'retail' ? retailType : undefined,
-        storeType: category === 'retail' ? retailTypeToStoreType(retailType) : category,""",
-    """        category: businessCategory(businessType),
-        retailType: businessType,
-        storeType: businessStoreType(businessType),"""
-)
-
-s = s.replace(
-    """      category,
-      category === 'retail' ? retailType : undefined,
-      selectedLogoStyle,
-      category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)""",
-    """      businessCategory(businessType),
-      businessType,
-      selectedLogoStyle,
-      businessStoreType(businessType)"""
-)
-
-# Replace retail-only dropdown blocks in both local/cloud creation UIs.
 start = 0
 while True:
-    a = s.find("            {category === 'retail' && (", start)
+    a = s.find('            <div>\n              <label className="block text-xs text-muted-foreground uppercase font-bold mb-2">Business Category</label>', start)
     if a < 0:
         break
-    b = s.find("            <div className=\"space-y-1\">\n              <label className=\"block text-xs text-muted-foreground uppercase font-bold mb-1\">Select Store Logo Concept", a)
+    b = s.find('            <div className="space-y-2">\n              <label className="block text-xs text-muted-foreground uppercase font-bold">What kind of business do you run?</label>', a)
     if b < 0:
         break
-    picker = """            <div className=\"space-y-2\">
-              <label className=\"block text-xs text-muted-foreground uppercase font-bold\">What kind of business do you run?</label>
-              <p className=\"text-[10px] text-muted-foreground\">Choose the closest match. This controls your dashboard, settings and customer experience.</p>
-              <div className=\"grid grid-cols-2 gap-2 max-h-60 overflow-y-auto\">
-                {BUSINESS_CHOICES.map(([id,label,icon]) => <button key={id} type=\"button\" onClick={() => { setBusinessType(id); setCategory(businessCategory(id)); setRetailType(id); setAccessMood('thinking'); }} className={`p-2.5 rounded-xl border text-left transition-all ${businessType === id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-primary/30'}`}><span className=\"text-lg\">{icon}</span><p className=\"font-display font-semibold text-xs mt-1\">{label}</p></button>)}
-              </div>
-            </div>
-"""
-    s = s[:a] + picker + s[b:]
-    start = b + len(picker)
-
-# Apply the existing template system to newly created local stores.
-s = s.replace(
-    """    const store = createStore(
-      storeName.trim(),
-      businessCategory(businessType),
-      businessType,
-      selectedLogoStyle,
-      businessStoreType(businessType)
-    );
-    setNewCode(store.accessCode);
-    setLoadedStore(store);""",
-    """    const store = createStore(
-      storeName.trim(),
-      businessCategory(businessType),
-      businessType,
-      selectedLogoStyle,
-      businessStoreType(businessType)
-    );
-    const templatedStore = applyBusinessTemplate(store, businessType);
-    setNewCode(templatedStore.accessCode);
-    setLoadedStore(templatedStore);"""
-)
+    s = s[:a] + s[b:]
+    start = b
 
 p.write_text(s)
 print('patched', len(s), 'bytes')
