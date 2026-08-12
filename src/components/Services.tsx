@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, generateId } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { Plus, Pencil, Trash2, X, Clock, Power } from 'lucide-react';
 
@@ -20,12 +20,67 @@ interface ServiceDraft {
 
 const emptyDraft = (): ServiceDraft => ({ name: '', price: '', turnaround: TURNAROUND_OPTIONS[0] });
 
+/**
+ * Keep the merchant service catalogue in the same public store payload the
+ * customer app reads. Services are still stored as normal products with
+ * isService=true for the merchant app, but we also publish a normalized
+ * businessTemplate.offerings list and mark the store as a services-mode
+ * business. This makes QR/customer discovery independent of the merchant's
+ * business category label.
+ */
+function syncCustomerServiceCatalog(store: StoreData): StoreData {
+  const services = (store.products || [])
+    .filter(p => p.isService && !p.discontinued)
+    .map(p => ({
+      id: String(p.id),
+      name: p.name,
+      description: p.description || '',
+      price: Number(p.sellingPrice || 0),
+      sellingPrice: Number(p.sellingPrice || 0),
+      pricing: 'fixed',
+      turnaround: p.turnaround || '',
+      enabled: true,
+      active: true,
+      discontinued: false,
+    }));
+
+  const current = ((store as any).businessTemplate || {}) as any;
+  const currentModes = Array.isArray(current.modes) ? current.modes : [];
+  const nextModes = Array.from(new Set([...currentModes, 'services']));
+
+  const same = JSON.stringify(current.offerings || []) === JSON.stringify(services)
+    && JSON.stringify(currentModes) === JSON.stringify(nextModes);
+
+  if (same) return store;
+
+  return {
+    ...(store as any),
+    businessTemplate: {
+      ...current,
+      modes: nextModes,
+      offerings: services,
+    },
+  } as StoreData;
+}
+
 export default function Services({ store, onUpdate, currentUser }: ServicesProps) {
   const services = store.products.filter(p => p.isService);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ServiceDraft>(emptyDraft());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Backfill existing services into the customer-facing catalogue as soon as
+  // the merchant opens Services. This fixes stores created before the shared
+  // customer-service contract was added, without requiring the merchant to
+  // recreate every service.
+  useEffect(() => {
+    const synced = syncCustomerServiceCatalog(store);
+    if (synced !== store) onUpdate(synced);
+    // Only react to the actual product list changes. The equality guard above
+    // prevents an update loop after onUpdate returns the synchronized store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.products]);
 
   const openNew = () => {
     setEditingId(null);
@@ -45,15 +100,15 @@ export default function Services({ store, onUpdate, currentUser }: ServicesProps
     if (!name) return showToast('Enter a service name', 'error');
     if (!(price > 0)) return showToast('Enter a valid price', 'error');
 
+    let updated: StoreData;
     if (editingId) {
-      const updated = updateProduct(store, editingId, { name, sellingPrice: price, turnaround: draft.turnaround }, currentUser?.name, currentUser?.role);
-      onUpdate(updated);
+      updated = updateProduct(store, editingId, { name, sellingPrice: price, turnaround: draft.turnaround }, currentUser?.name, currentUser?.role);
       showToast('Service updated');
     } else {
       // Services don't track stock the way physical products do — a large
       // quantity keeps every existing stock-check in the order pipeline
       // (recordSale, cart limits) from ever blocking a service booking.
-      const updated = addProduct(store, {
+      updated = addProduct(store, {
         name,
         costPrice: 0,
         sellingPrice: price,
@@ -63,20 +118,22 @@ export default function Services({ store, onUpdate, currentUser }: ServicesProps
         isService: true,
         turnaround: draft.turnaround,
       }, currentUser?.name, currentUser?.role);
-      onUpdate(updated);
       showToast('Service added');
     }
+
+    // Publish the same service immediately to the customer-facing payload.
+    onUpdate(syncCustomerServiceCatalog(updated));
     setShowForm(false);
   };
 
   const toggleEnabled = (s: Product) => {
     const updated = updateProduct(store, s.id, { discontinued: !s.discontinued }, currentUser?.name, currentUser?.role);
-    onUpdate(updated);
+    onUpdate(syncCustomerServiceCatalog(updated));
   };
 
   const remove = (id: string) => {
     const updated = deleteProduct(store, id, currentUser?.name, currentUser?.role);
-    onUpdate(updated);
+    onUpdate(syncCustomerServiceCatalog(updated));
     setConfirmDeleteId(null);
     showToast('Service removed');
   };
