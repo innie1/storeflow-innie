@@ -464,13 +464,19 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
           <div className="text-left min-w-0 flex-1">
             <h4 className="font-display font-bold text-sm text-foreground truncate">{product.name}</h4>
             <div className="flex flex-wrap items-center gap-1.5 mt-1">
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-display font-bold ${
-                isOutOfStock 
-                  ? 'bg-destructive/10 text-destructive border border-destructive/20' 
-                  : 'bg-success/10 text-success border border-success/20'
-              }`}>
-                {isOutOfStock ? '🔴 Out of Stock' : `🟢 In Stock (${product.quantity})`}
-              </span>
+              {product.isService ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-display font-bold bg-primary/10 text-primary border border-primary/20">
+                  🛠️ Service
+                </span>
+              ) : (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-display font-bold ${
+                  isOutOfStock
+                    ? 'bg-destructive/10 text-destructive border border-destructive/20'
+                    : 'bg-success/10 text-success border border-success/20'
+                }`}>
+                  {isOutOfStock ? '🔴 Out of Stock' : `🟢 In Stock (${product.quantity})`}
+                </span>
+              )}
             </div>
             <p className="text-xs font-display font-black text-yellow-500 mt-1">₦{(product.sellingPrice || 0).toLocaleString()}</p>
             {product.barcode && (
@@ -1863,13 +1869,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <h3 className="font-display font-bold text-sm text-foreground">Official Store QR Code</h3>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handleManualQRRefresh}
-                  className="p-1 px-2 rounded-lg bg-surface-2 border border-border hover:text-primary transition-colors text-muted-foreground text-[10px] font-bold flex items-center gap-1 cursor-pointer active:scale-95"
-                  title="Manual QR Refresh"
-                >
-                  <RefreshCw className="w-3 h-3 animate-none hover:animate-spin" /> Refresh
-                </button>
                 <span className="px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/30 text-[9px] font-display font-bold flex items-center gap-1">
                   <Shield className="w-3 h-3" /> Permanent
                 </span>
@@ -1920,18 +1919,18 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
                 <div className="space-y-1">
                   <h4 className="font-display font-black text-base text-foreground">Scan to Shop</h4>
-                  <p className="text-[10px] text-muted-foreground max-w-xs mx-auto">Scan with a mobile camera to browse products and buy directly.</p>
+                  <p className="text-[10px] text-muted-foreground max-w-xs mx-auto">Scan with a mobile camera to open this store in the customer app.</p>
                 </div>
 
                 {/* Benefit Grid */}
                 <div className="grid grid-cols-2 gap-3 max-w-xs mx-auto text-left text-[11px] text-muted-foreground font-display font-semibold py-2.5 border-t border-b border-border/40">
                   <div className="flex items-center gap-2">
                     <span className="text-sm">📦</span>
-                    <span>Browse Products</span>
+                    <span>{serviceBusiness ? 'View Services' : 'Browse Products'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm">⚡</span>
-                    <span>Order Instantly</span>
+                    <span>{serviceBusiness ? 'Request a Service' : 'Order Instantly'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm">💳</span>
@@ -1939,7 +1938,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm">🚚</span>
-                    <span>Pickup or Delivery</span>
+                    <span>{serviceBusiness ? 'Choose Pickup / Delivery' : 'Pickup or Delivery'}</span>
                   </div>
                 </div>
 
@@ -2036,50 +2035,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             </div>
           </div>
 
-          {/* Live Store Stats Grid */}
-          <div className="space-y-4 pt-4 border-t border-border/40">
-            <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2">
-              📊 Store Live Statistics
-            </h3>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {/* Total Products */}
-              <div className="p-4 bg-card border border-border/80 rounded-2xl flex flex-col justify-between shadow-sm hover:border-border transition-all duration-300">
-                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Products</div>
-                <div className="text-2xl font-black text-foreground mt-2 transition-all duration-500 animate-fade-in">
-                  {store.products.length}
-                </div>
-              </div>
-
-              {/* Available Products */}
-              <div className="p-4 bg-card border border-border/80 rounded-2xl flex flex-col justify-between shadow-sm hover:border-border transition-all duration-300">
-                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Available Items</div>
-                <div className="text-2xl font-black text-success mt-2 transition-all duration-500 animate-fade-in">
-                  {store.products.filter(p => p.quantity > 0).length}
-                </div>
-              </div>
-
-              {/* Out of Stock */}
-              <div className="p-4 bg-card border border-border/80 rounded-2xl flex flex-col justify-between shadow-sm hover:border-border transition-all duration-300">
-                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Out of Stock</div>
-                <div className="text-2xl font-black text-destructive mt-2 transition-all duration-500 animate-fade-in">
-                  {store.products.filter(p => p.quantity <= 0).length}
-                </div>
-              </div>
-
-              {/* Newly Added */}
-              <div className="p-4 bg-card border border-border/80 rounded-2xl flex flex-col justify-between shadow-sm hover:border-border transition-all duration-300">
-                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">New (Last 7d)</div>
-                <div className="text-2xl font-black text-primary mt-2 transition-all duration-500 animate-fade-in">
-                  {(() => {
-                    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-                    return store.products.filter(p => p.addedAt && new Date(p.addedAt).getTime() >= sevenDaysAgo).length;
-                  })()}
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Store Information Summary */}
           <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-sm space-y-4">
             <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2 border-b border-border/40 pb-3">
@@ -2126,58 +2081,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             </div>
           </div>
 
-          {/* Analytics Section */}
-          <div className="space-y-4 pt-2 text-left">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display font-bold text-sm text-foreground">QR & Barcode Analytics</h3>
-              <div className="flex gap-1 p-1 bg-surface-2 border border-border rounded-xl">
-                {['today', 'week', 'month', 'year'].map(filter => (
-                  <button
-                    key={filter}
-                    onClick={() => setAnalyticsFilter(filter as any)}
-                    className={`px-3 py-1 rounded-lg text-[10px] font-display font-bold transition capitalize select-none ${
-                      analyticsFilter === filter 
-                        ? 'bg-primary text-primary-foreground shadow-sm' 
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Grid of Metric Cards (Blurred out representation) */}
-            <div className="relative">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 opacity-30 select-none pointer-events-none">
-                {[
-                  { name: 'Total QR Scans', value: '-' },
-                  { name: 'Orders From QR', value: '-' },
-                  { name: 'Conversion Rate', value: '-' },
-                  { name: 'Product QR Scans', value: '-' },
-                  { name: 'Store Barcode Scans', value: '-' },
-                  { name: 'Most Scanned Product', value: '-' }
-                ].map((card, i) => (
-                  <div key={i} className="p-4 rounded-xl bg-card border border-border/40">
-                    <p className="text-[10px] text-muted-foreground font-display font-semibold uppercase">{card.name}</p>
-                    <p className="text-xl font-display font-black text-foreground mt-1.5">{card.value}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center p-6 bg-background/20 backdrop-blur-[0.5px]">
-                <div className="bg-card border border-border p-5 rounded-2xl shadow-lg max-w-xs text-center space-y-1.5 animate-scale-up">
-                  <span className="text-2xl">📊</span>
-                  <h4 className="font-display font-bold text-xs text-foreground">No analytics available yet</h4>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">Live telemetry of customer scans, conversions, and orders will appear here automatically.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Product QR Codes Section */}
           <div className="space-y-4 pt-2 text-left">
             <div className="flex items-center justify-between">
-              <h3 className="font-display font-bold text-sm text-foreground">Product QR Codes</h3>
+              <h3 className="font-display font-bold text-sm text-foreground">{serviceBusiness ? 'Product & Service QR Codes' : 'Product QR Codes'}</h3>
               {store.products.length > 0 && (
                 <button 
                   onClick={() => setShowAllProductsQR(true)}
@@ -2199,7 +2106,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 <span className="text-4xl animate-breathe">📦</span>
                 <div>
                   <h4 className="font-display font-bold text-sm text-foreground">No products yet</h4>
-                  <p className="text-[11px] text-muted-foreground max-w-xs mx-auto leading-relaxed mt-1">Products automatically receive QR Codes and optional Barcodes after creation.</p>
+                  <p className="text-[11px] text-muted-foreground max-w-xs mx-auto leading-relaxed mt-1">Products and named services can receive a customer QR after creation.</p>
                 </div>
                 <button
                   onClick={() => {
@@ -2222,7 +2129,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-display font-bold text-base text-foreground">All Product QR Codes</h3>
-                  <p className="text-[10px] text-muted-foreground">Print secure tag labels for inventory tracking.</p>
+                  <p className="text-[10px] text-muted-foreground">Print a customer QR for a product or service.</p>
                 </div>
                 <button 
                   onClick={() => { setShowAllProductsQR(false); setProductSearchQuery(''); }}
