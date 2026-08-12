@@ -189,7 +189,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     ['printing','Printing / Cyber Cafe','🖨️'], ['cyber_cafe','Cyber Cafe','💻'], ['car_wash','Car Wash','🚗'], ['photography','Photography','📸'], ['cleaning','Cleaning Service','🧹'], ['spa','Spa / Wellness','🧖'],
     ['gas_filling','Gas Filling','⛽'], ['games','Gaming Centre','🎮'], ['restaurant','Restaurant / Food','🍔'],
   ] as const;
-  const businessCategory = (type: string): StoreCategory => type === 'games' ? 'games' : type === 'restaurant' ? 'restaurant' : 'other' as StoreCategory;
+  const businessCategory = (type: string): StoreCategory => type === 'games' ? 'games' : type === 'restaurant' ? 'restaurant' : type === 'other' ? 'other' : 'retail';
   const businessStoreType = (type: string): StoreType => type as StoreType;
 
   const handleCreate = () => {
@@ -922,18 +922,19 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     try {
       const store = createStore(
         storeName.trim(),
-        category,
-        category === 'retail' ? retailType : undefined,
+        businessCategory(businessType),
+        businessType,
         selectedLogoStyle,
-        category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)
+        businessStoreType(businessType)
       );
+      const templatedStore = applyBusinessTemplate(store, businessType);
       
-      if (store.managerSettings) {
-        store.managerSettings.multiDeviceSync = true;
-        store.managerSettings.ownerPassword = ownerPassword.trim() || store.managerSettings.ownerPassword || 'owner';
+      if (templatedStore.managerSettings) {
+        templatedStore.managerSettings.multiDeviceSync = true;
+        templatedStore.managerSettings.ownerPassword = ownerPassword.trim() || store.managerSettings.ownerPassword || 'owner';
       }
 
-      const storeId = store.storeId || store.accessCode;
+      const storeId = templatedStore.storeId || templatedStore.accessCode;
       const storeUrl = generateStoreUrl(storeId);
 
       const { data: dbStore, error: storeError } = await supabase
@@ -941,14 +942,14 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         .insert({
           owner_id: activeProfile.id,
           business_name: storeName.trim(),
-          business_type: category,
+          business_type: businessType,
           logo: selectedLogoStyle,
-          access_code: store.accessCode,
-          owner_password: store.managerSettings?.ownerPassword || 'owner',
+          access_code: templatedStore.accessCode,
+          owner_password: templatedStore.managerSettings?.ownerPassword || 'owner',
           store_id: storeId,
           qr_code: storeUrl,
           barcode: storeId,
-          data: store as any
+          data: templatedStore as any
         })
         .select()
         .single();
@@ -965,7 +966,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         role: 'owner'
       });
 
-      localStorage.setItem('storeflow_store_' + store.accessCode, JSON.stringify(store));
+      localStorage.setItem('storeflow_store_' + templatedStore.accessCode, JSON.stringify(templatedStore));
 
       const ownerUser = {
         name: activeProfile.full_name || 'Owner',
@@ -978,8 +979,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         supabase.functions.invoke('send-account-recovery-email', {
           body: {
             to: activeProfile.email,
-            storeName: store.storeName,
-            accessCode: store.accessCode,
+            storeName: templatedStore.storeName,
+            accessCode: templatedStore.accessCode,
             storeId: storeId,
             storeUrl: storeUrl,
             type: 'new_account',
@@ -989,7 +990,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
       setAccessMood('celebrating');
       showToast('Cloud Store created & details emailed successfully!', 'success');
-      onStoreLoaded(store);
+      onStoreLoaded(templatedStore);
     } catch (err: any) {
       setAccessMood('angry' as any);
       showToast(err.message || 'Failed to create cloud store', 'error');
@@ -1369,30 +1370,6 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
               />
             </div>
             
-            <div>
-              <label className="block text-xs text-muted-foreground uppercase font-bold mb-2">Business Category</label>
-              <div className="grid grid-cols-2 gap-2">
-                {CATEGORIES.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      setCategory(c.id);
-                      setAccessMood('thinking');
-                    }}
-                    className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
-                      category === c.id
-                        ? 'bg-primary/10 border-primary/40'
-                        : 'bg-surface-3 border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <div className="text-xl mb-1">{c.icon}</div>
-                    <p className="font-display font-semibold text-xs text-foreground">{c.label}</p>
-                    <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">{c.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="space-y-2">
               <label className="block text-xs text-muted-foreground uppercase font-bold">What kind of business do you run?</label>
               <p className="text-[10px] text-muted-foreground">Choose the closest match. This controls your dashboard, settings and customer experience.</p>
@@ -1463,29 +1440,6 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 placeholder="e.g. Blessed Nnamdi Store"
                 className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground uppercase font-bold mb-2">Business Category</label>
-              <div className="grid grid-cols-2 gap-2">
-                {CATEGORIES.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      setCategory(c.id);
-                      setAccessMood('thinking');
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-colors cursor-pointer ${
-                      category === c.id
-                        ? 'bg-primary/10 border-primary/40'
-                        : 'bg-surface-2 border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <div className="text-xl mb-1">{c.icon}</div>
-                    <p className="font-display font-semibold text-xs text-foreground">{c.label}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{c.desc}</p>
-                  </button>
-                ))}
-              </div>
             </div>
             <div className="space-y-2">
               <label className="block text-xs text-muted-foreground uppercase font-bold">What kind of business do you run?</label>
