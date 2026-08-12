@@ -1,0 +1,56 @@
+name: one-time service settings patch
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch Settings for service businesses
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/components/Settings.tsx')
+          s=p.read_text()
+          marker='const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground focus:outline-none focus:border-primary text-sm";\n'
+          helper='''\n// Service-first businesses do not manage stock as their primary operation.\n// Keep inventory tools for product businesses, but hide inventory-only settings from service workflows.\nconst SERVICE_BUSINESS_TYPES = new Set([\n  'laundry','barber','salon','tailoring','repair','printing','cyber_cafe','car_wash','photography','cleaning','spa','games','gaming','games_entertainment'\n]);\nfunction isServiceBusiness(store: StoreData): boolean {\n  const type = String(store.storeType || '').toLowerCase();\n  const category = String(store.category || '').toLowerCase();\n  return SERVICE_BUSINESS_TYPES.has(type) || SERVICE_BUSINESS_TYPES.has(category);\n}\n'''
+          if 'const SERVICE_BUSINESS_TYPES' not in s:
+              if marker not in s: raise SystemExit('Settings marker missing')
+              s=s.replace(marker, marker+helper, 1)
+          needle="  const [viewStack, setViewStack] = useState<View[]>(['home']);\n"
+          if 'const serviceBusiness = isServiceBusiness(store);' not in s:
+              if needle not in s: raise SystemExit('viewStack marker missing')
+              s=s.replace(needle, needle+"  const serviceBusiness = isServiceBusiness(store);\n", 1)
+          effect_marker="""  useEffect(() => {\n    if (!isActive && view !== 'home') {\n      setViewState('home');\n      setViewStack(['home']);\n    }\n  }, [isActive]);\n"""
+          effect=effect_marker+"""\n  useEffect(() => {\n    if (serviceBusiness && view === 'inventory') {\n      setViewState('home');\n      setViewStack(['home']);\n    }\n  }, [serviceBusiness, view]);\n"""
+          if 'if (serviceBusiness && view === \'inventory\')' not in s:
+              if effect_marker not in s: raise SystemExit('settings active effect missing')
+              s=s.replace(effect_marker,effect,1)
+          s=s.replace('            <ToggleRow label="Inventory Forecasts" checked={mgr.inventoryForecasts} onChange={v => updateMgr({ inventoryForecasts: v })} />\n', '            {!serviceBusiness && <ToggleRow label="Inventory Forecasts" checked={mgr.inventoryForecasts} onChange={v => updateMgr({ inventoryForecasts: v })} />}\n', 1)
+          s=s.replace('        <ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />\n', '        {!serviceBusiness && <ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />}\n', 1)
+          inv='          <SettingTile icon={<Package className="w-5 h-5" />} color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView(\'inventory\')} />'
+          inv2='          {!serviceBusiness && <SettingTile icon={<Package className="w-5 h-5" />} color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView(\'inventory\')} />}'
+          if inv in s: s=s.replace(inv,inv2,1)
+          wish='          <SettingTile icon={<Star className="w-5 h-5" />} color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView(\'wishlist\')} />'
+          wish2='          {!serviceBusiness && <SettingTile icon={<Star className="w-5 h-5" />} color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView(\'wishlist\')} />}'
+          if wish in s: s=s.replace(wish,wish2,1)
+          qr='          <SettingTile icon={<QrCode className="w-5 h-5" />} color="#FFC72C" title="QR & Barcodes" desc="Branded QR codes, analytics, and product tags." onClick={() => setView(\'barcode\')} />'
+          qr2='          <SettingTile icon={<QrCode className="w-5 h-5" />} color="#FFC72C" title={serviceBusiness ? \'QR & Storefront\' : \'QR & Barcodes\'} desc={serviceBusiness ? \'Share your customer storefront QR code and service page.\' : \'Branded QR codes, analytics, and product tags.\'} onClick={() => setView(\'barcode\')} />'
+          if qr in s: s=s.replace(qr,qr2,1)
+          p.write_text(s)
+      - name: Commit application change
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Settings.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: make settings business-aware"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
