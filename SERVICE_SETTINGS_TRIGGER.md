@@ -1,0 +1,1 @@
+Temporary trigger for service-business settings integration. This file will be removed after the patch is applied.
