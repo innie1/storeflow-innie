@@ -1,4 +1,4 @@
-name: temporary business picker patcher
+name: service settings patcher
 on:
   pull_request:
     types: [synchronize, reopened]
@@ -7,77 +7,54 @@ permissions:
   contents: write
 jobs:
   patch:
-    if: ${{ github.event.pull_request.head.ref == 'feat/business-modes-polish' }}
+    if: ${{ github.event.pull_request.head.ref == 'feat/service-business-settings' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Patch StoreAccess safely
+      - name: Patch Settings safely
         shell: python
         run: |
           from pathlib import Path
-          p=Path('src/components/StoreAccess.tsx')
-          s=p.read_text()
-          old="""const CATEGORIES: { id: StoreCategory; label: string; icon: string; desc: string }[] = [
-            { id: 'retail', label: 'Retail Store', icon: '🛒', desc: 'Products, inventory and sales' },
-            { id: 'restaurant', label: 'Restaurant', icon: '🍽️', desc: 'Menu items and orders' },
-            { id: 'games', label: 'Games & Entertainment', icon: '🎮', desc: 'PlayStation, Snooker, etc.' },
-            { id: 'other', label: 'Other', icon: '🏪', desc: 'Custom setup' },
-          ];"""
-          new="""const CATEGORIES: { id: StoreCategory; label: string; icon: string; desc: string }[] = [
-            { id: 'retail', label: 'Retail & Shop', icon: '🛒', desc: 'Products, inventory and sales' },
-            { id: 'restaurant', label: 'Restaurant & Food', icon: '🍽️', desc: 'Menu, orders and delivery' },
-            { id: 'games', label: 'Games & Entertainment', icon: '🎮', desc: 'Gaming, sessions and bookings' },
-            { id: 'other', label: 'Services & Other', icon: '🛠️', desc: 'Laundry, barber, tailoring and more' },
-          ];"""
-          if old in s: s=s.replace(old,new)
-          needle="  const [retailType, setRetailType] = useState('provision_retail');"
-          if 'const [businessType, setBusinessType]' not in s:
-              s=s.replace(needle,needle+"\n  const [businessType, setBusinessType] = useState('provision');")
-          choices="""
-  const BUSINESS_CHOICES = [
-    ['provision','Provision / Supermarket','🛒'], ['pharmacy','Pharmacy / Chemist','💊'], ['laundry','Laundry / Dry Cleaning','🧺'], ['gas_filling','Gas Filling','⛽'], ['games','Gaming Centre','🎮'], ['barber','Barber Shop','💈'], ['salon','Salon / Beauty','💇‍♀️'], ['tailoring','Tailoring / Fashion Design','🧵'], ['repair','Repair Shop','🛠️'], ['printing','Printing / Cyber Cafe','🖨️'], ['car_wash','Car Wash','🚗'], ['photography','Photography','📸'], ['cleaning','Cleaning Service','🧹'], ['spa','Spa / Wellness','🧖'], ['clothing','Clothing / Fashion','👕'], ['electronics','Electronics','📱'], ['restaurant','Restaurant / Food','🍔'],
-  ] as const;
-  const businessCategory=(type:string):StoreCategory => type==='games'?'games':type==='restaurant'?'restaurant':['laundry','gas_filling','barber','salon','tailoring','repair','printing','car_wash','photography','cleaning','spa'].includes(type)?'other':'retail';
-  const businessStoreType=(type:string):StoreType => type==='games'?'games':type==='restaurant'?'restaurant':type==='gas_filling'?'gas_filling':type==='laundry'?'laundry':type==='pharmacy'?'pharmacy':type==='clothing'?'clothing':type==='electronics'?'electronics':'other' as StoreType;
-
-"""
-          if 'const BUSINESS_CHOICES = [' not in s:
-              s=s.replace('  const handleCreate = () => {',choices+'  const handleCreate = () => {')
-          s=s.replace("""        category,
-        retailType: category === 'retail' ? retailType : undefined,
-        storeType: category === 'retail' ? retailTypeToStoreType(retailType) : category,""","""        category: businessCategory(businessType),
-        retailType: businessType,
-        storeType: businessStoreType(businessType),""")
-          s=s.replace("""      category,
-      category === 'retail' ? retailType : undefined,
-      selectedLogoStyle,
-      category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)""","""      businessCategory(businessType),
-      businessType,
-      selectedLogoStyle,
-      businessStoreType(businessType)""")
-          marker="            <div className=\"space-y-1\">\n              <label className=\"block text-xs text-muted-foreground uppercase font-bold mb-1\">Select Store Logo Concept</label>"
-          start="            {category === 'retail' && ("
-          si=s.find(start)
-          ei=s.find(marker,si) if si>=0 else -1
-          replacement="""            <div className=\"space-y-2\">
-              <label className=\"block text-xs text-muted-foreground uppercase font-bold\">What kind of business do you run?</label>
-              <div className=\"grid grid-cols-2 gap-2\">
-                {BUSINESS_CHOICES.map(([id,label,icon]) => <button key={id} type=\"button\" onClick={()=>{setBusinessType(id);setCategory(businessCategory(id));setRetailType(id);setAccessMood('thinking');}} className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${businessType===id?'bg-primary/10 border-primary ring-1 ring-primary/20':'bg-surface-2 border-border hover:border-primary/30'}`}><div className=\"text-xl mb-1\">{icon}</div><p className=\"font-display font-semibold text-xs text-foreground leading-tight\">{label}</p></button>)}
-              </div>
-              <p className=\"text-[10px] text-muted-foreground\">Pick the closest match. Manchant prepares the right dashboard and setup automatically.</p>
-            </div>
-"""
-          if si>=0 and ei>=0: s=s[:si]+replacement+s[ei:]
+          p=Path('src/components/Settings.tsx'); s=p.read_text()
+          anchor="export default function Settings({ store, onUpdate, onLock, currentUser, isActive = true }: SettingsProps) {"
+          insert="""
+          const isServiceBusiness = ['laundry','barber','salon','tailoring','repair','printing','cyber_cafe','car_wash','photography','cleaning','spa','games','gaming','restaurant'].includes(String((store as any)?.storeType || (store as any)?.category || (store as any)?.businessTemplate?.type || (store as any)?.data?.businessTemplate?.type || '').toLowerCase()) || (Array.isArray((store as any)?.businessTemplate?.modes) && (store as any).businessTemplate.modes.includes('services')) || (Array.isArray((store as any)?.data?.businessTemplate?.modes) && (store as any).data.businessTemplate.modes.includes('services'));
+          """
+          if 'const isServiceBusiness =' not in s:
+              if anchor not in s: raise SystemExit('settings component anchor missing')
+              s=s.replace(anchor,anchor+'\n'+insert,1)
+          old="""  const setView = (newView: View) => {
+    setViewStack(prev => {"""
+          new="""  const setView = (newView: View) => {
+    if (newView === 'inventory' && isServiceBusiness) return;
+    setViewStack(prev => {"""
+          if old not in s: raise SystemExit('setView anchor missing')
+          s=s.replace(old,new,1)
+          old='<ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />'
+          new='{!isServiceBusiness && (<ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />)}'
+          if old in s: s=s.replace(old,new,1)
+          old='<span>Browse Products</span>'
+          new="<span>{isServiceBusiness ? 'Browse Services' : 'Browse Products'}</span>"
+          if old in s: s=s.replace(old,new,1)
+          old='<div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Products</div>'
+          new='<div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{isServiceBusiness ? \'Total Services\' : \'Total Products\'}</div>'
+          if old in s: s=s.replace(old,new,1)
+          old='<div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Out of Stock</div>'
+          new='<div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{isServiceBusiness ? \'Unavailable\' : \'Out of Stock\'}</div>'
+          if old in s: s=s.replace(old,new,1)
           p.write_text(s)
-          print('patched StoreAccess:', 'business choices' in s or 'BUSINESS_CHOICES' in s)
-      - name: Commit patch to PR branch
-        shell: bash
+          PY
+      - name: Build merchant app
+        run: npm ci && npm run build
+      - name: Commit patch and remove workflow
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/StoreAccess.tsx
-          git commit -m "feat: add complete business choices to store creation"
+          git add src/components/Settings.tsx .github/workflows/patch-business-picker.yml
+          git commit -m "feat: hide inventory settings for service businesses"
+          git rm .github/workflows/patch-business-picker.yml
+          git commit -m "chore: remove temporary service settings workflow"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
