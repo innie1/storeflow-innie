@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { Plus, Pencil, Trash2, X, Clock, Power } from 'lucide-react';
 
@@ -21,12 +21,9 @@ interface ServiceDraft {
 const emptyDraft = (): ServiceDraft => ({ name: '', price: '', turnaround: TURNAROUND_OPTIONS[0] });
 
 /**
- * Keep the merchant service catalogue in the same public store payload the
- * customer app reads. Services are still stored as normal products with
- * isService=true for the merchant app, but we also publish a normalized
- * businessTemplate.offerings list and mark the store as a services-mode
- * business. This makes QR/customer discovery independent of the merchant's
- * business category label.
+ * Publish the merchant service catalogue into the cloud store payload that
+ * the customer app reads. The merchant keeps services as products with
+ * isService=true, while customers consume the normalized offerings list.
  */
 function syncCustomerServiceCatalog(store: StoreData): StoreData {
   const services = (store.products || [])
@@ -63,6 +60,19 @@ function syncCustomerServiceCatalog(store: StoreData): StoreData {
   } as StoreData;
 }
 
+/**
+ * Important: onUpdate only updates React state. saveStore is required here so
+ * the normalized service catalogue actually reaches Supabase and survives a
+ * customer QR scan on another device.
+ */
+function publishServiceCatalog(store: StoreData, onUpdate: (store: StoreData) => void) {
+  const synced = syncCustomerServiceCatalog(store);
+  if (synced === store) return store;
+  saveStore(synced);
+  onUpdate(synced);
+  return synced;
+}
+
 export default function Services({ store, onUpdate, currentUser }: ServicesProps) {
   const services = store.products.filter(p => p.isService);
   const [showForm, setShowForm] = useState(false);
@@ -70,15 +80,9 @@ export default function Services({ store, onUpdate, currentUser }: ServicesProps
   const [draft, setDraft] = useState<ServiceDraft>(emptyDraft());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Backfill existing services into the customer-facing catalogue as soon as
-  // the merchant opens Services. This fixes stores created before the shared
-  // customer-service contract was added, without requiring the merchant to
-  // recreate every service.
+  // Backfill older service stores as soon as the Services module is opened.
   useEffect(() => {
-    const synced = syncCustomerServiceCatalog(store);
-    if (synced !== store) onUpdate(synced);
-    // Only react to the actual product list changes. The equality guard above
-    // prevents an update loop after onUpdate returns the synchronized store.
+    publishServiceCatalog(store, onUpdate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.products]);
 
@@ -105,9 +109,6 @@ export default function Services({ store, onUpdate, currentUser }: ServicesProps
       updated = updateProduct(store, editingId, { name, sellingPrice: price, turnaround: draft.turnaround }, currentUser?.name, currentUser?.role);
       showToast('Service updated');
     } else {
-      // Services don't track stock the way physical products do — a large
-      // quantity keeps every existing stock-check in the order pipeline
-      // (recordSale, cart limits) from ever blocking a service booking.
       updated = addProduct(store, {
         name,
         costPrice: 0,
@@ -121,19 +122,18 @@ export default function Services({ store, onUpdate, currentUser }: ServicesProps
       showToast('Service added');
     }
 
-    // Publish the same service immediately to the customer-facing payload.
-    onUpdate(syncCustomerServiceCatalog(updated));
+    publishServiceCatalog(updated, onUpdate);
     setShowForm(false);
   };
 
   const toggleEnabled = (s: Product) => {
     const updated = updateProduct(store, s.id, { discontinued: !s.discontinued }, currentUser?.name, currentUser?.role);
-    onUpdate(syncCustomerServiceCatalog(updated));
+    publishServiceCatalog(updated, onUpdate);
   };
 
   const remove = (id: string) => {
     const updated = deleteProduct(store, id, currentUser?.name, currentUser?.role);
-    onUpdate(syncCustomerServiceCatalog(updated));
+    publishServiceCatalog(updated, onUpdate);
     setConfirmDeleteId(null);
     showToast('Service removed');
   };
