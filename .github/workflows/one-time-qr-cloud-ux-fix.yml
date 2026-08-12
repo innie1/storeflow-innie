@@ -1,0 +1,62 @@
+name: One-time QR cloud UX cleanup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'QR cloud publishing UX cleanup') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Patch QR publishing UX
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/components/Settings.tsx')
+          s = p.read_text()
+
+          replacements = {
+            'label="Multi-device Cloud Sync"': 'label="Publish Store to Customers"',
+            'description="Enable real-time cloud backup to sync and access this store on other devices."': 'description="Publish your store to the cloud so customers can use the QR code or Store ID to find it."',
+            'Cloud Sync Required': 'Publish Store to Customers',
+            'This store is not published to the cloud.': 'Publish this store once to make its QR code and Store ID available to customers.',
+            'Enable Cloud Sync': 'Publish Store',
+            'Scan to Shop': 'Scan to Open Store',
+            '<span>Browse Products</span>': "<span>{isServiceBusiness(store) ? 'Browse Services' : 'Browse Products'}</span>",
+            '<span>Order Instantly</span>': "<span>{isServiceBusiness(store) ? 'Request Service' : 'Order Instantly'}</span>",
+            "showToast('Cloud Sync Enabled! Backup created successfully.', 'success');": "showToast('Store published successfully. Your QR code is ready.', 'success');",
+            'Use your <strong>Store Access Code ({store.accessCode})</strong> and your <strong>Owner Password</strong> to view this store on other devices.': 'Your store is published. Customers can use the QR code or Store ID ({store.accessCode}) to find it, and you can sign in on another device to continue managing it.',
+          }
+
+          changed = 0
+          for old, new in replacements.items():
+            if old in s:
+              s = s.replace(old, new)
+              changed += 1
+
+          if "Browse Services" not in s or "Publish Store to Customers" not in s:
+            raise SystemExit('QR cloud UX patch did not apply safely')
+
+          p.write_text(s)
+          print(f'Applied {changed} targeted replacements')
+
+      - name: Build and commit patch
+        shell: bash
+        run: |
+          npm ci
+          npm run build
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Settings.tsx
+          git rm .github/workflows/one-time-qr-cloud-ux-fix.yml
+          git commit -m "fix: QR cloud publishing UX cleanup"
+          git push origin HEAD:main
