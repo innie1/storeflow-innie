@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { StoreData } from '@/types/store';
 import { getBusinessTemplate } from '@/lib/business-templates';
+import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
 
 interface BusinessOwnerDashboardProps {
   store: StoreData;
@@ -46,6 +48,7 @@ const quickActions: Record<string, { label: string; tab: string; icon: string }[
 };
 
 export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOwnerDashboardProps) {
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const template = getBusinessTemplate(store.storeType);
   const actions = quickActions[store.storeType] || [
     { label: template.labels.primaryAction, tab: 'orders', icon: '✨' },
@@ -53,6 +56,8 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
     { label: 'Sales', tab: 'sales', icon: '💰' },
     { label: 'Customers', tab: 'customers', icon: '👥' },
   ];
+
+  if (showAnalysis) return <BusinessAnalytics store={store} onBack={() => setShowAnalysis(false)} />;
 
   const today = new Date().toISOString().slice(0, 10);
   const todaySales = (store.sales || []).filter(s => s.date?.slice(0, 10) === today);
@@ -96,11 +101,12 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
       <section className="rounded-3xl border border-border bg-card p-5">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl">{template.icon}</div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground">Your business</p>
             <h1 className="font-display font-bold text-xl truncate">{store.storeName}</h1>
             <p className="text-xs text-primary font-semibold mt-0.5">{template.name}</p>
           </div>
+          <button onClick={() => setShowAnalysis(true)} className="shrink-0 rounded-xl bg-primary text-primary-foreground px-3 py-2 text-xs font-display font-bold">Analysis</button>
         </div>
       </section>
 
@@ -126,6 +132,16 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
               <div className="font-display font-bold text-sm mt-2">{action.label}</div>
             </button>
           ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display font-bold">Customer & QR analysis</h2>
+            <p className="text-sm text-muted-foreground mt-1">See scans, visitors, guest buyers, successful orders and repeat customers.</p>
+          </div>
+          <button onClick={() => setShowAnalysis(true)} className="px-4 py-2 rounded-xl border border-primary text-primary text-xs font-bold whitespace-nowrap">Open</button>
         </div>
       </section>
 
