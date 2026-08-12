@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createStore, loadStore, saveStore } from '@/lib/store-data';
+import { applyBusinessTemplate } from '@/lib/business-templates';
 import { StoreData, StoreCategory, StoreType, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotMood } from '@/components/Mascot';
@@ -14,10 +15,10 @@ interface StoreAccessProps {
 }
 
 const CATEGORIES: { id: StoreCategory; label: string; icon: string; desc: string }[] = [
-  { id: 'retail', label: 'Retail Store', icon: '🛒', desc: 'Products, inventory and sales' },
-  { id: 'restaurant', label: 'Restaurant', icon: '🍽️', desc: 'Menu items and orders' },
-  { id: 'games', label: 'Games & Entertainment', icon: '🎮', desc: 'PlayStation, Snooker, etc.' },
-  { id: 'other', label: 'Other', icon: '🏪', desc: 'Custom setup' },
+  { id: 'retail', label: 'Retail & Products', icon: '🛒', desc: 'Sell products, manage stock and sales' },
+  { id: 'restaurant', label: 'Food & Restaurant', icon: '🍽️', desc: 'Menus, orders and delivery' },
+  { id: 'games', label: 'Games & Entertainment', icon: '🎮', desc: 'Gaming, sessions and bookings' },
+  { id: 'other', label: 'Services & Other', icon: '🛠️', desc: 'Laundry, barber, tailoring and more' },
 ];
 
 const QUESTIONS = [
@@ -76,6 +77,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [storeName, setStoreName] = useState('');
   const [category, setCategory] = useState<StoreCategory>('retail');
   const [retailType, setRetailType] = useState('provision_retail');
+  const [businessType, setBusinessType] = useState('provision');
   const [selectedLogoStyle, setSelectedLogoStyle] = useState(() => LOGO_STYLES[Math.floor(Math.random() * LOGO_STYLES.length)].id);
   const [accessCode, setAccessCode] = useState('');
   const [newCode, setNewCode] = useState('');
@@ -180,6 +182,16 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     }
   };
 
+
+  const BUSINESS_CHOICES = [
+    ['provision','Provision / Supermarket','🛒'], ['pharmacy','Pharmacy / Chemist','💊'], ['clothing','Clothing / Fashion','👕'], ['electronics','Electronics','📱'], ['food','Food Business','🍲'],
+    ['laundry','Laundry / Dry Cleaning','🧺'], ['barber','Barber Shop','💈'], ['salon','Salon / Beauty','💇‍♀️'], ['tailoring','Tailoring / Fashion Design','🧵'], ['repair','Repair Shop','🛠️'],
+    ['printing','Printing / Cyber Cafe','🖨️'], ['cyber_cafe','Cyber Cafe','💻'], ['car_wash','Car Wash','🚗'], ['photography','Photography','📸'], ['cleaning','Cleaning Service','🧹'], ['spa','Spa / Wellness','🧖'],
+    ['gas_filling','Gas Filling','⛽'], ['games','Gaming Centre','🎮'], ['restaurant','Restaurant / Food','🍔'],
+  ] as const;
+  const businessCategory = (type: string): StoreCategory => type === 'games' ? 'games' : type === 'restaurant' ? 'restaurant' : type === 'other' ? 'other' : 'retail';
+  const businessStoreType = (type: string): StoreType => type as StoreType;
+
   const handleCreate = () => {
     if (!storeName.trim()) {
       setAccessMood('worried');
@@ -194,9 +206,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       const updated: StoreData = {
         ...loadedStore,
         storeName: storeName.trim(),
-        category,
-        retailType: category === 'retail' ? retailType : undefined,
-        storeType: category === 'retail' ? retailTypeToStoreType(retailType) : category,
+        category: businessCategory(businessType),
+        retailType: businessType,
+        storeType: businessStoreType(businessType),
         profile: { ...(loadedStore.profile || {}), logoStyle: selectedLogoStyle },
       };
       saveStore(updated);
@@ -209,13 +221,14 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
     const store = createStore(
       storeName.trim(),
-      category,
-      category === 'retail' ? retailType : undefined,
+      businessCategory(businessType),
+      businessType,
       selectedLogoStyle,
-      category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)
+      businessStoreType(businessType)
     );
-    setNewCode(store.accessCode);
-    setLoadedStore(store);
+    const templatedStore = applyBusinessTemplate(store, businessType);
+    setNewCode(templatedStore.accessCode);
+    setLoadedStore(templatedStore);
     
     // Generate recovery key
     const randPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -909,18 +922,19 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     try {
       const store = createStore(
         storeName.trim(),
-        category,
-        category === 'retail' ? retailType : undefined,
+        businessCategory(businessType),
+        businessType,
         selectedLogoStyle,
-        category === 'retail' ? retailTypeToStoreType(retailType) : (category as StoreType)
+        businessStoreType(businessType)
       );
+      const templatedStore = applyBusinessTemplate(store, businessType);
       
-      if (store.managerSettings) {
-        store.managerSettings.multiDeviceSync = true;
-        store.managerSettings.ownerPassword = ownerPassword.trim() || store.managerSettings.ownerPassword || 'owner';
+      if (templatedStore.managerSettings) {
+        templatedStore.managerSettings.multiDeviceSync = true;
+        templatedStore.managerSettings.ownerPassword = ownerPassword.trim() || store.managerSettings.ownerPassword || 'owner';
       }
 
-      const storeId = store.storeId || store.accessCode;
+      const storeId = templatedStore.storeId || templatedStore.accessCode;
       const storeUrl = generateStoreUrl(storeId);
 
       const { data: dbStore, error: storeError } = await supabase
@@ -928,14 +942,14 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         .insert({
           owner_id: activeProfile.id,
           business_name: storeName.trim(),
-          business_type: category,
+          business_type: businessType,
           logo: selectedLogoStyle,
-          access_code: store.accessCode,
-          owner_password: store.managerSettings?.ownerPassword || 'owner',
+          access_code: templatedStore.accessCode,
+          owner_password: templatedStore.managerSettings?.ownerPassword || 'owner',
           store_id: storeId,
           qr_code: storeUrl,
           barcode: storeId,
-          data: store as any
+          data: templatedStore as any
         })
         .select()
         .single();
@@ -952,7 +966,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         role: 'owner'
       });
 
-      localStorage.setItem('storeflow_store_' + store.accessCode, JSON.stringify(store));
+      localStorage.setItem('storeflow_store_' + templatedStore.accessCode, JSON.stringify(templatedStore));
 
       const ownerUser = {
         name: activeProfile.full_name || 'Owner',
@@ -965,8 +979,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         supabase.functions.invoke('send-account-recovery-email', {
           body: {
             to: activeProfile.email,
-            storeName: store.storeName,
-            accessCode: store.accessCode,
+            storeName: templatedStore.storeName,
+            accessCode: templatedStore.accessCode,
             storeId: storeId,
             storeUrl: storeUrl,
             type: 'new_account',
@@ -976,7 +990,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
       setAccessMood('celebrating');
       showToast('Cloud Store created & details emailed successfully!', 'success');
-      onStoreLoaded(store);
+      onStoreLoaded(templatedStore);
     } catch (err: any) {
       setAccessMood('angry' as any);
       showToast(err.message || 'Failed to create cloud store', 'error');
@@ -1356,51 +1370,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
               />
             </div>
             
-            <div>
-              <label className="block text-xs text-muted-foreground uppercase font-bold mb-2">Business Category</label>
-              <div className="grid grid-cols-2 gap-2">
-                {CATEGORIES.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      setCategory(c.id);
-                      setAccessMood('thinking');
-                    }}
-                    className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
-                      category === c.id
-                        ? 'bg-primary/10 border-primary/40'
-                        : 'bg-surface-3 border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <div className="text-xl mb-1">{c.icon}</div>
-                    <p className="font-display font-semibold text-xs text-foreground">{c.label}</p>
-                    <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">{c.desc}</p>
-                  </button>
-                ))}
+            <div className="space-y-2">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">What kind of business do you run?</label>
+              <p className="text-[10px] text-muted-foreground">Choose the closest match. This controls your dashboard, settings and customer experience.</p>
+              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                {BUSINESS_CHOICES.map(([id,label,icon]) => <button key={id} type="button" onClick={() => { setBusinessType(id); setCategory(businessCategory(id)); setRetailType(id); setAccessMood('thinking'); }} className={`p-2.5 rounded-xl border text-left transition-all ${businessType === id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-primary/30'}`}><span className="text-lg">{icon}</span><p className="font-display font-semibold text-xs mt-1">{label}</p></button>)}
               </div>
             </div>
-
-            {category === 'retail' && (
-              <div className="space-y-1">
-                <label className="block text-xs text-muted-foreground uppercase font-bold">Select Retail Type</label>
-                <select
-                  value={retailType}
-                  onChange={e => setRetailType(e.target.value)}
-                  className="w-full p-2.5 rounded-lg bg-surface-3 border border-border text-foreground text-xs focus:outline-none focus:border-primary focus:bg-surface-3 [&>option]:bg-card"
-                >
-                  <option value="provision_retail">Sales of Provision (Retail Provision)</option>
-                  <option value="provision_wholesale">Wholesale for Provision</option>
-                  <option value="pharmacy">Pharmacy / Chemist</option>
-                  <option value="electronics">Electronics Store</option>
-                  <option value="clothing">Clothing / Fashion</option>
-                  <option value="food">Food / Provisions Supplier</option>
-                  <option value="laundry">Laundry / Dry Cleaning</option>
-                  <option value="gasoline">Gasoline / Gas Filling Station</option>
-                  <option value="other">Other / General Retail</option>
-                </select>
-              </div>
-            )}
-
             <div className="space-y-1">
               <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Select Store Logo Concept</label>
               <div className="grid grid-cols-5 gap-2">
@@ -1465,52 +1441,13 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
               />
             </div>
-            <div>
-              <label className="block text-xs text-muted-foreground uppercase font-bold mb-2">Business Category</label>
-              <div className="grid grid-cols-2 gap-2">
-                {CATEGORIES.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      setCategory(c.id);
-                      setAccessMood('thinking');
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-colors cursor-pointer ${
-                      category === c.id
-                        ? 'bg-primary/10 border-primary/40'
-                        : 'bg-surface-2 border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <div className="text-xl mb-1">{c.icon}</div>
-                    <p className="font-display font-semibold text-xs text-foreground">{c.label}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{c.desc}</p>
-                  </button>
-                ))}
+            <div className="space-y-2">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">What kind of business do you run?</label>
+              <p className="text-[10px] text-muted-foreground">Choose the closest match. This controls your dashboard, settings and customer experience.</p>
+              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                {BUSINESS_CHOICES.map(([id,label,icon]) => <button key={id} type="button" onClick={() => { setBusinessType(id); setCategory(businessCategory(id)); setRetailType(id); setAccessMood('thinking'); }} className={`p-2.5 rounded-xl border text-left transition-all ${businessType === id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-primary/30'}`}><span className="text-lg">{icon}</span><p className="font-display font-semibold text-xs mt-1">{label}</p></button>)}
               </div>
             </div>
-            {category === 'retail' && (
-              <div className="space-y-1">
-                <label className="block text-xs text-muted-foreground uppercase font-bold">Select Retail Type</label>
-                <select
-                  value={retailType}
-                  onChange={e => setRetailType(e.target.value)}
-                  className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary focus:bg-surface-2 [&>option]:bg-card"
-                >
-                  <option value="provision_retail">Sales of Provision (Retail Provision)</option>
-                  <option value="provision_wholesale">Wholesale for Provision</option>
-                  <option value="pharmacy">Pharmacy / Chemist</option>
-                  <option value="electronics">Electronics Store</option>
-                  <option value="clothing">Clothing / Fashion</option>
-                  <option value="food">Food / Provisions Supplier</option>
-                  <option value="laundry">Laundry / Dry Cleaning</option>
-                  <option value="gasoline">Gasoline / Gas Filling Station</option>
-                  <option value="other">Other / General Retail</option>
-                </select>
-                <p className="text-[10px] text-muted-foreground leading-snug">
-                  * Sales or wholesale of provisions will preload default items. Other types start empty.
-                </p>
-              </div>
-            )}
             <div className="space-y-1">
               <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Select Store Logo Concept</label>
               <div className="grid grid-cols-5 gap-2">
