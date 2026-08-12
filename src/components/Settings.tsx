@@ -127,6 +127,17 @@ const card = "bg-card shadow-card rounded-2xl";
 const tileBase = "w-full p-4 rounded-2xl bg-card shadow-card flex items-center gap-3 text-left transition-all hover:ring-1 hover:ring-primary/30";
 const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground focus:outline-none focus:border-primary text-sm";
 
+// Service-first businesses do not manage stock as their primary operation.
+// Keep inventory tools for product businesses, but hide inventory-only settings from service workflows.
+const SERVICE_BUSINESS_TYPES = new Set([
+  'laundry','barber','salon','tailoring','repair','printing','cyber_cafe','car_wash','photography','cleaning','spa','games','gaming','games_entertainment'
+]);
+function isServiceBusiness(store: StoreData): boolean {
+  const type = String(store.storeType || '').toLowerCase();
+  const category = String(store.category || '').toLowerCase();
+  return SERVICE_BUSINESS_TYPES.has(type) || SERVICE_BUSINESS_TYPES.has(category);
+}
+
 // ---- small helpers ----
 function ProgressRing({ pct, size = 56, color = 'hsl(var(--success))' }: { pct: number; size?: number; color?: string }) {
   const r = (size - 6) / 2;
@@ -548,6 +559,7 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
 export default function Settings({ store, onUpdate, onLock, currentUser, isActive = true }: SettingsProps) {
   const [view, setViewState] = useState<View>('home');
   const [viewStack, setViewStack] = useState<View[]>(['home']);
+  const serviceBusiness = isServiceBusiness(store);
   const barcodeQrCanvasRef = useRef<HTMLCanvasElement>(null);
   const storeBarcodeCanvasRef = useRef<HTMLCanvasElement>(null);
   const [showAllProductsQR, setShowAllProductsQR] = useState(false);
@@ -618,6 +630,13 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
       setViewStack(['home']);
     }
   }, [isActive]);
+
+  useEffect(() => {
+    if (serviceBusiness && view === 'inventory') {
+      setViewState('home');
+      setViewStack(['home']);
+    }
+  }, [serviceBusiness, view]);
   const [searchQuery, setSearchQuery] = useState('');
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
   const [theme, setTheme] = useState<ThemeId>(getTheme());
@@ -2623,7 +2642,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           <div className={`${card} px-4 divide-y divide-border`}>
             <ToggleRow label="Revenue Forecasts" checked={mgr.revenueForecasts} onChange={v => updateMgr({ revenueForecasts: v })} />
             <ToggleRow label="Profit Forecasts" checked={mgr.profitForecasts} onChange={v => updateMgr({ profitForecasts: v })} />
-            <ToggleRow label="Inventory Forecasts" checked={mgr.inventoryForecasts} onChange={v => updateMgr({ inventoryForecasts: v })} />
+            {!serviceBusiness && <ToggleRow label="Inventory Forecasts" checked={mgr.inventoryForecasts} onChange={v => updateMgr({ inventoryForecasts: v })} />}
             <ToggleRow label="Expense Analysis" checked={mgr.expenseAnalysis} onChange={v => updateMgr({ expenseAnalysis: v })} />
           </div>
 
@@ -3202,7 +3221,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         <ToggleRow label="Monthly Reports" checked={mgr.notifyMonthlyReports} onChange={v => updateMgr({ notifyMonthlyReports: v })} />
         <ToggleRow label="Savings Reminders" checked={mgr.notifySavingsReminders} onChange={v => updateMgr({ notifySavingsReminders: v })} />
         <ToggleRow label="Customer Request Alerts" checked={mgr.notifyCustomerRequests} onChange={v => updateMgr({ notifyCustomerRequests: v })} />
-        <ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />
+        {!serviceBusiness && <ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />}
       </div>
     </SubPage>
   );
@@ -4555,8 +4574,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             }
             onClick={() => setView('pricing')}
           />
-          <SettingTile icon={<Package className="w-5 h-5" />} color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />
-          <SettingTile icon={<Star className="w-5 h-5" />} color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView('wishlist')} />
+          {!serviceBusiness && <SettingTile icon={<Package className="w-5 h-5" />} color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />}
+          {!serviceBusiness && <SettingTile icon={<Star className="w-5 h-5" />} color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView('wishlist')} />}
           <SettingTile icon={<PiggyBank className="w-5 h-5" />} color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}
             right={<div className="text-right space-y-1">
               <p className="text-[10px] text-muted-foreground">Goal</p>
@@ -4582,7 +4601,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
           <SettingTile icon={<ShieldCheck className="w-5 h-5" />} color="#2EBFB1" title="Security" desc="App lock, access code, reset password, and credentials." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='4h'?'4 Hours':timer==='8h'?'8 Hours':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
 
-          <SettingTile icon={<QrCode className="w-5 h-5" />} color="#FFC72C" title="QR & Barcodes" desc="Branded QR codes, analytics, and product tags." onClick={() => setView('barcode')} />
+          <SettingTile icon={<QrCode className="w-5 h-5" />} color="#FFC72C" title={serviceBusiness ? 'QR & Storefront' : 'QR & Barcodes'} desc={serviceBusiness ? 'Share your customer storefront QR code and service page.' : 'Branded QR codes, analytics, and product tags.'} onClick={() => setView('barcode')} />
 
           <SettingTile icon={<Store className="w-5 h-5" />} color="#EC4899" title="Marketplace, Store Type & Loyalty Settings" desc="Configure storefront visibility, category type, pricing, loyalty rewards, and delivery." onClick={() => setView('marketplace-settings')} />
 
