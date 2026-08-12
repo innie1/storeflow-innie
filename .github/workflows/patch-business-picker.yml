@@ -22,13 +22,8 @@ jobs:
           from pathlib import Path
           p = Path('src/components/StoreAccess.tsx')
           s = p.read_text()
-
           if "@/lib/business-templates" not in s:
-              s = s.replace(
-                  "import { createStore, loadStore, saveStore } from '@/lib/store-data';",
-                  "import { createStore, loadStore, saveStore } from '@/lib/store-data';\nimport { applyBusinessTemplate } from '@/lib/business-templates';"
-              )
-
+              s = s.replace("import { createStore, loadStore, saveStore } from '@/lib/store-data';", "import { createStore, loadStore, saveStore } from '@/lib/store-data';\nimport { applyBusinessTemplate } from '@/lib/business-templates';")
           old_categories = """const CATEGORIES: { id: StoreCategory; label: string; icon: string; desc: string }[] = [
             { id: 'retail', label: 'Retail Store', icon: '🛒', desc: 'Products, inventory and sales' },
             { id: 'restaurant', label: 'Restaurant', icon: '🍽️', desc: 'Menu items and orders' },
@@ -42,11 +37,9 @@ jobs:
             { id: 'other', label: 'Services & Other', icon: '🛠️', desc: 'Laundry, barber, tailoring and more' },
           ];"""
           s = s.replace(old_categories, new_categories)
-
           needle = "  const [retailType, setRetailType] = useState('provision_retail');"
           if 'const [businessType, setBusinessType]' not in s:
               s = s.replace(needle, needle + "\n  const [businessType, setBusinessType] = useState('provision');")
-
           if 'const BUSINESS_CHOICES = [' not in s:
               choices = """
   const BUSINESS_CHOICES = [
@@ -57,7 +50,7 @@ jobs:
   ] as const;
   const businessCategory = (type: string): StoreCategory => type === 'games' ? 'games' : type === 'restaurant' ? 'restaurant' : type === 'other' ? 'other' : 'retail';
   const businessStoreType = (type: string): StoreType => type as StoreType;
-  const businessPicker = (selected: string, compact = false) => (
+  const businessPicker = (selected: string) => (
     <div className="space-y-2">
       <label className="block text-xs text-muted-foreground uppercase font-bold">What kind of business do you run?</label>
       <p className="text-[10px] text-muted-foreground">Choose the closest match. This controls your dashboard, settings and customer experience.</p>
@@ -69,7 +62,6 @@ jobs:
 
 """
               s = s.replace('  const handleCreate = () => {', choices + '  const handleCreate = () => {')
-
           s = s.replace("""        category,
         retailType: category === 'retail' ? retailType : undefined,
         storeType: category === 'retail' ? retailTypeToStoreType(retailType) : category,""", """        category: businessCategory(businessType),
@@ -82,8 +74,6 @@ jobs:
       businessType,
       selectedLogoStyle,
       businessStoreType(businessType)""")
-
-          # Replace every retail-only selector with the same business picker.
           start = 0
           while True:
               a = s.find("            {category === 'retail' && (", start)
@@ -92,28 +82,7 @@ jobs:
               if b < 0: break
               s = s[:a] + "            {businessPicker(businessType)}\n" + s[b:]
               start = b + 1
-
-          # Apply the existing template system immediately after local creation.
-          old = """    const store = createStore(
-      storeName.trim(),
-      businessCategory(businessType),
-      businessType,
-      selectedLogoStyle,
-      businessStoreType(businessType)
-    );
-    setNewCode(store.accessCode);"""
-          new = """    const store = createStore(
-      storeName.trim(),
-      businessCategory(businessType),
-      businessType,
-      selectedLogoStyle,
-      businessStoreType(businessType)
-    );
-    const templatedStore = applyBusinessTemplate(store, businessType);
-    setNewCode(templatedStore.accessCode);"""
-          s = s.replace(old, new)
-          s = s.replace("    setLoadedStore(store);", "    setLoadedStore(templatedStore);")
-
+          s = s.replace("    setNewCode(store.accessCode);\n    setLoadedStore(store);", "    const templatedStore = applyBusinessTemplate(store, businessType);\n    setNewCode(templatedStore.accessCode);\n    setLoadedStore(templatedStore);")
           p.write_text(s)
           print('patched', len(s), 'bytes')
       - name: Commit patch to branch
