@@ -3,6 +3,7 @@ import { StoreData, GameService } from '@/types/store';
 import { ensureDefaultGames, getEnabledGames, getDailyStats, recordGameSession, DEFAULT_GAMES } from '@/lib/games-data';
 import { showToast } from '@/components/Toast';
 import { Gamepad2, Users, Clock3, Receipt, Settings2, Play, History, TrendingUp } from 'lucide-react';
+import ServiceOrders from '@/components/games/ServiceOrders';
 
 interface Props {
   store: StoreData;
@@ -72,6 +73,8 @@ export default function GamesDashboard({ store, onUpdate, onGoToSettings }: Prop
           <Settings2 className="w-4 h-4" />
         </button>
       </div>
+
+      <ServiceOrders storeId={store.id} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-card border border-border rounded-2xl p-4">
