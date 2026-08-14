@@ -3,27 +3,24 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import serviceOrdersPlugin from "./vite-plugin-service-orders";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    hmr: {
-      overlay: false,
-    },
+    hmr: { overlay: false },
   },
   plugins: [
     react(),
     mode === "development" && componentTagger(),
+    serviceOrdersPlugin(),
     VitePWA({
       strategies: "injectManifest",
       srcDir: "src",
       filename: "sw.ts",
       registerType: "autoUpdate",
-      // Disabled in dev: an active SW during `vite dev` intercepts requests with
-      // NetworkFirst/StaleWhileRevalidate, which fights Vite's HMR and serves stale
-      // files after edits — this was the cause of the "stuck / changes not showing" bug.
       devOptions: { enabled: false },
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
       manifest: {
@@ -46,9 +43,7 @@ export default defineConfig(({ mode }) => ({
     }),
   ].filter(Boolean),
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    alias: { "@": path.resolve(__dirname, "./src") },
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
   },
 }));
