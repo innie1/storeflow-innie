@@ -15,19 +15,55 @@ export const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
   { name: 'VR Games', icon: '🥽', price: 2000, enabled: true, order: 6 },
 ];
 
+/** Convert the merchant's current game configuration into the canonical service catalogue. */
+function syncGamesToCustomerCatalog(store: StoreData): StoreData {
+  const games = [...(store.games || [])].sort((a, b) => a.order - b.order);
+  const current = ((store as any).businessTemplate || {}) as any;
+  const currentOfferings = Array.isArray(current.offerings) ? current.offerings : [];
+  const nonGameOfferings = currentOfferings.filter((o: any) => o?.source !== 'games' && o?.kind !== 'game');
+  const gameOfferings = games.map(g => ({
+    id: String(g.id),
+    name: g.name,
+    description: '',
+    icon: g.icon,
+    price: Number(g.price || 0),
+    sellingPrice: Number(g.price || 0),
+    pricing: 'time',
+    unit: 'session',
+    unitLabel: 'per session',
+    enabled: g.enabled !== false,
+    active: g.enabled !== false,
+    discontinued: false,
+    source: 'games',
+    order: g.order,
+  }));
+
+  const offerings = [...nonGameOfferings, ...gameOfferings];
+  const modes = Array.isArray(current.modes) ? current.modes : [];
+  const nextModes = Array.from(new Set([...modes, 'services']));
+
+  return {
+    ...(store as any),
+    businessTemplate: {
+      ...current,
+      modes: nextModes,
+      offerings,
+    },
+  } as StoreData;
+}
+
 /** Ensure a games store has definitions without ever overwriting an owner's choices. */
 export function ensureDefaultGames(store: StoreData): StoreData {
   if (store.category !== 'games' && store.storeType !== 'games') return store;
   const existing = store.games || [];
-  // An existing list — including an intentionally all-disabled list — is authoritative.
-  if (existing.length > 0) return store;
+  if (existing.length > 0) return syncGamesToCustomerCatalog(store);
 
   const games: GameService[] = DEFAULT_GAMES.map((g, i) => ({
     ...g,
     id: gid(),
     order: i,
   }));
-  const updated = { ...store, games };
+  const updated = syncGamesToCustomerCatalog({ ...store, games });
   saveStore(updated);
   return updated;
 }
@@ -43,7 +79,7 @@ export function getEnabledGames(store: StoreData): GameService[] {
 export function addGame(store: StoreData, partial: Omit<GameService, 'id' | 'order'>): StoreData {
   const games = getGames(store);
   const next: GameService = { ...partial, id: gid(), order: games.length };
-  const updated = { ...store, games: [...games, next] };
+  const updated = syncGamesToCustomerCatalog({ ...store, games: [...games, next] });
   saveStore(updated);
   return updated;
 }
@@ -51,13 +87,13 @@ export function addGame(store: StoreData, partial: Omit<GameService, 'id' | 'ord
 /** Update a game setting and persist the resulting store immediately. */
 export function updateGame(store: StoreData, id: string, updates: Partial<GameService>): StoreData {
   const games = (store.games || []).map(g => g.id === id ? { ...g, ...updates } : g);
-  const updated = { ...store, games };
+  const updated = syncGamesToCustomerCatalog({ ...store, games });
   saveStore(updated);
   return updated;
 }
 
 export function deleteGame(store: StoreData, id: string): StoreData {
-  const updated = { ...store, games: (store.games || []).filter(g => g.id !== id) };
+  const updated = syncGamesToCustomerCatalog({ ...store, games: (store.games || []).filter(g => g.id !== id) });
   saveStore(updated);
   return updated;
 }
@@ -71,7 +107,7 @@ export function moveGame(store: StoreData, id: string, dir: -1 | 1): StoreData {
   const next = [...sorted];
   [next[idx], next[swap]] = [next[swap], next[idx]];
   const reordered = next.map((g, i) => ({ ...g, order: i }));
-  const updated = { ...store, games: reordered };
+  const updated = syncGamesToCustomerCatalog({ ...store, games: reordered });
   saveStore(updated);
   return updated;
 }
