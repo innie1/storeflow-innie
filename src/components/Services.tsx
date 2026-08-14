@@ -3,218 +3,74 @@ import { StoreData, Product } from '@/types/store';
 import { addProduct, updateProduct, deleteProduct, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { getServicePricingLabel, getServicePricingOptions, getStoredServicePricing, serviceUnitForPricing, type ServicePricing } from '@/lib/service-pricing';
-import { Plus, Pencil, Trash2, X, Clock, Power, Scale, Tag } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Clock, Power, Scale, Tag, Play, Timer, Pause, CalendarClock } from 'lucide-react';
 
-interface ServicesProps {
-  store: StoreData;
-  onUpdate: (store: StoreData) => void;
-  currentUser?: { name?: string; role?: string };
-}
-
+interface ServicesProps { store: StoreData; onUpdate: (store: StoreData) => void; currentUser?: { name?: string; role?: string }; }
 const TURNAROUND_OPTIONS = ['Same day', '24 hours', '48 hours', '3 days', '1 week'];
-
+type WorkflowMode = 'job' | 'session' | 'appointment';
 interface ServiceDraft {
-  name: string;
-  description: string;
-  price: string;
-  turnaround: string;
-  pricing: ServicePricing;
+  name: string; description: string; price: string; turnaround: string; pricing: ServicePricing;
+  workflowMode: WorkflowMode; requiresStart: boolean; timer: boolean; allowPause: boolean; allowAddTime: boolean; durationMinutes: string;
 }
-
-function defaultPricing(store: StoreData): ServicePricing {
-  return getServicePricingOptions(store)[0]?.id || 'fixed';
+function defaultPricing(store: StoreData): ServicePricing { return getServicePricingOptions(store)[0]?.id || 'fixed'; }
+function defaultWorkflow(pricing: ServicePricing): Pick<ServiceDraft, 'workflowMode'|'requiresStart'|'timer'|'allowPause'|'allowAddTime'|'durationMinutes'> {
+  const timed = pricing === 'per_hour' || pricing === 'per_session';
+  return { workflowMode: timed ? 'session' : pricing === 'appointment' ? 'appointment' : 'job', requiresStart: true, timer: timed, allowPause: timed, allowAddTime: timed, durationMinutes: timed ? '60' : '' };
 }
-
-function emptyDraft(store: StoreData): ServiceDraft {
-  return { name: '', description: '', price: '', turnaround: TURNAROUND_OPTIONS[0], pricing: defaultPricing(store) };
-}
+function emptyDraft(store: StoreData): ServiceDraft { const pricing = defaultPricing(store); return { name: '', description: '', price: '', turnaround: TURNAROUND_OPTIONS[0], pricing, ...defaultWorkflow(pricing) }; }
 
 /** Publish the merchant service catalogue into the cloud store payload consumed by the customer app. */
 function syncCustomerServiceCatalog(store: StoreData): StoreData {
-  const services = (store.products || [])
-    .filter(p => p.isService && !p.discontinued)
-    .map(p => {
-      const pricing = getStoredServicePricing(p);
-      const pricingInfo = getServicePricingLabel(pricing);
-      return {
-        id: String(p.id),
-        name: p.name,
-        description: p.description || '',
-        price: Number(p.sellingPrice || 0),
-        sellingPrice: Number(p.sellingPrice || 0),
-        pricing,
-        unit: (p as any).unit || undefined,
-        unitLabel: pricingInfo.unitLabel,
-        turnaround: p.turnaround || '',
-        enabled: true,
-        active: true,
-        discontinued: false,
-      };
-    });
-
-  const current = ((store as any).businessTemplate || {}) as any;
-  const currentModes = Array.isArray(current.modes) ? current.modes : [];
-  const nextModes = Array.from(new Set([...currentModes, 'services']));
-  const same = JSON.stringify(current.offerings || []) === JSON.stringify(services) && JSON.stringify(currentModes) === JSON.stringify(nextModes);
-  if (same) return store;
-
+  const services = (store.products || []).filter(p => p.isService && !p.discontinued).map(p => {
+    const pricing = getStoredServicePricing(p); const pricingInfo = getServicePricingLabel(pricing); const workflow = (p as any).serviceWorkflow || {};
+    return { id: String(p.id), name: p.name, description: p.description || '', price: Number(p.sellingPrice || 0), sellingPrice: Number(p.sellingPrice || 0), pricing, unit: (p as any).unit || undefined, unitLabel: pricingInfo.unitLabel, turnaround: p.turnaround || '', enabled: true, active: true, discontinued: false, serviceWorkflow: { mode: workflow.mode || 'job', requiresStart: workflow.requiresStart !== false, timer: workflow.timer === true, allowPause: workflow.allowPause === true, allowAddTime: workflow.allowAddTime === true, durationMinutes: Number(workflow.durationMinutes || 0) || undefined } };
+  });
+  const current = ((store as any).businessTemplate || {}) as any; const currentModes = Array.isArray(current.modes) ? current.modes : []; const nextModes = Array.from(new Set([...currentModes, 'services']));
+  const same = JSON.stringify(current.offerings || []) === JSON.stringify(services) && JSON.stringify(currentModes) === JSON.stringify(nextModes); if (same) return store;
   return { ...(store as any), businessTemplate: { ...current, modes: nextModes, offerings: services } } as StoreData;
 }
-
-function publishServiceCatalog(store: StoreData, onUpdate: (store: StoreData) => void) {
-  const synced = syncCustomerServiceCatalog(store);
-  if (synced === store) return store;
-  saveStore(synced);
-  onUpdate(synced);
-  return synced;
-}
+function publishServiceCatalog(store: StoreData, onUpdate: (store: StoreData) => void) { const synced = syncCustomerServiceCatalog(store); if (synced === store) return store; saveStore(synced); onUpdate(synced); return synced; }
 
 export default function Services({ store, onUpdate, currentUser }: ServicesProps) {
-  const services = store.products.filter(p => p.isService);
-  const pricingOptions = getServicePricingOptions(store);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ServiceDraft>(() => emptyDraft(store));
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-
-  useEffect(() => {
-    publishServiceCatalog(store, onUpdate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const services = store.products.filter(p => p.isService); const pricingOptions = getServicePricingOptions(store); const [showForm, setShowForm] = useState(false); const [editingId, setEditingId] = useState<string | null>(null); const [draft, setDraft] = useState<ServiceDraft>(() => emptyDraft(store)); const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  useEffect(() => { publishServiceCatalog(store, onUpdate); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.products]);
-
-  const openNew = () => {
-    setEditingId(null);
-    setDraft(emptyDraft(store));
-    setShowForm(true);
-  };
-
-  const openEdit = (s: Product) => {
-    const pricing = getStoredServicePricing(s);
-    setEditingId(s.id);
-    setDraft({
-      name: s.name,
-      description: s.description || '',
-      price: String(s.sellingPrice || ''),
-      turnaround: s.turnaround || TURNAROUND_OPTIONS[0],
-      pricing: pricingOptions.some(o => o.id === pricing) ? pricing : defaultPricing(store),
-    });
-    setShowForm(true);
-  };
-
+  const openNew = () => { setEditingId(null); setDraft(emptyDraft(store)); setShowForm(true); };
+  const openEdit = (s: Product) => { const pricing = getStoredServicePricing(s); const w = (s as any).serviceWorkflow || {}; const base = defaultWorkflow(pricing); setEditingId(s.id); setDraft({ name: s.name, description: s.description || '', price: String(s.sellingPrice || ''), turnaround: s.turnaround || TURNAROUND_OPTIONS[0], pricing: pricingOptions.some(o => o.id === pricing) ? pricing : defaultPricing(store), workflowMode: w.mode || base.workflowMode, requiresStart: w.requiresStart !== false, timer: w.timer === true, allowPause: w.allowPause === true, allowAddTime: w.allowAddTime === true, durationMinutes: w.durationMinutes ? String(w.durationMinutes) : base.durationMinutes }); setShowForm(true); };
+  const changePricing = (pricing: ServicePricing) => setDraft(d => ({ ...d, pricing, ...defaultWorkflow(pricing) }));
   const save = () => {
-    const name = draft.name.trim();
-    const quoteBased = draft.pricing === 'quote';
-    const price = Number(draft.price);
+    const name = draft.name.trim(); const quoteBased = draft.pricing === 'quote'; const price = Number(draft.price); const duration = Number(draft.durationMinutes);
     if (!name) return showToast('Enter a service name', 'error');
     if (!quoteBased && (!(price > 0) || !Number.isFinite(price))) return showToast('Enter a valid price', 'error');
-
+    if (draft.timer && (!(duration > 0) || !Number.isFinite(duration))) return showToast('Enter a valid session duration', 'error');
     const unit = serviceUnitForPricing(draft.pricing);
-    const serviceData: any = {
-      name,
-      description: draft.description.trim(),
-      costPrice: 0,
-      sellingPrice: quoteBased ? 0 : price,
-      quantity: 999999,
-      category: 'Service',
-      unit,
-      isService: true,
-      turnaround: draft.turnaround,
-      servicePricing: draft.pricing,
-    };
-
+    const serviceData: any = { name, description: draft.description.trim(), costPrice: 0, sellingPrice: quoteBased ? 0 : price, quantity: 999999, category: 'Service', unit, isService: true, turnaround: draft.turnaround, servicePricing: draft.pricing, serviceWorkflow: { mode: draft.workflowMode, requiresStart: draft.requiresStart, timer: draft.timer, allowPause: draft.allowPause, allowAddTime: draft.allowAddTime, durationMinutes: draft.timer ? duration : undefined } };
     let updated: StoreData;
-    if (editingId) {
-      updated = updateProduct(store, editingId, serviceData, currentUser?.name, currentUser?.role);
-      showToast('Service updated');
-    } else {
-      updated = addProduct(store, serviceData, currentUser?.name, currentUser?.role);
-      showToast('Service added');
-    }
-
-    publishServiceCatalog(updated, onUpdate);
-    setShowForm(false);
+    if (editingId) { updated = updateProduct(store, editingId, serviceData, currentUser?.name, currentUser?.role); showToast('Service updated'); } else { updated = addProduct(store, serviceData, currentUser?.name, currentUser?.role); showToast('Service added'); }
+    publishServiceCatalog(updated, onUpdate); setShowForm(false);
   };
-
-  const toggleEnabled = (s: Product) => {
-    const updated = updateProduct(store, s.id, { discontinued: !s.discontinued }, currentUser?.name, currentUser?.role);
-    publishServiceCatalog(updated, onUpdate);
-  };
-
-  const remove = (id: string) => {
-    const updated = deleteProduct(store, id, currentUser?.name, currentUser?.role);
-    publishServiceCatalog(updated, onUpdate);
-    setConfirmDeleteId(null);
-    showToast('Service removed');
-  };
-
-  const pricingText = (s: Product) => {
-    const pricing = getStoredServicePricing(s);
-    return getServicePricingLabel(pricing).unitLabel;
-  };
-
+  const toggleEnabled = (s: Product) => { const updated = updateProduct(store, s.id, { discontinued: !s.discontinued }, currentUser?.name, currentUser?.role); publishServiceCatalog(updated, onUpdate); };
+  const remove = (id: string) => { const updated = deleteProduct(store, id, currentUser?.name, currentUser?.role); publishServiceCatalog(updated, onUpdate); setConfirmDeleteId(null); showToast('Service removed'); };
+  const pricingText = (s: Product) => { const pricing = getStoredServicePricing(s); return getServicePricingLabel(pricing).unitLabel; };
   return (
     <div className="px-4 py-4 max-w-lg mx-auto pb-24">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="font-display font-black text-xl text-foreground">Services</h2>
-          <p className="text-xs text-muted-foreground">Set exactly how each service is priced. Customers see the same pricing on your storefront.</p>
-        </div>
-        <button onClick={openNew} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm shrink-0"><Plus className="w-4 h-4" /> Add</button>
-      </div>
-
-      {store.storeType === 'laundry' && (
-        <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-          <div className="flex items-start gap-3"><Scale className="w-5 h-5 text-primary mt-0.5" /><div><p className="font-display font-bold text-sm">Laundry pricing</p><p className="text-xs text-muted-foreground mt-1">You can charge per piece, per KG, per load, or use one fixed price. Each laundry service can have its own price.</p></div></div>
-        </div>
-      )}
-
-      {store.storeType !== 'games' && services.length === 0 && (
-        <div className="text-center py-16 px-4"><p className="text-4xl mb-2">🛠️</p><p className="font-display font-bold text-foreground">No services yet</p><p className="text-sm text-muted-foreground mt-1">Add your first service and choose its pricing method.</p></div>
-      )}
-
-      <div className="space-y-2.5">
-        {services.map(s => {
-          const pricing = getStoredServicePricing(s);
-          const pricingInfo = getServicePricingLabel(pricing);
-          return (
-            <div key={s.id} className={`p-3.5 rounded-2xl border bg-surface-2/40 ${s.discontinued ? 'opacity-50 border-border' : 'border-border'}`}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Tag className="w-4 h-4 text-primary" /></div>
-                <div className="flex-1 min-w-0"><p className="font-display font-semibold text-sm text-foreground truncate">{s.name}</p><div className="flex items-center gap-2 mt-0.5"><span className="text-sm font-display font-bold text-primary">{pricing === 'quote' ? 'Quote' : `₦${Number(s.sellingPrice || 0).toLocaleString()}`}</span><span className="text-[11px] text-muted-foreground">{pricingInfo.unitLabel || pricingInfo.label}</span></div></div>
-                <button onClick={() => toggleEnabled(s)} title={s.discontinued ? 'Enable' : 'Disable'} className="w-8 h-8 flex items-center justify-center text-muted-foreground shrink-0"><Power className="w-4 h-4" /></button>
-                <button onClick={() => openEdit(s)} className="w-8 h-8 flex items-center justify-center text-muted-foreground shrink-0"><Pencil className="w-4 h-4" /></button>
-                <button onClick={() => setConfirmDeleteId(s.id)} className="w-8 h-8 flex items-center justify-center text-muted-foreground shrink-0"><Trash2 className="w-4 h-4" /></button>
-              </div>
-              <div className="flex items-center gap-2 mt-2 ml-13 text-[11px] text-muted-foreground">
-                {s.turnaround && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {s.turnaround}</span>}
-                <span>{pricingInfo.label}</span>
-                {s.discontinued && <span className="font-bold text-destructive uppercase">Disabled</span>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 animate-fade-in" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-sm bg-background rounded-t-2xl sm:rounded-2xl p-5 pb-6 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4"><div><h3 className="font-display font-bold text-base">{editingId ? 'Edit Service' : 'New Service'}</h3><p className="text-xs text-muted-foreground mt-0.5">Customers will see this exactly as configured.</p></div><button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button></div>
-
-            <div className="space-y-3">
-              <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Service Name</label><input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder={store.storeType === 'laundry' ? 'e.g. Shirt Wash' : 'e.g. Haircut'} autoFocus className="w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary" /></div>
-              <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">How should customers be charged?</label><div className="grid grid-cols-2 gap-2">{pricingOptions.map(option => <button key={option.id} type="button" onClick={() => setDraft({ ...draft, pricing: option.id })} className={`p-3 rounded-xl border text-left transition-all ${draft.pricing === option.id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2/40 border-border'}`}><p className="text-xs font-display font-bold">{option.label}</p>{option.unitLabel && <p className="text-[10px] text-muted-foreground mt-0.5">Price shown {option.unitLabel}</p>}</button>)}</div></div>
-              {draft.pricing !== 'quote' && <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Price {getServicePricingLabel(draft.pricing).unitLabel}</label><input value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value.replace(/[^0-9]/g, '') })} placeholder="₦" inputMode="numeric" className="w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary" /></div>}
-              {draft.pricing === 'quote' && <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">Customers will see <b>Get a quote</b> instead of a made-up price. You can agree the price after reviewing the request.</div>}
-              <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Description <span className="font-normal normal-case">(optional)</span></label><textarea value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} placeholder="What does this service include?" rows={3} className="w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2/40 text-sm resize-none focus:outline-none focus:border-primary" /></div>
-              {['laundry','cleaning','car_wash','tailoring','repair'].includes(String(store.storeType)) && <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Turnaround / completion</label><div className="grid grid-cols-3 gap-1.5">{TURNAROUND_OPTIONS.map(t => <button key={t} type="button" onClick={() => setDraft({ ...draft, turnaround: t })} className={`py-2 rounded-lg border text-xs font-display font-semibold ${draft.turnaround === t ? 'bg-primary/10 border-primary text-foreground' : 'bg-surface-2/40 border-border text-muted-foreground'}`}>{t}</button>)}</div></div>}
-            </div>
-
-            <button onClick={save} className="w-full mt-5 py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm">{editingId ? 'Save Changes' : 'Add Service'}</button>
-          </div>
-        </div>
-      )}
-
-      {confirmDeleteId && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in px-5" onClick={() => setConfirmDeleteId(null)}><div className="w-full max-w-sm bg-background rounded-2xl p-5" onClick={e => e.stopPropagation()}><p className="font-display font-bold text-sm text-foreground">Remove this service?</p><p className="text-xs text-muted-foreground mt-1">Customers won't be able to book it anymore.</p><div className="flex gap-3 mt-4"><button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm">Cancel</button><button onClick={() => remove(confirmDeleteId)} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-display font-bold text-sm">Remove</button></div></div></div>}
+      <div className="flex items-center justify-between mb-4"><div><h2 className="font-display font-black text-xl text-foreground">Services</h2><p className="text-xs text-muted-foreground">Configure pricing, availability and how the service is delivered. Customers and Orders use the same configuration.</p></div><button onClick={openNew} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm shrink-0"><Plus className="w-4 h-4" /> Add</button></div>
+      {store.storeType === 'laundry' && <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-start gap-3"><Scale className="w-5 h-5 text-primary mt-0.5" /><div><p className="font-display font-bold text-sm">Laundry pricing</p><p className="text-xs text-muted-foreground mt-1">Charge per piece, per KG, per load, or use a fixed price.</p></div></div></div>}
+      {store.storeType !== 'games' && services.length === 0 && <div className="text-center py-16 px-4"><p className="text-4xl mb-2">🛠️</p><p className="font-display font-bold text-foreground">No services yet</p><p className="text-sm text-muted-foreground mt-1">Add your first service and configure how customers should book or use it.</p></div>}
+      <div className="space-y-2.5">{services.map(s => { const pricing = getStoredServicePricing(s); const pricingInfo = getServicePricingLabel(pricing); const w = (s as any).serviceWorkflow || {}; return <div key={s.id} className={`p-3.5 rounded-2xl border bg-surface-2/40 ${s.discontinued ? 'opacity-50 border-border' : 'border-border'}`}><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">{w.timer ? <Timer className="w-4 h-4 text-primary" /> : <Tag className="w-4 h-4 text-primary" />}</div><div className="flex-1 min-w-0"><p className="font-display font-semibold text-sm text-foreground truncate">{s.name}</p><div className="flex items-center gap-2 mt-0.5"><span className="text-sm font-display font-bold text-primary">{pricing === 'quote' ? 'Quote' : `₦${Number(s.sellingPrice || 0).toLocaleString()}`}</span><span className="text-[11px] text-muted-foreground">{pricingInfo.unitLabel || pricingInfo.label}</span></div></div><button onClick={() => toggleEnabled(s)} title={s.discontinued ? 'Enable' : 'Disable'} className="w-8 h-8 flex items-center justify-center text-muted-foreground shrink-0"><Power className="w-4 h-4" /></button><button onClick={() => openEdit(s)} className="w-8 h-8 flex items-center justify-center text-muted-foreground shrink-0"><Pencil className="w-4 h-4" /></button><button onClick={() => setConfirmDeleteId(s.id)} className="w-8 h-8 flex items-center justify-center text-muted-foreground shrink-0"><Trash2 className="w-4 h-4" /></button></div><div className="flex flex-wrap items-center gap-2 mt-2 ml-13 text-[11px] text-muted-foreground">{w.mode && <span className="flex items-center gap-1">{w.mode === 'session' ? <Play className="w-3 h-3" /> : w.mode === 'appointment' ? <CalendarClock className="w-3 h-3" /> : <Tag className="w-3 h-3" />}{w.mode === 'session' ? `Session${w.durationMinutes ? ` · ${w.durationMinutes} min` : ''}` : w.mode === 'appointment' ? 'Appointment' : 'Job'}</span>}{w.timer && <span className="flex items-center gap-1"><Timer className="w-3 h-3" /> Timer</span>}{w.allowPause && <span className="flex items-center gap-1"><Pause className="w-3 h-3" /> Pause</span>}{s.turnaround && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {s.turnaround}</span>}{s.discontinued && <span className="font-bold text-destructive uppercase">Disabled</span>}</div></div>; })}</div>
+      {showForm && <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 animate-fade-in" onClick={() => setShowForm(false)}><div className="w-full max-w-sm bg-background rounded-t-2xl sm:rounded-2xl p-5 pb-6 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between mb-4"><div><h3 className="font-display font-bold text-base">{editingId ? 'Edit Service' : 'New Service'}</h3><p className="text-xs text-muted-foreground mt-0.5">This configuration controls what customers see and how the merchant handles the request.</p></div><button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button></div>
+        <div className="space-y-3">
+          <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Service Name</label><input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. PlayStation, Haircut, Shirt Wash" autoFocus className="w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary" /></div>
+          <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">How should customers be charged?</label><div className="grid grid-cols-2 gap-2">{pricingOptions.map(option => <button key={option.id} type="button" onClick={() => changePricing(option.id)} className={`p-3 rounded-xl border text-left transition-all ${draft.pricing === option.id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2/40 border-border'}`}><p className="text-xs font-display font-bold">{option.label}</p>{option.unitLabel && <p className="text-[10px] text-muted-foreground mt-0.5">Price shown {option.unitLabel}</p>}</button>)}</div></div>
+          {draft.pricing !== 'quote' && <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Price {getServicePricingLabel(draft.pricing).unitLabel}</label><input value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value.replace(/[^0-9]/g, '') })} placeholder="₦" inputMode="numeric" className="w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2/40 text-sm font-display placeholder:text-muted-foreground focus:outline-none focus:border-primary" /></div>}
+          {draft.pricing === 'quote' && <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">Customers will see <b>Get a quote</b> and the merchant can agree the final price after reviewing the request.</div>}
+          <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Service workflow</label><div className="grid grid-cols-3 gap-2">{([['job','Job'],['session','Session'],['appointment','Appointment']] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setDraft({ ...draft, workflowMode: id, timer: id === 'session' ? true : draft.timer })} className={`p-2.5 rounded-xl border text-left ${draft.workflowMode === id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2/40 border-border'}`}><p className="text-xs font-bold">{label}</p><p className="text-[9px] text-muted-foreground mt-0.5">{id === 'session' ? 'Start a live session' : id === 'appointment' ? 'Scheduled service' : 'Work order'}</p></button>)}</div></div>
+          {draft.workflowMode === 'session' && <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 space-y-3"><div className="flex items-center gap-2"><Timer className="w-4 h-4 text-primary" /><p className="text-xs font-bold">Session controls</p></div><div className="grid grid-cols-2 gap-2"><div className="space-y-1"><label className="text-[10px] uppercase font-bold text-muted-foreground">Duration (minutes)</label><input value={draft.durationMinutes} onChange={e => setDraft({ ...draft, durationMinutes: e.target.value.replace(/[^0-9]/g,'') })} inputMode="numeric" className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm" /></div><div className="flex flex-col justify-end gap-1.5"><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={draft.timer} onChange={e => setDraft({ ...draft, timer: e.target.checked })} /> Live timer</label><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={draft.allowPause} onChange={e => setDraft({ ...draft, allowPause: e.target.checked })} /> Pause / resume</label><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={draft.allowAddTime} onChange={e => setDraft({ ...draft, allowAddTime: e.target.checked })} /> Add time</label></div></div></div>}
+          {draft.workflowMode !== 'session' && <div className="rounded-2xl border border-border bg-surface-2/30 p-3"><label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={draft.requiresStart} onChange={e => setDraft({ ...draft, requiresStart: e.target.checked })} /> Merchant must tap <b>Start</b> before the service is marked complete</label></div>}
+          <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Description <span className="font-normal normal-case">(optional)</span></label><textarea value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} placeholder="What does this service include?" rows={3} className="w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2/40 text-sm resize-none focus:outline-none focus:border-primary" /></div>
+          {['laundry','cleaning','car_wash','tailoring','repair'].includes(String(store.storeType)) && <div className="space-y-1"><label className="block text-[11px] text-muted-foreground uppercase font-bold">Turnaround / completion</label><div className="grid grid-cols-3 gap-1.5">{TURNAROUND_OPTIONS.map(t => <button key={t} type="button" onClick={() => setDraft({ ...draft, turnaround: t })} className={`py-2 rounded-lg border text-xs font-display font-semibold ${draft.turnaround === t ? 'bg-primary/10 border-primary text-foreground' : 'bg-surface-2/40 border-border text-muted-foreground'}`}>{t}</button>)}</div></div>}
+        </div><button onClick={save} className="w-full mt-5 py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm">{editingId ? 'Save Changes' : 'Add Service'}</button></div></div>}
+      {confirmDeleteId && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in px-5" onClick={() => setConfirmDeleteId(null)}><div className="w-full max-w-sm bg-background rounded-2xl p-5" onClick={e => e.stopPropagation()}><p className="font-display font-bold text-sm text-foreground">Remove this service?</p><p className="text-xs text-muted-foreground mt-1">Customers won't be able to use it anymore.</p><div className="flex gap-3 mt-4"><button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border font-display font-semibold text-sm">Cancel</button><button onClick={() => remove(confirmDeleteId)} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-display font-bold text-sm">Remove</button></div></div></div>}
     </div>
   );
 }
