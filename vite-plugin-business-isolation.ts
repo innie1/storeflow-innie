@@ -16,6 +16,7 @@ function patchIndex(source: string): string {
   );
 
   s = s.replace("{store.storeType === 'laundry' ? (", "{isServiceFirst ? (");
+  s = s.replace("{store.category || 'Retail'}", "{businessTemplate.name}");
 
   const oldRestock = `        const withDraft = checkWeeklyRestockDraft(next);\n        if (withDraft) {\n          next = withDraft;\n        }\n`;
   const newRestock = `        if (shouldRunRetailRestockEngine(next)) {\n          const withDraft = checkWeeklyRestockDraft(next);\n          if (withDraft) {\n            next = withDraft;\n          }\n        }\n`;
