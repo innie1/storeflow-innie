@@ -18,18 +18,10 @@ export default function serviceOrdersPlugin(): Plugin {
         if (!next.includes("from '@/components/ServiceOrderControls'")) {
           next = next.replace(importAnchor, `${importAnchor}\nimport ServiceOrderControls from '@/components/ServiceOrderControls';`);
         }
-        if (!next.includes("from '@/components/laundry/LaundryWorkspace'")) {
-          next = next.replace(importAnchor, `${importAnchor}\nimport LaundryWorkspace from '@/components/laundry/LaundryWorkspace';`);
-        }
 
-        // Laundry has its own merchant workspace. Do not render the generic
-        // marketplace Orders screen and try to bolt a recorder into it.
-        const rootAnchor = `  return (\n    <div className="space-y-3.5 pt-1">`;
-        const laundryReturn = `  if (String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry') {\n    return <LaundryWorkspace store={store} orders={orders} onUpdate={onUpdate} />;\n  }\n\n`;
-        if (!next.includes('return <LaundryWorkspace') && next.includes(rootAnchor)) {
-          next = next.replace(rootAnchor, laundryReturn + rootAnchor);
-        }
-
+        // IMPORTANT: Laundry does NOT replace Orders. Orders is the online
+        // customer-app inbox. The physical-store LaundryWorkspace is mounted as
+        // its own tab in Index.tsx below.
         const oldBlock = `                  {/* Actions for Non-Pending active statuses */}\n                  {normStatus !== 'Pending' && normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (\n                    <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border/30">\n                      {(normStatus === 'Accepted' || normStatus === 'Preparing' || normStatus === 'Ready') && (\n                        <button\n                          onClick={() => onUpdateOrderStatus(order.id, 'Cancelled')}\n                          className="px-3 py-1.5 rounded-lg border border-destructive/20 bg-destructive/5 text-destructive text-xs font-semibold hover:bg-destructive/10 transition active:scale-95 cursor-pointer mr-auto"\n                        >\n                          Cancel Order\n                        </button>\n                      )}\n\n                      {normStatus === 'Accepted' && (\n                        <button\n                          onClick={() => onUpdateOrderStatus(order.id, 'Preparing')}\n                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"\n                        >\n                          Start Preparing\n                        </button>\n                      )}\n\n                      {normStatus === 'Preparing' && (\n                        <button\n                          onClick={() => onUpdateOrderStatus(order.id, 'Ready')}\n                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"\n                        >\n                          {meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}\n                        </button>\n                      )}\n\n                      {normStatus === 'Ready' && (\n                        <button\n                          onClick={() => onUpdateOrderStatus(order.id, 'Completed')}\n                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"\n                        >\n                          {meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}\n                        </button>\n                      )}\n                    </div>\n                  )}`;
 
         const newBlock = `                  {/* Service orders use their configured workflow instead of product pickup/preparation states. */}\n                  <ServiceOrderControls\n                    order={order}\n                    store={store}\n                    normStatus={normStatus}\n                    meta={meta}\n                    onUpdateOrderStatus={onUpdateOrderStatus}\n                  />\n\n                  {/* Product-order workflow remains unchanged. */}\n                  {!['service', 'appointment', 'session', 'metered'].includes(String(order.order_kind || '').toLowerCase()) && !((order.order_items || []).some((item: any) => store.products?.some((p: any) => String(p.id) === String(item.product_id) && p.isService))) && normStatus !== 'Pending' && normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (\n                    <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border/30">\n                      {(normStatus === 'Accepted' || normStatus === 'Preparing' || normStatus === 'Ready') && (\n                        <button onClick={() => onUpdateOrderStatus(order.id, 'Cancelled')} className="px-3 py-1.5 rounded-lg border border-destructive/20 bg-destructive/5 text-destructive text-xs font-semibold hover:bg-destructive/10 transition active:scale-95 cursor-pointer mr-auto">Cancel Order</button>\n                      )}\n                      {normStatus === 'Accepted' && (\n                        <button onClick={() => onUpdateOrderStatus(order.id, 'Preparing')} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">Start Preparing</button>\n                      )}\n                      {normStatus === 'Preparing' && (\n                        <button onClick={() => onUpdateOrderStatus(order.id, 'Ready')} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">{meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}</button>\n                      )}\n                      {normStatus === 'Ready' && (\n                        <button onClick={() => onUpdateOrderStatus(order.id, 'Completed')} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">{meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}</button>\n                      )}\n                    </div>\n                  )}`;
@@ -49,11 +41,31 @@ export default function serviceOrdersPlugin(): Plugin {
       }
 
       if (id.endsWith('/src/pages/Index.tsx')) {
-        if (code.includes('storeflow:order-created')) return null;
-        const anchor = `  // Auto-heal / maintain background push notification subscription when store is loaded`;
-        if (!code.includes(anchor)) return null;
-        const listener = `  // Refresh a just-created merchant walk-in order after its child rows are saved.\n  // This avoids the realtime INSERT event racing ahead of order_items creation.\n  useEffect(() => {\n    const handleCreatedOrder = async (event: Event) => {\n      const orderId = (event as CustomEvent).detail?.orderId;\n      if (!orderId) return;\n      const { data, error } = await supabase\n        .from('orders')\n        .select('*, order_items(*)')\n        .eq('id', orderId)\n        .single();\n      if (error || !data) return;\n      const normalized = { ...data, status: getNormalizedStatus(data.status) };\n      setOrders(prev => [normalized, ...prev.filter(order => order.id !== orderId)]);\n    };\n    window.addEventListener('storeflow:order-created', handleCreatedOrder);\n    return () => window.removeEventListener('storeflow:order-created', handleCreatedOrder);\n  }, [getNormalizedStatus]);\n\n`;
-        return { code: code.replace(anchor, listener + anchor), map: null };
+        let next = code;
+
+        // Mount the physical-store laundry workspace beside, not instead of,
+        // the online Orders inbox.
+        const ordersImport = "import Orders from '@/components/Orders';";
+        const laundryImport = "import LaundryWorkspace from '@/components/laundry/LaundryWorkspace';";
+        if (!next.includes(laundryImport)) {
+          next = next.replace(ordersImport, `${ordersImport}\n${laundryImport}`);
+        }
+
+        const ordersSurface = `            <div className={tab === 'orders' ? 'block' : 'hidden'}>\n              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} />\n            </div>`;
+        const separateLaundrySurface = `${ordersSurface}\n            <div className={String(tab) === 'laundry-records' ? 'block' : 'hidden'}>\n              {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (\n                <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} />\n              )}\n            </div>`;
+        if (!next.includes("String(tab) === 'laundry-records'") && next.includes(ordersSurface)) {
+          next = next.replace(ordersSurface, separateLaundrySurface);
+        }
+
+        if (!next.includes('storeflow:order-created')) {
+          const anchor = `  // Auto-heal / maintain background push notification subscription when store is loaded`;
+          if (next.includes(anchor)) {
+            const listener = `  // Refresh a just-created merchant walk-in order after its child rows are saved.\n  // This avoids the realtime INSERT event racing ahead of order_items creation.\n  useEffect(() => {\n    const handleCreatedOrder = async (event: Event) => {\n      const orderId = (event as CustomEvent).detail?.orderId;\n      if (!orderId) return;\n      const { data, error } = await supabase\n        .from('orders')\n        .select('*, order_items(*)')\n        .eq('id', orderId)\n        .single();\n      if (error || !data) return;\n      const normalized = { ...data, status: getNormalizedStatus(data.status) };\n      setOrders(prev => [normalized, ...prev.filter(order => order.id !== orderId)]);\n    };\n    window.addEventListener('storeflow:order-created', handleCreatedOrder);\n    return () => window.removeEventListener('storeflow:order-created', handleCreatedOrder);\n  }, [getNormalizedStatus]);\n\n`;
+            next = next.replace(anchor, listener + anchor);
+          }
+        }
+
+        return next === code ? null : { code: next, map: null };
       }
 
       return null;
