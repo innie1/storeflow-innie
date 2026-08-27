@@ -13,6 +13,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Verify required Vite config
+        shell: bash
+        run: |
+          test -f .env || { echo "Missing .env required by the current Vercel/Vite build"; exit 1; }
+          for key in VITE_SUPABASE_PROJECT_ID VITE_SUPABASE_PUBLISHABLE_KEY VITE_SUPABASE_URL; do
+            value="$(grep -E "^${key}=" .env | head -1 | cut -d= -f2- | tr -d '"' | xargs)"
+            test -n "$value" || { echo "Missing required ${key}"; exit 1; }
+          done
       - run: npm ci
       - run: npm test
       - run: npm run build
