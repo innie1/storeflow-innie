@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { StoreData } from '@/types/store';
-import { supabase } from '@/integrations/supabase/client';
 import { addCustomer } from '@/lib/store-data';
 import { getServicePricingLabel, getStoredServicePricing } from '@/lib/service-pricing';
 import {
@@ -10,6 +9,12 @@ import {
   suggestedLaundryTotal,
   type LaundryGarmentSelection,
 } from '@/lib/laundry-intake';
+import {
+  createLocalLaundryRecord,
+  LAUNDRY_SYNC_CHANGED_EVENT,
+  syncLaundryRecord,
+  type LaundrySyncStatus,
+} from '@/lib/laundry-offline';
 import { showToast } from '@/components/Toast';
 import { Check, ClipboardCopy, Minus, Plus, Shirt, X } from 'lucide-react';
 
@@ -19,11 +24,13 @@ interface Props {
 }
 
 interface CreatedRecord {
+  clientRef: string;
   tagCode: string;
   pieceCount: number;
   customerName: string;
   serviceName: string;
   total: number;
+  syncStatus: LaundrySyncStatus;
 }
 
 const OPEN_SIGNAL = 'storeflow:open-laundry-intake';
@@ -71,6 +78,18 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     const suggested = suggestedLaundryTotal(selectedService, pieceCount, Number(billingQuantity) || 0);
     setTotalPrice(suggested > 0 ? String(suggested) : '');
   }, [selectedService, pieceCount, billingQuantity, priceTouched]);
+
+  useEffect(() => {
+    const handleSync = (event: Event) => {
+      const record = (event as CustomEvent).detail?.record;
+      if (!record?.clientRef) return;
+      setCreated(current => current && current.clientRef === record.clientRef
+        ? { ...current, syncStatus: record.syncStatus }
+        : current);
+    };
+    window.addEventListener(LAUNDRY_SYNC_CHANGED_EVENT, handleSync);
+    return () => window.removeEventListener(LAUNDRY_SYNC_CHANGED_EVENT, handleSync);
+  }, []);
 
   const reset = () => {
     setCustomerName('');
@@ -126,7 +145,6 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   };
 
   const saveIntake = async () => {
-    const storeId = String((store as any).id || '');
     const accessCode = String((store as any).accessCode || '');
     const name = customerName.trim();
     const phone = customerPhone.trim();
@@ -134,7 +152,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     const total = Number(totalPrice);
     const billingQty = Number(billingQuantity) || 0;
 
-    if (!storeId) return showToast('Store is still syncing. Try again in a moment.', 'error');
+    if (!accessCode) return showToast('Store access code is missing', 'error');
     if (!name) return showToast('Enter the customer name', 'error');
     if (!selectedService) return showToast('Add and select a laundry service first', 'error');
     if (clean.length === 0) return showToast('Record at least one item of clothing', 'error');
@@ -143,24 +161,20 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
     setSaving(true);
     try {
-      const garments = clean.map(item => ({ garment_type: item.garmentType, quantity: item.quantity }));
-      const { data, error } = await (supabase as any).rpc('create_laundry_walkin', {
-        p_store_id: storeId,
-        p_access_code: accessCode,
-        p_customer_name: name,
-        p_customer_phone: phone,
-        p_service_id: String(selectedService.id),
-        p_service_name: selectedService.name,
-        p_pricing: pricing,
-        p_billing_quantity: pricing === 'per_kg' || pricing === 'per_load' ? billingQty : 1,
-        p_total: total,
-        p_notes: notes.trim(),
-        p_garments: garments,
+      // LOCAL FIRST: generate the tag and persist the complete job before any
+      // network request. Supabase is only the background mirror.
+      const localRecord = createLocalLaundryRecord({
+        accessCode,
+        customerName: name,
+        customerPhone: phone,
+        serviceId: String(selectedService.id),
+        serviceName: selectedService.name,
+        pricing,
+        billingQuantity: pricing === 'per_kg' || pricing === 'per_load' ? billingQty : 1,
+        total,
+        notes: notes.trim(),
+        garments: clean,
       });
-      if (error) throw error;
-
-      const tagCode = String(data?.tag_code || data?.receipt_number || '');
-      if (!tagCode) throw new Error('Laundry tag was not generated');
 
       if (phone && !customers.some(customer => customer.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''))) {
         try {
@@ -170,12 +184,22 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
         }
       }
 
-      setCreated({ tagCode, pieceCount: Number(data?.piece_count || pieceCount), customerName: name, serviceName: selectedService.name, total });
-      window.dispatchEvent(new CustomEvent('storeflow:order-created', { detail: { orderId: data?.order_id } }));
-      showToast(`Laundry recorded — ${tagCode}`, 'success');
+      setCreated({
+        clientRef: localRecord.clientRef,
+        tagCode: localRecord.tagCode,
+        pieceCount: localRecord.pieceCount,
+        customerName: name,
+        serviceName: selectedService.name,
+        total,
+        syncStatus: 'pending',
+      });
+      showToast(`Laundry saved locally — ${localRecord.tagCode}`, 'success');
+
+      // Fire-and-forget cloud mirror. Failure does NOT undo or block the local record.
+      syncLaundryRecord(accessCode, localRecord.clientRef).catch(() => {});
     } catch (error: any) {
-      console.error('[Laundry Intake] Failed:', error);
-      showToast(error?.message || 'Could not save laundry record', 'error');
+      console.error('[Laundry Intake] Local save failed:', error);
+      showToast(error?.message || 'Could not save laundry record on this device', 'error');
     } finally {
       setSaving(false);
     }
@@ -204,7 +228,20 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
       {open && <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center" onClick={close}>
         <div className="w-full sm:max-w-lg max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-background border border-border p-4 sm:p-5" onClick={event => event.stopPropagation()}>
           {created ? <div className="space-y-5 py-2">
-            <div className="flex justify-between items-start"><div><p className="text-xs text-success font-bold uppercase">Laundry recorded</p><h3 className="font-display font-black text-xl mt-1">Receipt / Tag Code</h3></div><button onClick={close} className="p-2 rounded-xl bg-surface-2"><X className="w-4 h-4" /></button></div>
+            <div className="flex justify-between items-start gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs text-success font-bold uppercase">Laundry recorded</p>
+                  {created.syncStatus === 'synced' ? (
+                    <span className="px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-black">Synced</span>
+                  ) : (
+                    <span className="px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>
+                  )}
+                </div>
+                <h3 className="font-display font-black text-xl mt-1">Receipt / Tag Code</h3>
+              </div>
+              <button onClick={close} className="p-2 rounded-xl bg-surface-2"><X className="w-4 h-4" /></button>
+            </div>
             <div className="rounded-2xl border-2 border-primary/40 bg-primary/5 p-6 text-center">
               <p className="font-mono font-black text-4xl tracking-[0.18em]">{created.tagCode}</p>
               <p className="text-xs text-muted-foreground mt-3">Write this same code on the tags for every cloth in this bundle. Search the same code later to find the receipt.</p>
@@ -216,6 +253,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
               <div className="p-3 rounded-xl bg-surface-2 border border-border"><p className="text-[10px] uppercase text-muted-foreground font-bold">Pieces</p><p className="text-sm font-bold mt-1">{created.pieceCount}</p></div>
               <div className="p-3 rounded-xl bg-surface-2 border border-border"><p className="text-[10px] uppercase text-muted-foreground font-bold">Total</p><p className="text-sm font-bold mt-1">₦{created.total.toLocaleString()}</p></div>
             </div>
+            {created.syncStatus !== 'synced' && <p className="text-[11px] text-primary text-center font-semibold">Safe on this device. StoreFlow will sync it automatically when Supabase is reachable.</p>}
             <button onClick={close} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
           </div> : <div className="space-y-5">
             <div className="flex items-start justify-between"><div><p className="text-xs uppercase text-primary font-black">Physical store</p><h3 className="font-display font-black text-xl mt-0.5">Record Laundry</h3><p className="text-xs text-muted-foreground mt-1">Record the customer, service and clothes brought in.</p></div><button onClick={close} className="p-2 rounded-xl bg-surface-2"><X className="w-4 h-4" /></button></div>
@@ -226,7 +264,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
             </section>
 
             <section className="space-y-2.5 text-left"><p className="text-[11px] uppercase font-black text-muted-foreground">2. Service</p>
-              {services.length === 0 ? <div className="p-4 rounded-xl border border-amber-500/25 bg-amber-500/5 text-xs text-muted-foreground">No laundry service yet. Open Services and add Full Service, Wash Only, Ironing, or another service.</div> : <div className="grid grid-cols-2 gap-2">{services.map(service => { const active = String(service.id) === String(selectedService?.id); return <button key={service.id} type="button" onClick={() => { setSelectedServiceId(String(service.id)); setPriceTouched(false); }} className={`p-3 rounded-xl border text-left ${active ? 'border-primary bg-primary/10' : 'border-border bg-surface-2'}`}><p className="text-xs font-black">{service.name}</p><p className="text-[10px] text-muted-foreground mt-1">₦{Number(service.sellingPrice || 0).toLocaleString()} {getServicePricingLabel(getStoredServicePricing(service)).unitLabel}</p></button>; })}</div>}
+              {services.length === 0 ? <div className="p-4 rounded-xl border border-primary/25 bg-primary/5 text-xs text-muted-foreground">No laundry service yet. Open Services and add Full Service, Wash Only, Ironing, or another service.</div> : <div className="grid grid-cols-2 gap-2">{services.map(service => { const active = String(service.id) === String(selectedService?.id); return <button key={service.id} type="button" onClick={() => { setSelectedServiceId(String(service.id)); setPriceTouched(false); }} className={`p-3 rounded-xl border text-left ${active ? 'border-primary bg-primary/10' : 'border-border bg-surface-2'}`}><p className="text-xs font-black">{service.name}</p><p className="text-[10px] text-muted-foreground mt-1">₦{Number(service.sellingPrice || 0).toLocaleString()} {getServicePricingLabel(getStoredServicePricing(service)).unitLabel}</p></button>; })}</div>}
             </section>
 
             <section className="space-y-2.5 text-left"><div className="flex justify-between"><p className="text-[11px] uppercase font-black text-muted-foreground">3. Clothes</p><p className="text-xs font-black text-primary">{pieceCount} pieces</p></div>
@@ -240,8 +278,8 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
               <textarea value={notes} onChange={event => setNotes(event.target.value)} rows={2} placeholder="Stains, damage, special instructions…" className="w-full p-3 rounded-xl bg-surface-2 border border-border text-sm resize-none" />
             </section>
 
-            <div className="rounded-xl bg-surface-2 border border-border p-3 text-xs text-left"><b>After saving:</b> StoreFlow creates one 6-character code. Write that same code on every tag for this customer bundle.</div>
-            <button onClick={saveIntake} disabled={saving || services.length === 0} className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm disabled:opacity-50">{saving ? 'Recording…' : 'Record Laundry'}</button>
+            <div className="rounded-xl bg-surface-2 border border-border p-3 text-xs text-left space-y-1"><p><b>After saving:</b> StoreFlow creates one 6-character code. Write that same code on every tag for this customer bundle.</p><p className="text-muted-foreground">The record is saved on this device first. Cloud syncing happens automatically in the background.</p></div>
+            <button onClick={saveIntake} disabled={saving || services.length === 0} className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm disabled:opacity-50">{saving ? 'Saving…' : 'Record Laundry'}</button>
           </div>}
         </div>
       </div>}
