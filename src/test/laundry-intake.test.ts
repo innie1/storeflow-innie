@@ -19,21 +19,23 @@ const service = (pricing: string, price: number) => ({
 } as any);
 
 describe('laundry walk-in intake', () => {
-  it('creates a short searchable receipt number with date, time and random suffix', () => {
-    const date = new Date(2026, 7, 27, 14, 5, 0);
-    expect(generateLaundryReceiptNumber(date, () => 0)).toBe('LND-260827-1405-AAAA');
+  it('creates one short six-character handwritten-friendly tag code', () => {
+    const code = generateLaundryReceiptNumber(new Date(2026, 7, 27, 14, 5, 0), () => 0);
+    expect(code).toBe('AAAAAA');
+    expect(code).toHaveLength(6);
+    expect(code).toMatch(/^[A-Z2-9]{6}$/);
   });
 
-  it('expands grouped clothing counts into one unique tag per physical piece', () => {
+  it('uses the same tag code for every physical piece in one customer bundle', () => {
     const selections = [
       { garmentType: 'Shirt', quantity: 2 },
       { garmentType: 'Trouser', quantity: 1 },
     ];
     expect(countLaundryPieces(selections)).toBe(3);
-    expect(expandLaundryGarments('LND-TEST', selections)).toEqual([
-      { garmentType: 'Shirt', tagCode: 'LND-TEST-01', sequence: 1 },
-      { garmentType: 'Shirt', tagCode: 'LND-TEST-02', sequence: 2 },
-      { garmentType: 'Trouser', tagCode: 'LND-TEST-03', sequence: 3 },
+    expect(expandLaundryGarments('K7M2Q9', selections)).toEqual([
+      { garmentType: 'Shirt', tagCode: 'K7M2Q9', sequence: 1 },
+      { garmentType: 'Shirt', tagCode: 'K7M2Q9', sequence: 2 },
+      { garmentType: 'Trouser', tagCode: 'K7M2Q9', sequence: 3 },
     ]);
   });
 
