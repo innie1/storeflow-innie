@@ -8,23 +8,26 @@ import type { Plugin } from 'vite';
 export default function serviceOrdersPlugin(): Plugin {
   return {
     name: 'storeflow-service-orders',
+    // This plugin matches raw TSX anchors. It must run before React/SWC turns
+    // those anchors into generated JavaScript.
+    enforce: 'pre',
     transform(code, id) {
       if (id.endsWith('/src/components/Orders.tsx')) {
         let next = code;
         const importAnchor = "import { subscribeToOrderPush } from '@/lib/push-notifications';";
-        if (!next.includes('ServiceOrderControls')) {
+        if (!next.includes("from '@/components/ServiceOrderControls'")) {
           next = next.replace(importAnchor, `${importAnchor}\nimport ServiceOrderControls from '@/components/ServiceOrderControls';`);
         }
-        if (!next.includes('LaundryWalkInIntake')) {
-          next = next.replace(importAnchor, `${importAnchor}\nimport LaundryWalkInIntake from '@/components/laundry/LaundryWalkInIntake';`);
+        if (!next.includes("from '@/components/laundry/LaundryWorkspace'")) {
+          next = next.replace(importAnchor, `${importAnchor}\nimport LaundryWorkspace from '@/components/laundry/LaundryWorkspace';`);
         }
 
+        // Laundry has its own merchant workspace. Do not render the generic
+        // marketplace Orders screen and try to bolt a recorder into it.
         const rootAnchor = `  return (\n    <div className="space-y-3.5 pt-1">`;
-        if (!next.includes('<LaundryWalkInIntake') && next.includes(rootAnchor)) {
-          next = next.replace(
-            rootAnchor,
-            `${rootAnchor}\n      {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (\n        <LaundryWalkInIntake store={store} onUpdate={onUpdate} />\n      )}`,
-          );
+        const laundryReturn = `  if (String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry') {\n    return <LaundryWorkspace store={store} orders={orders} onUpdate={onUpdate} />;\n  }\n\n`;
+        if (!next.includes('return <LaundryWorkspace') && next.includes(rootAnchor)) {
+          next = next.replace(rootAnchor, laundryReturn + rootAnchor);
         }
 
         const oldBlock = `                  {/* Actions for Non-Pending active statuses */}\n                  {normStatus !== 'Pending' && normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (\n                    <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border/30">\n                      {(normStatus === 'Accepted' || normStatus === 'Preparing' || normStatus === 'Ready') && (\n                        <button\n                          onClick={() => onUpdateOrderStatus(order.id, 'Cancelled')}\n                          className="px-3 py-1.5 rounded-lg border border-destructive/20 bg-destructive/5 text-destructive text-xs font-semibold hover:bg-destructive/10 transition active:scale-95 cursor-pointer mr-auto"\n                        >\n                          Cancel Order\n                        </button>\n                      )}\n\n                      {normStatus === 'Accepted' && (\n                        <button\n                          onClick={() => onUpdateOrderStatus(order.id, 'Preparing')}\n                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"\n                        >\n                          Start Preparing\n                        </button>\n                      )}\n\n                      {normStatus === 'Preparing' && (\n                        <button\n                          onClick={() => onUpdateOrderStatus(order.id, 'Ready')}\n                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"\n                        >\n                          {meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}\n                        </button>\n                      )}\n\n                      {normStatus === 'Ready' && (\n                        <button\n                          onClick={() => onUpdateOrderStatus(order.id, 'Completed')}\n                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"\n                        >\n                          {meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}\n                        </button>\n                      )}\n                    </div>\n                  )}`;
