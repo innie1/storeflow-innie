@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { StoreData } from '@/types/store';
 import LaundryWalkInIntake from '@/components/laundry/LaundryWalkInIntake';
 import {
@@ -8,6 +8,12 @@ import {
   requestLaundryWorkspace,
   type LaundryWorkspaceView,
 } from '@/lib/laundry-workspace';
+import {
+  getLocalLaundryRecords,
+  LAUNDRY_LOCAL_CHANGED_EVENT,
+  LAUNDRY_SYNC_CHANGED_EVENT,
+  mergeLaundryRecords,
+} from '@/lib/laundry-offline';
 import { ClipboardList, Plus, Search, Shirt } from 'lucide-react';
 
 interface Props {
@@ -19,13 +25,24 @@ interface Props {
 export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
   const [view, setView] = useState<LaundryWorkspaceView>(() => consumeLaundryWorkspaceView());
   const [search, setSearch] = useState('');
+  const [localRecords, setLocalRecords] = useState(() => getLocalLaundryRecords(store.accessCode));
+
+  useEffect(() => {
+    const refresh = () => setLocalRecords(getLocalLaundryRecords(store.accessCode));
+    refresh();
+    window.addEventListener(LAUNDRY_LOCAL_CHANGED_EVENT, refresh);
+    window.addEventListener(LAUNDRY_SYNC_CHANGED_EVENT, refresh);
+    return () => {
+      window.removeEventListener(LAUNDRY_LOCAL_CHANGED_EVENT, refresh);
+      window.removeEventListener(LAUNDRY_SYNC_CHANGED_EVENT, refresh);
+    };
+  }, [store.accessCode]);
 
   const laundryRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return [...(orders || [])]
-      .filter(order => !query || getLaundryRecordSearchText(order).includes(query))
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-  }, [orders, search]);
+    return mergeLaundryRecords(orders || [], localRecords)
+      .filter(order => !query || getLaundryRecordSearchText(order).includes(query));
+  }, [orders, localRecords, search]);
 
   const changeView = (next: LaundryWorkspaceView) => {
     requestLaundryWorkspace(next);
@@ -41,7 +58,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
           <p className="text-xs text-muted-foreground mt-1">
             {view === 'record'
               ? 'Record clothes brought physically to the shop and generate one shared 6-character tag.'
-              : 'Find every laundry bundle by tag, customer, service or clothing details.'}
+              : 'Find in-store laundry bundles by tag, customer, service or clothing details.'}
           </p>
         </div>
 
@@ -113,6 +130,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                   .join(', ');
                 const pieceCount = Number(meta.garment_count || 0);
                 const status = String(order.workflow_stage || order.status || 'Received').replace(/_/g, ' ');
+                const synced = order._laundrySyncStatus === 'synced';
 
                 return (
                   <div key={order.id} className="rounded-2xl border border-border bg-card p-4 text-left">
@@ -121,6 +139,11 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono font-black text-xl tracking-[0.12em] text-primary">{tagCode}</span>
                           <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black capitalize">{status}</span>
+                          {synced ? (
+                            <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-black">Synced</span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>
+                          )}
                         </div>
                         <p className="font-display font-black text-sm mt-2">{order.customer_name || 'Walk-in Customer'}</p>
                         {order.customer_phone && <p className="text-xs text-muted-foreground mt-0.5">{order.customer_phone}</p>}
