@@ -20,10 +20,43 @@ type Workflow = {
   durationMinutes?: number;
 };
 
+function findOffering(order: any, store: any) {
+  for (const item of order.order_items || []) {
+    const id = String(item.offering_id || item.product_id || '');
+    const product = store.products?.find((p: any) => String(p.id) === id);
+    if (product) return product;
+    const offering = store.businessTemplate?.offerings?.find((o: any) => String(o.id) === id);
+    if (offering) return offering;
+    const game = store.games?.find((g: any) => String(g.id) === id);
+    if (game) return game;
+  }
+  return null;
+}
+
 function getWorkflow(order: any, store: any): Workflow {
-  const item = (order.order_items || []).find((i: any) => store.products?.find((p: any) => String(p.id) === String(i.product_id) && p.isService));
-  const product = item ? store.products?.find((p: any) => String(p.id) === String(item.product_id)) : null;
-  return product?.serviceWorkflow || {};
+  const offering = findOffering(order, store);
+  if (offering?.serviceWorkflow) return offering.serviceWorkflow;
+
+  if (order.order_kind === 'session') {
+    return {
+      mode: 'session',
+      requiresStart: true,
+      timer: true,
+      allowPause: true,
+      allowAddTime: true,
+      durationMinutes: Number(offering?.durationMinutes || offering?.duration || 60),
+    };
+  }
+  if (order.order_kind === 'appointment') return { mode: 'appointment', requiresStart: true };
+  return { mode: 'job', requiresStart: true };
+}
+
+function isServiceOrder(order: any, store: any): boolean {
+  if (['service', 'appointment', 'session', 'metered', 'mixed'].includes(String(order.order_kind || ''))) return true;
+  if ((order.order_items || []).some((i: any) => i.item_kind && i.item_kind !== 'product')) return true;
+  return (order.order_items || []).some((i: any) =>
+    store.products?.some((p: any) => String(p.id) === String(i.product_id) && p.isService)
+  );
 }
 
 function readSession(meta: any) {
@@ -38,7 +71,7 @@ function readSession(meta: any) {
 
 export default function ServiceOrderControls({ order, store, normStatus, meta, onUpdateOrderStatus }: Props) {
   const workflow = useMemo(() => getWorkflow(order, store), [order, store]);
-  const isService = (order.order_items || []).some((i: any) => store.products?.some((p: any) => String(p.id) === String(i.product_id) && p.isService));
+  const isService = useMemo(() => isServiceOrder(order, store), [order, store]);
   const [now, setNow] = useState(Date.now());
   const session = readSession(meta);
 
