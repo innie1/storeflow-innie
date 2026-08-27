@@ -14,16 +14,25 @@ export default function BusinessSimpleHome({ store, onNavigate }: Props) {
   const customers = store.customers?.length || 0;
   const isAppointment = template.modes.includes('appointments');
   const isSession = template.modes.includes('sessions');
-  const primary = template.labels.primaryAction;
+  const isLaundry = template.type === 'laundry';
+  const primary = isLaundry ? 'Record Laundry' : template.labels.primaryAction;
   const noun = template.labels.offeringNoun;
 
   const candidateActions: { label: string; icon: string; tab: TabId }[] = [
-    { label: primary, icon: '✨', tab: isSession ? 'games-dashboard' : 'orders' },
+    { label: primary, icon: isLaundry ? '🧺' : '✨', tab: isSession ? 'games-dashboard' : 'orders' },
     { label: noun + (noun.endsWith('s') ? '' : 's'), icon: template.icon, tab: 'inventory' },
     { label: isAppointment ? 'Appointments' : isSession ? 'Sessions' : 'Customers', icon: isAppointment ? '📅' : isSession ? '🎮' : '👥', tab: isAppointment ? 'orders' : isSession ? 'games-dashboard' : 'customers' },
-    { label: 'Sales', icon: '💰', tab: 'sales' },
+    ...(isLaundry ? [{ label: 'Laundry Records', icon: '🧾', tab: 'orders' as TabId }] : [{ label: 'Sales', icon: '💰', tab: 'sales' as TabId }]),
   ];
   const actions = candidateActions.filter(action => isBusinessTabAllowed(store, action.tab));
+
+  const navigate = (action: { label: string; tab: TabId }) => {
+    if (isLaundry && action.label === 'Record Laundry') {
+      sessionStorage.setItem('storeflow-open-laundry-intake', '1');
+      window.dispatchEvent(new Event('storeflow:open-laundry-intake'));
+    }
+    onNavigate(action.tab);
+  };
 
   return (
     <div className="animate-fade-in max-w-lg mx-auto space-y-4">
@@ -58,7 +67,7 @@ export default function BusinessSimpleHome({ store, onNavigate }: Props) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           {actions.map(action => (
-            <button key={`${action.tab}-${action.label}`} onClick={() => onNavigate(action.tab)} className="min-h-24 rounded-2xl bg-surface-2/50 border border-border p-3 text-left hover:border-primary/30 active:scale-[.99] transition-all">
+            <button key={`${action.tab}-${action.label}`} onClick={() => navigate(action)} className="min-h-24 rounded-2xl bg-surface-2/50 border border-border p-3 text-left hover:border-primary/30 active:scale-[.99] transition-all">
               <span className="text-2xl">{action.icon}</span>
               <p className="font-display font-bold text-sm mt-2">{action.label}</p>
             </button>
