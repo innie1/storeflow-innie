@@ -1,14 +1,14 @@
-import { StoreData } from '@/types/store';
-import { getBusinessTemplate } from '@/lib/business-templates';
+import { StoreData, TabId } from '@/types/store';
+import { getBusinessTemplate, isBusinessTabAllowed } from '@/lib/business-runtime';
 import { CalendarClock, ClipboardList, DollarSign, Package, Settings2, Sparkles, Users } from 'lucide-react';
 
 interface Props {
   store: StoreData;
-  onNavigate: (tab: any) => void;
+  onNavigate: (tab: TabId) => void;
 }
 
 export default function BusinessSimpleHome({ store, onNavigate }: Props) {
-  const template = getBusinessTemplate((store as any).businessType || store.storeType);
+  const template = getBusinessTemplate(store);
   const today = new Date().toISOString().split('T')[0];
   const todayRevenue = (store.sales || []).filter(s => s.date.startsWith(today)).reduce((sum, s) => sum + s.total, 0);
   const customers = store.customers?.length || 0;
@@ -17,12 +17,13 @@ export default function BusinessSimpleHome({ store, onNavigate }: Props) {
   const primary = template.labels.primaryAction;
   const noun = template.labels.offeringNoun;
 
-  const actions = [
-    { label: primary, icon: '✨', tab: 'orders' },
-    { label: noun + (noun.endsWith('s') ? '' : 's'), icon: template.icon, tab: template.modes.includes('services') ? 'inventory' : 'inventory' },
+  const candidateActions: { label: string; icon: string; tab: TabId }[] = [
+    { label: primary, icon: '✨', tab: isSession ? 'games-dashboard' : 'orders' },
+    { label: noun + (noun.endsWith('s') ? '' : 's'), icon: template.icon, tab: 'inventory' },
     { label: isAppointment ? 'Appointments' : isSession ? 'Sessions' : 'Customers', icon: isAppointment ? '📅' : isSession ? '🎮' : '👥', tab: isAppointment ? 'orders' : isSession ? 'games-dashboard' : 'customers' },
     { label: 'Sales', icon: '💰', tab: 'sales' },
   ];
+  const actions = candidateActions.filter(action => isBusinessTabAllowed(store, action.tab));
 
   return (
     <div className="animate-fade-in max-w-lg mx-auto space-y-4">
@@ -57,7 +58,7 @@ export default function BusinessSimpleHome({ store, onNavigate }: Props) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           {actions.map(action => (
-            <button key={action.label} onClick={() => onNavigate(action.tab)} className="min-h-24 rounded-2xl bg-surface-2/50 border border-border p-3 text-left hover:border-primary/30 active:scale-[.99] transition-all">
+            <button key={`${action.tab}-${action.label}`} onClick={() => onNavigate(action.tab)} className="min-h-24 rounded-2xl bg-surface-2/50 border border-border p-3 text-left hover:border-primary/30 active:scale-[.99] transition-all">
               <span className="text-2xl">{action.icon}</span>
               <p className="font-display font-bold text-sm mt-2">{action.label}</p>
             </button>
@@ -66,8 +67,8 @@ export default function BusinessSimpleHome({ store, onNavigate }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => onNavigate('orders')} className="rounded-xl bg-primary text-primary-foreground p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><ClipboardList className="w-4 h-4" /> Orders</button>
-        <button onClick={() => onNavigate('inventory')} className="rounded-xl bg-card border border-border p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><Package className="w-4 h-4" /> {template.modes.includes('services') ? 'Services' : 'Inventory'}</button>
+        {isBusinessTabAllowed(store, 'orders') && <button onClick={() => onNavigate('orders')} className="rounded-xl bg-primary text-primary-foreground p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><ClipboardList className="w-4 h-4" /> {template.labels.orderNoun}s</button>}
+        {isBusinessTabAllowed(store, 'inventory') && <button onClick={() => onNavigate('inventory')} className="rounded-xl bg-card border border-border p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><Package className="w-4 h-4" /> {template.modes.includes('services') && !template.modules.includes('inventory') ? 'Services' : 'Inventory'}</button>}
       </div>
       {isAppointment && <div className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Appointments can be managed from Orders.</div>}
     </div>
