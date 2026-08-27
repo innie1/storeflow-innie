@@ -2,6 +2,7 @@ export type LaundryWorkspaceView = 'record' | 'records';
 
 export const LAUNDRY_WORKSPACE_VIEW_STORAGE = 'storeflow-laundry-workspace-view';
 export const LAUNDRY_INTAKE_OPEN_STORAGE = 'storeflow-open-laundry-intake';
+export const LAUNDRY_INTAKE_OPEN_SIGNAL = 'storeflow:open-laundry-intake';
 
 export function getLaundryActionView(label: string): LaundryWorkspaceView | null {
   if (label === 'Record Laundry') return 'record';
@@ -17,7 +18,11 @@ export function requestLaundryWorkspace(view: LaundryWorkspaceView): void {
   if (typeof window === 'undefined') return;
   window.sessionStorage.setItem(LAUNDRY_WORKSPACE_VIEW_STORAGE, view);
   if (view === 'record') {
+    // Persist the intent so a newly mounted intake can consume it, and also
+    // broadcast immediately so an intake that is already mounted opens too.
+    // This makes every Record Laundry control behave identically.
     window.sessionStorage.setItem(LAUNDRY_INTAKE_OPEN_STORAGE, '1');
+    window.dispatchEvent(new CustomEvent(LAUNDRY_INTAKE_OPEN_SIGNAL));
   } else {
     window.sessionStorage.removeItem(LAUNDRY_INTAKE_OPEN_STORAGE);
   }
