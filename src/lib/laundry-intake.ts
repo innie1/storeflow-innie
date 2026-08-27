@@ -39,26 +39,22 @@ export interface LaundryOrderItemDraft {
   metadata: Record<string, unknown>;
 }
 
-function pad2(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
 function randomCode(random: () => number): string {
+  // Avoid characters that are easy to confuse when handwritten on a cloth tag.
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let output = '';
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 6; i += 1) {
     output += alphabet[Math.floor(random() * alphabet.length) % alphabet.length];
   }
   return output;
 }
 
-export function generateLaundryReceiptNumber(date = new Date(), random: () => number = Math.random): string {
-  const yy = String(date.getFullYear()).slice(-2);
-  const mm = pad2(date.getMonth() + 1);
-  const dd = pad2(date.getDate());
-  const hh = pad2(date.getHours());
-  const min = pad2(date.getMinutes());
-  return `LND-${yy}${mm}${dd}-${hh}${min}-${randomCode(random)}`;
+/**
+ * The receipt number is also the physical laundry tag code.
+ * It is intentionally only six handwritten-friendly characters, e.g. K7M2Q9.
+ */
+export function generateLaundryReceiptNumber(_date = new Date(), random: () => number = Math.random): string {
+  return randomCode(random);
 }
 
 export function sanitizeGarmentSelections(selections: LaundryGarmentSelection[]): LaundryGarmentSelection[] {
@@ -71,16 +67,13 @@ export function countLaundryPieces(selections: LaundryGarmentSelection[]): numbe
   return sanitizeGarmentSelections(selections).reduce((sum, item) => sum + item.quantity, 0);
 }
 
+/** Every garment in one intake shares the same tag code. */
 export function expandLaundryGarments(receiptNumber: string, selections: LaundryGarmentSelection[]): ExpandedLaundryGarment[] {
   const expanded: ExpandedLaundryGarment[] = [];
   let sequence = 1;
   for (const item of sanitizeGarmentSelections(selections)) {
     for (let i = 0; i < item.quantity; i += 1) {
-      expanded.push({
-        garmentType: item.garmentType,
-        tagCode: `${receiptNumber}-${String(sequence).padStart(2, '0')}`,
-        sequence,
-      });
+      expanded.push({ garmentType: item.garmentType, tagCode: receiptNumber, sequence });
       sequence += 1;
     }
   }
@@ -100,10 +93,8 @@ function slug(value: string): string {
 }
 
 /**
- * Build the existing order_items rows for a physical laundry intake.
- * Per-piece pricing is attached directly to each garment group. For KG/load/fixed
- * pricing, garments remain visible as zero-price identification lines and a single
- * service-charge line carries the agreed total.
+ * Build order_items for a physical laundry intake while keeping the agreed
+ * receipt total exact even when staff override the configured catalogue price.
  */
 export function buildLaundryOrderItems(
   service: Product,
