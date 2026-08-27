@@ -116,10 +116,15 @@ export function buildLaundryOrderItems(
   const serviceId = String(service.id);
   const serviceName = service.name;
   const rows: LaundryOrderItemDraft[] = [];
+  const total = Math.max(0, Number(agreedTotal) || 0);
 
   if (pricing === 'per_piece') {
-    const unitPrice = Math.max(0, Number(service.sellingPrice) || 0);
-    for (const item of clean) {
+    const pieceCount = clean.reduce((sum, item) => sum + item.quantity, 0);
+    const unitPrice = pieceCount > 0 ? total / pieceCount : 0;
+    let allocated = 0;
+    clean.forEach((item, index) => {
+      const subtotal = index === clean.length - 1 ? total - allocated : unitPrice * item.quantity;
+      allocated += subtotal;
       rows.push({
         product_id: `walkin:${serviceId}:${slug(item.garmentType)}`,
         offering_id: serviceId,
@@ -127,12 +132,12 @@ export function buildLaundryOrderItems(
         item_name: item.garmentType,
         unit: 'pcs',
         quantity: item.quantity,
-        price: unitPrice,
-        subtotal: unitPrice * item.quantity,
+        price: item.quantity > 0 ? subtotal / item.quantity : 0,
+        subtotal,
         options: { service_name: serviceName, pricing },
         metadata: { source: 'walk_in_laundry' },
       });
-    }
+    });
     return rows;
   }
 
@@ -151,7 +156,6 @@ export function buildLaundryOrderItems(
     });
   }
 
-  const total = Math.max(0, Number(agreedTotal) || 0);
   rows.push({
     product_id: `walkin:${serviceId}:service-charge`,
     offering_id: serviceId,
