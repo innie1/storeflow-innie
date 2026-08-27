@@ -18,6 +18,9 @@ export const DEFAULT_LAUNDRY_GARMENTS = [
 export interface LaundryGarmentSelection {
   garmentType: string;
   quantity: number;
+  /** Price copied at intake time so later price-list edits never change old receipts. */
+  unitPrice?: number;
+  subtotal?: number;
 }
 
 export interface ExpandedLaundryGarment {
@@ -59,7 +62,13 @@ export function generateLaundryReceiptNumber(_date = new Date(), random: () => n
 
 export function sanitizeGarmentSelections(selections: LaundryGarmentSelection[]): LaundryGarmentSelection[] {
   return selections
-    .map(item => ({ garmentType: item.garmentType.trim(), quantity: Math.max(0, Math.floor(Number(item.quantity) || 0)) }))
+    .map(item => {
+      const quantity = Math.max(0, Math.floor(Number(item.quantity) || 0));
+      const unitPrice = Number(item.unitPrice);
+      const explicitPrice = Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : undefined;
+      const subtotal = explicitPrice === undefined ? undefined : explicitPrice * quantity;
+      return { garmentType: item.garmentType.trim(), quantity, unitPrice: explicitPrice, subtotal };
+    })
     .filter(item => item.garmentType && item.quantity > 0);
 }
 
@@ -93,8 +102,9 @@ function slug(value: string): string {
 }
 
 /**
- * Build order_items for a physical laundry intake while keeping the agreed
- * receipt total exact even when staff override the configured catalogue price.
+ * Build order_items for a physical laundry intake while keeping garment price
+ * snapshots when present. Legacy callers without snapshots still allocate the
+ * agreed total evenly, preserving backwards compatibility.
  */
 export function buildLaundryOrderItems(
   service: Product,
@@ -110,6 +120,27 @@ export function buildLaundryOrderItems(
   const total = Math.max(0, Number(agreedTotal) || 0);
 
   if (pricing === 'per_piece') {
+    const hasSnapshots = clean.every(item => Number.isFinite(Number(item.unitPrice)));
+    if (hasSnapshots) {
+      clean.forEach(item => {
+        const unitPrice = Math.max(0, Number(item.unitPrice) || 0);
+        const subtotal = unitPrice * item.quantity;
+        rows.push({
+          product_id: `walkin:${serviceId}:${slug(item.garmentType)}`,
+          offering_id: serviceId,
+          item_kind: 'service',
+          item_name: item.garmentType,
+          unit: 'pcs',
+          quantity: item.quantity,
+          price: unitPrice,
+          subtotal,
+          options: { service_name: serviceName, pricing },
+          metadata: { source: 'walk_in_laundry', garment_price_snapshot: true },
+        });
+      });
+      return rows;
+    }
+
     const pieceCount = clean.reduce((sum, item) => sum + item.quantity, 0);
     const unitPrice = pieceCount > 0 ? total / pieceCount : 0;
     let allocated = 0;
