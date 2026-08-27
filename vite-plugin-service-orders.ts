@@ -47,14 +47,26 @@ export default function serviceOrdersPlugin(): Plugin {
         // the online Orders inbox.
         const ordersImport = "import Orders from '@/components/Orders';";
         const laundryImport = "import LaundryWorkspace from '@/components/laundry/LaundryWorkspace';";
+        const syncImport = "import LaundrySyncAgent from '@/components/laundry/LaundrySyncAgent';";
         if (!next.includes(laundryImport)) {
           next = next.replace(ordersImport, `${ordersImport}\n${laundryImport}`);
+        }
+        if (!next.includes(syncImport)) {
+          next = next.replace(laundryImport, `${laundryImport}\n${syncImport}`);
         }
 
         const ordersSurface = `            <div className={tab === 'orders' ? 'block' : 'hidden'}>\n              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} />\n            </div>`;
         const separateLaundrySurface = `${ordersSurface}\n            <div className={String(tab) === 'laundry-records' ? 'block' : 'hidden'}>\n              {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (\n                <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} />\n              )}\n            </div>`;
         if (!next.includes("String(tab) === 'laundry-records'") && next.includes(ordersSurface)) {
           next = next.replace(ordersSurface, separateLaundrySurface);
+        }
+
+        // Keep pending local laundry records syncing regardless of which page
+        // the merchant is currently viewing.
+        const footerAnchor = `      <ToastContainer />\n      <InstallPrompt />`;
+        const footerWithSync = `      {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && <LaundrySyncAgent store={store} />}\n      <ToastContainer />\n      <InstallPrompt />`;
+        if (!next.includes('<LaundrySyncAgent store={store} />') && next.includes(footerAnchor)) {
+          next = next.replace(footerAnchor, footerWithSync);
         }
 
         if (!next.includes('storeflow:order-created')) {
