@@ -83,4 +83,17 @@ describe('laundry workspace routing', () => {
     expect(code).not.toContain("if (t.id === 'orders' && businessType === 'laundry') return { ...t, label: 'Laundry Records'");
     expect(code).toContain("case 'laundry-records':");
   });
+
+  it('routes only laundry Services to the garment-by-service price list', () => {
+    const plugin = businessIsolationPlugin();
+    const fixture = `import { Plus, Pencil, Trash2, X, Clock, Power, Scale, Tag, Play, Timer, Pause, CalendarClock } from 'lucide-react';\ninterface ServicesProps { store: any; onUpdate: any; currentUser?: any; }\nexport default function Services({ store, onUpdate, currentUser }: ServicesProps) {\n  return <div>Generic service editor</div>;\n}`;
+    const transform = plugin.transform as any;
+    const result = transform(fixture, '/repo/src/components/Services.tsx');
+    const code = result?.code || fixture;
+
+    expect(code).toContain("import LaundryPricingSetup from '@/components/laundry/LaundryPricingSetup';");
+    expect(code).toContain("=== 'laundry'");
+    expect(code).toContain('<LaundryPricingSetup store={store} onUpdate={onUpdate} currentUser={currentUser} />');
+    expect(code).toContain('Generic service editor');
+  });
 });
