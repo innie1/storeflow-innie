@@ -21,6 +21,7 @@ function shouldLogStorefrontScan(storeKey: string): boolean {
 function storefrontRowToStoreData(row: any): StoreData | null {
   if (!row || !row.data) return null;
   const data = row.data as StoreData;
+  const legacyBusinessType = (data as any).businessType;
   const accessCode = data.accessCode || row.access_code;
   if (!accessCode) return null;
 
@@ -30,8 +31,8 @@ function storefrontRowToStoreData(row: any): StoreData | null {
     storeId: row.store_id || data.storeId,
     storeName: data.storeName || row.business_name || 'Store',
     accessCode,
-    storeType: (data.storeType || data.businessType || 'other') as any,
-    businessType: (data.businessType || data.storeType || 'other') as any,
+    storeType: (data.storeType || legacyBusinessType || 'other') as any,
+    businessType: (legacyBusinessType || data.storeType || 'other') as any,
     profile: {
       ...(data.profile || ({} as any)),
       phone: data.profile?.phone || row.phone || '',
