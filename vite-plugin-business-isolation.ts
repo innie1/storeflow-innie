@@ -7,8 +7,16 @@ function patchIndex(source: string): string {
   if (!s.includes(importLine)) s = s.replace(importAnchor, importAnchor + importLine);
 
   const oldBusinessBlock = `  const isGames = store?.category === 'games';\n  const isLaundry = store?.storeType === 'laundry';\n\n  const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;\n\n  const mainTabs = isGames\n    ? GAMES_MAIN_TABS\n    : isLaundry\n    ? RETAIL_MAIN_TABS.map(t => (t.id === 'inventory' ? { ...t, label: 'Services', icon: '🧺' } : t))\n    : RETAIL_MAIN_TABS;\n  const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;\n`;
-  const newBusinessBlock = `  const businessTemplate = getBusinessTemplate(store);\n  const businessType = resolveBusinessType(store);\n  const isGames = businessType === 'games';\n  const isServiceFirst = isServiceFirstBusiness(store);\n\n  const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;\n\n  const mainTabs = isGames\n    ? GAMES_MAIN_TABS\n    : RETAIL_MAIN_TABS\n        .filter(t => isBusinessTabAllowed(store, t.id))\n        .map(t => {\n          if (t.id === 'orders' && businessType === 'laundry') return { ...t, label: 'Laundry Records', icon: '🧾' };\n          if (t.id === 'inventory' && isServiceFirst) return { ...t, label: 'Services', icon: businessTemplate.icon };\n          return t;\n        });\n  const moreItems = (isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS)\n    .filter(t => isBusinessTabAllowed(store, t.id));\n`;
+  const newBusinessBlock = `  const businessTemplate = getBusinessTemplate(store);\n  const businessType = resolveBusinessType(store);\n  const isGames = businessType === 'games';\n  const isServiceFirst = isServiceFirstBusiness(store);\n\n  const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;\n\n  const mainTabs = isGames\n    ? GAMES_MAIN_TABS\n    : RETAIL_MAIN_TABS\n        .filter(t => isBusinessTabAllowed(store, t.id))\n        .flatMap(t => {\n          const mapped = t.id === 'inventory' && isServiceFirst\n            ? { ...t, label: 'Services', icon: businessTemplate.icon }\n            : t;\n          // Laundry needs BOTH surfaces: Orders is the online customer-app inbox,\n          // while Laundry Records is the physical counter/intake workspace.\n          if (businessType === 'laundry' && t.id === 'orders') {\n            return [mapped, { id: 'laundry-records' as TabId, label: 'Laundry Records', icon: '🧾' }];\n          }\n          return [mapped];\n        });\n  const moreItems = (isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS)\n    .filter(t => isBusinessTabAllowed(store, t.id));\n`;
   s = s.replace(oldBusinessBlock, newBusinessBlock);
+
+  // Give the dedicated laundry records tab a normal sidebar icon even though
+  // it is an incremental compatibility tab and not yet part of the legacy TabId union.
+  const orderIconBlock = `    case 'orders':\n      return <ShoppingCart className={className} />;`;
+  const laundryIconBlock = `${orderIconBlock}\n    case 'laundry-records':\n      return <Receipt className={className} />;`;
+  if (!s.includes("case 'laundry-records':") && s.includes(orderIconBlock)) {
+    s = s.replace(orderIconBlock, laundryIconBlock);
+  }
 
   s = s.replace(
     "const allowedSubs = cat.subItems.filter(sub => isTabAllowed(sub.tabId, currentUser));",
