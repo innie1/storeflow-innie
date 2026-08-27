@@ -10,6 +10,27 @@ const CATEGORY_FALLBACKS: Record<string, CanonicalBusinessType> = {
   other: 'other',
 };
 
+const TYPE_ALIASES: Record<string, CanonicalBusinessType> = {
+  retail: 'provision',
+  provision: 'provision',
+  provisions: 'provision',
+  supermarket: 'provision',
+  mini_mart: 'provision',
+  minimart: 'provision',
+  grocery: 'provision',
+  gaming: 'games',
+  gaming_centre: 'games',
+  gaming_center: 'games',
+  dry_cleaning: 'laundry',
+  drycleaning: 'laundry',
+  chemist: 'pharmacy',
+  beauty: 'salon',
+  tailor: 'tailoring',
+  cybercafe: 'cyber_cafe',
+  carwash: 'car_wash',
+  cleaning_service: 'cleaning',
+};
+
 const TAB_REQUIREMENTS: Partial<Record<TabId, BusinessModule[]>> = {
   orders: ['orders'],
   sales: ['sales'],
@@ -25,9 +46,22 @@ const TAB_REQUIREMENTS: Partial<Record<TabId, BusinessModule[]>> = {
   history: ['reports'],
 };
 
+function normalizeType(value?: string | null): CanonicalBusinessType | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (normalized in BUSINESS_TEMPLATES) return normalized as CanonicalBusinessType;
+  return TYPE_ALIASES[normalized] || null;
+}
+
 export function resolveBusinessType(store?: Partial<StoreData> | null): CanonicalBusinessType {
-  const requested = store?.storeType as string | undefined;
-  if (requested && requested in BUSINESS_TEMPLATES) return requested as CanonicalBusinessType;
+  // businessType is the cloud-backed canonical field. storeType remains a
+  // compatibility mirror for existing local backups and older installations.
+  const canonical = normalizeType((store as any)?.businessType as string | undefined);
+  if (canonical) return canonical;
+
+  const requested = normalizeType(store?.storeType as string | undefined);
+  if (requested) return requested;
+
   const category = store?.category as string | undefined;
   if (category && CATEGORY_FALLBACKS[category]) return CATEGORY_FALLBACKS[category];
   return 'other';
@@ -77,9 +111,9 @@ export function getOrderProgressText(store: Partial<StoreData> | null | undefine
   const normalized = status.trim().toLowerCase();
   if (normalized === 'ready') return `your ${template.labels.orderNoun.toLowerCase()} from ${name} is ready! 🎉`;
   if (normalized === 'completed' || normalized === 'collected') return `your ${template.labels.orderNoun.toLowerCase()} from ${name} has been completed. ✅ Thank you for your patronage!`;
-  if (normalized === 'preparing') {
+  if (normalized === 'preparing' || normalized === 'in progress' || normalized === 'in_service') {
     if (resolveBusinessType(store) === 'laundry') return `your laundry order from ${name} is being processed. 🧺`;
-    if (template.modes.includes('services')) return `your ${template.labels.orderNoun.toLowerCase()} from ${name} is being worked on.`;
+    if (template.modes.includes('services') || template.modes.includes('sessions') || template.modes.includes('appointments')) return `your ${template.labels.orderNoun.toLowerCase()} from ${name} is in progress.`;
     return `your ${template.labels.orderNoun.toLowerCase()} from ${name} is being prepared.`;
   }
   if (normalized === 'accepted') return `your ${template.labels.orderNoun.toLowerCase()} from ${name} has been accepted and is being processed. 👍`;
