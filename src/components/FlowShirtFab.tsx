@@ -90,7 +90,7 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
           initialQuantity: item.quantity,
           category: store.storeType || 'others',
           addedAt: new Date().toISOString(),
-          source: 'flow_shirt',
+          source: 'voice_sale',
           needsStockSetup: true,
         };
         updated = { ...updated, products: [...updated.products, newProduct] };
@@ -145,7 +145,7 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
       initialQuantity: Math.max(0, quantity || 0),
       category: store.storeType || 'others',
       addedAt: new Date().toISOString(),
-      source: 'flow_shirt',
+      source: 'voice_sale',
       needsStockSetup: !costPrice,
     };
     const updated = { ...store, products: [...store.products, newProduct] } as StoreData;
