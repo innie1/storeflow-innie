@@ -10,10 +10,10 @@ interface BusinessOwnerDashboardProps {
 
 const quickActions: Record<string, { label: string; tab: string; icon: string }[]> = {
   laundry: [
-    { label: 'New Laundry Order', tab: 'orders', icon: '🧺' },
+    { label: 'Record Laundry', tab: 'orders', icon: '🧺' },
     { label: 'Services', tab: 'inventory', icon: '👕' },
     { label: 'Customers', tab: 'customers', icon: '👥' },
-    { label: 'Sales', tab: 'sales', icon: '💰' },
+    { label: 'Laundry Records', tab: 'orders', icon: '🧾' },
   ],
   gas_filling: [
     { label: 'New Gas Sale', tab: 'sales', icon: '⛽' },
@@ -56,6 +56,14 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
     { label: 'Sales', tab: 'sales', icon: '💰' },
     { label: 'Customers', tab: 'customers', icon: '👥' },
   ];
+
+  const handleQuickAction = (action: { label: string; tab: string }) => {
+    if (store.storeType === 'laundry' && action.label === 'Record Laundry') {
+      sessionStorage.setItem('storeflow-open-laundry-intake', '1');
+      window.dispatchEvent(new Event('storeflow:open-laundry-intake'));
+    }
+    onNavigate(action.tab);
+  };
 
   if (showAnalysis) return <BusinessAnalytics store={store} onBack={() => setShowAnalysis(false)} />;
 
@@ -127,7 +135,7 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
         </div>
         <div className="grid grid-cols-2 gap-2">
           {actions.map(action => (
-            <button key={action.label} onClick={() => onNavigate(action.tab)} className="rounded-2xl border border-border bg-card p-4 text-left hover:border-primary/50 active:scale-[0.99] transition-all">
+            <button key={action.label} onClick={() => handleQuickAction(action)} className="rounded-2xl border border-border bg-card p-4 text-left hover:border-primary/50 active:scale-[0.99] transition-all">
               <div className="text-2xl">{action.icon}</div>
               <div className="font-display font-bold text-sm mt-2">{action.label}</div>
             </button>
