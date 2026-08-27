@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StoreData } from '@/types/store';
 import { getBusinessTemplate } from '@/lib/business-templates';
+import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
 import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
 
 interface BusinessOwnerDashboardProps {
@@ -58,9 +59,9 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
   ];
 
   const handleQuickAction = (action: { label: string; tab: string }) => {
-    if (store.storeType === 'laundry' && action.label === 'Record Laundry') {
-      sessionStorage.setItem('storeflow-open-laundry-intake', '1');
-      window.dispatchEvent(new Event('storeflow:open-laundry-intake'));
+    if (store.storeType === 'laundry') {
+      const laundryView = getLaundryActionView(action.label);
+      if (laundryView) requestLaundryWorkspace(laundryView);
     }
     onNavigate(action.tab);
   };
