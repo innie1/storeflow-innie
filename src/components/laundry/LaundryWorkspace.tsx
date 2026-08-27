@@ -12,7 +12,10 @@ import {
   getLocalLaundryRecords,
   LAUNDRY_LOCAL_CHANGED_EVENT,
   LAUNDRY_SYNC_CHANGED_EVENT,
+  LAUNDRY_WORKFLOW_STAGES,
   mergeLaundryRecords,
+  updateLaundryOrderStage,
+  type LaundryWorkflowStage,
 } from '@/lib/laundry-offline';
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
@@ -28,6 +31,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
   const [view, setView] = useState<LaundryWorkspaceView>(() => consumeLaundryWorkspaceView());
   const [search, setSearch] = useState('');
   const [localRecords, setLocalRecords] = useState(() => getLocalLaundryRecords(store.accessCode));
+  const [stageBusy, setStageBusy] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = () => setLocalRecords(getLocalLaundryRecords(store.accessCode));
@@ -53,6 +57,21 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
 
   const sendWhatsApp = (order: any) => {
     if (!openLaundryWhatsApp(store, order)) showToast('This laundry record does not have a valid phone number', 'error');
+  };
+
+  const changeStage = async (order: any, stage: LaundryWorkflowStage) => {
+    const key = String(order._localClientRef || order.client_ref || order.id || '');
+    setStageBusy(key);
+    try {
+      const accepted = await updateLaundryOrderStage(store.accessCode, order, stage);
+      if (!accepted) {
+        showToast('Could not update this laundry stage. Check your connection and try again.', 'error');
+        return;
+      }
+      showToast(`Laundry marked ${LAUNDRY_WORKFLOW_STAGES.find(item => item.id === stage)?.label || stage}`);
+    } finally {
+      setStageBusy(null);
+    }
   };
 
   return (
@@ -113,9 +132,11 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                   .map((item: any) => `${Number(item.quantity || 0)} ${item.item_name || 'item'}`)
                   .join(', ');
                 const pieceCount = Number(meta.garment_count || 0) || (order.order_items || []).filter((item: any) => !item?.metadata?.charge_line).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+                const currentStage = String(order.workflow_stage || 'received').toLowerCase() as LaundryWorkflowStage;
                 const status = String(order.workflow_stage || order.status || 'Received').replace(/_/g, ' ');
                 const synced = order._laundrySyncStatus === 'synced';
                 const whatsapp = buildLaundryWhatsAppPayload(store, order);
+                const recordKey = String(order._localClientRef || order.client_ref || order.id || '');
 
                 return (
                   <div key={order.id} className="rounded-2xl border border-border bg-card p-4 text-left">
@@ -133,16 +154,30 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
-                      <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Service</p><p className="text-xs font-bold mt-1">{serviceName}</p></div>
+                      <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Treatment</p><p className="text-xs font-bold mt-1">{serviceName}</p></div>
                       <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Pieces</p><p className="text-xs font-bold mt-1">{pieceCount || '—'}</p></div>
                       <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Clothes</p><p className="text-xs font-bold mt-1 break-words">{garmentSummary || 'Not listed'}</p></div>
                     </div>
 
-                    {whatsapp && (
-                      <button onClick={() => sendWhatsApp(order)} className="mt-3 w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-display font-black flex items-center justify-center gap-2">
-                        <MessageCircle className="w-4 h-4" /> WhatsApp {whatsapp.kind === 'ready' ? 'Ready Message' : whatsapp.kind === 'reminder' ? 'Collection Reminder' : whatsapp.kind === 'processing' ? 'Progress Update' : whatsapp.kind === 'completed' ? 'Thank You' : 'Receipt'}
-                      </button>
-                    )}
+                    <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                      <div className="flex-1 min-w-0">
+                        <label className="text-[9px] uppercase font-black text-muted-foreground">Laundry status</label>
+                        <select
+                          value={LAUNDRY_WORKFLOW_STAGES.some(item => item.id === currentStage) ? currentStage : 'received'}
+                          disabled={stageBusy === recordKey}
+                          onChange={event => changeStage(order, event.target.value as LaundryWorkflowStage)}
+                          className="mt-1 w-full h-10 rounded-xl border border-border bg-surface-2 px-3 text-xs font-bold outline-none focus:border-primary disabled:opacity-50"
+                        >
+                          {LAUNDRY_WORKFLOW_STAGES.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+                        </select>
+                      </div>
+
+                      {whatsapp && (
+                        <button onClick={() => sendWhatsApp(order)} className="sm:self-end h-10 px-4 rounded-xl bg-emerald-600 text-white text-xs font-display font-black flex items-center justify-center gap-2">
+                          <MessageCircle className="w-4 h-4" /> WhatsApp {whatsapp.kind === 'ready' ? 'Ready' : whatsapp.kind === 'reminder' ? 'Reminder' : whatsapp.kind === 'processing' ? 'Update' : whatsapp.kind === 'completed' ? 'Thank You' : 'Receipt'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
