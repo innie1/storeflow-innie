@@ -10,8 +10,6 @@ function patchIndex(source: string): string {
   const newBusinessBlock = `  const businessTemplate = getBusinessTemplate(store);\n  const businessType = resolveBusinessType(store);\n  const isGames = businessType === 'games';\n  const isServiceFirst = isServiceFirstBusiness(store);\n\n  const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;\n\n  const mainTabs = isGames\n    ? GAMES_MAIN_TABS\n    : RETAIL_MAIN_TABS\n        .filter(t => isBusinessTabAllowed(store, t.id))\n        .flatMap(t => {\n          const mapped = t.id === 'inventory' && isServiceFirst\n            ? { ...t, label: 'Services', icon: businessTemplate.icon }\n            : t;\n          // Laundry needs BOTH surfaces: Orders is the online customer-app inbox,\n          // while Laundry Records is the physical counter/intake workspace.\n          if (businessType === 'laundry' && t.id === 'orders') {\n            return [mapped, { id: 'laundry-records' as TabId, label: 'Laundry Records', icon: '🧾' }];\n          }\n          return [mapped];\n        });\n  const moreItems = (isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS)\n    .filter(t => isBusinessTabAllowed(store, t.id));\n`;
   s = s.replace(oldBusinessBlock, newBusinessBlock);
 
-  // Give the dedicated laundry records tab a normal sidebar icon even though
-  // it is an incremental compatibility tab and not yet part of the legacy TabId union.
   const orderIconBlock = `    case 'orders':\n      return <ShoppingCart className={className} />;`;
   const laundryIconBlock = `${orderIconBlock}\n    case 'laundry-records':\n      return <Receipt className={className} />;`;
   if (!s.includes("case 'laundry-records':") && s.includes(orderIconBlock)) {
@@ -50,6 +48,22 @@ function patchOrders(source: string): string {
   return s;
 }
 
+function patchServices(source: string): string {
+  let s = source;
+  const importAnchor = "import { Plus, Pencil, Trash2, X, Clock, Power, Scale, Tag, Play, Timer, Pause, CalendarClock } from 'lucide-react';";
+  const importLine = "import LaundryPricingSetup from '@/components/laundry/LaundryPricingSetup';";
+  if (!s.includes(importLine) && s.includes(importAnchor)) {
+    s = s.replace(importAnchor, `${importAnchor}\n${importLine}`);
+  }
+
+  const functionAnchor = "export default function Services({ store, onUpdate, currentUser }: ServicesProps) {";
+  const laundryReturn = `export default function Services({ store, onUpdate, currentUser }: ServicesProps) {\n  if (String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry') {\n    return <LaundryPricingSetup store={store} onUpdate={onUpdate} currentUser={currentUser} />;\n  }`;
+  if (!s.includes('return <LaundryPricingSetup') && s.includes(functionAnchor)) {
+    s = s.replace(functionAnchor, laundryReturn);
+  }
+  return s;
+}
+
 export default function businessIsolationPlugin(): Plugin {
   return {
     name: 'storeflow-business-isolation',
@@ -58,6 +72,7 @@ export default function businessIsolationPlugin(): Plugin {
       const normalized = id.replace(/\\/g, '/');
       if (normalized.endsWith('/src/pages/Index.tsx')) return { code: patchIndex(code), map: null };
       if (normalized.endsWith('/src/components/Orders.tsx')) return { code: patchOrders(code), map: null };
+      if (normalized.endsWith('/src/components/Services.tsx')) return { code: patchServices(code), map: null };
       return null;
     },
   };
