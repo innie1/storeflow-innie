@@ -2,6 +2,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { generateLaundryReceiptNumber, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
 
 export type LaundrySyncStatus = 'pending' | 'synced';
+export type LaundryWorkflowStage = 'received' | 'washing' | 'drying' | 'ironing' | 'folding' | 'ready' | 'collected';
+
+export const LAUNDRY_WORKFLOW_STAGES: { id: LaundryWorkflowStage; label: string }[] = [
+  { id: 'received', label: 'Received' },
+  { id: 'washing', label: 'Washing' },
+  { id: 'drying', label: 'Drying' },
+  { id: 'ironing', label: 'Ironing' },
+  { id: 'folding', label: 'Folding' },
+  { id: 'ready', label: 'Ready' },
+  { id: 'collected', label: 'Collected' },
+];
 
 export interface LocalLaundryRecord {
   clientRef: string;
@@ -19,6 +30,8 @@ export interface LocalLaundryRecord {
   pieceCount: number;
   garmentSummary: string;
   createdAt: string;
+  workflowStage?: LaundryWorkflowStage;
+  stageUpdatedAt?: string;
   syncStatus: LaundrySyncStatus;
   syncedAt?: string;
   cloudOrderId?: string;
@@ -91,6 +104,10 @@ function uniqueLocalTag(existing: LocalLaundryRecord[]): string {
   return tag;
 }
 
+function isLaundryWorkflowStage(value: string): value is LaundryWorkflowStage {
+  return LAUNDRY_WORKFLOW_STAGES.some(stage => stage.id === value);
+}
+
 export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLaundryRecord {
   const accessCode = normalizeAccessCode(input.accessCode);
   const customerName = input.customerName.trim();
@@ -102,6 +119,7 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
   if (!garments.length) throw new Error('Record at least one clothing item');
 
   const existing = getLocalLaundryRecords(accessCode);
+  const now = new Date().toISOString();
   const record: LocalLaundryRecord = {
     clientRef: makeClientRef(),
     accessCode,
@@ -117,7 +135,9 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     garments,
     pieceCount: garments.reduce((sum, item) => sum + item.quantity, 0),
     garmentSummary: summarizeLaundryGarments(garments),
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    workflowStage: 'received',
+    stageUpdatedAt: now,
     syncStatus: 'pending',
   };
 
@@ -144,6 +164,16 @@ export function getLocalLaundryRecord(accessCode: string, clientRef: string): Lo
   return getLocalLaundryRecords(accessCode).find(record => record.clientRef === clientRef) || null;
 }
 
+export function setLocalLaundryStage(accessCode: string, clientRef: string, stage: LaundryWorkflowStage): LocalLaundryRecord | null {
+  if (!isLaundryWorkflowStage(stage)) return null;
+  return updateLocalRecord(accessCode, clientRef, {
+    workflowStage: stage,
+    stageUpdatedAt: new Date().toISOString(),
+    syncStatus: 'pending',
+    lastSyncError: undefined,
+  });
+}
+
 export function isWalkInLaundryOrder(order: any): boolean {
   const meta = order?.service_metadata && typeof order.service_metadata === 'object'
     ? order.service_metadata
@@ -153,7 +183,15 @@ export function isWalkInLaundryOrder(order: any): boolean {
   return meta?.source === 'walk_in_laundry' || meta?.intake_type === 'physical_store';
 }
 
+function statusForStage(stage: LaundryWorkflowStage): string {
+  if (stage === 'ready') return 'Ready';
+  if (stage === 'collected') return 'Completed';
+  if (stage === 'received') return 'Accepted';
+  return 'Preparing';
+}
+
 export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
+  const workflowStage = record.workflowStage || 'received';
   const serviceMetadata = {
     source: 'walk_in_laundry',
     intake_type: 'physical_store',
@@ -188,13 +226,14 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     order_number: record.tagCode,
     customer_name: record.customerName,
     customer_phone: record.customerPhone,
-    status: 'Accepted',
-    workflow_stage: 'received',
+    status: statusForStage(workflowStage),
+    workflow_stage: workflowStage,
     business_type: 'laundry',
     order_kind: 'service',
     total: record.total,
     subtotal: record.total,
     created_at: record.createdAt,
+    updated_at: record.stageUpdatedAt || record.createdAt,
     service_metadata: serviceMetadata,
     notes: JSON.stringify(serviceMetadata),
     _laundrySyncStatus: record.syncStatus,
@@ -216,6 +255,12 @@ export function mergeLaundryRecords(cloudOrders: any[], localRecords: LocalLaund
       const tag = String(order?.order_number || meta?.tag_code || '').toUpperCase();
       const local = (clientRef && localByClient.get(clientRef)) || (tag && localByTag.get(tag));
       if (local) matched.add(local.clientRef);
+      // If the local copy has a newer unsynced stage, show it immediately rather
+      // than letting the older cloud stage overwrite what staff just selected.
+      if (local && local.syncStatus !== 'synced') {
+        const localOrder = localLaundryRecordToOrder(local);
+        return { ...order, ...localOrder, id: order.id, _laundrySyncStatus: 'pending' };
+      }
       return {
         ...order,
         _laundrySyncStatus: 'synced',
@@ -230,6 +275,17 @@ export function mergeLaundryRecords(cloudOrders: any[], localRecords: LocalLaund
   return [...cloud, ...localOnly].sort(
     (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
   );
+}
+
+async function syncLaundryStage(accessCode: string, record: LocalLaundryRecord): Promise<{ order_id?: string } | null> {
+  const stage = record.workflowStage || 'received';
+  const { data, error } = await (supabase as any).rpc('update_laundry_walkin_stage', {
+    p_access_code: normalizeAccessCode(accessCode),
+    p_client_ref: record.clientRef,
+    p_stage: stage,
+  });
+  if (error) throw error;
+  return data || null;
 }
 
 export async function syncLaundryRecord(accessCode: string, clientRef: string): Promise<boolean> {
@@ -268,15 +324,17 @@ export async function syncLaundryRecord(accessCode: string, clientRef: string): 
       return false;
     }
 
+    const stageData = await syncLaundryStage(normalized, record);
+    const cloudOrderId = String(stageData?.order_id || data?.order_id || '');
     const updated = updateLocalRecord(normalized, clientRef, {
       syncStatus: 'synced',
       syncedAt: new Date().toISOString(),
-      cloudOrderId: String(data?.order_id || ''),
+      cloudOrderId,
       lastSyncError: undefined,
     });
 
-    if (typeof window !== 'undefined' && data?.order_id) {
-      window.dispatchEvent(new CustomEvent('storeflow:order-created', { detail: { orderId: data.order_id } }));
+    if (typeof window !== 'undefined' && cloudOrderId) {
+      window.dispatchEvent(new CustomEvent('storeflow:order-created', { detail: { orderId: cloudOrderId } }));
     }
     emit(LAUNDRY_SYNC_CHANGED_EVENT, updated || record);
     return true;
@@ -286,6 +344,34 @@ export async function syncLaundryRecord(accessCode: string, clientRef: string): 
   } finally {
     inflight.delete(key);
   }
+}
+
+export async function updateLaundryOrderStage(
+  accessCode: string,
+  order: any,
+  stage: LaundryWorkflowStage,
+): Promise<boolean> {
+  const clientRef = String(order?._localClientRef || order?.client_ref || order?.service_metadata?.client_ref || '');
+  if (!clientRef || !isLaundryWorkflowStage(stage)) return false;
+
+  const local = getLocalLaundryRecord(accessCode, clientRef);
+  if (local) {
+    setLocalLaundryStage(accessCode, clientRef, stage);
+    syncLaundryRecord(accessCode, clientRef).catch(() => {});
+    return true;
+  }
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+  const { data, error } = await (supabase as any).rpc('update_laundry_walkin_stage', {
+    p_access_code: normalizeAccessCode(accessCode),
+    p_client_ref: clientRef,
+    p_stage: stage,
+  });
+  if (error) return false;
+  if (typeof window !== 'undefined' && data?.order_id) {
+    window.dispatchEvent(new CustomEvent('storeflow:order-created', { detail: { orderId: data.order_id } }));
+  }
+  return true;
 }
 
 export async function syncPendingLaundryRecords(accessCode: string): Promise<void> {
