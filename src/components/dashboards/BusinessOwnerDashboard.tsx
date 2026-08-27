@@ -12,7 +12,7 @@ interface BusinessOwnerDashboardProps {
 const quickActions: Record<string, { label: string; tab: string; icon: string }[]> = {
   laundry: [
     { label: 'Record Laundry', tab: 'laundry-records', icon: '🧺' },
-    { label: 'Services', tab: 'inventory', icon: '👕' },
+    { label: 'Price List', tab: 'inventory', icon: '👕' },
     { label: 'Customers', tab: 'customers', icon: '👥' },
     { label: 'Laundry Records', tab: 'laundry-records', icon: '🧾' },
   ],
@@ -84,7 +84,7 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
   const stats = store.storeType === 'laundry'
     ? [
         { label: 'Today Revenue', value: `₦${revenue.toLocaleString()}`, icon: '💰' },
-        { label: 'Services', value: String(serviceCount), icon: '🧺' },
+        { label: 'Treatments', value: String(serviceCount), icon: '🧺' },
         { label: 'Customers', value: String((store.customers || []).length), icon: '👥' },
       ]
     : store.storeType === 'gas_filling'
