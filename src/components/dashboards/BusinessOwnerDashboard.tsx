@@ -11,10 +11,10 @@ interface BusinessOwnerDashboardProps {
 
 const quickActions: Record<string, { label: string; tab: string; icon: string }[]> = {
   laundry: [
-    { label: 'Record Laundry', tab: 'orders', icon: '🧺' },
+    { label: 'Record Laundry', tab: 'laundry-records', icon: '🧺' },
     { label: 'Services', tab: 'inventory', icon: '👕' },
     { label: 'Customers', tab: 'customers', icon: '👥' },
-    { label: 'Laundry Records', tab: 'orders', icon: '🧾' },
+    { label: 'Laundry Records', tab: 'laundry-records', icon: '🧾' },
   ],
   gas_filling: [
     { label: 'New Gas Sale', tab: 'sales', icon: '⛽' },
