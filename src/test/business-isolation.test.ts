@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BUSINESS_TEMPLATES } from '@/lib/business-templates';
 import { getBusinessTemplate, getOrderProgressText, isBusinessTabAllowed, isServiceFirstBusiness, resolveBusinessType, shouldRunRetailRestockEngine } from '@/lib/business-runtime';
 
 const store = (storeType: any, category: any = 'retail') => ({ storeType, category, storeName: 'Test Store' } as any);
@@ -35,7 +36,7 @@ describe('business isolation runtime', () => {
   });
 
   it('derives capabilities from every registered business template', () => {
-    for (const type of Object.keys((await import('@/lib/business-templates')).BUSINESS_TEMPLATES)) {
+    for (const type of Object.keys(BUSINESS_TEMPLATES)) {
       const template = getBusinessTemplate(store(type));
       expect(template.type).toBe(type);
       if (!template.modules.includes('inventory')) {
