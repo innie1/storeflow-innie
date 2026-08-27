@@ -4,7 +4,7 @@ import { loadStore, logScanEvent } from '@/lib/store-data';
 import { supabase } from '@/integrations/supabase/client';
 import { showToast } from '@/components/Toast';
 import { StoreData } from '@/types/store';
-import { Loader2, QrCode, Store, AlertCircle } from 'lucide-react';
+import { Loader2, QrCode, AlertCircle } from 'lucide-react';
 import BusinessStorefront from '@/components/business/BusinessStorefront';
 
 function shouldLogStorefrontScan(storeKey: string): boolean {
@@ -16,6 +16,29 @@ function shouldLogStorefrontScan(storeKey: string): boolean {
   } catch {
     return true;
   }
+}
+
+function storefrontRowToStoreData(row: any): StoreData | null {
+  if (!row || !row.data) return null;
+  const data = row.data as StoreData;
+  const accessCode = data.accessCode || row.access_code;
+  if (!accessCode) return null;
+
+  return {
+    ...data,
+    id: row.id || data.id,
+    storeId: row.store_id || data.storeId,
+    storeName: data.storeName || row.business_name || 'Store',
+    accessCode,
+    storeType: (data.storeType || data.businessType || 'other') as any,
+    businessType: (data.businessType || data.storeType || 'other') as any,
+    profile: {
+      ...(data.profile || ({} as any)),
+      phone: data.profile?.phone || row.phone || '',
+      email: data.profile?.email || row.email || '',
+      location: data.profile?.location || row.address || '',
+    },
+  } as StoreData;
 }
 
 export default function StoreDeepLink() {
@@ -31,6 +54,8 @@ export default function StoreDeepLink() {
     }
 
     const lookup = async () => {
+      // Keep the fast local path for the merchant's own device, but never write a
+      // public/sanitized storefront result back into the merchant store cache.
       const localByCode = loadStore(storeId.toUpperCase());
       if (localByCode) {
         activateStore(localByCode);
@@ -54,29 +79,31 @@ export default function StoreDeepLink() {
       }
 
       try {
-        let { data: cloudStore } = await supabase
-          .from('stores')
-          .select('*')
-          .eq('store_id', storeId)
-          .maybeSingle();
+        const { data: cloudStore, error } = await supabase.rpc('get_public_storefront' as any, {
+          p_key: storeId,
+        } as any);
+        if (error) throw error;
 
-        if (!cloudStore) {
-          const { data: codeStore } = await supabase
-            .from('stores')
-            .select('*')
-            .eq('access_code', storeId.toUpperCase())
-            .maybeSingle();
-          cloudStore = codeStore;
-        }
-
-        if (cloudStore?.data) {
-          const storeData = cloudStore.data as StoreData;
-          localStorage.setItem(`storeflow_store_${storeData.accessCode}`, JSON.stringify(storeData));
+        const storeData = storefrontRowToStoreData(cloudStore);
+        if (storeData) {
           activateStore(storeData);
           return;
         }
+
+        // Access codes are historically uppercase; retry once for old QR codes.
+        if (storeId !== storeId.toUpperCase()) {
+          const { data: upperStore, error: upperError } = await supabase.rpc('get_public_storefront' as any, {
+            p_key: storeId.toUpperCase(),
+          } as any);
+          if (upperError) throw upperError;
+          const upperStoreData = storefrontRowToStoreData(upperStore);
+          if (upperStoreData) {
+            activateStore(upperStoreData);
+            return;
+          }
+        }
       } catch (err) {
-        console.error('StoreDeepLink: Cloud lookup failed', err);
+        console.error('StoreDeepLink: scoped cloud lookup failed', err);
       }
 
       setStatus('not-found');
