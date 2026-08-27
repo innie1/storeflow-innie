@@ -28,7 +28,7 @@ export interface LocalLaundryRecord {
 export interface NewLocalLaundryRecord {
   accessCode: string;
   customerName: string;
-  customerPhone?: string;
+  customerPhone: string;
   serviceId: string;
   serviceName: string;
   pricing: string;
@@ -93,7 +93,11 @@ function uniqueLocalTag(existing: LocalLaundryRecord[]): string {
 
 export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLaundryRecord {
   const accessCode = normalizeAccessCode(input.accessCode);
+  const customerName = input.customerName.trim();
+  const customerPhone = input.customerPhone.trim();
   if (!accessCode) throw new Error('Store access code is missing');
+  if (!customerName) throw new Error('Customer name is required');
+  if (!customerPhone) throw new Error('Customer phone number is required');
   const garments = sanitizeGarmentSelections(input.garments);
   if (!garments.length) throw new Error('Record at least one clothing item');
 
@@ -102,8 +106,8 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     clientRef: makeClientRef(),
     accessCode,
     tagCode: uniqueLocalTag(existing),
-    customerName: input.customerName.trim(),
-    customerPhone: (input.customerPhone || '').trim(),
+    customerName,
+    customerPhone,
     serviceId: String(input.serviceId || ''),
     serviceName: input.serviceName.trim(),
     pricing: input.pricing || 'fixed',
@@ -160,10 +164,23 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     billing_quantity: record.billingQuantity,
     garment_count: record.pieceCount,
     garment_summary: record.garmentSummary,
+    garment_lines: record.garments,
     receipt_number: record.tagCode,
     tag_code: record.tagCode,
     instructions: record.notes,
   };
+
+  const pricedGarments = record.garments.map(item => {
+    const unitPrice = Math.max(0, Number(item.unitPrice) || 0);
+    const subtotal = Number.isFinite(Number(item.subtotal)) ? Math.max(0, Number(item.subtotal)) : unitPrice * item.quantity;
+    return {
+      item_name: item.garmentType,
+      quantity: item.quantity,
+      price: unitPrice,
+      subtotal,
+      metadata: { source: 'walk_in_laundry', garment_price_snapshot: true },
+    };
+  });
 
   return {
     id: `local:${record.clientRef}`,
@@ -182,22 +199,7 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     notes: JSON.stringify(serviceMetadata),
     _laundrySyncStatus: record.syncStatus,
     _localClientRef: record.clientRef,
-    order_items: [
-      ...record.garments.map(item => ({
-        item_name: item.garmentType,
-        quantity: item.quantity,
-        price: 0,
-        subtotal: 0,
-        metadata: { source: 'walk_in_laundry', identification_only: true },
-      })),
-      {
-        item_name: `${record.serviceName} — Service charge`,
-        quantity: 1,
-        price: record.total,
-        subtotal: record.total,
-        metadata: { source: 'walk_in_laundry', charge_line: true },
-      },
-    ],
+    order_items: pricedGarments,
   };
 }
 
@@ -253,7 +255,12 @@ export async function syncLaundryRecord(accessCode: string, clientRef: string): 
       p_billing_quantity: record.billingQuantity,
       p_total: record.total,
       p_notes: record.notes,
-      p_garments: record.garments.map(item => ({ garment_type: item.garmentType, quantity: item.quantity })),
+      p_garments: record.garments.map(item => ({
+        garment_type: item.garmentType,
+        quantity: item.quantity,
+        unit_price: Math.max(0, Number(item.unitPrice) || 0),
+        subtotal: Number.isFinite(Number(item.subtotal)) ? Math.max(0, Number(item.subtotal)) : Math.max(0, Number(item.unitPrice) || 0) * item.quantity,
+      })),
     });
 
     if (error) {
