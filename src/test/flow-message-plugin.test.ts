@@ -14,6 +14,7 @@ describe('Flow message UI transform', () => {
     expect(transformed).toContain('formatFlowOrderReceipt(store, order)');
     expect(transformed).toContain('WhatsApp customer');
     expect(transformed).toContain('startFlowVoiceInput');
+    expect(transformed).toContain("storeflow:start-flow-voice");
     expect(transformed).toContain('<Mic className="w-4 h-4" />');
     expect(transformed).toContain('New customer order');
     expect(transformed).toContain('Flow Messages');
@@ -23,13 +24,10 @@ describe('Flow message UI transform', () => {
     const source = fs.readFileSync('src/components/FlowChat.tsx', 'utf8');
     const messageUi = patchFlowChat(source);
     const transformed = patchFlowOrderDrafts(messageUi);
-
     expect(transformed).toContain("from '@/lib/flow-order-draft'");
     expect(transformed).toContain('flowOrderDraftRef = useRef<FlowConversationOrderDraft | null>(null)');
     expect(transformed).toContain('handleFlowConversationOrder(text)');
-    expect(transformed.indexOf('if (handleFlowConversationOrder(text)) return;')).toBeLessThan(
-      transformed.indexOf('if (handleFlowMessageOrder(text)) return;'),
-    );
+    expect(transformed.indexOf('if (handleFlowConversationOrder(text)) return;')).toBeLessThan(transformed.indexOf('if (handleFlowMessageOrder(text)) return;'));
     expect(transformed).toContain('mergeFlowConversationOrderDraft(store, active, text)');
     expect(transformed).toContain('createFlowConversationOrder(store, latest)');
     expect(transformed).toContain('applyFlowConversationOrderLocalEffects(store, order, latest)');
@@ -38,10 +36,13 @@ describe('Flow message UI transform', () => {
     expect(transformed).toContain('setActiveFlowOrderDraft(null); setSessionId');
   });
 
-  it('renames the merchant action from chat to message', () => {
+  it('opens the Flow Messages modal directly when the global shortcut fires', () => {
     const source = fs.readFileSync('src/components/Manager.tsx', 'utf8');
     const transformed = patchManager(source);
     expect(transformed).toContain('Message with Flow');
     expect(transformed).not.toContain('Chat with Flow');
+    expect(transformed).toContain("storeflow:open-flow-messages");
+    expect(transformed).toContain('setChatOpen(true)');
+    expect(transformed).toContain("storeflow:start-flow-voice");
   });
 });
