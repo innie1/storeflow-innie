@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import BusinessStorefront from '@/components/business/BusinessStorefront';
 import { getPublicStorefront, placeStorefrontOrder } from '@/lib/public-storefront';
+import { prepareStoreForMarketplacePublish } from '@/lib/marketplace-publish';
 import type { StoreData } from '@/types/store';
 
 const publishedStore: StoreData = {
@@ -18,6 +19,22 @@ const publishedStore: StoreData = {
 };
 
 describe('public storefront access', () => {
+  it('publishes only this service store actual active services', () => {
+    const contaminated = {
+      ...publishedStore,
+      products: [
+        ...publishedStore.products,
+        { id: 'mineral', name: 'Mineral', category: 'Beverages', costPrice: 100, sellingPrice: 200, quantity: 10 },
+        { id: 'disabled', name: 'Old Service', category: 'Service', costPrice: 0, sellingPrice: 500, quantity: 1, isService: true, discontinued: true },
+      ],
+    } as StoreData;
+
+    const result = prepareStoreForMarketplacePublish(contaminated, { onlineOrdersEnabled: true });
+
+    expect(result.marketplaceSettings).toEqual({ onlineOrdersEnabled: true });
+    expect((result.businessTemplate as any).offerings.map((item: any) => item.name)).toEqual(['Wash & Fold']);
+  });
+
   it('loads the exact published store through the scoped RPC for guests', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: { id: publishedStore.id, store_id: publishedStore.storeId, access_code: publishedStore.accessCode, data: publishedStore },
@@ -57,4 +74,3 @@ describe('public storefront access', () => {
     expect(result.order_number).toBe('SF-1234');
   });
 });
-

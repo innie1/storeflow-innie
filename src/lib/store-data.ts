@@ -8,6 +8,7 @@ import {
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
 import { generateStoreUrl } from '@/lib/qr-code';
+import { prepareStoreForMarketplacePublish } from '@/lib/marketplace-publish';
 
 const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -640,15 +641,16 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean 
 
         const storeId = store.storeId || store.accessCode;
         const storeUrl = generateStoreUrl(storeId);
+        const cloudStore = prepareStoreForMarketplacePublish(store, store.marketplaceSettings || {});
 
         const payload: any = {
           owner_id: profile.id,
           business_name: store.storeName,
-          business_type: store.category || 'retail',
+          business_type: store.storeType || store.category || 'retail',
           logo: store.profile?.logoStyle || 'minimalist',
           access_code: store.accessCode,
           owner_password: store.managerSettings?.ownerPassword || '',
-          data: store as any,
+          data: cloudStore as any,
           store_id: storeId,
           qr_code: storeUrl,
           barcode: storeId,

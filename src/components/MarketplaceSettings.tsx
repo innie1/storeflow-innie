@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { StoreData, Product } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
-import { generateStoreUrl } from '@/lib/qr-code';
 import { saveStore } from '@/lib/store-data';
+import { prepareStoreForMarketplacePublish } from '@/lib/marketplace-publish';
 import { getPushSubscriptionState, subscribeToOrderPush, unsubscribeFromOrderPush } from '@/lib/push-notifications';
 import ToggleRow from '@/components/Toggle';
 import { 
@@ -31,9 +31,9 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       showLimitedStock: false,
 
       // 2. Preview settings
-      description: store.profile?.address || 'Premium Nigerian marketplace store',
-      coverImage: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&auto=format&fit=crop&q=80',
-      rating: 4.8,
+      description: store.profile?.address || '',
+      coverImage: '',
+      rating: 0,
       deliveryTime: '20-30 mins',
       isFeatured: true,
 
@@ -116,6 +116,22 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
   const [form, setForm] = useState(settings);
   const [activeSection, setActiveSection] = useState<string>('visibility');
   const [saving, setSaving] = useState(false);
+  const [cloudPublishState, setCloudPublishState] = useState<'checking' | 'published' | 'not-published'>('checking');
+
+  useEffect(() => {
+    let cancelled = false;
+    const key = store.storeId || store.accessCode;
+    if (!key) {
+      setCloudPublishState('not-published');
+      return;
+    }
+    supabase.rpc('get_public_storefront', { p_key: key }).then(({ data, error }) => {
+      if (cancelled) return;
+      const publicSettings = (data as any)?.data?.marketplaceSettings;
+      setCloudPublishState(!error && publicSettings ? 'published' : 'not-published');
+    });
+    return () => { cancelled = true; };
+  }, [store.storeId, store.accessCode, store.marketplaceSettings]);
 
   const [loyaltySettings, setLoyaltySettings] = useState(
     store.loyaltySettings || { enabled: false, earnPerHundred: 1, redeemThreshold: 100, redeemValueNaira: 500 }
@@ -222,18 +238,24 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
         return;
       }
 
-      const storeId = store.storeId || store.accessCode;
-      const storeUrl = generateStoreUrl(storeId);
+      const publishedStore = prepareStoreForMarketplacePublish(store, form as Record<string, unknown>);
 
-      const { error } = await supabase
+      const { data: publishedRow, error } = await supabase
         .from('stores')
         .update({
-          data: store as any,
+          data: publishedStore as any,
+          business_type: publishedStore.storeType || publishedStore.category || 'retail',
           updated_at: new Date().toISOString()
         })
-        .eq('access_code', store.accessCode);
+        .eq('access_code', store.accessCode)
+        .select('id')
+        .maybeSingle();
 
       if (error) throw error;
+      if (!publishedRow?.id) throw new Error('This store could not be matched to its cloud record.');
+      saveStore(publishedStore, { skipCloudSync: true });
+      onUpdate(publishedStore);
+      setCloudPublishState('published');
       showToast('Marketplace settings updated live in customer application! ⚡', 'success');
     } catch (err: any) {
       console.error("Failed to update marketplace settings live in database:", err);
@@ -348,9 +370,9 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-display font-black text-lg text-foreground">Marketplace Control Center</h2>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-success/10 border border-success/20 text-success flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-              Live Sync
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono border flex items-center gap-1 ${cloudPublishState === 'published' ? 'bg-success/10 border-success/20 text-success' : 'bg-warning/10 border-warning/20 text-warning'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${cloudPublishState === 'published' ? 'bg-success animate-pulse' : 'bg-warning'}`} />
+              {cloudPublishState === 'checking' ? 'Checking…' : cloudPublishState === 'published' ? 'Published' : 'Publish Required'}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">Sync controls instantly with your customer web application storefront.</p>
