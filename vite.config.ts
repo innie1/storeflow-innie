@@ -5,6 +5,7 @@ import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 import serviceOrdersPlugin from "./vite-plugin-service-orders";
 import businessIsolationPlugin from "./vite-plugin-business-isolation";
+import flowMessagesPlugin from "./vite-plugin-flow-messages";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -15,6 +16,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     businessIsolationPlugin(),
+    flowMessagesPlugin(),
     react(),
     mode === "development" && componentTagger(),
     serviceOrdersPlugin(),
