@@ -29,12 +29,16 @@ describe('Flow Shirt smart sale parser', () => {
     expect(createFlowShirtCode(1_787_872_000_000)).toMatch(/^FS-[A-Z0-9]{8}$/);
   });
 
-  it('keeps the shirt icon laundry-only and routes product stores to Flow Messages', () => {
+  it('keeps the shirt laundry-only and opens Flow Messages directly for product stores', () => {
     const source = fs.readFileSync('src/components/FlowShirtFab.tsx', 'utf8');
     expect(source).toContain("const isLaundry = businessType === 'laundry'");
-    expect(source).toContain("onNavigate?.('manager')");
+    expect(source).toContain("const FLOW_HOLD_MS = 3000");
+    expect(source).toContain("storeflow:open-flow-messages");
+    expect(source).toContain("openFlowMessages(false)");
+    expect(source).toContain("openFlowMessages(true)");
+    expect(source).toContain("onPointerDown={beginHold}");
+    expect(source).toContain("holding ? <Mic");
     expect(source).toContain("<MessageCircle className=\"w-6 h-6\"");
     expect(source).toContain("? <Shirt className=\"w-6 h-6\"");
-    expect(source).toContain("title={isLaundry ? 'Record Laundry' : 'Message with Flow'}");
   });
 });
