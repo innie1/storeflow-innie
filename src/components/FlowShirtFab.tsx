@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Mic, Send, Shirt, X } from 'lucide-react';
+import { MessageCircle, Mic, Send, Shirt, X } from 'lucide-react';
 import type { Product, StoreData, TabId } from '@/types/store';
 import { generateId, recordSale, saveStore } from '@/lib/store-data';
 import { isBusinessTabAllowed, resolveBusinessType } from '@/lib/business-runtime';
@@ -38,13 +38,16 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
 
   const handleFab = () => {
     if (businessType === 'laundry') {
-      // Laundry must keep the mandatory customer + phone intake instead of
-      // leaking the retail sale form into the laundry workspace.
+      // The shirt is laundry-specific and opens the mandatory customer + phone intake.
       requestLaundryWorkspace('record');
       onNavigate?.('laundry-records' as TabId);
       return;
     }
-    setOpen(true);
+
+    // Retail/provision and other product stores should never show a clothing
+    // metaphor. Their floating shortcut goes straight to Flow Messages, where
+    // Flow can build customer orders conversationally.
+    onNavigate?.('manager');
   };
 
   const prepareTypedSale = () => {
@@ -168,16 +171,20 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
     commit(updated);
   };
 
+  const isLaundry = businessType === 'laundry';
+
   return (
     <>
       <button
         type="button"
         onClick={handleFab}
         className="fixed right-4 bottom-24 md:bottom-8 z-[55] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center active:scale-95 transition-transform"
-        title={businessType === 'laundry' ? 'Record Laundry' : 'Flow Shirt smart sell'}
-        aria-label={businessType === 'laundry' ? 'Record Laundry' : 'Open Flow Shirt smart sell'}
+        title={isLaundry ? 'Record Laundry' : 'Message with Flow'}
+        aria-label={isLaundry ? 'Record Laundry' : 'Message with Flow'}
       >
-        <Shirt className="w-6 h-6" strokeWidth={2.4} />
+        {isLaundry
+          ? <Shirt className="w-6 h-6" strokeWidth={2.4} />
+          : <MessageCircle className="w-6 h-6" strokeWidth={2.4} />}
       </button>
 
       {open && canSellProducts && (
