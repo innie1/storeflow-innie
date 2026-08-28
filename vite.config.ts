@@ -8,6 +8,7 @@ import businessIsolationPlugin from "./vite-plugin-business-isolation";
 import flowMessagesPlugin from "./vite-plugin-flow-messages";
 import flowOrderDraftsPlugin from "./vite-plugin-flow-order-drafts";
 import orderItemSnapshotsPlugin from "./vite-plugin-order-item-snapshots";
+import floatingFlowSettingPlugin from "./vite-plugin-floating-flow-setting";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -20,6 +21,7 @@ export default defineConfig(({ mode }) => ({
     businessIsolationPlugin(),
     flowMessagesPlugin(),
     flowOrderDraftsPlugin(),
+    floatingFlowSettingPlugin(),
     orderItemSnapshotsPlugin(),
     react(),
     mode === "development" && componentTagger(),
