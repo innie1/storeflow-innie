@@ -41,4 +41,10 @@ describe('Flow Shirt smart sale parser', () => {
     expect(source).toContain("<MessageCircle className=\"w-6 h-6\"");
     expect(source).toContain("? <Shirt className=\"w-6 h-6\"");
   });
+
+  it('hides all floating Flow shortcuts when the setting is switched off', () => {
+    const source = fs.readFileSync('src/components/FlowShirtFab.tsx', 'utf8');
+    expect(source).toContain("floatingFlowShortcutEnabled !== false");
+    expect(source).toContain("if (!floatingShortcutEnabled) return null");
+  });
 });
