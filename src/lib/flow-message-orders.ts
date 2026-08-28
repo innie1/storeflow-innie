@@ -48,18 +48,8 @@ const NUMBER_WORDS: Record<string, number> = {
 };
 
 function normalized(value: string): string {
-  return String(value || '')
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9+]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-function regexEscape(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(value || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ').replace(/[^a-z0-9+]+/g, ' ').trim().replace(/\s+/g, ' ');
 }
 
 function quantityFromToken(token?: string): number | null {
@@ -81,8 +71,7 @@ function quantityNear(text: string, start: number, end: number): number {
 }
 
 function phoneFromText(text: string): string {
-  const matches = text.match(/(?:\+?234|0)?[\s-]?[789](?:[\s-]?\d){9}\b/g) || [];
-  const raw = matches[0] || '';
+  const raw = (text.match(/(?:\+?234|0)?[\s-]?[789](?:[\s-]?\d){9}\b/g) || [])[0] || '';
   const digits = raw.replace(/\D/g, '');
   if (!digits) return '';
   if (digits.startsWith('234') && digits.length >= 13) return '+' + digits;
@@ -104,7 +93,7 @@ function inferredCustomerName(text: string): string {
   const clean = text.replace(/(?:\+?234|0)?[\s-]?[789](?:[\s-]?\d){9}\b/g, ' ').trim();
   const patterns = [
     /\b(?:customer|client|buyer)\s+(?:is\s+)?([a-z][a-z .'-]{1,45}?)(?=\s+(?:wants|needs|ordered|phone|number|would like)\b|[,;])/i,
-    /\b(?:create|make|take|place|record)\s+(?:a\s+)?(?:new\s+)?(?:customer\s+)?order\s+for\s+([a-z][a-z .'-]{1,45}?)(?=\s+(?:who|wants|needs|ordered|phone|number|for)\b|[,;])/i,
+    /\b(?:create|make|take|place|record)\s+(?:an?\s+)?(?:new\s+)?(?:customer\s+)?order\s+for\s+([a-z][a-z .'-]{1,45}?)(?=\s+(?:who|wants|needs|ordered|phone|number|for)\b|[,;:])/i,
     /^\s*([a-z][a-z .'-]{1,45}?)\s+(?:wants|needs|ordered|would like)\b/i,
   ];
   for (const pattern of patterns) {
@@ -127,66 +116,39 @@ function itemKindFor(product: Product): FlowMessageItemKind {
 function catalogMentions(store: StoreData, text: string): Array<{ product: Product; start: number; end: number }> {
   const q = normalized(text);
   const padded = ` ${q} `;
-  const results: Array<{ product: Product; start: number; end: number; aliasLength: number }> = [];
+  const hits: Array<{ product: Product; start: number; end: number; aliasLength: number }> = [];
   for (const product of store.products || []) {
     if (product.discontinued) continue;
-    const aliases = [product.name, ...((product as any).voiceAliases || [])]
-      .map(normalized)
-      .filter(Boolean)
-      .sort((a, b) => b.length - a.length);
+    const aliases = [product.name, ...((product as any).voiceAliases || [])].map(normalized).filter(Boolean).sort((a, b) => b.length - a.length);
     for (const alias of aliases) {
-      const needle = ` ${alias} `;
-      const index = padded.indexOf(needle);
+      const index = padded.indexOf(` ${alias} `);
       if (index < 0) continue;
-      results.push({ product, start: Math.max(0, index), end: Math.max(0, index) + alias.length, aliasLength: alias.length });
+      hits.push({ product, start: Math.max(0, index), end: Math.max(0, index) + alias.length, aliasLength: alias.length });
       break;
     }
   }
-  // Prefer the longest catalogue name when aliases overlap, then preserve speech order.
-  results.sort((a, b) => a.start - b.start || b.aliasLength - a.aliasLength);
-  const kept: typeof results = [];
-  for (const candidate of results) {
-    if (kept.some(item => candidate.start >= item.start && candidate.end <= item.end)) continue;
-    kept.push(candidate);
-  }
+  hits.sort((a, b) => a.start - b.start || b.aliasLength - a.aliasLength);
+  const kept: typeof hits = [];
+  for (const hit of hits) if (!kept.some(item => hit.start >= item.start && hit.end <= item.end)) kept.push(hit);
   return kept.sort((a, b) => a.start - b.start);
 }
 
 function genericItems(store: StoreData, text: string): { items: FlowMessageOrderItem[]; unmatched: string[] } {
   const q = normalized(text);
-  const mentions = catalogMentions(store, text);
-  const items: FlowMessageOrderItem[] = mentions.map(({ product, start, end }) => {
+  const items = catalogMentions(store, text).map(({ product, start, end }) => {
     const quantity = quantityNear(q, start, end);
     const unitPrice = Math.max(0, Number(product.sellingPrice) || 0);
-    return {
-      product,
-      productId: String(product.id),
-      label: product.name,
-      quantity,
-      unitPrice,
-      subtotal: quantity * unitPrice,
-      unit: product.unit,
-      itemKind: itemKindFor(product),
-    };
+    return { product, productId: String(product.id), label: product.name, quantity, unitPrice, subtotal: quantity * unitPrice, unit: product.unit, itemKind: itemKindFor(product) };
   });
-
   if (items.length) return { items, unmatched: [] };
 
-  // Fall back to Flow's fuzzy product resolver for a spoken single-item order.
-  const chunks = text
-    .replace(/(?:\+?234|0)?[\s-]?[789](?:[\s-]?\d){9}\b/g, ' ')
-    .split(/[,;]|\s+and\s+/i)
-    .map(part => part.trim())
-    .filter(Boolean);
+  const chunks = text.replace(/(?:\+?234|0)?[\s-]?[789](?:[\s-]?\d){9}\b/g, ' ').split(/[,;]|\s+and\s+/i).map(part => part.trim()).filter(Boolean);
   const unmatched: string[] = [];
   for (const chunk of chunks) {
     const qtyMatch = chunk.match(/\b(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/i);
     const quantity = quantityFromToken(qtyMatch?.[1]) || 1;
-    const phrase = chunk
-      .replace(/\b(?:create|make|take|place|record|new|customer|order|client|buyer|wants|needs|ordered|would like|please|for|phone|number)\b/gi, ' ')
-      .replace(qtyMatch?.[0] || '', ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const phrase = chunk.replace(/\b(?:create|make|take|place|record|new|customer|order|client|buyer|wants|needs|ordered|would like|please|for|phone|number)\b/gi, ' ')
+      .replace(qtyMatch?.[0] || '', ' ').replace(/\s+/g, ' ').trim();
     if (!phrase) continue;
     const match = resolveProduct(store, phrase);
     if (!match || match.score < 0.76) { unmatched.push(chunk); continue; }
@@ -203,39 +165,19 @@ function laundryItems(store: StoreData, text: string): FlowMessageOrderItem[] {
   const q = normalized(text);
   let service: Product | null = null;
   let bestLength = 0;
-  for (const candidate of services) {
-    for (const alias of [candidate.name, ...((candidate as any).voiceAliases || [])]) {
-      const name = normalized(alias);
-      if (name && (` ${q} `).includes(` ${name} `) && name.length > bestLength) {
-        service = candidate;
-        bestLength = name.length;
-      }
-    }
+  for (const candidate of services) for (const alias of [candidate.name, ...((candidate as any).voiceAliases || [])]) {
+    const name = normalized(alias);
+    if (name && (` ${q} `).includes(` ${name} `) && name.length > bestLength) { service = candidate; bestLength = name.length; }
   }
   if (!service && services.length === 1) service = services[0];
   if (!service) return [];
-
   const config = getLaundryPricingConfig(store);
-  const garmentHits = config.garmentTypes
-    .map(garment => ({ garment, key: normalized(garment), index: (` ${q} `).indexOf(` ${normalized(garment)} `) }))
-    .filter(hit => hit.key && hit.index >= 0)
-    .sort((a, b) => a.index - b.index);
-  if (!garmentHits.length) return [];
-
-  return garmentHits.map(hit => {
+  const hits = config.garmentTypes.map(garment => ({ garment, key: normalized(garment), index: (` ${q} `).indexOf(` ${normalized(garment)} `) }))
+    .filter(hit => hit.key && hit.index >= 0).sort((a, b) => a.index - b.index);
+  return hits.map(hit => {
     const quantity = quantityNear(q, Math.max(0, hit.index), Math.max(0, hit.index) + hit.key.length);
     const unitPrice = getLaundryGarmentPrice(store, service!, hit.garment);
-    return {
-      product: service!,
-      productId: String(service!.id),
-      label: `${hit.garment} — ${service!.name}`,
-      quantity,
-      unitPrice,
-      subtotal: quantity * unitPrice,
-      unit: 'pcs',
-      itemKind: 'service' as const,
-      metadata: { garment_type: hit.garment, service_name: service!.name },
-    };
+    return { product: service!, productId: String(service!.id), label: `${hit.garment} — ${service!.name}`, quantity, unitPrice, subtotal: quantity * unitPrice, unit: 'pcs', itemKind: 'service' as const, metadata: { garment_type: hit.garment, service_name: service!.name } };
   });
 }
 
@@ -246,20 +188,18 @@ export function supportsFlowMessageOrders(store: StoreData): boolean {
 export function isFlowMessageOrderRequest(store: StoreData, text: string): boolean {
   if (!supportsFlowMessageOrders(store)) return false;
   const q = normalized(text);
-  if (/\b(?:create|make|take|place|record|start)\s+(?:a\s+)?(?:new\s+)?(?:customer\s+)?order\b/.test(q)) return true;
+  if (/\b(?:create|make|take|place|record|start)\s+(?:an?\s+)?(?:new\s+)?(?:customer\s+)?order\b/.test(q)) return true;
   if (/\b(?:customer|client|buyer)\b.{0,45}\b(?:wants|needs|ordered|would like)\b/.test(q)) return true;
-  if (/\b(?:wants|needs|ordered|would like)\b/.test(q) && existingCustomerFromText(store, text)) return true;
-  return false;
+  return /\b(?:wants|needs|ordered|would like)\b/.test(q) && !!existingCustomerFromText(store, text);
 }
 
 export function parseFlowMessageOrder(store: StoreData, text: string): FlowMessageOrderDraft {
   const knownCustomer = existingCustomerFromText(store, text);
   const customerName = knownCustomer?.name || inferredCustomerName(text);
   const customerPhone = phoneFromText(text) || knownCustomer?.phone || '';
-  const specialLaundry = resolveBusinessType(store) === 'laundry' ? laundryItems(store, text) : [];
-  const parsed = specialLaundry.length ? { items: specialLaundry, unmatched: [] as string[] } : genericItems(store, text);
-  const total = parsed.items.reduce((sum, item) => sum + item.subtotal, 0);
-  return { rawText: text.trim(), customerName, customerPhone, items: parsed.items, unmatched: parsed.unmatched, total };
+  const laundry = resolveBusinessType(store) === 'laundry' ? laundryItems(store, text) : [];
+  const parsed = laundry.length ? { items: laundry, unmatched: [] as string[] } : genericItems(store, text);
+  return { rawText: text.trim(), customerName, customerPhone, items: parsed.items, unmatched: parsed.unmatched, total: parsed.items.reduce((sum, item) => sum + item.subtotal, 0) };
 }
 
 export function flowOrderKind(store: StoreData, items: FlowMessageOrderItem[]): string {
@@ -269,15 +209,14 @@ export function flowOrderKind(store: StoreData, items: FlowMessageOrderItem[]): 
   if (template.modes.includes('sessions') && !template.modes.includes('products')) return 'session';
   if (template.modes.includes('appointments') && !template.modes.includes('products')) return 'appointment';
   if (template.modes.includes('metered') && !template.modes.includes('products')) return 'metered';
-  return types.has('product') && types.size === 1 ? 'product' : 'mixed';
+  return 'mixed';
 }
 
 export function formatFlowOrderReceipt(store: StoreData, order: Pick<CreatedFlowOrder, 'order_number'|'customer_name'|'order_items'|'total'>): string {
   const lines = (order.order_items || []).map((item: any) => {
     const name = item.item_name || item.product_name || store.products?.find(p => String(p.id) === String(item.product_id))?.name || 'Item';
     const quantity = Number(item.quantity) || 0;
-    const price = Number(item.price) || 0;
-    const subtotal = Number(item.subtotal ?? quantity * price) || 0;
+    const subtotal = Number(item.subtotal ?? quantity * (Number(item.price) || 0)) || 0;
     return `• ${quantity} × ${name} — ₦${subtotal.toLocaleString()}`;
   });
   return `Receipt **${order.order_number}**\nCustomer: **${order.customer_name}**\n${lines.join('\n')}\n\nTotal: **₦${Number(order.total || 0).toLocaleString()}**`;
@@ -306,11 +245,7 @@ function isUuid(value: unknown): value is string {
 async function resolveStoreUuid(store: StoreData): Promise<string> {
   if (isUuid((store as any).id)) return (store as any).id;
   const client: any = supabase;
-  const keys: Array<[string, string | undefined]> = [
-    ['access_code', store.accessCode],
-    ['store_id', (store as any).storeId],
-  ];
-  for (const [column, value] of keys) {
+  for (const [column, value] of [['access_code', store.accessCode], ['store_id', (store as any).storeId]] as Array<[string, string | undefined]>) {
     if (!value) continue;
     const { data, error } = await client.from('stores').select('id').eq(column, value).maybeSingle();
     if (!error && data?.id) return data.id;
@@ -319,17 +254,7 @@ async function resolveStoreUuid(store: StoreData): Promise<string> {
 }
 
 function rpcItems(items: FlowMessageOrderItem[]) {
-  return items.map(item => ({
-    product_id: item.productId,
-    offering_id: item.productId,
-    item_name: item.label,
-    item_kind: item.itemKind,
-    quantity: item.quantity,
-    price: item.unitPrice,
-    unit: item.unit || null,
-    metadata: item.metadata || {},
-    options: {},
-  }));
+  return items.map(item => ({ product_id: item.productId, offering_id: item.productId, item_name: item.label, item_kind: item.itemKind, quantity: item.quantity, price: item.unitPrice, unit: item.unit || null, metadata: item.metadata || {}, options: {} }));
 }
 
 function fallbackOrderNumber(): string {
@@ -348,55 +273,20 @@ export async function createFlowMessageOrder(store: StoreData, draft: FlowMessag
   const orderKind = flowOrderKind(store, draft.items);
   const notes = JSON.stringify({ source: 'flow_message', transcript: draft.rawText, createdBy: 'Flow' });
   const items = rpcItems(draft.items);
-
-  // Preferred path: one server-side transaction so Orders realtime sees the
-  // receipt only after all its items exist.
   const rpc = await client.rpc('merchant_create_flow_message_order', {
-    p_store_id: storeId,
-    p_customer_name: draft.customerName.trim(),
-    p_customer_phone: draft.customerPhone.trim(),
-    p_items: items,
-    p_order_number: null,
-    p_notes: notes,
-    p_business_type: businessType,
-    p_order_kind: orderKind,
+    p_store_id: storeId, p_customer_name: draft.customerName.trim(), p_customer_phone: draft.customerPhone.trim(), p_items: items,
+    p_order_number: null, p_notes: notes, p_business_type: businessType, p_order_kind: orderKind,
   });
   if (!rpc.error && rpc.data) return rpc.data as CreatedFlowOrder;
 
-  // Compatibility fallback for deployments where the new RPC has not reached
-  // Supabase yet. Existing store-member RLS still protects both inserts.
   const orderNumber = fallbackOrderNumber();
   const total = draft.items.reduce((sum, item) => sum + item.subtotal, 0);
   const { data: order, error: orderError } = await client.from('orders').insert({
-    store_id: storeId,
-    customer_name: draft.customerName.trim(),
-    customer_phone: draft.customerPhone.trim(),
-    order_number: orderNumber,
-    status: 'Pending',
-    subtotal: total,
-    discount: 0,
-    total,
-    notes,
-    business_type: businessType,
-    order_kind: orderKind,
-    workflow_stage: 'pending',
-    service_metadata: { source: 'flow_message' },
+    store_id: storeId, customer_name: draft.customerName.trim(), customer_phone: draft.customerPhone.trim(), order_number: orderNumber,
+    status: 'Pending', subtotal: total, discount: 0, total, notes, business_type: businessType, order_kind: orderKind, workflow_stage: 'pending', service_metadata: { source: 'flow_message' },
   }).select('*').single();
   if (orderError || !order) throw new Error(orderError?.message || rpc.error?.message || 'Could not create the order.');
-
-  const rows = items.map(item => ({
-    order_id: order.id,
-    product_id: item.product_id,
-    offering_id: item.offering_id,
-    item_name: item.item_name,
-    item_kind: item.item_kind,
-    quantity: item.quantity,
-    price: item.price,
-    subtotal: Number(item.quantity) * Number(item.price),
-    unit: item.unit,
-    metadata: item.metadata,
-    options: item.options,
-  }));
+  const rows = items.map(item => ({ order_id: order.id, product_id: item.product_id, offering_id: item.offering_id, item_name: item.item_name, item_kind: item.item_kind, quantity: item.quantity, price: item.price, subtotal: Number(item.quantity) * Number(item.price), unit: item.unit, metadata: item.metadata, options: item.options }));
   const { data: insertedItems, error: itemError } = await client.from('order_items').insert(rows).select('*');
   if (itemError) throw new Error(`Order ${orderNumber} was created, but its items could not sync: ${itemError.message}. Open Orders and refresh before retrying.`);
   return { ...order, order_items: insertedItems || [] } as CreatedFlowOrder;
