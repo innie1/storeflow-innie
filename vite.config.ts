@@ -6,6 +6,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import serviceOrdersPlugin from "./vite-plugin-service-orders";
 import businessIsolationPlugin from "./vite-plugin-business-isolation";
 import flowMessagesPlugin from "./vite-plugin-flow-messages";
+import flowOrderDraftsPlugin from "./vite-plugin-flow-order-drafts";
 import orderItemSnapshotsPlugin from "./vite-plugin-order-item-snapshots";
 
 // https://vitejs.dev/config/
@@ -18,6 +19,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     businessIsolationPlugin(),
     flowMessagesPlugin(),
+    flowOrderDraftsPlugin(),
     orderItemSnapshotsPlugin(),
     react(),
     mode === "development" && componentTagger(),
