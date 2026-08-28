@@ -22,6 +22,7 @@ const FLOW_MESSAGE_EVENT = 'storeflow:open-flow-messages';
 export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser }: Props) {
   const businessType = resolveBusinessType(store);
   const canSellProducts = businessType !== 'games' && isBusinessTabAllowed(store, 'sales');
+  const floatingShortcutEnabled = (store.managerSettings as any)?.floatingFlowShortcutEnabled !== false;
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [draft, setDraft] = useState<FlowShirtDraftItem[]>([]);
@@ -34,6 +35,7 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
     [store.products],
   );
 
+  if (!floatingShortcutEnabled) return null;
   if (businessType !== 'laundry' && !canSellProducts) return null;
 
   const commit = (updated: StoreData) => {
