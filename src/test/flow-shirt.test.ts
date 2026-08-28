@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/types/store';
 import { createFlowShirtCode, parseFlowShirtText } from '@/lib/flow-shirt';
@@ -26,5 +27,14 @@ describe('Flow Shirt smart sale parser', () => {
 
   it('creates short transaction codes for saved Flow Shirt sales', () => {
     expect(createFlowShirtCode(1_787_872_000_000)).toMatch(/^FS-[A-Z0-9]{8}$/);
+  });
+
+  it('keeps the shirt icon laundry-only and routes product stores to Flow Messages', () => {
+    const source = fs.readFileSync('src/components/FlowShirtFab.tsx', 'utf8');
+    expect(source).toContain("const isLaundry = businessType === 'laundry'");
+    expect(source).toContain("onNavigate?.('manager')");
+    expect(source).toContain("<MessageCircle className=\"w-6 h-6\"");
+    expect(source).toContain("? <Shirt className=\"w-6 h-6\"");
+    expect(source).toContain("title={isLaundry ? 'Record Laundry' : 'Message with Flow'}");
   });
 });
