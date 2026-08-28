@@ -1,0 +1,106 @@
+/* StoreFlow UI Overhaul — non-destructive visual layer.
+   Keeps existing business logic/components intact while making the app
+   feel calmer, more mobile-first, and action-oriented. */
+
+body.storeflow-ui-overhaul {
+  --sf-space: 12px;
+}
+
+/* Make the app shell feel less cramped on phones. */
+body.storeflow-ui-overhaul main {
+  scroll-behavior: smooth;
+}
+
+body.storeflow-ui-overhaul main > * {
+  max-width: 100%;
+}
+
+/* Consistent card language without changing component markup. */
+body.storeflow-ui-overhaul .rounded-2xl,
+body.storeflow-ui-overhaul .rounded-3xl {
+  transition: box-shadow 160ms ease, transform 160ms ease, border-color 160ms ease;
+}
+
+/* Stronger hierarchy for large metric values. */
+body.storeflow-ui-overhaul .text-3xl,
+body.storeflow-ui-overhaul .text-4xl,
+body.storeflow-ui-overhaul .text-5xl {
+  letter-spacing: -0.035em;
+}
+
+/* Primary actions should read as actions, not decorative cards. */
+body.storeflow-ui-overhaul button.bg-primary,
+body.storeflow-ui-overhaul a.bg-primary {
+  min-height: 42px;
+}
+
+/* Inputs: comfortable thumb target on mobile. */
+body.storeflow-ui-overhaul input,
+body.storeflow-ui-overhaul select,
+body.storeflow-ui-overhaul textarea {
+  min-height: 42px;
+}
+
+/* Mobile bottom navigation: calmer, larger hit areas and no visual crowding. */
+@media (max-width: 767px) {
+  body.storeflow-ui-overhaul nav.fixed.bottom-0 {
+    padding-top: 4px;
+    box-shadow: 0 -8px 28px rgba(0,0,0,.12);
+    backdrop-filter: blur(18px);
+  }
+
+  body.storeflow-ui-overhaul nav.fixed.bottom-0 button {
+    min-height: 52px;
+    border-radius: 14px;
+  }
+
+  body.storeflow-ui-overhaul nav.fixed.bottom-0 button span:last-child {
+    font-size: 10px;
+    letter-spacing: -.01em;
+  }
+
+  /* The More sheet should feel like a task launcher. */
+  body.storeflow-ui-overhaul .animate-slide-up {
+    overscroll-behavior: contain;
+  }
+
+  /* Give page content enough room above the fixed navigation. */
+  body.storeflow-ui-overhaul main {
+    padding-bottom: 74px;
+  }
+}
+
+/* Desktop: keep content readable instead of stretching every card edge-to-edge. */
+@media (min-width: 768px) {
+  body.storeflow-ui-overhaul main {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
+/* Reduce accidental visual noise from hover states on touch devices. */
+@media (hover: none) {
+  body.storeflow-ui-overhaul button:hover,
+  body.storeflow-ui-overhaul a:hover {
+    transform: none !important;
+  }
+}
+
+/* Accessibility: never remove keyboard focus. */
+body.storeflow-ui-overhaul button:focus-visible,
+body.storeflow-ui-overhaul a:focus-visible,
+body.storeflow-ui-overhaul input:focus-visible,
+body.storeflow-ui-overhaul select:focus-visible,
+body.storeflow-ui-overhaul textarea:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Customer Orders must remain a primary mobile navigation destination.
+   The navigation presentation script may hide the second button; override
+   that presentation-only rule so the existing Orders tab stays visible. */
+@media (max-width: 767px) {
+  body.storeflow-ui-overhaul nav.fixed.bottom-0 button:nth-child(2) {
+    display: flex !important;
+  }
+}

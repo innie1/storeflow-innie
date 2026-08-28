@@ -1,0 +1,1028 @@
+import { useState, useMemo, useEffect } from 'react';
+import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
+import { getDashboardStats, getTopSellers, getSalesTargetStatus } from '@/lib/store-data';
+import { generatePerformanceSummary } from '@/lib/reports';
+import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
+import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
+import Mascot, { MascotBadge } from '@/components/Mascot';
+import { ChevronDown, Check } from 'lucide-react';
+import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths } from 'date-fns';
+
+// ---------- Metric reporting period (Revenue / Net Profit) ----------
+
+type MetricPeriod = 'today' | 'week' | 'month' | '3months' | 'year' | 'lifetime';
+
+const PERIOD_LABELS: Record<MetricPeriod, string> = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  '3months': 'Last 3 Months',
+  year: 'This Year',
+  lifetime: 'Lifetime',
+};
+
+const PERIOD_OPTIONS: MetricPeriod[] = ['today', 'week', 'month', '3months', 'year', 'lifetime'];
+
+function periodStart(period: MetricPeriod): number | null {
+  const now = new Date();
+  switch (period) {
+    case 'today': return startOfDay(now).getTime();
+    case 'week': return startOfWeek(now).getTime();
+    case 'month': return startOfMonth(now).getTime();
+    case '3months': return startOfDay(subMonths(now, 3)).getTime();
+    case 'year': return startOfYear(now).getTime();
+    case 'lifetime': return null;
+  }
+}
+
+function loadStoredPeriod(accessCode: string, metric: 'revenue' | 'netProfit'): MetricPeriod {
+  if (typeof localStorage === 'undefined') return 'lifetime';
+  const raw = localStorage.getItem(`storeflow_dash_period_${accessCode}_${metric}`);
+  return (PERIOD_OPTIONS as string[]).includes(raw || '') ? (raw as MetricPeriod) : 'lifetime';
+}
+
+interface OwnerDashboardProps {
+  store: StoreData;
+  onNavigate: (tab: any, lowStock?: boolean) => void;
+}
+
+type BreakdownType = 'revenue' | 'profit' | 'inventory' | 'sales' | null;
+type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
+
+export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProps) {
+  const stats = getDashboardStats(store);
+  const topSellers = getTopSellers(store, 5);
+  const pendingSummary = useMemo(() => {
+    const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
+    return {
+      totalOwed: list.reduce((s, p) => s + p.balance, 0),
+      customerCount: new Set(list.map(p => p.customerName.toLowerCase())).size,
+    };
+  }, [store.pendingPayments]);
+  const [activeBreakdown, setActiveBreakdown] = useState<BreakdownType>(null);
+  const [salesRange, setSalesRange] = useState<DateRange>('all');
+  const [trendRange, setTrendRange] = useState<'today' | '1w' | '14d' | '30d' | 'all'>('14d');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  // Revenue / Net Profit reporting period — remembered per store, per metric
+  const [revenuePeriod, setRevenuePeriod] = useState<MetricPeriod>(() => loadStoredPeriod(store.accessCode, 'revenue'));
+  const [netProfitPeriod, setNetProfitPeriod] = useState<MetricPeriod>(() => loadStoredPeriod(store.accessCode, 'netProfit'));
+  const [periodSheetFor, setPeriodSheetFor] = useState<'revenue' | 'netProfit' | null>(null);
+
+  // Scroll lock for the period picker sheet below. Deliberately not using
+  // Radix's built-in scroll lock here (react-remove-scroll) — on mobile it
+  // was occasionally failing to release its touchmove blocker on close,
+  // freezing page scroll app-wide while taps still worked. A plain
+  // useEffect cleanup is guaranteed to run on close/unmount, so it can't
+  // leak the same way.
+  useEffect(() => {
+    if (periodSheetFor === null) return;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [periodSheetFor]);
+
+  const getPeriodTotals = (period: MetricPeriod) => {
+    const start = periodStart(period);
+    const sales = start === null ? store.sales : store.sales.filter(s => new Date(s.date).getTime() >= start);
+    return {
+      revenue: sales.reduce((sum, s) => sum + s.total, 0),
+      profit: sales.reduce((sum, s) => sum + s.profit, 0),
+    };
+  };
+
+  const revenuePeriodStats = useMemo(() => getPeriodTotals(revenuePeriod), [store.sales, revenuePeriod]);
+  const netProfitPeriodStats = useMemo(() => getPeriodTotals(netProfitPeriod), [store.sales, netProfitPeriod]);
+
+  const selectPeriod = (period: MetricPeriod) => {
+    if (periodSheetFor === 'revenue') {
+      setRevenuePeriod(period);
+      if (typeof localStorage !== 'undefined') localStorage.setItem(`storeflow_dash_period_${store.accessCode}_revenue`, period);
+    } else if (periodSheetFor === 'netProfit') {
+      setNetProfitPeriod(period);
+      if (typeof localStorage !== 'undefined') localStorage.setItem(`storeflow_dash_period_${store.accessCode}_netProfit`, period);
+    }
+    setPeriodSheetFor(null);
+  };
+
+  const toggleBreakdown = (type: BreakdownType) => {
+    setActiveBreakdown(prev => (prev === type ? null : type));
+  };
+
+  // Curated, short summary meant for sharing (WhatsApp, share sheet) — full
+  // raw data lives in Settings > Data & Storage > Raw Export instead.
+  const generateReport = () => generatePerformanceSummary(store);
+
+  const handleShareReport = async () => {
+    const text = generateReport();
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Performance Report - ${store.storeName}`, text });
+      } catch { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
+  };
+
+  const handleWhatsAppReport = () => {
+    const text = encodeURIComponent(generateReport());
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const getRevenueBreakdown = () => {
+    const map = new Map<string, { name: string; revenue: number; qty: number }>();
+    store.sales.forEach(s => {
+      const existing = map.get(s.productId) || { name: s.productName, revenue: 0, qty: 0 };
+      existing.revenue += s.total;
+      existing.qty += s.quantity;
+      map.set(s.productId, existing);
+    });
+    return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
+  };
+
+  const getProfitBreakdown = () => {
+    const map = new Map<string, { name: string; profit: number; margin: number }>();
+    store.sales.forEach(s => {
+      const product = store.products.find(p => p.id === s.productId);
+      const existing = map.get(s.productId) || { name: s.productName, profit: 0, margin: 0 };
+      existing.profit += s.profit;
+      if (product) existing.margin = Math.round(((product.sellingPrice - product.costPrice) / product.costPrice) * 100);
+      map.set(s.productId, existing);
+    });
+    return Array.from(map.values()).sort((a, b) => b.profit - a.profit);
+  };
+
+  const getInventoryBreakdown = () => {
+    const restocks = store.restocks || [];
+    return [...store.products]
+      .map(p => {
+        const purchased = restocks
+          .filter(r => r.productId === p.id)
+          .reduce((sum, r) => sum + r.quantity, 0);
+        const initial = p.initialQuantity ?? Math.max(0, p.quantity - purchased);
+        return {
+          name: p.name,
+          category: p.category,
+          initial,
+          purchased,
+          current: p.quantity,
+          value: p.costPrice * p.quantity,
+        };
+      })
+      .sort((a, b) => b.value - a.value);
+  };
+
+  const getDateRangeBounds = (): { start: Date | null; end: Date | null } => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+
+    if (salesRange === 'today') return { start, end };
+    if (salesRange === 'week') {
+      const wkStart = new Date(start);
+      wkStart.setDate(start.getDate() - 6);
+      return { start: wkStart, end };
+    }
+    if (salesRange === 'month') {
+      const mStart = new Date(start);
+      mStart.setDate(start.getDate() - 29);
+      return { start: mStart, end };
+    }
+    if (salesRange === 'custom') {
+      const s = customStart ? new Date(customStart + 'T00:00:00') : null;
+      const e = customEnd ? new Date(customEnd + 'T23:59:59') : null;
+      return { start: s, end: e };
+    }
+    return { start: null, end: null };
+  };
+
+  const filteredSales = useMemo(() => {
+    const { start, end } = getDateRangeBounds();
+    return store.sales.filter(s => {
+      const d = new Date(s.date);
+      if (start && d < start) return false;
+      if (end && d > end) return false;
+      return true;
+    });
+  }, [store.sales, salesRange, customStart, customEnd]);
+
+  const getSalesBreakdown = () => {
+    const map = new Map<string, { date: string; count: number; total: number; ts: number }>();
+    filteredSales.forEach(s => {
+      const d = new Date(s.date);
+      const dateKey = d.toLocaleDateString();
+      const dayTs = new Date(d).setHours(0, 0, 0, 0);
+      const existing = map.get(dateKey) || { date: dateKey, count: 0, total: 0, ts: dayTs };
+      existing.count += 1;
+      existing.total += s.total;
+      map.set(dateKey, existing);
+    });
+    return Array.from(map.values()).sort((a, b) => b.ts - a.ts);
+  };
+
+  const trendData = useMemo(() => {
+    if (trendRange === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const buckets: { label: string; total: number; profit: number; hour: number }[] = [];
+      for (let h = 0; h < 24; h++) {
+        const d = new Date(today);
+        d.setHours(h);
+        buckets.push({
+          label: d.toLocaleTimeString(undefined, { hour: 'numeric', hour12: true }),
+          total: 0,
+          profit: 0,
+          hour: h,
+        });
+      }
+      const todayStart = today.getTime();
+      const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+      store.sales.forEach(s => {
+        const sd = new Date(s.date);
+        const sTime = sd.getTime();
+        if (sTime >= todayStart && sTime < todayEnd) {
+          const h = sd.getHours();
+          const bucket = buckets.find(b => b.hour === h);
+          if (bucket) {
+            bucket.total += s.total;
+            bucket.profit += s.profit;
+          }
+        }
+      });
+      return buckets;
+    }
+
+    if (trendRange === 'all') {
+      if (store.sales.length === 0) return [];
+      const saleDates = store.sales.map(s => new Date(s.date).getTime());
+      const minDate = new Date(Math.min(...saleDates));
+      const maxDate = new Date(Math.max(...saleDates));
+      minDate.setHours(0, 0, 0, 0);
+      maxDate.setHours(23, 59, 59, 999);
+
+      const timeDiff = maxDate.getTime() - minDate.getTime();
+      const diffDays = Math.ceil(timeDiff / (24 * 60 * 60 * 1000));
+
+      if (diffDays <= 31) {
+        const buckets: { label: string; total: number; profit: number; ts: number }[] = [];
+        const current = new Date(minDate);
+        while (current <= maxDate) {
+          buckets.push({
+            label: current.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+            total: 0,
+            profit: 0,
+            ts: current.getTime(),
+          });
+          current.setDate(current.getDate() + 1);
+        }
+        store.sales.forEach(s => {
+          const sd = new Date(s.date);
+          sd.setHours(0, 0, 0, 0);
+          const b = buckets.find(x => x.ts === sd.getTime());
+          if (b) {
+            b.total += s.total;
+            b.profit += s.profit;
+          }
+        });
+        return buckets;
+      } else if (diffDays <= 180) {
+        const buckets: { label: string; total: number; profit: number; startTs: number; endTs: number }[] = [];
+        const current = new Date(minDate);
+        current.setDate(current.getDate() - current.getDay());
+        while (current <= maxDate) {
+          const weekStart = new Date(current);
+          const weekEnd = new Date(current);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          buckets.push({
+            label: `${weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
+            total: 0,
+            profit: 0,
+            startTs: weekStart.getTime(),
+            endTs: weekEnd.getTime() + 24 * 60 * 60 * 1000 - 1,
+          });
+          current.setDate(current.getDate() + 7);
+        }
+        store.sales.forEach(s => {
+          const sd = new Date(s.date).getTime();
+          const b = buckets.find(x => sd >= x.startTs && sd <= x.endTs);
+          if (b) {
+            b.total += s.total;
+            b.profit += s.profit;
+          }
+        });
+        return buckets;
+      } else {
+        const buckets: { label: string; total: number; profit: number; startTs: number; endTs: number }[] = [];
+        const current = new Date(minDate);
+        current.setDate(1);
+        while (current <= maxDate) {
+          const monthStart = new Date(current);
+          const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+          buckets.push({
+            label: current.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }),
+            total: 0,
+            profit: 0,
+            startTs: monthStart.getTime(),
+            endTs: monthEnd.getTime() + 24 * 60 * 60 * 1000 - 1,
+          });
+          current.setMonth(current.getMonth() + 1);
+        }
+        store.sales.forEach(s => {
+          const sd = new Date(s.date).getTime();
+          const b = buckets.find(x => sd >= x.startTs && sd <= x.endTs);
+          if (b) {
+            b.total += s.total;
+            b.profit += s.profit;
+          }
+        });
+        return buckets;
+      }
+    }
+
+    const days = trendRange === '1w' ? 7 : trendRange === '30d' ? 30 : 14;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const buckets: { label: string; total: number; profit: number; ts: number }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      buckets.push({
+        label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        total: 0,
+        profit: 0,
+        ts: d.getTime(),
+      });
+    }
+    store.sales.forEach(s => {
+      const sd = new Date(s.date);
+      sd.setHours(0, 0, 0, 0);
+      const bucket = buckets.find(b => b.ts === sd.getTime());
+      if (bucket) {
+        bucket.total += s.total;
+        bucket.profit += s.profit;
+      }
+    });
+    return buckets;
+  }, [store.sales, trendRange]);
+
+  const profitTone = netProfitPeriodStats.profit >= 0 ? 'text-success' : 'text-destructive';
+  const profitSign = netProfitPeriodStats.profit >= 0 ? '+' : '−';
+  const profitAbs = Math.abs(netProfitPeriodStats.profit);
+
+  const managerEnabled = (store.managerSettings ?? DEFAULT_MANAGER_SETTINGS).enabled;
+  const mgrSettings = store.managerSettings ?? DEFAULT_MANAGER_SETTINGS;
+  const health = healthScore(store);
+  const target = useMemo(() => getSalesTargetStatus(store), [store]);
+  const insights = managerEnabled ? generateInsights(store, '7d') : [];
+  const recs = (managerEnabled ? generateRecommendations(store) : []).filter(r => r.action !== 'restock' || mgrSettings.restockSuggestions);
+  const restockScoreResult = useMemo(() => restockScore(store), [store]);
+  const flowMood = useMemo(() => {
+    if (!managerEnabled) return 'sleeping';
+    const currentHour = new Date().getHours();
+    const isSleepTime = currentHour >= 21 || currentHour < 6;
+    if (isSleepTime) return 'sleeping';
+
+    const activeProducts = store.products.filter(p => !p.discontinued);
+    const hasLowStock = activeProducts.some(p => p.quantity <= 3);
+    const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
+    const isGoalAchieved =
+      store.savingsGoal && store.savingsGoal.saved >= store.savingsGoal.amount && store.savingsGoal.amount > 0;
+
+    if (isGoalAchieved) return 'celebrating';
+
+    if (health.overall >= 80) return 'confident';
+    if (health.overall >= 65) return 'happy';
+    if (health.overall >= 45 && health.overall < 65) return 'resting';
+    if (hasLowStock || hasDebt) return 'concerned';
+    if (health.overall < 45 && health.overall >= 25) return 'worried';
+    if (health.overall < 25) return 'angry';
+
+    return 'neutral';
+  }, [store, managerEnabled, health.overall]);
+
+  const insightCount = insights.length + recs.length;
+  const healthTone =
+    health.overall >= 80
+      ? 'hsl(var(--success))'
+      : health.overall >= 60
+      ? 'hsl(var(--primary))'
+      : health.overall >= 40
+      ? 'hsl(var(--warning))'
+      : 'hsl(var(--destructive))';
+  const healthSize = 70;
+  const healthR = (healthSize - 8) / 2;
+  const healthC = 2 * Math.PI * healthR;
+  const healthDash = (Math.min(100, health.overall) / 100) * healthC;
+
+  return (
+    <div className="animate-fade-in space-y-4 md:space-y-6 text-left">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
+        {/* Left Column */}
+        <div className="md:col-span-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            {managerEnabled ? (
+              <div className="p-4 rounded-2xl bg-card shadow-card border border-border/40">
+                <p className="text-xs text-muted-foreground font-display">Store Health</p>
+                <p className="font-display font-bold text-3xl text-foreground mt-1">
+                  {health.overall}
+                  <span className="text-sm text-muted-foreground">/100</span>
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-1">{health.label}</p>
+                <div className="flex justify-center mt-2">
+                  <svg width={healthSize} height={healthSize} viewBox={`0 0 ${healthSize} ${healthSize}`} className="-rotate-90">
+                    <circle cx={healthSize / 2} cy={healthSize / 2} r={healthR} stroke="hsl(var(--surface-2))" strokeWidth={8} fill="none" />
+                    <circle
+                      cx={healthSize / 2}
+                      cy={healthSize / 2}
+                      r={healthR}
+                      stroke={healthTone}
+                      strokeWidth={8}
+                      fill="none"
+                      strokeDasharray={`${healthDash} ${healthC}`}
+                      strokeLinecap="round"
+                      style={{ transition: 'stroke-dasharray 800ms ease-out' }}
+                    />
+                  </svg>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => onNavigate('manager')} className="p-4 rounded-2xl bg-card shadow-card border border-border/40 text-left cursor-pointer">
+                <div className="flex justify-center mb-1">
+                  <Mascot size={56} mood="sleeping" store={store} />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">Store Manager is off</p>
+                <p className="text-[10px] text-primary text-center mt-1 font-display font-semibold">Tap to enable →</p>
+              </button>
+            )}
+
+            <div className="p-4 rounded-2xl bg-card shadow-card border border-border/40 flex flex-col">
+              <div className="flex items-center gap-2 mb-2">
+                <Mascot size={36} mood={flowMood} store={store} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
+                  <MascotBadge on={managerEnabled} />
+                </div>
+              </div>
+              <div className="space-y-1 flex-1">
+                {!managerEnabled && (
+                  <p className="text-[11px] text-muted-foreground">Turn on Store Manager to receive insights, forecasts and recommendations.</p>
+                )}
+                {managerEnabled && insights.length === 0 && <p className="text-[11px] text-muted-foreground">Insights appear as you record sales.</p>}
+                {managerEnabled &&
+                  insights.slice(0, 4).map(i => (
+                    <p key={i.id} className="text-[11px] text-foreground/90 leading-snug flex gap-1.5">
+                      <span>{i.icon}</span>
+                      <span className="flex-1">{i.text}</span>
+                    </p>
+                  ))}
+              </div>
+              {managerEnabled && insightCount > 0 && (
+                <button onClick={() => onNavigate('manager')} className="mt-2 text-[10px] text-primary font-display font-semibold text-left cursor-pointer">
+                  View all insights ({insightCount}) →
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Actions Panel */}
+          <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card space-y-2">
+            <h3 className="font-display font-bold text-xs uppercase tracking-wider text-muted-foreground">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onNavigate('sales')}
+                className="py-2.5 px-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                💰 Record Sale
+              </button>
+              <button
+                onClick={() => onNavigate('expenses')}
+                className="py-2.5 px-3 rounded-xl bg-destructive/10 text-destructive border border-destructive/20 font-display font-bold text-xs hover:bg-destructive/20 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                🧾 Log Expense
+              </button>
+            </div>
+          </div>
+
+          <button
+            onClick={() => toggleBreakdown('revenue')}
+            className={`w-full p-5 rounded-2xl bg-card shadow-card border text-left transition-all cursor-pointer ${
+              activeBreakdown === 'revenue' ? 'border-yellow-500/80 ring-1 ring-yellow-500/40 bg-surface-2/40' : 'border-border/40 hover:bg-surface-2/40'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground font-display">Revenue</p>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); setPeriodSheetFor('revenue'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPeriodSheetFor('revenue'); } }}
+                className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground font-display font-semibold uppercase tracking-wide hover:text-foreground active:scale-95 transition cursor-pointer"
+              >
+                {PERIOD_LABELS[revenuePeriod]} <ChevronDown className="w-3 h-3" />
+              </span>
+            </div>
+            <p className="font-display font-bold text-[2.4rem] leading-tight text-yellow-500 tracking-tight">
+              ₦{revenuePeriodStats.revenue.toLocaleString()}
+            </p>
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <p className={`text-sm font-display font-semibold ${profitTone}`}>
+                {profitSign}₦{profitAbs.toLocaleString()} Net Profit
+              </p>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); setPeriodSheetFor('netProfit'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPeriodSheetFor('netProfit'); } }}
+                className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground font-display font-semibold uppercase tracking-wide hover:text-foreground active:scale-95 transition cursor-pointer shrink-0"
+              >
+                {PERIOD_LABELS[netProfitPeriod]} <ChevronDown className="w-3 h-3" />
+              </span>
+            </div>
+            <div className="mt-2 pt-2 border-t border-border flex items-end justify-between">
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Business Balance</p>
+                <p className={`font-display font-bold text-lg ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
+                  {stats.netIncome >= 0 ? '' : '−'}₦{Math.abs(stats.netIncome).toLocaleString()}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expenses</p>
+                <p className="font-display font-semibold text-sm text-destructive">₦{stats.totalExpenses.toLocaleString()}</p>
+              </div>
+            </div>
+          </button>
+
+          {periodSheetFor !== null && (
+            <div
+              className="fixed inset-0 z-50"
+              onClick={() => setPeriodSheetFor(null)}
+            >
+              <div className="absolute inset-0 bg-black/80 animate-in fade-in-0 duration-200" />
+              <div
+                className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-background p-4 max-h-[60vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-base font-display font-bold mb-2">
+                  {periodSheetFor === 'revenue' ? 'Revenue period' : 'Net Profit period'}
+                </h3>
+                <div className="flex flex-col gap-1 pb-2">
+                  {PERIOD_OPTIONS.map((period) => {
+                    const active = periodSheetFor === 'revenue' ? revenuePeriod === period : netProfitPeriod === period;
+                    return (
+                      <button
+                        key={period}
+                        onClick={() => selectPeriod(period)}
+                        className={`w-full flex items-center justify-between px-3 py-3 rounded-xl text-sm font-display font-semibold transition active:scale-[0.98] cursor-pointer ${
+                          active ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2/60'
+                        }`}
+                      >
+                        {PERIOD_LABELS[period]}
+                        {active && <Check className="w-4 h-4" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5">
+              <span className="uppercase font-bold tracking-wide font-display">
+                {target.period === 'daily' ? "Today's Target" : "This Week's Target"}
+                {target.mode === 'auto' ? ' (Auto)' : ''}
+              </span>
+              <span className="font-bold text-foreground">₦{target.progressAmount.toLocaleString()} / ₦{target.targetAmount.toLocaleString()}</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-surface-2 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${target.progressPercent >= 100 ? 'bg-success' : 'bg-primary'}`}
+                style={{ width: `${target.progressPercent}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => toggleBreakdown('sales')}
+              className={`p-4 rounded-2xl bg-card border shadow-card text-left transition-all cursor-pointer ${
+                activeBreakdown === 'sales' ? 'border-primary/80 ring-1 ring-primary/40 bg-surface-2/40' : 'border-border/40 hover:bg-surface-2/40'
+              }`}
+            >
+              <p className="text-xs text-muted-foreground font-display">Sales</p>
+              <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalSales}</p>
+            </button>
+            <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card text-left">
+              <p className="text-xs text-muted-foreground font-display">Products</p>
+              <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => toggleBreakdown('inventory')}
+            className={`w-full p-4 rounded-2xl bg-card border shadow-card text-left transition-all cursor-pointer ${
+              activeBreakdown === 'inventory' ? 'border-primary/80 ring-1 ring-primary/40 bg-surface-2/40' : 'border-border/40 hover:bg-surface-2/40'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground font-display">Inventory</p>
+                <p className="font-display font-bold text-2xl text-foreground mt-1">{stats.totalProducts}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-display font-bold text-xl text-success">₦{stats.inventoryValue.toLocaleString()}</p>
+                <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-display font-bold uppercase tracking-wide">
+                  Now
+                </span>
+              </div>
+            </div>
+          </button>
+
+          {stats.lowStockProducts.length > 0 && (
+            <button
+              onClick={() => onNavigate('inventory', true)}
+              className="w-full p-3 rounded-xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/20 transition-colors flex items-center justify-between cursor-pointer"
+            >
+              <span className="text-sm font-display font-semibold text-warning">
+                ⚠ {stats.lowStockProducts.length} low-stock product{stats.lowStockProducts.length === 1 ? '' : 's'}
+              </span>
+              <span className="text-warning text-xs">View →</span>
+            </button>
+          )}
+
+          {/* Restock Score */}
+          {restockScoreResult.totalSpend90d > 0 && (
+            <button
+              onClick={() => onNavigate('inventory')}
+              className="w-full p-4 rounded-2xl bg-card shadow-card border border-border/40 text-left cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-display font-bold text-xs uppercase tracking-wider text-muted-foreground">Restock Score (90 days)</h3>
+                <span className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full ${
+                  restockScoreResult.score >= 85 ? 'bg-success/15 text-success' :
+                  restockScoreResult.score >= 65 ? 'bg-primary/15 text-primary' :
+                  restockScoreResult.score >= 40 ? 'bg-warning/15 text-warning' : 'bg-destructive/15 text-destructive'
+                }`}>{restockScoreResult.label}</span>
+              </div>
+              <div className="flex items-end gap-3">
+                <span className="font-display font-bold text-3xl leading-none">{restockScoreResult.score}</span>
+                <span className="text-xs text-muted-foreground mb-0.5">/ 100</span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-muted mt-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    restockScoreResult.score >= 85 ? 'bg-success' :
+                    restockScoreResult.score >= 65 ? 'bg-primary' :
+                    restockScoreResult.score >= 40 ? 'bg-warning' : 'bg-destructive'
+                  }`}
+                  style={{ width: `${restockScoreResult.score}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                {restockScoreResult.wastedSpend90d > 0
+                  ? `₦${Math.round(restockScoreResult.wastedSpend90d).toLocaleString()} of your last 90 days of restocking went into products that aren't selling well.`
+                  : `All your restocking in the last 90 days went into products that sell. Nice work.`}
+              </p>
+              {restockScoreResult.wastedItems.length > 0 && (
+                <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                  Worth reviewing: {restockScoreResult.wastedItems.slice(0, 3).map(w => w.name).join(', ')}
+                </p>
+              )}
+            </button>
+          )}
+
+          {pendingSummary.totalOwed > 0 && (
+            <button
+              onClick={() => onNavigate('pending')}
+              className="w-full p-4 rounded-2xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/15 transition-colors cursor-pointer"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-display">💳 Pending Payments</p>
+                  <p className="font-display font-bold text-2xl text-warning mt-1">₦{pendingSummary.totalOwed.toLocaleString()}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {pendingSummary.customerCount} customer{pendingSummary.customerCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <span className="text-warning">›</span>
+              </div>
+            </button>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleShareReport}
+              className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors text-xs font-display font-semibold cursor-pointer"
+            >
+              📤 Share Performance Report
+            </button>
+            <button
+              onClick={handleWhatsAppReport}
+              className="p-2.5 rounded-xl bg-success/10 border border-success/20 text-success hover:bg-success/20 transition-colors text-sm cursor-pointer"
+              title="Share on WhatsApp"
+            >
+              💬
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column */}
+        <div className="md:col-span-7 space-y-4">
+
+
+          {activeBreakdown === 'revenue' && (
+            <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card space-y-2 animate-fade-in text-left">
+              <h3 className="font-display font-bold text-sm text-yellow-500">Revenue Breakdown</h3>
+              {getRevenueBreakdown().length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sales yet</p>
+              ) : (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {getRevenueBreakdown().map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
+                      <div>
+                        <span className="text-foreground font-medium">{item.name}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">{item.qty} sold</span>
+                      </div>
+                      <span className="text-yellow-500 font-bold">₦{item.revenue.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeBreakdown === 'profit' && (
+            <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card space-y-2 animate-fade-in text-left">
+              <h3 className="font-display font-bold text-sm text-success">Net Profit Breakdown</h3>
+              {getProfitBreakdown().length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sales yet</p>
+              ) : (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {getProfitBreakdown().map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
+                      <div>
+                        <span className="text-foreground font-medium">{item.name}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">{item.margin}% margin</span>
+                      </div>
+                      <span className="text-success font-bold">₦{item.profit.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeBreakdown === 'inventory' && (() => {
+            const items = getInventoryBreakdown();
+            const totalInitial = items.reduce((s, i) => s + i.initial, 0);
+            const totalCurrent = items.reduce((s, i) => s + i.current, 0);
+            const totalPurchased = items.reduce((s, i) => s + i.purchased, 0);
+            const totalValue = items.reduce((s, i) => s + i.value, 0);
+            return (
+              <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card space-y-3 animate-fade-in text-left">
+                <h3 className="font-display font-bold text-sm text-primary">Inventory Breakdown</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 rounded-lg bg-surface-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase">Initial</p>
+                    <p className="font-display font-bold text-base text-foreground">{totalInitial.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-success/10 text-center">
+                    <p className="text-[10px] text-success uppercase">Bought</p>
+                    <p className="font-display font-bold text-base text-success">+{totalPurchased.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-primary/10 text-center">
+                    <p className="text-[10px] text-primary uppercase">Current</p>
+                    <p className="font-display font-bold text-base text-primary">{totalCurrent.toLocaleString()}</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-right">Total value: ₦{totalValue.toLocaleString()}</p>
+                <div className="grid grid-cols-4 gap-2 text-[10px] text-muted-foreground px-2 pb-1 border-b border-border uppercase tracking-wide">
+                  <span className="col-span-2 text-left">Product</span>
+                  <span className="text-center">Initial</span>
+                  <span className="text-center text-success">+ Bought</span>
+                  <span className="text-center text-primary">Current</span>
+                </div>
+                <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                  {items.map((item, i) => (
+                    <div key={i} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-surface-2 text-sm text-left">
+                      <div className="col-span-1 min-w-0">
+                        <p className="text-foreground font-medium truncate">{item.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{item.category} • ₦{item.value.toLocaleString()}</p>
+                      </div>
+                      <span className="text-center text-muted-foreground">{item.initial}</span>
+                      <span className="text-center text-success">{item.purchased > 0 ? `+${item.purchased}` : '—'}</span>
+                      <span className={`text-center font-bold ${item.current <= 5 ? 'text-destructive' : 'text-primary'}`}>{item.current}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {activeBreakdown === 'sales' && (() => {
+            const breakdown = getSalesBreakdown();
+            const maxTotal = Math.max(...breakdown.map(d => d.total), 0);
+            const minTotal = breakdown.length > 1 ? Math.min(...breakdown.map(d => d.total)) : -1;
+            const rangeTotal = breakdown.reduce((s, d) => s + d.total, 0);
+            const rangeCount = breakdown.reduce((s, d) => s + d.count, 0);
+            const ranges: { key: DateRange; label: string }[] = [
+              { key: 'today', label: 'Today' },
+              { key: 'week', label: '7 Days' },
+              { key: 'month', label: '30 Days' },
+              { key: 'all', label: 'All' },
+              { key: 'custom', label: 'Custom' },
+            ];
+            return (
+              <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card space-y-3 animate-fade-in text-left">
+                <h3 className="font-display font-bold text-sm">Sales by Day</h3>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {ranges.map(r => (
+                    <button
+                      key={r.key}
+                      onClick={() => setSalesRange(r.key)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-display font-semibold border transition-colors cursor-pointer ${
+                        salesRange === r.key
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+
+                {salesRange === 'custom' && (
+                  <div className="grid grid-cols-2 gap-2 text-left">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-semibold">From</label>
+                      <input
+                        type="date"
+                        value={customStart}
+                        onChange={e => setCustomStart(e.target.value)}
+                        className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground uppercase font-semibold">To</label>
+                      <input
+                        type="date"
+                        value={customEnd}
+                        onChange={e => setCustomEnd(e.target.value)}
+                        className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 text-left">
+                  <div className="p-2 rounded-lg bg-yellow-500/10 text-center">
+                    <p className="text-[10px] text-yellow-500 uppercase font-semibold">Range Revenue</p>
+                    <p className="font-display font-bold text-sm text-yellow-500">₦{rangeTotal.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-surface-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">Transactions</p>
+                    <p className="font-display font-bold text-sm text-foreground">{rangeCount}</p>
+                  </div>
+                </div>
+
+                {breakdown.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No sales in this range</p>
+                ) : (
+                  <>
+                    {breakdown.length > 1 && (
+                      <div className="flex gap-2 text-[10px] text-muted-foreground text-left">
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-success" /> Best day
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-destructive" /> Lowest day
+                        </span>
+                      </div>
+                    )}
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                      {breakdown.map((day, i) => {
+                        const isBest = day.total === maxTotal && maxTotal > 0;
+                        const isWorst = day.total === minTotal && minTotal >= 0 && !isBest;
+                        return (
+                          <div
+                            key={i}
+                            className={`flex justify-between items-center p-2 rounded-lg text-sm border ${
+                              isBest
+                                ? 'bg-success/10 border-success/40'
+                                : isWorst
+                                ? 'bg-destructive/10 border-destructive/40'
+                                : 'bg-surface-2 border-transparent'
+                            }`}
+                          >
+                            <div>
+                              <span className="text-foreground font-medium">
+                                {day.date} {isBest && '🏆'} {isWorst && '📉'}
+                              </span>
+                              <span className="text-muted-foreground ml-2 text-xs">{day.count} transactions</span>
+                            </div>
+                            <span className={`font-bold ${isBest ? 'text-success' : isWorst ? 'text-destructive' : 'text-primary'}`}>
+                              ₦{day.total.toLocaleString()}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
+          {store.sales.length > 0 && (
+            <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card text-left">
+              <h3 className="font-display font-bold text-sm mb-3">Sales Trend</h3>
+              <div className="flex flex-wrap gap-1 mb-4">
+                {[
+                  { key: 'today', label: 'Today' },
+                  { key: '1w', label: '1 Week' },
+                  { key: '14d', label: '14 Days' },
+                  { key: '30d', label: '30 Days' },
+                  { key: 'all', label: 'All' },
+                ].map(r => (
+                  <button
+                    key={r.key}
+                    onClick={() => setTrendRange(r.key as any)}
+                    className={`px-2.5 py-0.5 rounded-md text-[10px] font-display font-semibold border transition-colors cursor-pointer ${
+                      trendRange === r.key
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              <div className="h-60 w-full text-xs">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--surface-3))" />
+                    <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" tickLine={false} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        borderColor: 'hsl(var(--border))',
+                        borderRadius: '0.75rem',
+                      }}
+                      formatter={(val: number, name: string) => [`₦${val.toLocaleString()}`, name]}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      align="right"
+                      height={28}
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <Line type="monotone" dataKey="total" name="Revenue" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="profit" name="Net Profit" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 2 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {activeBreakdown === null && topSellers.length > 0 && (
+            <div className="p-5 rounded-2xl bg-card border border-border/40 shadow-card text-left space-y-4 animate-fade-in">
+              <h3 className="font-display font-bold text-base text-foreground">Top Sellers</h3>
+              <div className="space-y-3">
+                {(() => {
+                  const maxSold = Math.max(...topSellers.map(item => item.totalSold), 1);
+                  return topSellers.map((item, idx) => {
+                    const percentage = (item.totalSold / maxSold) * 100;
+                    return (
+                      <div key={idx} className="flex items-center justify-between text-sm gap-3 py-1">
+                        <span className="w-28 shrink-0 truncate text-foreground/90 font-medium" title={item.name}>
+                          {item.name}
+                        </span>
+                        <div className="flex-1 bg-background rounded-full h-3.5 overflow-hidden">
+                          <div
+                            className="bg-primary h-full rounded-full"
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                        <span className="w-8 shrink-0 text-right text-muted-foreground font-medium">
+                          {item.totalSold}
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

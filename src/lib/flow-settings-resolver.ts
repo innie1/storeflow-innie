@@ -1,0 +1,278 @@
+import { DEFAULT_MANAGER_SETTINGS, ManagerSettings, StoreData } from '@/types/store';
+import { changeCustomerDebt, changeProductCost, changeProductPrice, changeProductStock, findFlowCustomer, findFlowProduct, addFlowCustomer, recordCustomerPayment, archiveProduct, restoreProduct } from '@/lib/flow-store-actions';
+
+export interface FlowSettingResult {
+  handled: boolean;
+  store?: StoreData;
+  label?: string;
+  value?: string | number | boolean;
+  message?: string;
+  needsConfirmation?: boolean;
+}
+
+type BooleanKey = keyof ManagerSettings;
+type NumericKey = 'defaultMargin' | 'criticalStockThreshold' | 'graphInterval' | 'defaultPurchaseQty' | 'defaultRestockQty' | 'minStockThreshold' | 'autoApplyMaxChangeAmount' | 'autoDiscountValue' | 'autoDiscountMinSubtotal' | 'autoDiscountMaxSubtotal';
+type SelectKey = 'voiceGender' | 'restockFrequency' | 'autoDiscountType';
+
+const BOOLEAN_ALIASES: Array<[RegExp, BooleanKey, string]> = [
+  [/^(?:mascot|flow)\s+animations?$/, 'mascotAnimations', 'Mascot animations'],
+  [/^(?:number|numeric|value)\s+animations?$/, 'numericAnimations', 'Number animations'],
+  [/^(?:reduce|reduced)\s+motion$/, 'reduceMotion', 'Reduced motion'],
+  [/^(?:compact|compact\s+mode)$/, 'compactMode', 'Compact mode'],
+  [/^(?:voice|flow\s+voice|voice\s+features?)$/, 'voiceFeatures', 'Voice features'],
+  [/^(?:auto\s+voice|automatic\s+voice|auto\s+listen)$/, 'autoVoiceListen', 'Auto voice listening'],
+  [/^(?:weekly\s+recap|weekly\s+report)$/, 'weeklyRecap', 'Weekly recap'],
+  [/^(?:customer\s+request\s+notifications?|customer\s+requests?)$/, 'notifyCustomerRequests', 'Customer request notifications'],
+  [/^(?:low\s+stock|low\s+stock\s+alerts?)$/, 'notifyLowStock', 'Low-stock notifications'],
+  [/^(?:insights?|insight\s+notifications?)$/, 'notifyInsights', 'Insight notifications'],
+  [/^(?:recommendations?|recommendation\s+notifications?)$/, 'notifyRecommendations', 'Recommendation notifications'],
+  [/^(?:alerts?|alert\s+notifications?)$/, 'notifyAlerts', 'Alert notifications'],
+  [/^(?:weekly\s+report\s+notifications?)$/, 'notifyWeeklyRecap', 'Weekly recap notifications'],
+  [/^(?:monthly\s+reports?|monthly\s+report\s+notifications?)$/, 'notifyMonthlyReports', 'Monthly reports'],
+  [/^(?:savings?|savings\s+reminders?)$/, 'notifySavingsReminders', 'Savings reminders'],
+  [/^(?:revenue\s+forecasts?|revenue\s+forecast)$/, 'revenueForecasts', 'Revenue forecasts'],
+  [/^(?:profit\s+forecasts?|profit\s+forecast)$/, 'profitForecasts', 'Profit forecasts'],
+  [/^(?:inventory\s+forecasts?|inventory\s+forecast)$/, 'inventoryForecasts', 'Inventory forecasts'],
+  [/^(?:expense\s+analysis|expense\s+analytics)$/, 'expenseAnalysis', 'Expense analysis'],
+  [/^(?:smart\s+pricing|pricing\s+assistant)$/, 'smartPricing', 'Smart pricing'],
+  [/^(?:product\s+suggestions?|product\s+recommendations?)$/, 'productSuggestions', 'Product suggestions'],
+  [/^(?:savings\s+planner|savings\s+planning)$/, 'savingsPlanner', 'Savings planner'],
+  [/^(?:business\s+advice|business\s+advisor)$/, 'businessAdvice', 'Business advice'],
+  [/^(?:business\s+expansion|expansion\s+advice)$/, 'businessExpansion', 'Business expansion'],
+  [/^(?:business\s+questions?)$/, 'businessQuestions', 'Business questions'],
+  [/^(?:auto\s+suggest\s+prices?|price\s+suggestions?)$/, 'autoSuggestPrices', 'Automatic price suggestions'],
+  [/^(?:auto\s+apply\s+prices?|automatic\s+price\s+changes?)$/, 'autoApplyPrices', 'Automatic price changes'],
+  [/^(?:show\s+product\s+profit|product\s+profit)$/, 'showProductProfit', 'Product profit display'],
+  [/^(?:restock\s+suggestions?|restock\s+advice)$/, 'restockSuggestions', 'Restock suggestions'],
+  [/^(?:inventory\s+alerts?|stock\s+alerts?)$/, 'inventoryAlerts', 'Inventory alerts'],
+  [/^(?:auto\s+backups?|automatic\s+backups?)$/, 'autoBackupsEnabled', 'Automatic backups'],
+  [/^(?:auto\s+discounts?|automatic\s+discounts?)$/, 'autoDiscountEnabled', 'Automatic discounts'],
+  [/^(?:weather\s+impact|weather\s+insights?)$/, 'weatherImpactEnabled', 'Weather impact insights'],
+  [/^(?:auto\s+restock|automatic\s+restock|auto\s+suggest\s+restock)$/, 'autoSuggestRestock', 'Automatic restock suggestions'],
+  [/^(?:multi\s+device\s+sync|device\s+sync)$/, 'multiDeviceSync', 'Multi-device sync'],
+  [/^(?:auto\s+print|automatic\s+printing|auto\s+print\s+receipts?)$/, 'autoPrintReceipt', 'Automatic receipt printing'],
+  [/^(?:receipt\s+logo|show\s+receipt\s+logo)$/, 'receiptLogoEnabled', 'Receipt logo'],
+  [/^(?:biometric|biometric\s+lock)$/, 'biometricLock', 'Biometric lock'],
+  [/^(?:pin|pin\s+lock|app\s+pin)$/, 'pinLock', 'PIN lock'],
+];
+
+const NUMERIC_ALIASES: Array<[RegExp, NumericKey, string]> = [
+  [/^(?:default\s+)?margin$/, 'defaultMargin', 'Default margin'],
+  [/^(?:critical\s+stock|critical\s+stock\s+threshold)$/, 'criticalStockThreshold', 'Critical stock threshold'],
+  [/^(?:minimum|min|reorder)\s+stock(?:\s+threshold)?$/, 'minStockThreshold', 'Minimum stock threshold'],
+  [/^(?:default\s+)?purchase\s+quantity$/, 'defaultPurchaseQty', 'Default purchase quantity'],
+  [/^(?:default\s+)?restock\s+quantity$/, 'defaultRestockQty', 'Default restock quantity'],
+  [/^(?:graph|chart)\s+(?:interval|refresh)$/, 'graphInterval', 'Graph interval'],
+  [/^(?:maximum\s+automatic\s+price\s+change|auto\s+price\s+change\s+limit|price\s+change\s+limit)$/, 'autoApplyMaxChangeAmount', 'Automatic price-change limit'],
+  [/^(?:discount\s+value|automatic\s+discount\s+value)$/, 'autoDiscountValue', 'Automatic discount value'],
+  [/^(?:minimum\s+discount\s+subtotal|discount\s+minimum)$/, 'autoDiscountMinSubtotal', 'Discount minimum subtotal'],
+  [/^(?:maximum\s+discount\s+subtotal|discount\s+maximum)$/, 'autoDiscountMaxSubtotal', 'Discount maximum subtotal'],
+];
+
+const SELECT_ALIASES: Array<[RegExp, SelectKey, string]> = [
+  [/^(?:voice\s+gender|voice)$/, 'voiceGender', 'Flow voice'],
+  [/^(?:restock\s+frequency|restock\s+schedule)$/, 'restockFrequency', 'Restock frequency'],
+  [/^(?:discount\s+type|automatic\s+discount\s+type)$/, 'autoDiscountType', 'Automatic discount type'],
+];
+
+function normalize(s: string) {
+  return s.toLowerCase().replace(/[’']/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function manager(store: StoreData): ManagerSettings {
+  return { ...DEFAULT_MANAGER_SETTINGS, ...(store.managerSettings || {}) };
+}
+
+function result(store: StoreData, key: keyof ManagerSettings, value: any, label: string): FlowSettingResult {
+  const next = { ...store, managerSettings: { ...manager(store), [key]: value } };
+  return { handled: true, store: next, label, value, message: `${label} is ${typeof value === 'boolean' ? (value ? 'on' : 'off') : String(value)}.` };
+}
+
+function parseOperation(q: string) {
+  const m = q.match(/^(?:please\s+)?(?:turn|switch)\s+(on|off)\s+(.+)$|^(?:please\s+)?(?:enable|disable)\s+(.+)$|^(?:please\s+)?toggle\s+(.+)$|^(?:please\s+)?(?:set|change)\s+(.+?)\s+(?:to|=)\s+(.+)$/);
+  if (!m) return null;
+  if (m[1]) return { mode: 'bool' as const, enabled: m[1] === 'on', target: m[2] };
+  if (m[3]) return { mode: 'bool' as const, enabled: !q.startsWith('disable'), target: m[3] };
+  if (m[4]) return { mode: 'toggle' as const, target: m[4] };
+  return { mode: 'value' as const, target: m[5], value: m[6] };
+}
+
+function productControl(store: StoreData, q: string): FlowSettingResult | null {
+  let m = q.match(/^(?:set|change|update)\s+(.+?)\s+(?:selling\s+)?price\s+(?:to|=)\s+₦?([\d,]+)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const price = Number(m[2].replace(/,/g, ''));
+    if (!Number.isFinite(price) || price <= 0) return { handled: true, message: 'Give me a valid selling price.' };
+    const next = changeProductPrice(store, match, price);
+    return { handled: true, store: next, label: `${match.product.name} price`, value: price, message: `Done — **${match.product.name}** now sells for ₦${price.toLocaleString()}.` };
+  }
+
+  m = q.match(/^(?:set|change|update)\s+(.+?)\s+cost\s+(?:price\s+)?(?:to|=)\s+₦?([\d,]+)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const cost = Number(m[2].replace(/,/g, ''));
+    if (!Number.isFinite(cost) || cost < 0) return { handled: true, message: 'Give me a valid cost price.' };
+    const next = changeProductCost(store, match, cost);
+    return { handled: true, store: next, label: `${match.product.name} cost price`, value: cost, message: `Done — **${match.product.name}** cost price is now ₦${cost.toLocaleString()}.` };
+  }
+
+  m = q.match(/^(?:set|change|update)\s+(.+?)\s+(?:stock|quantity)\s+(?:to|=)\s+(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const quantity = Number(m[2]);
+    const next = changeProductStock(store, match, quantity);
+    return { handled: true, store: next, label: `${match.product.name} stock`, value: quantity, message: `Done — **${match.product.name}** stock is now ${quantity}.` };
+  }
+
+  m = q.match(/^(?:increase|add)\s+(.+?)\s+(?:stock|quantity)\s+by\s+(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const quantity = Number(m[2]);
+    const next = changeProductStock(store, match, match.product.quantity + quantity);
+    return { handled: true, store: next, label: `${match.product.name} stock`, value: next.products.find(p => p.id === match.product.id)?.quantity || 0, message: `Done — added ${quantity} to **${match.product.name}**. Stock is now ${next.products.find(p => p.id === match.product.id)?.quantity || 0}.` };
+  }
+
+  m = q.match(/^(?:reduce|decrease|remove)\s+(.+?)\s+(?:stock|quantity)\s+by\s+(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const quantity = Number(m[2]);
+    if (quantity > match.product.quantity) return { handled: true, message: `I won't reduce it below zero. **${match.product.name}** only has ${match.product.quantity} in stock.` };
+    const next = changeProductStock(store, match, match.product.quantity - quantity);
+    return { handled: true, store: next, label: `${match.product.name} stock`, value: next.products.find(p => p.id === match.product.id)?.quantity || 0, message: `Done — removed ${quantity} from **${match.product.name}**. Stock is now ${next.products.find(p => p.id === match.product.id)?.quantity || 0}.` };
+  }
+
+  m = q.match(/^(?:archive|discontinue|deactivate)\s+(.+)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]);
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const next = archiveProduct(store, match);
+    return { handled: true, store: next, label: `${match.product.name}`, message: `Archived **${match.product.name}**. You can restore it later.` };
+  }
+
+  m = q.match(/^(?:restore|reactivate|activate)\s+(.+)$/);
+  if (m) {
+    const match = findFlowProduct(store, m[1]) || (() => {
+      const p = store.products.find(x => normalize(x.name) === normalize(m![1]));
+      return p ? { product: p, score: 1 } : null;
+    })();
+    if (!match) return { handled: true, message: `I couldn't find **${m[1]}** in your inventory.` };
+    const next = restoreProduct(store, match);
+    return { handled: true, store: next, label: `${match.product.name}`, message: `Restored **${match.product.name}**.` };
+  }
+  return null;
+}
+
+function customerControl(store: StoreData, q: string): FlowSettingResult | null {
+  let m = q.match(/^(?:add|create|register)\s+(?:a\s+)?customer\s+(.+?)(?:\s+(?:phone|number)\s*[:=]?\s*(\+?\d[\d\s-]{6,}))?$/);
+  if (m) {
+    const name = m[1].trim();
+    if (!name) return { handled: true, message: 'Give me the customer name.' };
+    if (findFlowCustomer(store, name)) return { handled: true, message: `I already have a customer named **${name}**.` };
+    const next = addFlowCustomer(store, name, (m[2] || '').replace(/\D/g, ''));
+    return { handled: true, store: next, label: 'Customer', message: `Added **${name}** to your Customer Book.` };
+  }
+
+  m = q.match(/^(?:add|record|give)\s+(?:a\s+)?(?:debt|credit)\s+of\s+₦?([\d,]+)\s+(?:to|for)\s+(.+)$/);
+  if (m) {
+    const amount = Number(m[1].replace(/,/g, ''));
+    const customer = findFlowCustomer(store, m[2]);
+    if (!customer) return { handled: true, message: `I couldn't find customer **${m[2]}**.` };
+    const next = changeCustomerDebt(store, customer, amount);
+    const updated = next.customers?.find(c => c.id === customer.id)?.outstandingDebt || 0;
+    return { handled: true, store: next, label: `${customer.name} debt`, value: updated, message: `Recorded ₦${amount.toLocaleString()} for **${customer.name}**. Outstanding debt: ₦${updated.toLocaleString()}.` };
+  }
+
+  m = q.match(/^(?:record\s+)?(?:payment|paid)\s+₦?([\d,]+)\s+(?:from|by)\s+(.+)$/);
+  if (m) {
+    const amount = Number(m[1].replace(/,/g, ''));
+    const customer = findFlowCustomer(store, m[2]);
+    if (!customer) return { handled: true, message: `I couldn't find customer **${m[2]}**.` };
+    const next = recordCustomerPayment(store, customer, amount);
+    const updated = next.customers?.find(c => c.id === customer.id)?.outstandingDebt || 0;
+    return { handled: true, store: next, label: `${customer.name} payment`, value: amount, message: `Recorded ₦${amount.toLocaleString()} from **${customer.name}**. Remaining debt: ₦${updated.toLocaleString()}.` };
+  }
+
+  return null;
+}
+
+export function resolveFlowSettingCommand(store: StoreData, raw: string): FlowSettingResult {
+  const q = normalize(raw);
+
+  const productAction = productControl(store, q);
+  if (productAction) return productAction;
+  const customerAction = customerControl(store, q);
+  if (customerAction) return customerAction;
+
+  const op = parseOperation(q);
+  if (!op) return { handled: false };
+  const target = normalize(op.target);
+
+  if (['all notifications', 'all notification', 'every notification'].includes(target) && (op.mode === 'bool' || op.mode === 'toggle')) {
+    const current = manager(store);
+    const enabled = op.mode === 'toggle' ? !(current.notifyInsights && current.notifyRecommendations && current.notifyAlerts && current.notifyWeeklyRecap && current.notifyMonthlyReports && current.notifySavingsReminders && current.notifyCustomerRequests && current.notifyLowStock) : op.enabled;
+    const nextSettings = { ...current, notifyInsights: enabled, notifyRecommendations: enabled, notifyAlerts: enabled, notifyWeeklyRecap: enabled, notifyMonthlyReports: enabled, notifySavingsReminders: enabled, notifyCustomerRequests: enabled, notifyLowStock: enabled };
+    return { handled: true, store: { ...store, managerSettings: nextSettings }, label: 'All notifications', value: enabled, message: `All notification categories are ${enabled ? 'on' : 'off'}.` };
+  }
+
+  if (/^(?:customer\s+ordering|customer\s+orders?|online\s+ordering)$/.test(target) && (op.mode === 'bool' || op.mode === 'toggle')) {
+    const current = store.profile?.payment?.acceptWebsiteOrders ?? true;
+    const enabled = op.mode === 'toggle' ? !current : op.enabled;
+    return { handled: true, store: { ...store, profile: { ...(store.profile || { storeType: '', location: '', phone: '', email: '' }), payment: { ...(store.profile?.payment || {}), acceptWebsiteOrders: enabled } } }, label: 'Customer ordering', value: enabled, message: `Customer ordering is ${enabled ? 'on' : 'off'}.` };
+  }
+
+  const bool = BOOLEAN_ALIASES.find(([pattern]) => pattern.test(target));
+  if (bool && (op.mode === 'bool' || op.mode === 'toggle')) {
+    const current = Boolean(manager(store)[bool[1]]);
+    const enabled = op.mode === 'toggle' ? !current : op.enabled;
+    const sensitive = bool[1] === 'biometricLock' || bool[1] === 'pinLock' || bool[1] === 'autoApplyPrices' || bool[1] === 'autoBackupsEnabled';
+    const r = result(store, bool[1], enabled, bool[2]);
+    if (sensitive && enabled) r.needsConfirmation = true;
+    return r;
+  }
+
+  const numeric = NUMERIC_ALIASES.find(([pattern]) => pattern.test(target));
+  if (numeric && op.mode === 'value') {
+    const n = Number(String(op.value).replace(/[₦,% ,]/g, ''));
+    if (!Number.isFinite(n)) return { handled: true, message: `Give me a valid number for ${numeric[2]}.` };
+    if (numeric[1] === 'graphInterval' && ![10, 30, 60].includes(n)) return { handled: true, message: 'Graph interval can be 10, 30 or 60 minutes.' };
+    if (numeric[1] === 'defaultMargin' && (n < 0 || n > 100)) return { handled: true, message: 'Default margin must be between 0% and 100%.' };
+    if (n < 0) return { handled: true, message: `${numeric[2]} cannot be negative.` };
+    return result(store, numeric[1], n, numeric[2]);
+  }
+
+  const select = SELECT_ALIASES.find(([pattern]) => pattern.test(target));
+  if (select && op.mode === 'value') {
+    const value = normalize(String(op.value));
+    if (select[1] === 'voiceGender' && !['male', 'female', 'young male', 'young-male'].includes(value)) return { handled: true, message: 'Voice can be male, female or young-male.' };
+    if (select[1] === 'restockFrequency' && !['daily', 'weekly', 'monthly'].includes(value)) return { handled: true, message: 'Restock frequency can be daily, weekly or monthly.' };
+    if (select[1] === 'autoDiscountType' && !['flat', 'percentage', 'percent'].includes(value)) return { handled: true, message: 'Discount type can be flat or percentage.' };
+    const normalizedValue = select[1] === 'voiceGender' && value === 'young male' ? 'young-male' : select[1] === 'autoDiscountType' && value === 'percent' ? 'percentage' : value;
+    return result(store, select[1], normalizedValue, select[2]);
+  }
+
+  return { handled: false };
+}
+
+export function flowSettingsHelp() {
+  return [
+    'I can operate your StoreFlow settings and store controls, including:',
+    '• Turn mascot, number or reduced-motion animations on/off',
+    '• Turn voice, auto-listening and sounds on/off',
+    '• Control all notification categories, including low-stock, insights, recommendations, alerts, reports and savings reminders',
+    '• Turn customer ordering on/off',
+    '• Add, change and adjust inventory products',
+    '• Change selling price, cost price and stock',
+    '• Archive and restore products',
+    '• Add customers and record customer debts/payments',
+    '• Turn forecasts, smart pricing, savings and business tools on/off',
+    '• Control automatic backups, discounts and receipt printing',
+    '• Turn biometric/PIN lock and other security controls on/off',
+    '• Change margins, stock thresholds, graph intervals and restock quantities',
+    '• Change voice gender, restock frequency and discount type',
+  ].join('\n');
+}
