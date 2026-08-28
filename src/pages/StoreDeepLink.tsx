@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { loadStore, logScanEvent } from '@/lib/store-data';
-import { supabase } from '@/integrations/supabase/client';
 import { showToast } from '@/components/Toast';
 import { StoreData } from '@/types/store';
 import { Loader2, QrCode, AlertCircle } from 'lucide-react';
 import BusinessStorefront from '@/components/business/BusinessStorefront';
+import { getPublicStorefront } from '@/lib/public-storefront';
 
 function shouldLogStorefrontScan(storeKey: string): boolean {
   try {
@@ -16,30 +16,6 @@ function shouldLogStorefrontScan(storeKey: string): boolean {
   } catch {
     return true;
   }
-}
-
-function storefrontRowToStoreData(row: any): StoreData | null {
-  if (!row || !row.data) return null;
-  const data = row.data as StoreData;
-  const legacyBusinessType = (data as any).businessType;
-  const accessCode = data.accessCode || row.access_code;
-  if (!accessCode) return null;
-
-  return {
-    ...data,
-    id: row.id || data.id,
-    storeId: row.store_id || data.storeId,
-    storeName: data.storeName || row.business_name || 'Store',
-    accessCode,
-    storeType: (data.storeType || legacyBusinessType || 'other') as any,
-    businessType: (legacyBusinessType || data.storeType || 'other') as any,
-    profile: {
-      ...(data.profile || ({} as any)),
-      phone: data.profile?.phone || row.phone || '',
-      email: data.profile?.email || row.email || '',
-      location: data.profile?.location || row.address || '',
-    },
-  } as StoreData;
 }
 
 export default function StoreDeepLink() {
@@ -80,12 +56,7 @@ export default function StoreDeepLink() {
       }
 
       try {
-        const { data: cloudStore, error } = await supabase.rpc('get_public_storefront' as any, {
-          p_key: storeId,
-        } as any);
-        if (error) throw error;
-
-        const storeData = storefrontRowToStoreData(cloudStore);
+        const storeData = await getPublicStorefront(storeId);
         if (storeData) {
           activateStore(storeData);
           return;
@@ -93,11 +64,7 @@ export default function StoreDeepLink() {
 
         // Access codes are historically uppercase; retry once for old QR codes.
         if (storeId !== storeId.toUpperCase()) {
-          const { data: upperStore, error: upperError } = await supabase.rpc('get_public_storefront' as any, {
-            p_key: storeId.toUpperCase(),
-          } as any);
-          if (upperError) throw upperError;
-          const upperStoreData = storefrontRowToStoreData(upperStore);
+          const upperStoreData = await getPublicStorefront(storeId.toUpperCase());
           if (upperStoreData) {
             activateStore(upperStoreData);
             return;
@@ -123,7 +90,7 @@ export default function StoreDeepLink() {
   };
 
   if (status === 'found' && store) {
-    return <BusinessStorefront store={store} onContinue={() => showToast('Order flow is ready for the next step.', 'success')} />;
+    return <BusinessStorefront store={store} />;
   }
 
   return (

@@ -9,6 +9,7 @@ import { Eye, EyeOff, Key, Shield, HelpCircle, Lock, Mail, Phone, Users, Cloud, 
 import { supabase } from '@/integrations/supabase/client';
 import { generateStoreUrl, parseScannedQRText } from '@/lib/qr-code';
 import QRScannerPage from '@/components/qr/QRScannerPage';
+import { getPublicStorefront } from '@/lib/public-storefront';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -1723,31 +1724,15 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                   (async () => {
                     setAccessMood('thinking' as any);
                     try {
-                      let cloudStore = null;
-                      // Try by store_id
-                      const { data: byId } = await supabase
-                        .from('stores')
-                        .select('*')
-                        .eq('store_id', parsed.storeId)
-                        .maybeSingle();
-                      cloudStore = byId;
+                      const remoteStore = await getPublicStorefront(parsed.storeId);
 
-                      // Fallback: by access_code
-                      if (!cloudStore) {
-                        const { data: byCode } = await supabase
-                          .from('stores')
-                          .select('*')
-                          .eq('access_code', code)
-                          .maybeSingle();
-                        cloudStore = byCode;
-                      }
-
-                      if (cloudStore && cloudStore.data) {
-                        const remoteStore = cloudStore.data as StoreData;
-                        localStorage.setItem(`storeflow_store_${remoteStore.accessCode}`, JSON.stringify(remoteStore));
+                      if (remoteStore) {
                         setAccessMood('happy' as any);
                         showToast('Cloud store loaded!', 'success');
-                        proceedWithStore(remoteStore);
+                        // QR scanning is a customer action. Open the public
+                        // storefront and never cache its sanitized payload as a
+                        // merchant store.
+                        window.location.assign(generateStoreUrl(remoteStore.storeId || remoteStore.accessCode));
                         return;
                       }
 
