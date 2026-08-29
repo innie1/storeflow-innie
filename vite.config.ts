@@ -9,6 +9,7 @@ import flowMessagesPlugin from "./vite-plugin-flow-messages";
 import flowOrderDraftsPlugin from "./vite-plugin-flow-order-drafts";
 import orderItemSnapshotsPlugin from "./vite-plugin-order-item-snapshots";
 import floatingFlowSettingPlugin from "./vite-plugin-floating-flow-setting";
+import storefrontPublishingPlugin from "./vite-plugin-storefront-publishing";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -19,6 +20,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     businessIsolationPlugin(),
+    storefrontPublishingPlugin(),
     flowMessagesPlugin(),
     flowOrderDraftsPlugin(),
     floatingFlowSettingPlugin(),
