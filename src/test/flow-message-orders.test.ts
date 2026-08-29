@@ -27,7 +27,7 @@ describe('Flow message orders', () => {
     expect(supportsFlowMessageOrders(baseStore('restaurant'))).toBe(true);
     expect(supportsFlowMessageOrders(baseStore('laundry'))).toBe(true);
     expect(supportsFlowMessageOrders(baseStore('barber'))).toBe(true);
-    expect(supportsFlowMessageOrders(baseStore('provision'))).toBe(false);
+    expect(supportsFlowMessageOrders(baseStore('provision'))).toBe(true);
   });
 
   it('recognizes a spoken customer order without stealing ordinary order queries', () => {
