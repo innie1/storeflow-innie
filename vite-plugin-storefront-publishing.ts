@@ -19,7 +19,7 @@ export function patchMarketplaceSettings(source: string): string {
   const tryIndex = code.indexOf(tryAnchor, saveIndex);
   if (tryIndex < 0) throw new Error('[storefront-publishing] handleSaveToCloud try block missing');
   if (!code.slice(saveIndex, saveIndex + 1800).includes('STOREFLOW_OWNER_STOREFRONT_PUBLISH')) {
-    const insertion = `\n      // STOREFLOW_OWNER_STOREFRONT_PUBLISH\n      // Works for both Supabase members and the original StoreFlow owner session.\n      const publishedStore = await publishStorefrontToCloud(store, form);\n      saveStore(publishedStore, { skipCloudSync: true });\n      onUpdate(publishedStore);\n      showToast('Customer storefront updated', 'success');\n      return;\n`;
+    const insertion = `\n      // STOREFLOW_OWNER_STOREFRONT_PUBLISH\n      // Works for both Supabase members and the original StoreFlow owner session.\n      const ownerPublishedStore = await publishStorefrontToCloud(store, form);\n      saveStore(ownerPublishedStore, { skipCloudSync: true });\n      onUpdate(ownerPublishedStore);\n      showToast('Customer storefront updated', 'success');\n      return;\n`;
     code = code.slice(0, tryIndex + tryAnchor.length) + insertion + code.slice(tryIndex + tryAnchor.length);
   }
 
