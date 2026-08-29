@@ -65,10 +65,9 @@ export function prepareStoreForMarketplacePublish(
 /**
  * Publish only customer-facing storefront fields.
  *
- * StoreFlow historically supports two merchant session types: Supabase Auth
- * members and the original access-code + owner-password session. The old
- * marketplace publisher handled only the first, so a local owner could turn
- * Marketplace on and configure services while Supabase remained unchanged.
+ * StoreFlow supports Supabase Auth members and the original access-code +
+ * owner-password merchant session. Both paths go through the same scoped RPC
+ * so marketplace publishing can never overwrite finance/inventory internals.
  */
 export async function publishStorefrontToCloud(
   store: StoreData,
@@ -78,27 +77,9 @@ export async function publishStorefrontToCloud(
   const businessTemplate = (published as any).businessTemplate || {};
   const laundryPricing = (published as any).laundryPricing || businessTemplate.laundryPricing || {};
   const accessCode = String(store.accessCode || '').trim();
+  const ownerPassword = String((store as any).managerSettings?.ownerPassword || '');
 
   if (!accessCode) throw new Error('This store has no access code, so its storefront cannot be published.');
-
-  const { data: authData } = await supabase.auth.getSession();
-  if (authData?.session?.user) {
-    const { error } = await supabase
-      .from('stores')
-      .update({
-        data: published as any,
-        business_name: published.storeName,
-        business_type: String(published.storeType || (published as any).category || 'other'),
-      } as any)
-      .eq('access_code', accessCode);
-    if (error) throw error;
-    return published;
-  }
-
-  const ownerPassword = String((store as any).managerSettings?.ownerPassword || '');
-  if (!ownerPassword) {
-    throw new Error('Owner verification is required before this storefront can be published.');
-  }
 
   const { error } = await (supabase as any).rpc('publish_storefront_from_owner', {
     p_access_code: accessCode,
@@ -107,6 +88,11 @@ export async function publishStorefrontToCloud(
     p_business_template: businessTemplate,
     p_laundry_pricing: laundryPricing,
   });
-  if (error) throw error;
+  if (error) {
+    if (!ownerPassword && /authoriz|permission|42501/i.test(String(error.message || error.code || ''))) {
+      throw new Error('Owner verification is required before this storefront can be published.');
+    }
+    throw error;
+  }
   return published;
 }
