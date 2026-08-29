@@ -22,7 +22,8 @@ const applyStoreFlowNavigation = () => {
     if (label === "Inventory") labelNode.textContent = "Stock";
     if (label === "Sales") labelNode.textContent = "Sell";
 
-    if (label === "Orders") button.style.display = "none";
+    // Orders is a capability-driven primary destination. Do not hide it here:
+    // Index.tsx decides whether the active business and staff role can use it.
   }
 };
 

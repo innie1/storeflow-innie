@@ -60,19 +60,19 @@ const serviceCommerce: BusinessModule[] = ['orders', ...commerce, 'queue'];
 export const BUSINESS_TEMPLATES: Record<string, BusinessTemplate> = {
   provision: {
     type: 'provision', name: 'Provision / Supermarket', icon: '🛒', description: 'Sell everyday products with inventory, sales, customers and suppliers.',
-    modes: ['products'], modules: ['inventory', 'sales', 'suppliers', ...commerce], offerings: [],
+    modes: ['products'], modules: ['inventory', 'sales', 'orders', 'suppliers', ...commerce], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Sale', offeringNoun: 'Product' }, customerFeatures: { quantity: true },
     customerExperience: { primaryAction: 'Shop', intro: 'Choose what you want to buy.', intake: ['quantity'] }, workflow: ['cart', 'checkout', 'complete']
   },
   pharmacy: {
     type: 'pharmacy', name: 'Pharmacy / Chemist', icon: '💊', description: 'Manage medicines, health products, sales and customer records.',
-    modes: ['products'], modules: ['inventory', 'sales', 'customers', 'suppliers', 'finance', 'reports', 'staff'], offerings: [],
+    modes: ['products'], modules: ['inventory', 'sales', 'orders', 'customers', 'suppliers', 'finance', 'reports', 'staff'], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Sale', offeringNoun: 'Product' }, customerFeatures: { quantity: true, notes: true },
     customerExperience: { primaryAction: 'Shop', intro: 'Choose the health products you need.', intake: ['quantity', 'options', 'notes'] }, workflow: ['cart', 'checkout', 'complete']
   },
   clothing: {
     type: 'clothing', name: 'Clothing / Fashion', icon: '👕', description: 'Sell clothing and fashion products.',
-    modes: ['products'], modules: ['inventory', 'sales', 'suppliers', ...commerce], offerings: [],
+    modes: ['products'], modules: ['inventory', 'sales', 'orders', 'suppliers', ...commerce], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Order', offeringNoun: 'Product' }, customerFeatures: { quantity: true, photos: true },
     customerExperience: { primaryAction: 'Shop', intro: 'Browse products and choose what you want.', intake: ['quantity', 'options', 'photo'] }, workflow: ['cart', 'checkout', 'complete']
   },
@@ -84,7 +84,7 @@ export const BUSINESS_TEMPLATES: Record<string, BusinessTemplate> = {
   },
   electronics: {
     type: 'electronics', name: 'Electronics', icon: '📱', description: 'Sell electronics and accessories.',
-    modes: ['products'], modules: ['inventory', 'sales', 'suppliers', ...commerce], offerings: [],
+    modes: ['products'], modules: ['inventory', 'sales', 'orders', 'suppliers', ...commerce], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Sale', offeringNoun: 'Product' }, customerFeatures: { quantity: true, photos: true },
     customerExperience: { primaryAction: 'Shop', intro: 'Browse electronics and accessories.', intake: ['quantity', 'options'] }, workflow: ['cart', 'checkout', 'complete']
   },

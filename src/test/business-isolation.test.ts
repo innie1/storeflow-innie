@@ -23,10 +23,19 @@ describe('business isolation runtime', () => {
 
   it('keeps provision retail inventory/sales/suppliers enabled', () => {
     const provision = store('provision');
+    expect(isBusinessTabAllowed(provision, 'orders')).toBe(true);
     expect(isBusinessTabAllowed(provision, 'inventory')).toBe(true);
     expect(isBusinessTabAllowed(provision, 'sales')).toBe(true);
     expect(isBusinessTabAllowed(provision, 'suppliers')).toBe(true);
     expect(shouldRunRetailRestockEngine(provision)).toBe(true);
+  });
+
+  it('keeps Orders available for every customer-order capable retail template', () => {
+    for (const type of ['provision', 'pharmacy', 'clothing', 'electronics', 'food', 'restaurant', 'gas_filling', 'other']) {
+      expect(isBusinessTabAllowed(store(type), 'orders'), `${type} should receive storefront orders`).toBe(true);
+    }
+    expect(isBusinessTabAllowed(store('laundry'), 'orders')).toBe(true);
+    expect(isBusinessTabAllowed(store('games', 'games'), 'orders')).toBe(false);
   });
 
   it('keeps gaming tabs exclusive to gaming stores', () => {
