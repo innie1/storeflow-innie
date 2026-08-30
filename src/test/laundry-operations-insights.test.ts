@@ -57,6 +57,15 @@ describe('laundry operations and business insights', () => {
     expect(getCustomerActivitySignals(legacyStore)).toEqual([]);
   });
 
+  it('isolates optional business insights from the main merchant workspace', () => {
+    const owner = fs.readFileSync('src/components/dashboards/OwnerDashboard.tsx', 'utf8');
+    const businessOwner = fs.readFileSync('src/components/dashboards/BusinessOwnerDashboard.tsx', 'utf8');
+    const boundary = fs.readFileSync('src/components/FeatureErrorBoundary.tsx', 'utf8');
+    expect(owner).toContain('<FeatureErrorBoundary name="Business insights">');
+    expect(businessOwner).toContain('<FeatureErrorBoundary name="Business insights">');
+    expect(boundary).toContain('sales, orders, laundry records');
+  });
+
   it('falls back to a 24-hour laundry promise when an older order has none', () => {
     expect(getPromisedTime({ business_type: 'laundry', created_at: '2026-08-30T10:00:00Z' })).toBe('2026-08-31T10:00:00.000Z');
   });

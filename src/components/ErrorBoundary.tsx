@@ -7,6 +7,7 @@ interface Props {
 interface State {
   hasError: boolean;
   errorCode?: string;
+  errorMessage?: string;
 }
 
 /**
@@ -27,7 +28,11 @@ export class ErrorBoundary extends Component<Props, State> {
     const value = String(error?.message || 'unknown');
     let hash = 0;
     for (let index = 0; index < value.length; index += 1) hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
-    return { hasError: true, errorCode: `SF-${Math.abs(hash).toString(36).toUpperCase()}` };
+    return {
+      hasError: true,
+      errorCode: `SF-${Math.abs(hash).toString(36).toUpperCase()}`,
+      errorMessage: value.slice(0, 240),
+    };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -89,6 +94,12 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           {this.state.errorCode && (
             <p style={{ fontSize: "11px", opacity: 0.45, margin: 0 }}>Reference {this.state.errorCode}</p>
+          )}
+          {this.state.errorMessage && (
+            <details style={{ fontSize: "11px", opacity: 0.55, maxWidth: "420px" }}>
+              <summary>Technical detail</summary>
+              <p style={{ overflowWrap: "anywhere" }}>{this.state.errorMessage}</p>
+            </details>
           )}
           <button
             onClick={this.handleReload}

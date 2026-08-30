@@ -8,6 +8,7 @@ import Mascot, { MascotBadge } from '@/components/Mascot';
 import { ChevronDown, Check } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import BusinessPulse from '@/components/BusinessPulse';
+import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
 
 // ---------- Metric reporting period (Revenue / Net Profit) ----------
 
@@ -422,7 +423,9 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
 
   return (
     <div className="animate-fade-in space-y-4 md:space-y-6 text-left">
-      <BusinessPulse store={store} orders={orders} onNavigate={onNavigate} />
+      <FeatureErrorBoundary name="Business insights">
+        <BusinessPulse store={store} orders={orders} onNavigate={onNavigate} />
+      </FeatureErrorBoundary>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
         {/* Left Column */}
         <div className="md:col-span-5 space-y-4">

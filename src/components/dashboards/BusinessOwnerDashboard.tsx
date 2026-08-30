@@ -4,6 +4,7 @@ import { getBusinessTemplate } from '@/lib/business-templates';
 import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
 import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
 import BusinessPulse from '@/components/BusinessPulse';
+import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
 
 interface BusinessOwnerDashboardProps {
   store: StoreData;
@@ -131,7 +132,9 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate 
         ))}
       </section>
 
-      <BusinessPulse store={store} orders={orders} onNavigate={onNavigate} />
+      <FeatureErrorBoundary name="Business insights">
+        <BusinessPulse store={store} orders={orders} onNavigate={onNavigate} />
+      </FeatureErrorBoundary>
 
       <section>
         <div className="flex items-center justify-between mb-2">
