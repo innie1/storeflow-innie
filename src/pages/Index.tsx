@@ -25,6 +25,7 @@ import { saveSession, clearSession, getActiveSession } from '@/components/Settin
 
 import Inventory from '@/components/Inventory';
 import Services from '@/components/Services';
+import LaundryPricingSetup from '@/components/laundry/LaundryPricingSetup';
 import Sales from '@/components/Sales';
 import SalesHistory from '@/components/SalesHistory';
 import ReceiptScanner from '@/components/ReceiptScanner';
@@ -914,7 +915,7 @@ export default function Index() {
   const mainTabs = isGames
     ? GAMES_MAIN_TABS
     : isLaundry
-    ? RETAIL_MAIN_TABS.map(t => (t.id === 'inventory' ? { ...t, label: 'Services', icon: '🧺' } : t))
+    ? RETAIL_MAIN_TABS.map(t => (t.id === 'inventory' ? { ...t, label: 'Price List', icon: '👕' } : t))
     : RETAIL_MAIN_TABS;
   const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;
 
@@ -1739,7 +1740,7 @@ export default function Index() {
             </div>
             <div className={tab === 'inventory' ? 'block' : 'hidden'}>
               {store.storeType === 'laundry' ? (
-                <Services store={store} onUpdate={setStore} currentUser={currentUser} />
+                <LaundryPricingSetup store={store} onUpdate={setStore} currentUser={currentUser} />
               ) : (
                 <Inventory
                   store={store}
