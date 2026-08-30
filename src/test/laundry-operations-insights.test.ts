@@ -64,6 +64,17 @@ describe('laundry operations and business insights', () => {
     expect(owner).toContain('<FeatureErrorBoundary name="Business insights">');
     expect(businessOwner).toContain('<FeatureErrorBoundary name="Business insights">');
     expect(boundary).toContain('sales, orders, laundry records');
+    expect(businessOwner).toContain('Start here');
+    expect(businessOwner).toContain('showInsights &&');
+    expect(businessOwner.indexOf('primaryAction.label')).toBeLessThan(businessOwner.indexOf('Business insights'));
+  });
+
+  it('uses remount-safe realtime channel names on merchant order screens', () => {
+    const index = fs.readFileSync('src/pages/Index.tsx', 'utf8');
+    const serviceOrders = fs.readFileSync('src/components/games/ServiceOrders.tsx', 'utf8');
+    expect(index).toContain('store-orders-${store.id}-${channelInstance}');
+    expect(index).toContain('store-notifications-${store.id}-${channelInstance}');
+    expect(serviceOrders).toContain('service-orders-${storeId}-${channelInstance}');
   });
 
   it('falls back to a 24-hour laundry promise when an older order has none', () => {

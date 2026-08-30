@@ -537,8 +537,9 @@ export default function Index() {
   // Set up Supabase Realtime channel listener on orders table
   useEffect(() => {
     if (!store?.id) return;
+    const channelInstance = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const channel = supabase
-      .channel(`store-orders-${store.id}`)
+      .channel(`store-orders-${store.id}-${channelInstance}`)
       .on(
         'postgres_changes',
         {
@@ -581,8 +582,9 @@ export default function Index() {
   // Set up Supabase Realtime channel listener on notifications table
   useEffect(() => {
     if (!store?.id) return;
+    const channelInstance = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const channel = supabase
-      .channel(`store-notifications-${store.id}`)
+      .channel(`store-notifications-${store.id}-${channelInstance}`)
       .on(
         'postgres_changes',
         {

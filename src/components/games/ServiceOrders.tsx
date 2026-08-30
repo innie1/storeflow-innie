@@ -57,7 +57,11 @@ export default function ServiceOrders({ storeId }: Props) {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    const channel = supabase.channel(`service-orders-${storeId}`)
+    // A cleanup and the next mount can overlap on slower phones. Supabase does
+    // not allow adding callbacks to an already-subscribed named channel, so
+    // every mounted screen owns a distinct channel while the old one leaves.
+    const channelInstance = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const channel = supabase.channel(`service-orders-${storeId}-${channelInstance}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `store_id=eq.${storeId}` }, () => { void load(); })
       .subscribe();
     return () => { window.clearInterval(timer); void supabase.removeChannel(channel); };

@@ -53,6 +53,7 @@ const quickActions: Record<string, { label: string; tab: string; icon: string }[
 
 export default function BusinessOwnerDashboard({ store, orders = [], onNavigate }: BusinessOwnerDashboardProps) {
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
   const template = getBusinessTemplate(store.storeType);
   const actions = quickActions[store.storeType] || [
     { label: template.labels.primaryAction, tab: 'orders', icon: '✨' },
@@ -108,63 +109,60 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate 
             { label: 'Customers', value: String((store.customers || []).length), icon: '👥' },
           ];
 
+  const primaryAction = actions[0];
+  const secondaryActions = actions.slice(1);
+
   return (
-    <div className="space-y-5 animate-fade-in">
-      <section className="rounded-3xl border border-border bg-card p-5">
+    <div className="space-y-3 animate-fade-in">
+      <section className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl">{template.icon}</div>
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl">{template.icon}</div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">Your business</p>
-            <h1 className="font-display font-bold text-xl truncate">{store.storeName}</h1>
-            <p className="text-xs text-primary font-semibold mt-0.5">{template.name}</p>
+            <h1 className="font-display font-black text-lg truncate">{store.storeName}</h1>
+            <p className="text-[11px] text-muted-foreground">{template.name}</p>
           </div>
-          <button onClick={() => setShowAnalysis(true)} className="shrink-0 rounded-xl bg-primary text-primary-foreground px-3 py-2 text-xs font-display font-bold">Analysis</button>
+          <button onClick={() => setShowAnalysis(true)} className="shrink-0 rounded-xl border border-border px-3 py-2 text-[11px] font-display font-bold">Analysis</button>
         </div>
       </section>
 
-      <section className="grid grid-cols-3 gap-2">
+      {primaryAction && (
+        <button onClick={() => handleQuickAction(primaryAction)} className="w-full rounded-2xl bg-primary px-4 py-4 text-left text-primary-foreground shadow-sm active:scale-[0.99] transition-transform">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-black/10 text-2xl">{primaryAction.icon}</span>
+            <span className="flex-1"><span className="block text-[10px] font-black uppercase tracking-wider opacity-70">Start here</span><span className="font-display text-lg font-black">{primaryAction.label}</span></span>
+            <span className="text-xl" aria-hidden="true">→</span>
+          </div>
+        </button>
+      )}
+
+      <section className="grid grid-cols-3 overflow-hidden rounded-2xl border border-border bg-card">
         {stats.map(stat => (
-          <div key={stat.label} className="rounded-2xl border border-border bg-card p-3">
-            <div className="text-lg">{stat.icon}</div>
-            <div className="font-display font-bold text-sm mt-2 truncate">{stat.value}</div>
-            <div className="text-[10px] text-muted-foreground mt-1 leading-tight">{stat.label}</div>
+          <div key={stat.label} className="min-w-0 border-r border-border p-3 last:border-r-0">
+            <div className="font-display font-black text-sm truncate">{stat.value}</div>
+            <div className="text-[9px] text-muted-foreground mt-0.5 truncate">{stat.label}</div>
           </div>
         ))}
       </section>
 
-      <FeatureErrorBoundary name="Business insights">
-        <BusinessPulse store={store} orders={orders} onNavigate={onNavigate} />
-      </FeatureErrorBoundary>
-
       <section>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-display font-bold">Quick actions</h2>
-          <span className="text-[10px] text-muted-foreground">Made for your business</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {actions.map(action => (
-            <button key={action.label} onClick={() => handleQuickAction(action)} className="rounded-2xl border border-border bg-card p-4 text-left hover:border-primary/50 active:scale-[0.99] transition-all">
-              <div className="text-2xl">{action.icon}</div>
-              <div className="font-display font-bold text-sm mt-2">{action.label}</div>
+        <div className="grid grid-cols-3 gap-2">
+          {secondaryActions.map(action => (
+            <button key={action.label} onClick={() => handleQuickAction(action)} className="min-h-20 rounded-xl border border-border bg-card p-3 text-left hover:border-primary/50 active:scale-[0.99] transition-all">
+              <div className="text-lg">{action.icon}</div>
+              <div className="font-display font-bold text-[11px] mt-1.5 leading-tight">{action.label}</div>
             </button>
           ))}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="font-display font-bold">Customer & QR analysis</h2>
-            <p className="text-sm text-muted-foreground mt-1">See scans, visitors, guest buyers, successful orders and repeat customers.</p>
-          </div>
-          <button onClick={() => setShowAnalysis(true)} className="px-4 py-2 rounded-xl border border-primary text-primary text-xs font-bold whitespace-nowrap">Open</button>
-        </div>
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <button type="button" onClick={() => setShowInsights(value => !value)} className="flex w-full items-center justify-between gap-3 p-4 text-left">
+          <span><span className="block font-display text-sm font-black">Business insights</span><span className="mt-0.5 block text-[10px] text-muted-foreground">Earnings, customers and promised times</span></span>
+          <span className="text-sm text-muted-foreground">{showInsights ? 'Hide' : 'View'}</span>
+        </button>
+        {showInsights && <div className="border-t border-border p-3"><FeatureErrorBoundary name="Business insights"><BusinessPulse store={store} orders={orders} onNavigate={onNavigate} /></FeatureErrorBoundary></div>}
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="font-display font-bold">What you need to do today</h2>
-        <p className="text-sm text-muted-foreground mt-1">Manchant has prepared this workspace for your {template.name.toLowerCase()} business. You can start working immediately — no technical setup required.</p>
-      </section>
     </div>
   );
 }
