@@ -20,14 +20,17 @@ function patchIndex(source: string): string {
     const endAnchor = '  const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;\n';
     const start = s.indexOf(startAnchor);
     const endStart = s.indexOf(endAnchor, start);
-    if (start < 0 || endStart < 0) {
+    const hasBusinessNavigation = start >= 0 || endStart >= 0 || s.includes("{store.category || 'Retail'}");
+    if (hasBusinessNavigation && (start < 0 || endStart < 0)) {
       throw new Error('[business-isolation] Index business navigation block missing');
     }
-    const end = endStart + endAnchor.length;
-    s = s.slice(0, start) + newBusinessBlock + s.slice(end);
+    if (start >= 0 && endStart >= 0) {
+      const end = endStart + endAnchor.length;
+      s = s.slice(0, start) + newBusinessBlock + s.slice(end);
+    }
   }
 
-  if (!s.includes('const businessTemplate = getBusinessTemplate(store);')) {
+  if (s.includes('{businessTemplate.name}') && !s.includes('const businessTemplate = getBusinessTemplate(store);')) {
     throw new Error('[business-isolation] businessTemplate declaration missing after Index transform');
   }
 
