@@ -67,7 +67,7 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
     setShowAddModal(true);
   };
 
-  const customers = store.customers || [];
+  const customers = Array.isArray(store.customers) ? store.customers : [];
   const activitySignals = getCustomerActivitySignals(store);
   const signalByCustomer = new Map(activitySignals.map(signal => [signal.customer.id, signal]));
   const filtered = customers.filter(c => 

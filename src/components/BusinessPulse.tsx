@@ -12,11 +12,12 @@ interface Props {
 export default function BusinessPulse({ store, orders = [], onNavigate }: Props) {
   const earnings = useMemo(() => getEarningsPulse(store), [store]);
   const signals = useMemo(() => getCustomerActivitySignals(store), [store]);
-  const urgentOrders = useMemo(() => orders.filter(order => {
+  const safeOrders = useMemo(() => Array.isArray(orders) ? orders : [], [orders]);
+  const urgentOrders = useMemo(() => safeOrders.filter(order => {
     if (['completed', 'cancelled', 'rejected'].includes(String(order.status || '').toLowerCase())) return false;
     const promised = getPromisedTime(order);
     return promised && new Date(promised).getTime() <= Date.now() + 2 * 60 * 60 * 1000;
-  }), [orders]);
+  }), [safeOrders]);
 
   useEffect(() => {
     if (!urgentOrders.length || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;

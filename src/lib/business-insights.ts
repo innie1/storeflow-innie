@@ -2,10 +2,15 @@ import type { Customer, StoreData } from '@/types/store';
 
 const DAY = 86_400_000;
 
+function arrayOrEmpty<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
 function amountInRange(store: StoreData, from: number, to: number): number {
-  return (store.sales || []).reduce((sum, sale) => {
+  return arrayOrEmpty<any>(store?.sales).reduce((sum, sale) => {
     const time = new Date(sale.date).getTime();
-    return time >= from && time < to ? sum + Number(sale.total || 0) : sum;
+    const amount = Number(sale?.total || 0);
+    return time >= from && time < to && Number.isFinite(amount) ? sum + amount : sum;
   }, 0);
 }
 
@@ -48,24 +53,26 @@ export type CustomerActivitySignal = {
 };
 
 export function getCustomerActivitySignals(store: StoreData): CustomerActivitySignal[] {
-  return (store.customers || []).map(customer => {
+  return arrayOrEmpty<Customer>(store?.customers).filter(customer => customer && typeof customer === 'object').map(customer => {
     const inactiveDays = daysSince(customer.lastPurchaseDate);
-    const frequent = customer.visitsCount >= 5 || customer.totalPurchases >= 10_000;
+    const frequent = Number(customer.visitsCount || 0) >= 5 || Number(customer.totalPurchases || 0) >= 10_000;
+    const customerName = String(customer.name || 'there');
+    const storeName = String(store?.storeName || 'our store');
     if (inactiveDays === null) return {
       customer, kind: 'new', label: 'New / no purchase yet',
-      message: `Hello ${customer.name}, thank you for connecting with ${store.storeName}. We are ready whenever you need us.`,
+      message: `Hello ${customerName}, thank you for connecting with ${storeName}. We are ready whenever you need us.`,
     };
     if (frequent && inactiveDays >= 14) return {
       customer, kind: inactiveDays >= 30 ? 'inactive' : 'slowing', label: inactiveDays >= 30 ? 'Regular now inactive' : 'Regular slowing down',
-      message: `Hello ${customer.name}, we have missed serving you at ${store.storeName}. Is there anything you need us to prepare for you this week?`,
+      message: `Hello ${customerName}, we have missed serving you at ${storeName}. Is there anything you need us to prepare for you this week?`,
     };
     if (frequent) return {
       customer, kind: 'frequent', label: 'Frequent customer',
-      message: `Hello ${customer.name}, thank you for being a regular customer of ${store.storeName}. We appreciate you and are ready for your next order.`,
+      message: `Hello ${customerName}, thank you for being a regular customer of ${storeName}. We appreciate you and are ready for your next order.`,
     };
     return {
       customer, kind: inactiveDays >= 30 ? 'inactive' : 'new', label: inactiveDays >= 30 ? 'Inactive customer' : 'Growing customer',
-      message: `Hello ${customer.name}, ${store.storeName} is ready to serve you again. Let us know what you need.`,
+      message: `Hello ${customerName}, ${storeName} is ready to serve you again. Let us know what you need.`,
     };
   }).sort((a, b) => {
     const weight = { slowing: 0, inactive: 1, frequent: 2, new: 3 };

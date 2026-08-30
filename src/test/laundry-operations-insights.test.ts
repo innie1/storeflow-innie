@@ -46,6 +46,17 @@ describe('laundry operations and business insights', () => {
     expect(signals[0].message).toContain('Washlie');
   });
 
+  it('keeps the dashboard safe for older or partially restored store shapes', () => {
+    const legacyStore = {
+      storeName: 'Older store', accessCode: 'OLD123', products: [], createdAt: '2025-01-01T00:00:00Z',
+      sales: null, customers: { stale: true },
+    } as any;
+    expect(() => getEarningsPulse(legacyStore)).not.toThrow();
+    expect(getEarningsPulse(legacyStore).today).toBe(0);
+    expect(() => getCustomerActivitySignals(legacyStore)).not.toThrow();
+    expect(getCustomerActivitySignals(legacyStore)).toEqual([]);
+  });
+
   it('falls back to a 24-hour laundry promise when an older order has none', () => {
     expect(getPromisedTime({ business_type: 'laundry', created_at: '2026-08-30T10:00:00Z' })).toBe('2026-08-31T10:00:00.000Z');
   });

@@ -6,6 +6,7 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  errorCode?: string;
 }
 
 /**
@@ -22,19 +23,42 @@ interface State {
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): State {
+    const value = String(error?.message || 'unknown');
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+    return { hasError: true, errorCode: `SF-${Math.abs(hash).toString(36).toUpperCase()}` };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Logged to console for now. If/when a monitoring tool (e.g. Sentry) is
     // wired up, report the error here as well.
     console.error("StoreFlow crashed:", error, errorInfo);
+    try {
+      sessionStorage.setItem('storeflow_last_crash', JSON.stringify({
+        message: String(error?.message || error),
+        stack: errorInfo.componentStack,
+        at: new Date().toISOString(),
+      }));
+    } catch {
+      // Storage can be unavailable in strict mobile privacy modes.
+    }
   }
 
-  private handleReload = () => {
-    this.setState({ hasError: false });
-    window.location.reload();
+  private handleReload = async () => {
+    try {
+      if ('caches' in window) {
+        await Promise.all(['html', 'assets'].map(cacheName => caches.delete(cacheName)));
+      }
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(registration => registration.update().catch(() => undefined)));
+      }
+    } catch {
+      // Reload still works when cache or service-worker access is restricted.
+    } finally {
+      window.location.reload();
+    }
   };
 
   render() {
@@ -63,6 +87,9 @@ export class ErrorBoundary extends Component<Props, State> {
             StoreFlow hit an unexpected error. Your data is safe — tap below to
             reload and pick up where you left off.
           </p>
+          {this.state.errorCode && (
+            <p style={{ fontSize: "11px", opacity: 0.45, margin: 0 }}>Reference {this.state.errorCode}</p>
+          )}
           <button
             onClick={this.handleReload}
             style={{
