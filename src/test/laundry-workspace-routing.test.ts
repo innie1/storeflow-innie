@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import fs from 'node:fs';
 import serviceOrdersPlugin from '../../vite-plugin-service-orders';
 import businessIsolationPlugin from '../../vite-plugin-business-isolation';
 import {
@@ -82,6 +83,20 @@ describe('laundry workspace routing', () => {
     expect(code).toContain("id: 'laundry-records' as TabId");
     expect(code).not.toContain("if (t.id === 'orders' && businessType === 'laundry') return { ...t, label: 'Laundry Records'");
     expect(code).toContain("case 'laundry-records':");
+  });
+
+  it('declares businessTemplate when transforming the real Price List navigation', () => {
+    const plugin = businessIsolationPlugin();
+    const source = fs.readFileSync('src/pages/Index.tsx', 'utf8');
+    const transform = plugin.transform as any;
+    const result = transform(source, '/repo/src/pages/Index.tsx');
+    const code = result?.code || source;
+    const declaration = code.indexOf('const businessTemplate = getBusinessTemplate(store);');
+    const usage = code.indexOf('{businessTemplate.name}');
+
+    expect(declaration).toBeGreaterThan(-1);
+    expect(usage).toBeGreaterThan(declaration);
+    expect(code).toContain("businessType === 'laundry' ? 'Price List' : 'Services'");
   });
 
   it('routes only laundry Services to the garment-by-service price list', () => {

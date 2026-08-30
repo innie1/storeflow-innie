@@ -10,7 +10,26 @@ function patchIndex(source: string): string {
 
   const oldBusinessBlock = `  const isGames = store?.category === 'games';\n  const isLaundry = store?.storeType === 'laundry';\n\n  const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;\n\n  const mainTabs = isGames\n    ? GAMES_MAIN_TABS\n    : isLaundry\n    ? RETAIL_MAIN_TABS.map(t => (t.id === 'inventory' ? { ...t, label: 'Services', icon: '🧺' } : t))\n    : RETAIL_MAIN_TABS;\n  const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;\n`;
   const newBusinessBlock = `  const businessTemplate = getBusinessTemplate(store);\n  const businessType = resolveBusinessType(store);\n  const isGames = businessType === 'games';\n  const isServiceFirst = isServiceFirstBusiness(store);\n\n  const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;\n\n  const mainTabs = isGames\n    ? GAMES_MAIN_TABS\n    : RETAIL_MAIN_TABS\n        .filter(t => isBusinessTabAllowed(store, t.id))\n        .flatMap(t => {\n          const mapped = t.id === 'inventory' && isServiceFirst\n            ? { ...t, label: businessType === 'laundry' ? 'Price List' : 'Services', icon: businessTemplate.icon }\n            : t;\n          // Laundry needs BOTH surfaces: Orders is the online customer-app inbox,\n          // while Laundry Records is the physical counter/intake workspace.\n          if (businessType === 'laundry' && t.id === 'orders') {\n            return [mapped, { id: 'laundry-records' as TabId, label: 'Laundry Records', icon: '🧾' }];\n          }\n          return [mapped];\n        });\n  const moreItems = (isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS)\n    .filter(t => isBusinessTabAllowed(store, t.id));\n`;
-  s = s.replace(oldBusinessBlock, newBusinessBlock);
+  if (s.includes(oldBusinessBlock)) {
+    s = s.replace(oldBusinessBlock, newBusinessBlock);
+  } else if (!s.includes('const businessTemplate = getBusinessTemplate(store);')) {
+    // The laundry label/icon has changed over time (Services, Price List, etc.).
+    // Replace the whole navigation setup by stable boundaries instead of
+    // silently leaving later businessTemplate references undeclared.
+    const startAnchor = "  const isGames = store?.category === 'games';";
+    const endAnchor = '  const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;\n';
+    const start = s.indexOf(startAnchor);
+    const endStart = s.indexOf(endAnchor, start);
+    if (start < 0 || endStart < 0) {
+      throw new Error('[business-isolation] Index business navigation block missing');
+    }
+    const end = endStart + endAnchor.length;
+    s = s.slice(0, start) + newBusinessBlock + s.slice(end);
+  }
+
+  if (!s.includes('const businessTemplate = getBusinessTemplate(store);')) {
+    throw new Error('[business-isolation] businessTemplate declaration missing after Index transform');
+  }
 
   const orderIconBlock = `    case 'orders':\n      return <ShoppingCart className={className} />;`;
   const laundryIconBlock = `${orderIconBlock}\n    case 'laundry-records':\n      return <Receipt className={className} />;`;
