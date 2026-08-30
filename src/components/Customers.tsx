@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { StoreData, Customer } from '@/types/store';
 import { addCustomer, updateCustomer, deleteCustomer } from '@/lib/store-data';
 import { 
-  Users, UserPlus, Phone, MapPin, Search, Trophy, Sparkles, AlertCircle, Edit, Trash2, Calendar, FileText
+  Users, UserPlus, Phone, MapPin, Search, Trophy, Sparkles, AlertCircle, Edit, Trash2, Calendar, FileText, MessageCircle
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import { getCustomerActivitySignals } from '@/lib/business-insights';
 
 interface CustomersProps {
   store: StoreData;
@@ -67,6 +68,8 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
   };
 
   const customers = store.customers || [];
+  const activitySignals = getCustomerActivitySignals(store);
+  const signalByCustomer = new Map(activitySignals.map(signal => [signal.customer.id, signal]));
   const filtered = customers.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.phone.includes(searchQuery)
@@ -78,6 +81,14 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
     if (!c.lastPurchaseDate) return true;
     const daysSince = (Date.now() - new Date(c.lastPurchaseDate).getTime()) / (1000 * 60 * 60 * 24);
     return daysSince > 14;
+  };
+
+  const openFollowUp = (customer: Customer) => {
+    const signal = signalByCustomer.get(customer.id);
+    if (!signal) return;
+    const digits = customer.phone.replace(/\D/g, '').replace(/^0/, '234');
+    if (digits.length < 7) return showToast('Add a valid phone number first', 'error');
+    window.open(`https://wa.me/${digits}?text=${encodeURIComponent(signal.message)}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -132,6 +143,7 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
           {filtered.map(c => {
             const vip = isValuable(c);
             const inactive = isInactive(c);
+            const signal = signalByCustomer.get(c.id);
             return (
               <div 
                 key={c.id} 
@@ -198,6 +210,16 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
                       <FileText className="w-3 h-3 text-muted-foreground" /> Last Purchase ({c.lastPurchaseDate ? new Date(c.lastPurchaseDate).toLocaleDateString() : ''})
                     </span>
                     <p className="text-xs text-muted-foreground truncate">{c.purchaseHistory[0].items}</p>
+                  </div>
+                )}
+
+                {signal && (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-left">
+                    <p className="text-[10px] font-black uppercase text-primary">{signal.label}</p>
+                    <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{signal.message}</p>
+                    <button type="button" onClick={() => openFollowUp(c)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white">
+                      <MessageCircle className="h-3.5 w-3.5" /> Review & send on WhatsApp
+                    </button>
                   </div>
                 )}
               </div>

@@ -321,6 +321,18 @@ export interface Customer {
   visitsCount: number;
 }
 
+export type LaundryEquipmentKind = 'washer' | 'dryer' | 'washer_dryer' | 'iron' | 'other';
+
+export interface LaundryEquipment {
+  id: string;
+  name: string;
+  kind: LaundryEquipmentKind;
+  active: boolean;
+  capacity?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Supplier {
   id: string;
   name: string;
@@ -740,6 +752,7 @@ export interface StoreData {
   // Feature expansion variables
   inventoryMovements?: InventoryMovement[];
   customers?: Customer[];
+  laundryEquipment?: LaundryEquipment[];
   suppliers?: Supplier[];
   goals?: BusinessGoal[];
   memoryTimeline?: MemoryEvent[];

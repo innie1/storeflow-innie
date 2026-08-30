@@ -3,9 +3,11 @@ import { StoreData } from '@/types/store';
 import { getBusinessTemplate } from '@/lib/business-templates';
 import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
 import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
+import BusinessPulse from '@/components/BusinessPulse';
 
 interface BusinessOwnerDashboardProps {
   store: StoreData;
+  orders?: any[];
   onNavigate: (tab: any, lowStock?: boolean) => void;
 }
 
@@ -48,7 +50,7 @@ const quickActions: Record<string, { label: string; tab: string; icon: string }[
   ],
 };
 
-export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOwnerDashboardProps) {
+export default function BusinessOwnerDashboard({ store, orders = [], onNavigate }: BusinessOwnerDashboardProps) {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const template = getBusinessTemplate(store.storeType);
   const actions = quickActions[store.storeType] || [
@@ -128,6 +130,8 @@ export default function BusinessOwnerDashboard({ store, onNavigate }: BusinessOw
           </div>
         ))}
       </section>
+
+      <BusinessPulse store={store} orders={orders} onNavigate={onNavigate} />
 
       <section>
         <div className="flex items-center justify-between mb-2">

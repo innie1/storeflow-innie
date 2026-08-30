@@ -18,7 +18,7 @@ import {
 } from '@/lib/laundry-offline';
 import { openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
-import { Check, ClipboardCopy, MessageCircle, Minus, Plus, Shirt, X } from 'lucide-react';
+import { CalendarClock, Check, ClipboardCopy, MessageCircle, Minus, Plus, Shirt, X } from 'lucide-react';
 
 interface Props {
   store: StoreData;
@@ -36,6 +36,17 @@ function validPhone(phone: string): boolean {
   return phone.replace(/\D/g, '').length >= 7;
 }
 
+function suggestedPromisedLocal(turnaround?: string): string {
+  const value = String(turnaround || '24 hours').toLowerCase();
+  const date = new Date();
+  const hours = value.includes('same day') ? 8 : Number(value.match(/(\d+)\s*hour/)?.[1] || 0);
+  const days = Number(value.match(/(\d+)\s*day/)?.[1] || 0);
+  const weeks = Number(value.match(/(\d+)\s*week/)?.[1] || 0);
+  date.setTime(date.getTime() + (hours || days * 24 || weeks * 7 * 24 || 24) * 60 * 60 * 1000);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const services = useMemo(
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
@@ -47,6 +58,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const [saving, setSaving] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [garmentCounts, setGarmentCounts] = useState<Record<string, number>>(() => emptyCounts(garmentTypes));
@@ -55,10 +67,17 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const [totalPrice, setTotalPrice] = useState('');
   const [priceTouched, setPriceTouched] = useState(false);
   const [notes, setNotes] = useState('');
+  const [promisedFor, setPromisedFor] = useState('');
+  const [promisedTouched, setPromisedTouched] = useState(false);
+  const [washMethodId, setWashMethodId] = useState('manual:hand-wash');
+  const [dryMethodId, setDryMethodId] = useState('manual:sun-dry');
   const [created, setCreated] = useState<LocalLaundryRecord | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
 
   const selectedService = services.find(service => String(service.id) === selectedServiceId) || services[0] || null;
+  const equipment = (store.laundryEquipment || []).filter(item => item.active);
+  const washOptions = [{ id: 'manual:hand-wash', name: 'Hand wash' }, ...equipment.filter(item => ['washer', 'washer_dryer'].includes(item.kind)).map(item => ({ id: item.id, name: item.name }))];
+  const dryOptions = [{ id: 'manual:sun-dry', name: 'Sun dry' }, ...equipment.filter(item => ['dryer', 'washer_dryer'].includes(item.kind)).map(item => ({ id: item.id, name: item.name }))];
   const pricing = selectedService ? getStoredServicePricing(selectedService) : 'per_piece';
   const pricingLabel = getServicePricingLabel(pricing);
   const selections = useMemo<LaundryGarmentSelection[]>(
@@ -74,6 +93,11 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   useEffect(() => {
     if (!selectedServiceId && services[0]) setSelectedServiceId(String(services[0].id));
   }, [selectedServiceId, services]);
+
+  useEffect(() => {
+    if (!selectedService || promisedTouched) return;
+    setPromisedFor(suggestedPromisedLocal(selectedService.turnaround));
+  }, [selectedService, promisedTouched]);
 
   useEffect(() => {
     setGarmentCounts(current => {
@@ -110,6 +134,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const reset = () => {
     setCustomerName('');
     setCustomerPhone('');
+    setCustomerAddress('');
     setSelectedCustomerId('');
     setSelectedServiceId(services[0] ? String(services[0].id) : '');
     setGarmentCounts(emptyCounts(garmentTypes));
@@ -118,6 +143,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     setTotalPrice('');
     setPriceTouched(false);
     setNotes('');
+    setPromisedFor(services[0] ? suggestedPromisedLocal(services[0].turnaround) : suggestedPromisedLocal());
+    setPromisedTouched(false);
+    setWashMethodId('manual:hand-wash');
+    setDryMethodId('manual:sun-dry');
     setCreated(null);
     setQrDataUrl('');
     setSaving(false);
@@ -147,6 +176,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     const customer = customers.find(item => item.id === id);
     setCustomerName(customer?.name || '');
     setCustomerPhone(customer?.phone || '');
+    setCustomerAddress(customer?.address || '');
   };
 
   const changeCount = (garment: string, delta: number) => {
@@ -193,6 +223,12 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
         accessCode,
         customerName: name,
         customerPhone: phone,
+        customerAddress: customerAddress.trim(),
+        promisedFor,
+        washMethodId,
+        washMethodName: washOptions.find(item => item.id === washMethodId)?.name || 'Hand wash',
+        dryMethodId,
+        dryMethodName: dryOptions.find(item => item.id === dryMethodId)?.name || 'Sun dry',
         serviceId: String(selectedService.id),
         serviceName: selectedService.name,
         pricing,
@@ -204,7 +240,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
       if (!customers.some(customer => customer.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''))) {
         try {
-          onUpdate(addCustomer(store, { name, phone }));
+          onUpdate(addCustomer(store, { name, phone, address: customerAddress.trim() || undefined }));
         } catch (customerError) {
           console.warn('[Laundry Intake] Customer book update failed:', customerError);
         }
@@ -282,6 +318,12 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
               <div className="p-3 rounded-xl bg-surface-2 border border-border"><p className="text-[10px] uppercase text-muted-foreground font-bold">Total</p><p className="text-sm font-bold mt-1">₦{created.total.toLocaleString()}</p></div>
             </div>
 
+            <div className="rounded-xl border border-border bg-card p-3 text-left text-xs">
+              {created.customerAddress && <p><b>Address:</b> {created.customerAddress}</p>}
+              {created.promisedFor && <p className="mt-1"><b>Promised:</b> {new Date(created.promisedFor).toLocaleString()}</p>}
+              <p className="mt-1"><b>Methods:</b> {created.washMethodName || 'Hand wash'} · {created.dryMethodName || 'Sun dry'}</p>
+            </div>
+
             <div className="rounded-xl border border-border bg-card p-3 text-left">
               <p className="text-[10px] uppercase font-black text-muted-foreground">Items</p>
               <p className="text-xs font-bold mt-1">{created.garmentSummary}</p>
@@ -299,6 +341,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
               <div className="space-y-2">
                 <div><label className="text-[10px] uppercase font-black text-muted-foreground">Customer name *</label><input value={customerName} onChange={event => { setCustomerName(event.target.value); setSelectedCustomerId(''); }} placeholder="Customer name" className="mt-1 w-full p-3 rounded-xl bg-surface-2 border border-border text-sm" /></div>
                 <div><label className="text-[10px] uppercase font-black text-muted-foreground">Phone number *</label><input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="e.g. 08012345678" inputMode="tel" className="mt-1 w-full p-3 rounded-xl bg-surface-2 border border-border text-sm" /></div>
+                <div><label className="text-[10px] uppercase font-black text-muted-foreground">Address (optional but recommended)</label><textarea value={customerAddress} onChange={event => setCustomerAddress(event.target.value)} placeholder="Pickup or delivery address" rows={2} className="mt-1 w-full resize-none p-3 rounded-xl bg-surface-2 border border-border text-sm" /></div>
               </div>
             </section>
 
@@ -319,7 +362,14 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
             {(pricing === 'per_kg' || pricing === 'per_load') && <section className="text-left space-y-1"><label className="text-[10px] uppercase font-black text-muted-foreground">Quantity {pricingLabel.unitLabel}</label><input value={billingQuantity} onChange={event => { setBillingQuantity(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(false); }} inputMode="decimal" className="w-full p-3 rounded-xl bg-surface-2 border border-border text-sm" /></section>}
 
             <section className="space-y-2.5 text-left">
-              <p className="text-[11px] uppercase font-black text-muted-foreground">4. Price & notes</p>
+              <div><p className="text-[11px] uppercase font-black text-muted-foreground">4. Promise & processing</p><p className="text-[10px] text-muted-foreground mt-1">The due time starts from this service’s usual turnaround. Change it for this job when needed.</p></div>
+              <div><label className="text-[10px] uppercase font-black text-muted-foreground">Promised pickup / delivery time</label><div className="mt-1 flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3"><CalendarClock className="h-4 w-4 text-primary" /><input type="datetime-local" value={promisedFor} onChange={event => { setPromisedFor(event.target.value); setPromisedTouched(true); }} className="w-full bg-transparent py-3 text-sm outline-none" /></div></div>
+              <div className="grid grid-cols-2 gap-2"><div><label className="text-[10px] uppercase font-black text-muted-foreground">Washing method</label><select value={washMethodId} onChange={event => setWashMethodId(event.target.value)} className="mt-1 w-full rounded-xl border border-border bg-surface-2 p-3 text-sm">{washOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div><div><label className="text-[10px] uppercase font-black text-muted-foreground">Drying method</label><select value={dryMethodId} onChange={event => setDryMethodId(event.target.value)} className="mt-1 w-full rounded-xl border border-border bg-surface-2 p-3 text-sm">{dryOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div></div>
+              {equipment.length === 0 && <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-[10px] text-muted-foreground">Using manual methods. Add washers and dryers from Laundry Records → Machines & methods to assign exact equipment.</p>}
+            </section>
+
+            <section className="space-y-2.5 text-left">
+              <p className="text-[11px] uppercase font-black text-muted-foreground">5. Price & notes</p>
               {pricing === 'per_piece' && calculated.lines.length > 0 && <div className="rounded-xl border border-border bg-card divide-y divide-border/60">{calculated.lines.map(line => <div key={line.garmentType} className="flex justify-between gap-3 px-3 py-2 text-xs"><span>{line.quantity} × {line.garmentType} @ ₦{line.unitPrice.toLocaleString()}</span><span className="font-black">₦{line.subtotal.toLocaleString()}</span></div>)}</div>}
               <div><label className="text-[10px] uppercase font-black text-muted-foreground">Total price</label><div className="mt-1 flex items-center gap-2 p-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input value={totalPrice} onChange={event => { setTotalPrice(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(true); }} inputMode="decimal" className="w-full bg-transparent outline-none font-black" placeholder="0" /></div>{priceTouched && calculated.total !== Number(totalPrice) && <p className="text-[10px] text-muted-foreground mt-1">Price manually adjusted. Calculated price is ₦{calculated.total.toLocaleString()}.</p>}</div>
               <textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Stains, damage, special instructions..." className="w-full min-h-24 p-3 rounded-xl bg-surface-2 border border-border text-sm resize-none" />

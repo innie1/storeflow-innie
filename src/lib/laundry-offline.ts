@@ -20,6 +20,12 @@ export interface LocalLaundryRecord {
   tagCode: string;
   customerName: string;
   customerPhone: string;
+  customerAddress?: string;
+  promisedFor?: string;
+  washMethodId?: string;
+  washMethodName?: string;
+  dryMethodId?: string;
+  dryMethodName?: string;
   serviceId: string;
   serviceName: string;
   pricing: string;
@@ -42,6 +48,12 @@ export interface NewLocalLaundryRecord {
   accessCode: string;
   customerName: string;
   customerPhone: string;
+  customerAddress?: string;
+  promisedFor?: string;
+  washMethodId?: string;
+  washMethodName?: string;
+  dryMethodId?: string;
+  dryMethodName?: string;
   serviceId: string;
   serviceName: string;
   pricing: string;
@@ -126,6 +138,12 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     tagCode: uniqueLocalTag(existing),
     customerName,
     customerPhone,
+    customerAddress: (input.customerAddress || '').trim() || undefined,
+    promisedFor: input.promisedFor && Number.isFinite(new Date(input.promisedFor).getTime()) ? new Date(input.promisedFor).toISOString() : undefined,
+    washMethodId: input.washMethodId || undefined,
+    washMethodName: input.washMethodName || undefined,
+    dryMethodId: input.dryMethodId || undefined,
+    dryMethodName: input.dryMethodName || undefined,
     serviceId: String(input.serviceId || ''),
     serviceName: input.serviceName.trim(),
     pricing: input.pricing || 'fixed',
@@ -206,6 +224,12 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     receipt_number: record.tagCode,
     tag_code: record.tagCode,
     instructions: record.notes,
+    customer_address: record.customerAddress || '',
+    promised_for: record.promisedFor || '',
+    wash_method_id: record.washMethodId || '',
+    wash_method_name: record.washMethodName || '',
+    dry_method_id: record.dryMethodId || '',
+    dry_method_name: record.dryMethodName || '',
   };
 
   const pricedGarments = record.garments.map(item => {
@@ -226,6 +250,7 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     order_number: record.tagCode,
     customer_name: record.customerName,
     customer_phone: record.customerPhone,
+    customer_address: record.customerAddress,
     status: statusForStage(workflowStage),
     workflow_stage: workflowStage,
     business_type: 'laundry',
@@ -310,7 +335,15 @@ export async function syncLaundryRecord(accessCode: string, clientRef: string): 
       p_pricing: record.pricing,
       p_billing_quantity: record.billingQuantity,
       p_total: record.total,
-      p_notes: record.notes,
+      p_notes: JSON.stringify({
+        instructions: record.notes,
+        customer_address: record.customerAddress || '',
+        promised_for: record.promisedFor || '',
+        wash_method_id: record.washMethodId || '',
+        wash_method_name: record.washMethodName || '',
+        dry_method_id: record.dryMethodId || '',
+        dry_method_name: record.dryMethodName || '',
+      }),
       p_garments: record.garments.map(item => ({
         garment_type: item.garmentType,
         quantity: item.quantity,

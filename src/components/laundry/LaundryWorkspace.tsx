@@ -20,6 +20,8 @@ import {
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
 import { ClipboardList, MessageCircle, Plus, Search, Shirt } from 'lucide-react';
+import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
+import { getPromisedTime } from '@/lib/business-insights';
 
 interface Props {
   store: StoreData;
@@ -109,6 +111,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
         </div>
       ) : (
         <div className="space-y-3">
+          <LaundryEquipmentPanel store={store} orders={laundryRecords} onUpdate={onUpdate} />
           <div className="relative h-11 rounded-xl bg-surface-2 border border-border flex items-center px-3.5">
             <Search className="w-4 h-4 text-muted-foreground shrink-0" />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search tag, customer, phone, service or clothes..." className="w-full bg-transparent border-0 outline-none px-2 text-sm text-foreground placeholder:text-muted-foreground" />
@@ -137,6 +140,9 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                 const synced = order._laundrySyncStatus === 'synced';
                 const whatsapp = buildLaundryWhatsAppPayload(store, order);
                 const recordKey = String(order._localClientRef || order.client_ref || order.id || '');
+                const promisedValue = getPromisedTime(order);
+                const promisedFor = promisedValue ? new Date(promisedValue) : null;
+                const overdue = promisedFor && Number.isFinite(promisedFor.getTime()) && promisedFor.getTime() < Date.now() && !['ready', 'collected'].includes(currentStage);
 
                 return (
                   <div key={order.id} className="rounded-2xl border border-border bg-card p-4 text-left">
@@ -145,6 +151,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono font-black text-xl tracking-[0.12em] text-primary">{tagCode}</span>
                           <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black capitalize">{status}</span>
+                          {promisedFor && Number.isFinite(promisedFor.getTime()) && <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${overdue ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/10 text-amber-500'}`}>{overdue ? 'Overdue' : `Due ${promisedFor.toLocaleString()}`}</span>}
                           {synced ? <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-black">Synced</span> : <span className="px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>}
                         </div>
                         <p className="font-display font-black text-sm mt-2">{order.customer_name || 'Walk-in Customer'}</p>
@@ -158,6 +165,11 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                       <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Pieces</p><p className="text-xs font-bold mt-1">{pieceCount || '—'}</p></div>
                       <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Clothes</p><p className="text-xs font-bold mt-1 break-words">{garmentSummary || 'Not listed'}</p></div>
                     </div>
+
+                    {(meta.customer_address || meta.wash_method_name || meta.dry_method_name) && <div className="mt-2 rounded-xl border border-border/60 bg-surface-2 p-2.5 text-xs text-muted-foreground">
+                      {meta.customer_address && <p><b className="text-foreground">Address:</b> {meta.customer_address}</p>}
+                      {(meta.wash_method_name || meta.dry_method_name) && <p className="mt-1"><b className="text-foreground">Processing:</b> {meta.wash_method_name || 'Not assigned'} · {meta.dry_method_name || 'Not assigned'}</p>}
+                    </div>}
 
                     <div className="mt-3 flex flex-col sm:flex-row gap-2">
                       <div className="flex-1 min-w-0">

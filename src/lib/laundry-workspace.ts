@@ -62,6 +62,9 @@ export function getLaundryRecordSearchText(order: any): string {
     meta?.service_name,
     meta?.garment_summary,
     meta?.tag_code,
+    meta?.customer_address,
+    meta?.wash_method_name,
+    meta?.dry_method_name,
     itemNames,
   ].filter(Boolean).join(' ').toLowerCase();
 }

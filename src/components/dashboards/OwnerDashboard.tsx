@@ -7,6 +7,7 @@ import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Ca
 import Mascot, { MascotBadge } from '@/components/Mascot';
 import { ChevronDown, Check } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths } from 'date-fns';
+import BusinessPulse from '@/components/BusinessPulse';
 
 // ---------- Metric reporting period (Revenue / Net Profit) ----------
 
@@ -43,13 +44,14 @@ function loadStoredPeriod(accessCode: string, metric: 'revenue' | 'netProfit'): 
 
 interface OwnerDashboardProps {
   store: StoreData;
+  orders?: any[];
   onNavigate: (tab: any, lowStock?: boolean) => void;
 }
 
 type BreakdownType = 'revenue' | 'profit' | 'inventory' | 'sales' | null;
 type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 
-export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProps) {
+export default function OwnerDashboard({ store, orders = [], onNavigate }: OwnerDashboardProps) {
   const stats = getDashboardStats(store);
   const topSellers = getTopSellers(store, 5);
   const pendingSummary = useMemo(() => {
@@ -420,6 +422,7 @@ export default function OwnerDashboard({ store, onNavigate }: OwnerDashboardProp
 
   return (
     <div className="animate-fade-in space-y-4 md:space-y-6 text-left">
+      <BusinessPulse store={store} orders={orders} onNavigate={onNavigate} />
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
         {/* Left Column */}
         <div className="md:col-span-5 space-y-4">

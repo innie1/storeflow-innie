@@ -9,11 +9,12 @@ import BusinessOwnerDashboard from '@/components/dashboards/BusinessOwnerDashboa
 
 interface DashboardProps {
   store: StoreData;
+  orders?: any[];
   onNavigate: (tab: any, lowStock?: boolean) => void;
   currentUser?: any;
 }
 
-export default function Dashboard({ store, onNavigate, currentUser }: DashboardProps) {
+export default function Dashboard({ store, orders = [], onNavigate, currentUser }: DashboardProps) {
   const role = currentUser?.role;
   const isBusinessTemplateStore = [
     'laundry',
@@ -31,7 +32,7 @@ export default function Dashboard({ store, onNavigate, currentUser }: DashboardP
   // normal product/inventory store and can fail on a freshly-created games store.
   // Staff roles keep their existing permission-focused dashboards.
   if ((role === 'owner' || !role) && isBusinessTemplateStore) {
-    return <BusinessOwnerDashboard store={store} onNavigate={onNavigate} />;
+    return <BusinessOwnerDashboard store={store} orders={orders} onNavigate={onNavigate} />;
   }
 
   switch (role) {
@@ -47,7 +48,7 @@ export default function Dashboard({ store, onNavigate, currentUser }: DashboardP
       return <SupervisorDashboard store={store} onNavigate={onNavigate} />;
     case 'custom':
       if (currentUser?.permissions?.reports) {
-        return <OwnerDashboard store={store} onNavigate={onNavigate} />;
+        return <OwnerDashboard store={store} orders={orders} onNavigate={onNavigate} />;
       }
       if (currentUser?.permissions?.sales) {
         return <CashierDashboard store={store} onNavigate={onNavigate} />;
@@ -58,6 +59,6 @@ export default function Dashboard({ store, onNavigate, currentUser }: DashboardP
       return <CashierDashboard store={store} onNavigate={onNavigate} />;
     case 'owner':
     default:
-      return <OwnerDashboard store={store} onNavigate={onNavigate} />;
+      return <OwnerDashboard store={store} orders={orders} onNavigate={onNavigate} />;
   }
 }
