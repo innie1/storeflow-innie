@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
+import { getLaundryPricingConfig, removeLaundryGarmentType, renameLaundryGarmentType } from '@/lib/laundry-pricing';
 
 describe('laundry customer price-list connection', () => {
   it('opens the garment price editor from the merchant Price List tab', () => {
@@ -14,5 +15,30 @@ describe('laundry customer price-list connection', () => {
     expect(setup).toContain('Add your first laundry service');
     expect(setup).toContain('config.garmentTypes.map');
     expect(setup).toContain('publishLaundryPricingToTemplate(next)');
+    expect(setup).toContain('beginGarmentRename(garment)');
+    expect(setup).toContain('removeGarment(garment)');
+  });
+
+  it('keeps merchant garment renames and removals authoritative', () => {
+    const store = {
+      products: [],
+      laundryPricing: {
+        version: 1,
+        garmentTypes: ['Shirt', 'Gown / Dress'],
+        matrix: {
+          full: { Shirt: 500, 'Gown / Dress': 900 },
+          iron: { Shirt: 250, 'Gown / Dress': 450 },
+        },
+      },
+    } as any;
+
+    const renamed = renameLaundryGarmentType(store, 'Gown / Dress', 'Evening Wear');
+    expect(getLaundryPricingConfig(renamed).garmentTypes).toEqual(['Shirt', 'Evening Wear']);
+    expect((renamed as any).laundryPricing.matrix.full['Evening Wear']).toBe(900);
+    expect((renamed as any).laundryPricing.matrix.iron['Evening Wear']).toBe(450);
+
+    const removed = removeLaundryGarmentType(renamed, 'Shirt');
+    expect(getLaundryPricingConfig(removed).garmentTypes).toEqual(['Evening Wear']);
+    expect((removed as any).laundryPricing.matrix.full.Shirt).toBeUndefined();
   });
 });

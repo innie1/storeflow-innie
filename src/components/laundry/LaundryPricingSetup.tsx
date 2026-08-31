@@ -8,6 +8,8 @@ import {
   getLaundryGarmentPrice,
   getLaundryPricingConfig,
   publishLaundryPricingToTemplate,
+  removeLaundryGarmentType,
+  renameLaundryGarmentType,
   seedLaundryGarmentPrices,
   setLaundryGarmentPrice,
 } from '@/lib/laundry-pricing';
@@ -43,6 +45,8 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
   const [customGarment, setCustomGarment] = useState('');
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [editingGarment, setEditingGarment] = useState<string | null>(null);
+  const [garmentNameDraft, setGarmentNameDraft] = useState('');
   const [draft, setDraft] = useState<ServiceDraft>(emptyDraft);
 
   const selectedService = allServices.find(service => String(service.id) === selectedServiceId) || allServices[0] || null;
@@ -91,6 +95,30 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
     persist(next);
     setCustomGarment('');
     showToast(`${clean} added`);
+  };
+
+  const beginGarmentRename = (garment: string) => {
+    setEditingGarment(garment);
+    setGarmentNameDraft(garment);
+  };
+
+  const saveGarmentName = () => {
+    if (!editingGarment) return;
+    const clean = garmentNameDraft.trim();
+    if (!clean) return showToast('Enter a clothing item name', 'error');
+    if (config.garmentTypes.some(name => name.toLowerCase() === clean.toLowerCase() && name !== editingGarment)) {
+      return showToast('That clothing item already exists', 'error');
+    }
+    persist(renameLaundryGarmentType(store, editingGarment, clean));
+    setEditingGarment(null);
+    setGarmentNameDraft('');
+    showToast(`${editingGarment} renamed to ${clean}`);
+  };
+
+  const removeGarment = (garment: string) => {
+    if (!window.confirm(`Remove ${garment} from the public laundry price list? Existing laundry records will not be changed.`)) return;
+    persist(removeLaundryGarmentType(store, garment));
+    showToast(`${garment} removed from the price list`);
   };
 
   const openNewService = () => {
@@ -240,9 +268,21 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
                     const explicit = getExplicitLaundryGarmentPrice(store, String(selectedService.id), garment);
                     const value = getLaundryGarmentPrice(store, selectedService, garment);
                     return (
-                      <div key={garment} className="p-3.5 flex items-center gap-3">
+                      <div key={garment} className="p-3.5 flex items-center gap-2.5">
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold truncate">{garment}</p>
+                          {editingGarment === garment ? (
+                            <div className="flex items-center gap-1.5">
+                              <input autoFocus value={garmentNameDraft} onChange={event => setGarmentNameDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') saveGarmentName(); if (event.key === 'Escape') setEditingGarment(null); }} className="min-w-0 w-full rounded-lg border border-primary bg-surface-2 px-2.5 py-2 text-sm font-bold outline-none" aria-label={`Edit ${garment} name`} />
+                              <button type="button" onClick={saveGarmentName} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground" aria-label={`Save ${garment} name`}><Check className="h-4 w-4" /></button>
+                              <button type="button" onClick={() => setEditingGarment(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border" aria-label="Cancel rename"><X className="h-4 w-4" /></button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <p className="min-w-0 flex-1 truncate text-sm font-bold">{garment}</p>
+                              <button type="button" onClick={() => beginGarmentRename(garment)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground" aria-label={`Edit ${garment}`} title={`Edit ${garment}`}><Pencil className="h-3.5 w-3.5" /></button>
+                              <button type="button" onClick={() => removeGarment(garment)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-destructive" aria-label={`Remove ${garment}`} title={`Remove ${garment}`}><Trash2 className="h-3.5 w-3.5" /></button>
+                            </div>
+                          )}
                           <p className="text-[10px] text-muted-foreground mt-0.5">{explicit === null ? 'Using old service price as starting price' : 'Price per item'}</p>
                         </div>
                         <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-2 px-3 h-10 w-36">

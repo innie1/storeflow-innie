@@ -38,10 +38,11 @@ export function getLaundryServices(store: StoreData): Product[] {
 
 export function getLaundryPricingConfig(store: StoreData): LaundryPricingConfig {
   const raw = (store as any).laundryPricing || {};
-  const garmentTypes = uniqueNames([
-    ...DEFAULT_LAUNDRY_GARMENTS,
-    ...(Array.isArray(raw.garmentTypes) ? raw.garmentTypes : []),
-  ]);
+  // Defaults are only a first-run starting point. Once a merchant has a
+  // garmentTypes array it is authoritative, including renames and removals.
+  const garmentTypes = uniqueNames(Array.isArray(raw.garmentTypes)
+    ? raw.garmentTypes
+    : DEFAULT_LAUNDRY_GARMENTS);
   const matrix = raw.matrix && typeof raw.matrix === 'object' ? raw.matrix : {};
   return { version: 1, garmentTypes, matrix };
 }
@@ -94,6 +95,52 @@ export function addLaundryGarmentType(store: StoreData, garmentType: string): St
     laundryPricing: {
       ...config,
       garmentTypes: uniqueNames([...config.garmentTypes, cleanName]),
+    },
+  } as StoreData;
+}
+
+export function renameLaundryGarmentType(store: StoreData, oldName: string, newName: string): StoreData {
+  const config = getLaundryPricingConfig(store);
+  const cleanOld = oldName.trim();
+  const cleanNew = newName.trim();
+  if (!cleanOld || !cleanNew || cleanOld === cleanNew) return store;
+  if (config.garmentTypes.some(name => name.toLowerCase() === cleanNew.toLowerCase() && name.toLowerCase() !== cleanOld.toLowerCase())) {
+    return store;
+  }
+
+  const matrix = Object.fromEntries(Object.entries(config.matrix).map(([serviceId, prices]) => {
+    const nextPrices = { ...prices };
+    const previousPrice = nextPrices[cleanOld];
+    delete nextPrices[cleanOld];
+    if (previousPrice !== undefined) nextPrices[cleanNew] = previousPrice;
+    return [serviceId, nextPrices];
+  }));
+
+  return {
+    ...(store as any),
+    laundryPricing: {
+      version: 1,
+      garmentTypes: config.garmentTypes.map(name => name === cleanOld ? cleanNew : name),
+      matrix,
+    },
+  } as StoreData;
+}
+
+export function removeLaundryGarmentType(store: StoreData, garmentType: string): StoreData {
+  const config = getLaundryPricingConfig(store);
+  const cleanName = garmentType.trim();
+  const matrix = Object.fromEntries(Object.entries(config.matrix).map(([serviceId, prices]) => {
+    const nextPrices = { ...prices };
+    delete nextPrices[cleanName];
+    return [serviceId, nextPrices];
+  }));
+
+  return {
+    ...(store as any),
+    laundryPricing: {
+      version: 1,
+      garmentTypes: config.garmentTypes.filter(name => name !== cleanName),
+      matrix,
     },
   } as StoreData;
 }

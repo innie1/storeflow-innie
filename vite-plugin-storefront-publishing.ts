@@ -48,14 +48,14 @@ export function patchLaundryPricing(source: string): string {
     code = code.replace(pricingImport, `${pricingImport}\n${publishImport}`);
   }
 
-  const persistAnchor = `    saveStore(published);\n    onUpdate(published);`;
-  if (code.includes(persistAnchor) && !code.includes('STOREFLOW_LAUNDRY_PRICE_PUBLISH')) {
+  const persistAnchor = /    saveStore\(published\);\r?\n    onUpdate\(published\);/;
+  if (persistAnchor.test(code) && !code.includes('STOREFLOW_LAUNDRY_PRICE_PUBLISH')) {
     code = code.replace(persistAnchor, `    saveStore(published);\n    onUpdate(published);\n    // STOREFLOW_LAUNDRY_PRICE_PUBLISH\n    void publishStorefrontToCloud(published).catch(error =>\n      console.warn('[StoreFlow Laundry] Price-list publish failed:', error)\n    );`);
   }
 
-  const effectAnchor = `    const seeded = seedLaundryGarmentPrices(store);\n    const published = publishLaundryPricingToTemplate(seeded);`;
-  if (code.includes(effectAnchor) && !code.includes('STOREFLOW_LAUNDRY_OPEN_PUBLISH')) {
-    code = code.replace(effectAnchor, `${effectAnchor}\n    // STOREFLOW_LAUNDRY_OPEN_PUBLISH: opening Price List repairs older local-only stores.\n    void publishStorefrontToCloud(published).catch(error =>\n      console.warn('[StoreFlow Laundry] Initial storefront publish failed:', error)\n    );`);
+  const effectAnchor = /    const seeded = seedLaundryGarmentPrices\(store\);\r?\n    const published = publishLaundryPricingToTemplate\(seeded\);/;
+  if (effectAnchor.test(code) && !code.includes('STOREFLOW_LAUNDRY_OPEN_PUBLISH')) {
+    code = code.replace(effectAnchor, match => `${match}\n    // STOREFLOW_LAUNDRY_OPEN_PUBLISH: opening Price List repairs older local-only stores.\n    void publishStorefrontToCloud(published).catch(error =>\n      console.warn('[StoreFlow Laundry] Initial storefront publish failed:', error)\n    );`);
   }
   return code;
 }

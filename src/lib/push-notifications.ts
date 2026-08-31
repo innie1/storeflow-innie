@@ -30,7 +30,7 @@ export function isPushSupported(): boolean {
 // (RLS error, network blip, etc.) the send-order-push function has nothing
 // to send to, so we treat that case as not-subscribed and let the user
 // retry, instead of showing a toggle that's silently lying to them.
-export async function getPushSubscriptionState(): Promise<'unsupported' | 'denied' | 'subscribed' | 'not-subscribed'> {
+export async function getPushSubscriptionState(storeId?: string): Promise<'unsupported' | 'denied' | 'subscribed' | 'not-subscribed'> {
   if (!isPushSupported()) return 'unsupported';
   if (Notification.permission === 'denied') return 'denied';
   try {
@@ -43,13 +43,14 @@ export async function getPushSubscriptionState(): Promise<'unsupported' | 'denie
 
     const { data, error } = await supabase
       .from('push_subscriptions')
-      .select('id')
+      .select('id, store_id')
       .eq('endpoint', endpoint)
       .maybeSingle();
 
-    if (error || !data) {
+    if (error || !data || (storeId && data.store_id !== storeId)) {
       // Browser thinks it's subscribed but our database has no matching
-      // row — this is exactly the "toggle says on, nothing arrives" bug.
+      // row for the currently selected store — this is exactly the "toggle
+      // says on, nothing arrives" bug, especially after switching stores.
       return 'not-subscribed';
     }
     return 'subscribed';
@@ -154,7 +155,7 @@ export async function autoSubscribeIfGranted(storeId: string): Promise<void> {
   if (!isPushSupported() || !storeId) return;
   if (Notification.permission !== 'granted') return;
   try {
-    const state = await getPushSubscriptionState();
+    const state = await getPushSubscriptionState(storeId);
     if (state !== 'subscribed') {
       console.log('[push] Auto-healing Web Push subscription for store:', storeId);
       await subscribeToOrderPush(storeId);
