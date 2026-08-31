@@ -96,7 +96,7 @@ function patchServices(source: string): string {
   return s;
 }
 
-function patchLaundryPricing(source: string): string {
+export function patchLaundryPricing(source: string): string {
   let s = source;
 
   s = s.replace(
@@ -110,7 +110,13 @@ function patchLaundryPricing(source: string): string {
   }
 
   const addStart = s.indexOf('  const addGarment = () => {');
-  const addEnd = s.indexOf('\n  const openNewService = () => {', addStart);
+  // Only replace addGarment itself. Using openNewService as the boundary used
+  // to delete every handler inserted between the two functions, which left
+  // visible edit/delete buttons calling identifiers removed from production.
+  const addEndMatch = addStart >= 0 ? /\r?\n  };\r?\n/.exec(s.slice(addStart)) : null;
+  const addEnd = addEndMatch?.index !== undefined
+    ? addStart + addEndMatch.index + addEndMatch[0].length
+    : -1;
   if (addStart >= 0 && addEnd > addStart) {
     const replacement = `  const addGarment = () => {\n    const clean = customGarment.trim();\n    if (!clean) return showToast('Enter a clothing type', 'error');\n\n    const existing = config.garmentTypes.find(garment => garment.toLowerCase() === clean.toLowerCase());\n    if (existing) {\n      setShowGarmentPrices(true);\n      setCustomGarment('');\n      showToast(\`${'${existing}'} is already in the price list\`, 'info');\n      window.setTimeout(() => {\n        const rowId = 'laundry-garment-' + existing.toLowerCase().replace(/[^a-z0-9]+/g, '-');\n        document.getElementById(rowId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });\n      }, 0);\n      return;\n    }\n\n    let next = addLaundryGarmentType(store, clean);\n    for (const service of allServices) {\n      next = setLaundryGarmentPrice(next, String(service.id), clean, Math.max(0, Number(service.sellingPrice) || 0));\n    }\n    next = seedLaundryGarmentPrices(next);\n    persist(next);\n    setCustomGarment('');\n    setShowGarmentPrices(true);\n    showToast(\`${'${clean}'} added to every laundry treatment\`, 'success');\n    window.setTimeout(() => {\n      const rowId = 'laundry-garment-' + clean.toLowerCase().replace(/[^a-z0-9]+/g, '-');\n      document.getElementById(rowId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });\n    }, 0);\n  };\n`;
     s = s.slice(0, addStart) + replacement + s.slice(addEnd);

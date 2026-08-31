@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { prepareStoreForMarketplacePublish } from '@/lib/marketplace-publish';
 import { patchLaundryPricing, patchMarketplaceSettings } from '../../vite-plugin-storefront-publishing';
+import { patchLaundryPricing as patchLaundryPricingLayout } from '../../vite-plugin-business-isolation';
 
 describe('customer storefront publishing', () => {
   it('publishes the exact laundry garment matrix instead of an empty product-level price map', () => {
@@ -49,6 +50,17 @@ describe('customer storefront publishing', () => {
     expect(transformed).toContain('STOREFLOW_LAUNDRY_OPEN_PUBLISH');
     expect(transformed).toContain('STOREFLOW_LAUNDRY_PRICE_PUBLISH');
     expect(transformed).toContain('publishStorefrontToCloud(published)');
+  });
+
+  it('keeps every garment edit and delete handler in the production transform', () => {
+    const source = fs.readFileSync('src/components/laundry/LaundryPricingSetup.tsx', 'utf8');
+    const transformed = patchLaundryPricingLayout(source);
+
+    expect(transformed).toContain('const beginGarmentRename = (garment: string) =>');
+    expect(transformed).toContain('const saveGarmentName = () =>');
+    expect(transformed).toContain('const removeGarment = (garment: string) =>');
+    expect(transformed).toContain('onClick={() => beginGarmentRename(garment)}');
+    expect(transformed).toContain('onClick={() => removeGarment(garment)}');
   });
 
   it('keeps owner publishing scoped and password/member authorized in the migration', () => {
