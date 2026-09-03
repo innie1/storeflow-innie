@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { Search, SlidersHorizontal, Calendar, User, Phone, MapPin, Package, ArrowLeftRight, Wallet, ChevronUp, ChevronDown } from 'lucide-react';
 import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
@@ -363,7 +364,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
       {/* Search Input + Filter button */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1 h-10 bg-surface-2 rounded-xl flex items-center px-3.5 border border-border/60 focus-within:border-primary/45 transition-colors min-w-0">
-          <span className="material-symbols-outlined text-muted-foreground text-sm mr-2 shrink-0">search</span>
+          <Search className="text-muted-foreground w-4 h-4 mr-2 shrink-0" />
           <input
             type="text"
             placeholder="Search order ID, customer or item..."
@@ -386,7 +387,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
           }`}
           title="Date & Time Filter"
         >
-          <span className="material-symbols-outlined text-lg">tune</span>
+          <SlidersHorizontal className="w-[18px] h-[18px]" />
           <span className="hidden sm:inline">Filter</span>
           {hasActiveDateFilter && (
             <span className="w-2 h-2 rounded-full bg-primary" />
@@ -399,7 +400,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
         <div className="p-3.5 bg-card border border-border/80 rounded-2xl shadow-sm text-left space-y-3 animate-fadeIn">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold font-display text-foreground flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-sm text-primary">calendar_month</span>
+              <Calendar className="w-4 h-4 text-primary" />
               Date & Time Filter
             </span>
             {hasActiveDateFilter && (
@@ -530,7 +531,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                 {/* Customer Details Box — mobile optimized */}
                 <div className="space-y-2 text-xs bg-surface-2/60 p-2.5 sm:p-3 rounded-xl border border-border/40">
                   <div className="flex items-center gap-2 text-foreground">
-                    <span className="material-symbols-outlined text-muted-foreground text-sm shrink-0">person</span>
+                    <User className="text-muted-foreground w-4 h-4 shrink-0" />
                     <span className="font-semibold truncate">{order.customer_name || 'Walk-in Customer'}</span>
                   </div>
 
@@ -554,7 +555,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                   {order.customer_phone && (
                     <div className="flex items-center justify-between gap-2 text-muted-foreground pt-1 border-t border-border/30">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="material-symbols-outlined text-muted-foreground text-sm shrink-0">call</span>
+                        <Phone className="text-muted-foreground w-4 h-4 shrink-0" />
                         <span className="font-mono text-xs text-foreground truncate">{order.customer_phone}</span>
                       </div>
                       <button
@@ -599,7 +600,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
 
                   {meta?.delivery_type === 'delivery' && meta?.address && (
                     <div className="flex items-start gap-2 text-muted-foreground pt-1 border-t border-border/30">
-                      <span className="material-symbols-outlined text-muted-foreground text-sm shrink-0 mt-0.5">location_on</span>
+                      <MapPin className="text-muted-foreground w-4 h-4 shrink-0 mt-0.5" />
                       <span className="leading-snug break-words text-left flex-1 font-medium">{meta.address}</span>
                     </div>
                   )}
@@ -608,12 +609,12 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                 {/* Items & Payment Badge Row */}
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground pt-1">
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm shrink-0 text-primary">inventory_2</span>
+                    <Package className="w-4 h-4 shrink-0 text-primary" />
                     <span className="font-semibold text-foreground">{order.order_items?.length || 0} item{(order.order_items?.length || 0) === 1 ? '' : 's'}</span>
                     <span className="text-border">•</span>
-                    <span className="material-symbols-outlined text-sm shrink-0">
-                      {(meta?.payment_method || meta?.paymentMethod || '').toLowerCase().includes('transfer') ? 'sync_alt' : 'payments'}
-                    </span>
+                    {(meta?.payment_method || meta?.paymentMethod || '').toLowerCase().includes('transfer')
+                      ? <ArrowLeftRight className="w-4 h-4 shrink-0" />
+                      : <Wallet className="w-4 h-4 shrink-0" />}
                     <span className="capitalize">{meta?.payment_method || meta?.paymentMethod || 'Not specified'}</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground font-mono">Subtotal: ₦{order.subtotal?.toLocaleString() || '0.00'}</span>
@@ -658,7 +659,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                       className="flex items-center gap-1 text-xs font-display font-bold text-primary hover:text-primary-focus cursor-pointer"
                     >
                       <span>{isExpanded ? 'Hide Items' : 'View Items'} ({order.order_items?.length || 0})</span>
-                      <span className="material-symbols-outlined text-sm">{isExpanded ? 'expand_less' : 'expand_more'}</span>
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
 
                     {/* Pending Status Quick Actions */}

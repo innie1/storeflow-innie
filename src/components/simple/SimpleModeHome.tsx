@@ -98,7 +98,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
       </div>
       <div className="simple-mode-voice-shell"><SimpleVoiceSell products={store.products} onConfirmSale={handleConfirmSale} onConfirmMultiSale={handleConfirmMultiSale} onCreateProduct={handleCreateProduct} onSaveAlias={handleSaveAlias} /><button onClick={() => setShowSearch(true)} className="simple-mode-search-near-toggle bg-surface-2 border border-border flex items-center justify-center hover:bg-surface-3 active:scale-95 transition-all cursor-pointer shadow-sm" title="Search products, customers, receipts" aria-label="Search products, customers, receipts"><Search className="w-4 h-4 text-foreground/80" /></button></div>
       <button onClick={() => onNavigate('history')} className="mt-6 flex items-center gap-1.5 text-xs text-muted-foreground font-display font-semibold"><History className="w-3.5 h-3.5" /> View Sales History</button>
-      <QuickSellGrid store={store} onSell={handleConfirmSale} />
+      <QuickSellGrid store={store} onSell={handleConfirmSale} onNavigate={onNavigate} />
       {promptProduct && <CostPricePrompt store={store} setStore={setStore} product={promptProduct} onDone={() => setCostPricePromptProductId(null)} />}
       {activeMilestone && <MilestoneCelebration milestone={activeMilestone} onDismiss={() => { const updated = markMilestoneReached(store, activeMilestone.id); setStore(updated); setActiveMilestone(null); }} />}
       {showSearch && <SimpleSearch store={store} onNavigate={onNavigate} onClose={() => setShowSearch(false)} />}

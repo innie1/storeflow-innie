@@ -8,28 +8,6 @@ initTheme();
 
 document.body.classList.add("storeflow-ui-overhaul");
 
-const applyStoreFlowNavigation = () => {
-  const nav = document.querySelector("nav.fixed.bottom-0");
-  if (!nav) return;
-
-  const buttons = Array.from(nav.querySelectorAll("button"));
-  for (const button of buttons) {
-    const labelNode = button.querySelector("span:last-child");
-    const label = labelNode?.textContent?.trim();
-    if (!label || !labelNode) continue;
-
-    if (label === "Dashboard") labelNode.textContent = "Home";
-    if (label === "Inventory") labelNode.textContent = "Stock";
-    if (label === "Sales") labelNode.textContent = "Sell";
-
-    // Orders is a capability-driven primary destination. Do not hide it here:
-    // Index.tsx decides whether the active business and staff role can use it.
-  }
-};
-
-const navigationObserver = new MutationObserver(() => applyStoreFlowNavigation());
-navigationObserver.observe(document.documentElement, { childList: true, subtree: true });
-
 // Notification deep-link bridge.
 // Orders.tsx owns its expansion state, so this small presentation-layer bridge
 // waits for the Orders list to render and clicks the exact order's existing

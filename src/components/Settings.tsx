@@ -2111,7 +2111,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 <button
                   onClick={() => {
                     setView('home');
-                    showToast('Navigate to the Inventory tab to add products', 'info');
+                    showToast('Navigate to the Stock tab to add products', 'info');
                   }}
                   className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-display font-bold text-xs rounded-xl cursor-pointer transition active:scale-95 shadow-sm flex items-center gap-1.5"
                 >
@@ -4384,7 +4384,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               <span className="text-[10px] text-muted-foreground uppercase font-bold">{targetMode === 'auto' ? 'Auto' : 'Manual'}</span>
             </div>
             <p className="text-[11px] text-muted-foreground leading-snug">
-              Auto sets a daily or weekly goal based on how often this store actually sells — busy stores get a daily target, slower stores get a weekly one. Switch to Manual to set your own.
+              Auto adjusts your target to how often this store sells. Switch to Manual to set your own.
             </p>
             <div className="flex gap-2">
               <button
@@ -4469,7 +4469,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             icon={<Tag className="w-5 h-5" />}
             color="#F2C94C"
             title="Pricing & Discounts"
-            desc="Manage profit margin, smart pricing rules, and automatic discounts"
+            desc="Margins, pricing rules & discounts."
             right={
               <div>
                 <p className="text-[10px] text-muted-foreground">Default Margin</p>
@@ -4493,7 +4493,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               <p className="text-[10px] text-muted-foreground">{Math.round(savingsPct)}%</p>
             </div>} />
 
-          <SettingTile icon={<Palette className="w-5 h-5" />} color="#5B8FF9" title="Appearance" desc="Customize theme and experience." onClick={() => setView('appearance')}
+          <SettingTile icon={<Palette className="w-5 h-5" />} color="#5B8FF9" title="Appearance" desc="Theme and app experience." onClick={() => setView('appearance')}
             right={<div className="flex gap-1.5">
               {THEMES.map(t => (
                 <div key={t.id} className={`w-10 h-10 rounded-xl flex items-center justify-center text-base border ${theme===t.id ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`} style={{ background: t.swatch + '22' }}>
@@ -4506,17 +4506,17 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             right={<><p className="text-[10px] font-display font-semibold text-warning">{activeNotifTypes} Types Active</p>
               <div className="flex gap-1 mt-1">{['📊','⭐','⚠️','📘','💰'].map((e,i)=><span key={i} className="w-6 h-6 rounded bg-surface-2 border border-border flex items-center justify-center text-[10px]">{e}</span>)}</div></> } />
 
-          <SettingTile icon={<ShieldCheck className="w-5 h-5" />} color="#2EBFB1" title="Security" desc="App lock, access code, reset password, and credentials." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='4h'?'4 Hours':timer==='8h'?'8 Hours':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
+          <SettingTile icon={<ShieldCheck className="w-5 h-5" />} color="#2EBFB1" title="Security" desc="App lock, access code & password." right={<><p className="text-[10px] text-muted-foreground">Lock Timer</p><p className="text-base font-display font-bold" style={{color:'#2EBFB1'}}>{timer==='1h'?'1 Hour':timer==='4h'?'4 Hours':timer==='8h'?'8 Hours':timer==='12h'?'12 Hours':'Always Open'}</p></>} onClick={() => setView('security')} />
 
-          <SettingTile icon={<QrCode className="w-5 h-5" />} color="#FFC72C" title={serviceBusiness ? 'QR & Storefront' : 'QR & Barcodes'} desc={serviceBusiness ? 'Share your customer storefront QR code and service page.' : 'Branded QR codes, analytics, and product tags.'} onClick={() => setView('barcode')} />
+          <SettingTile icon={<QrCode className="w-5 h-5" />} color="#FFC72C" title={serviceBusiness ? 'QR & Storefront' : 'QR & Barcodes'} desc={serviceBusiness ? 'Your storefront QR code & service page.' : 'Branded QR codes & analytics.'} onClick={() => setView('barcode')} />
 
-          <SettingTile icon={<Store className="w-5 h-5" />} color="#EC4899" title="Marketplace, Store Type & Loyalty Settings" desc="Configure storefront visibility, category type, pricing, loyalty rewards, and delivery." onClick={() => setView('marketplace-settings')} />
+          <SettingTile icon={<Store className="w-5 h-5" />} color="#EC4899" title="Marketplace & Loyalty" desc="Storefront, pricing, rewards & delivery." onClick={() => setView('marketplace-settings')} />
 
-          <SettingTile icon={<Printer className="w-5 h-5" />} color="#22C55E" title="Printer Settings" desc="Choose System/WiFi or Bluetooth thermal printing for receipts."
+          <SettingTile icon={<Printer className="w-5 h-5" />} color="#22C55E" title="Printer Settings" desc="Receipt printing method."
             right={<p className="text-[10px] font-display font-semibold" style={{color:'#22C55E'}}>{(store.managerSettings?.printMethod || 'system') === 'bluetooth' ? '🔵 Bluetooth' : '🖨️ System/WiFi'}</p>}
             onClick={() => setView('printer-settings')} />
 
-          <SettingTile icon={<Database className="w-5 h-5" />} color="#3B82F6" title="Data & Storage" desc="Import, export, backups, and store deletion." onClick={() => setView('data')}
+          <SettingTile icon={<Database className="w-5 h-5" />} color="#3B82F6" title="Data & Storage" desc="Backups & transfers." onClick={() => setView('data')}
             right={<div className="flex gap-1">
               {[
                 { e: <Download className="w-3.5 h-3.5 text-emerald-500" />, l: 'Export' },
@@ -4524,15 +4524,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 { e: <Cloud className="w-3.5 h-3.5 text-sky-400" />, l: 'Backup' },
                 { e: <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />, l: 'More' }
               ].map(o => (
-                <div key={o.l} className="w-10 h-10 rounded-lg bg-surface-2 border border-border flex flex-col items-center justify-center gap-0.5">
+                <div key={o.l} title={o.l} className="w-8 h-8 rounded-lg bg-surface-2 border border-border flex items-center justify-center">
                   {o.e}
-                  <span className="text-[8px] text-muted-foreground font-semibold">{o.l}</span>
                 </div>
               ))}
             </div>} />
 
           {currentUser?.role === 'owner' && (
-            <SettingTile icon={<FileText className="w-5 h-5" />} color="#2F80ED" title="Audit Activity Logs" desc="View secure logs tracking actions performed in this store." onClick={() => setView('activity-log')} />
+            <SettingTile icon={<FileText className="w-5 h-5" />} color="#2F80ED" title="Audit Activity Logs" desc="Secure logs of store activity." onClick={() => setView('activity-log')} />
           )}
           <SettingTile icon={<Headphones className="w-5 h-5" />} color="#F2C94C" title="Support" desc="Help, FAQs and contact." onClick={() => setView('support')} />
         </div>

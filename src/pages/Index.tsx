@@ -90,10 +90,10 @@ import {
 
 
 const RETAIL_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
+  { id: 'dashboard', label: 'Home', icon: '🏠' },
   { id: 'orders', label: 'Orders', icon: '🛍️' },
-  { id: 'inventory', label: 'Inventory', icon: '📦' },
-  { id: 'sales', label: 'Sales', icon: '💰' },
+  { id: 'inventory', label: 'Stock', icon: '📦' },
+  { id: 'sales', label: 'Sell', icon: '💰' },
   { id: 'manager', label: 'Flow', icon: '✨' },
 ];
 
@@ -184,7 +184,7 @@ const MORE_CATEGORIES: MoreCategory[] = [
 ];
 
 const GAMES_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
-  { id: 'games-dashboard', label: 'Dashboard', icon: '🎮' },
+  { id: 'games-dashboard', label: 'Home', icon: '🎮' },
   { id: 'games-history', label: 'History', icon: '📋' },
   { id: 'games-analytics', label: 'Analytics', icon: '📈' },
   { id: 'games-settings', label: 'Games', icon: '🕹️' },

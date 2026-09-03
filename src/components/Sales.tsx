@@ -7,7 +7,6 @@ import { showToast } from '@/components/Toast';
 import { playSoldSound, playQuickAddSound } from '@/lib/sound-effects';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
-import VoiceSell from '@/components/VoiceSell';
 import { printReceipt } from '@/lib/print-engine';
 import { getSmartDiscounts } from '@/lib/manager-intel';
 import {
@@ -18,10 +17,32 @@ import {
   ArrowUp,
   User,
   BarChart3,
-  Mic,
   QrCode,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown
 } from 'lucide-react';
+import { startOfDay, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
+
+type SalesCardPeriod = 'today' | 'week' | 'month' | 'year' | 'lifetime';
+
+const SALES_CARD_PERIODS: { id: SalesCardPeriod; label: string; prefix: string }[] = [
+  { id: 'today', label: 'Today', prefix: "Today's" },
+  { id: 'week', label: 'This Week', prefix: "This Week's" },
+  { id: 'month', label: 'This Month', prefix: "This Month's" },
+  { id: 'year', label: 'This Year', prefix: "This Year's" },
+  { id: 'lifetime', label: 'Lifetime', prefix: 'Lifetime' },
+];
+
+function salesCardPeriodStart(period: SalesCardPeriod): number | null {
+  const now = new Date();
+  switch (period) {
+    case 'today': return startOfDay(now).getTime();
+    case 'week': return startOfWeek(now).getTime();
+    case 'month': return startOfMonth(now).getTime();
+    case 'year': return startOfYear(now).getTime();
+    case 'lifetime': return null;
+  }
+}
 
 interface CartItem {
   productId: string;
@@ -43,8 +64,6 @@ interface SalesProps {
 export default function Sales({ store, onUpdate, managerSettings, isActive = true, currentUser }: SalesProps) {
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
-  const [voiceActive, setVoiceActive] = useState(false);
-  const [voiceListening, setVoiceListening] = useState(false);
   const [category, setCategory] = useState<string>('All');
   const [lastSales, setLastSales] = useState<Sale[] | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<MilestoneDef | null>(null);
@@ -65,13 +84,6 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
   const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
 
-  // Automatically shut down voice selling when navigating away
-  useEffect(() => {
-    if (!isActive) {
-      setVoiceActive(false);
-    }
-  }, [isActive]);
-
   // checkout form
   const [discount, setDiscount] = useState('');
   const [discountManuallyEdited, setDiscountManuallyEdited] = useState(false);
@@ -91,11 +103,15 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [dueDate, setDueDate] = useState('');
   const [customerNote, setCustomerNote] = useState('');
 
-  const today = new Date().toISOString().split('T')[0];
-  const todaySales = useMemo(() => store.sales.filter(s => s.date.startsWith(today)), [store.sales, today]);
-  const todayRevenue = todaySales.reduce((s, x) => s + x.total, 0);
-  const todayProfit = todaySales.reduce((s, x) => s + x.profit, 0);
-  const todayCount = todaySales.length;
+  const [salesCardPeriod, setSalesCardPeriod] = useState<SalesCardPeriod>('today');
+  const [salesCardPeriodMenuOpen, setSalesCardPeriodMenuOpen] = useState(false);
+  const periodSales = useMemo(() => {
+    const start = salesCardPeriodStart(salesCardPeriod);
+    return start === null ? store.sales : store.sales.filter(s => new Date(s.date).getTime() >= start);
+  }, [store.sales, salesCardPeriod]);
+  const periodRevenue = periodSales.reduce((s, x) => s + x.total, 0);
+  const periodProfit = periodSales.reduce((s, x) => s + x.profit, 0);
+  const periodCount = periodSales.length;
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -496,8 +512,32 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       <div className="rounded-2xl p-4 bg-gradient-to-br from-yellow-500/10 via-card/95 to-card border border-yellow-500/20 shadow-card flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-display font-bold text-slate-400 uppercase tracking-wider">Today's Sales (Revenue)</p>
-            <h2 className="text-2xl font-display font-black text-yellow-500 mt-0.5">₦{todayRevenue.toLocaleString()}</h2>
+            <div className="relative inline-block">
+              <button
+                onClick={() => setSalesCardPeriodMenuOpen(v => !v)}
+                className="flex items-center gap-1 text-[10px] font-display font-bold text-slate-400 uppercase tracking-wider cursor-pointer"
+              >
+                {SALES_CARD_PERIODS.find(p => p.id === salesCardPeriod)!.prefix} Sales (Revenue)
+                <ChevronDown className={`w-3 h-3 transition-transform ${salesCardPeriodMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {salesCardPeriodMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setSalesCardPeriodMenuOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[150px]">
+                    {SALES_CARD_PERIODS.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => { setSalesCardPeriod(p.id); setSalesCardPeriodMenuOpen(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs font-display font-semibold cursor-pointer ${p.id === salesCardPeriod ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'}`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <h2 className="text-2xl font-display font-black text-yellow-500 mt-0.5">₦{periodRevenue.toLocaleString()}</h2>
           </div>
           <div className="w-11 h-11 rounded-xl border border-yellow-500/25 bg-yellow-500/10 flex items-center justify-center text-yellow-500">
             <BarChart3 className="w-5 h-5" />
@@ -508,7 +548,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           <div className="bg-surface-2 border border-border/40 rounded-2xl p-3 flex items-center justify-between shadow-sm">
             <div>
               <p className="text-[11px] text-slate-400 font-display font-semibold">Sales Count</p>
-              <p className="text-lg font-display font-black text-foreground mt-0.5">{todayCount}</p>
+              <p className="text-lg font-display font-black text-foreground mt-0.5">{periodCount}</p>
             </div>
             <div className="w-7 h-7 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-yellow-500 shrink-0">
               <User className="w-4 h-4" />
@@ -518,7 +558,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           <div className="bg-surface-2 border border-border/40 rounded-2xl p-3 flex items-center justify-between shadow-sm">
             <div>
               <p className="text-[11px] text-slate-400 font-display font-semibold">Net Profit</p>
-              <p className="text-lg font-display font-black text-emerald-400 mt-0.5">₦{todayProfit.toLocaleString()}</p>
+              <p className="text-lg font-display font-black text-emerald-400 mt-0.5">₦{periodProfit.toLocaleString()}</p>
             </div>
             <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
               <ArrowUp className="w-4 h-4 stroke-[3]" />
@@ -526,21 +566,6 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           </div>
         </div>
       </div>
-
-      {/* Voice Sell — inline ambient bar */}
-      {(managerSettings?.voiceFeatures !== false) && (
-        <VoiceSell
-          products={store.products}
-          autoStart={managerSettings?.autoVoiceListen === true}
-          ambientActive={voiceActive}
-          setAmbientActive={setVoiceActive}
-          onListeningChange={setVoiceListening}
-          onAddItems={items => {
-            items.forEach(item => addToCart(item.productId, item.quantity));
-          }}
-          onCheckout={() => openCheckout()}
-        />
-      )}
 
       {/* Wholesale / Retail Global Toggle */}
       <div className="grid grid-cols-2 gap-1 bg-surface-2 p-1 rounded-xl border border-border/80 shadow-xs">
@@ -688,42 +713,6 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         </div>
       )}
 
-      {voiceActive && cart.length > 0 && (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
-          <div className="flex items-center justify-between border-b border-border/40 pb-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-display font-bold text-primary uppercase tracking-wider">🎙️ Voice Added Items</span>
-              <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-bold">{cartCount} items</span>
-            </div>
-            <button onClick={() => setCart([])} className="text-[10px] text-destructive/80 hover:text-destructive font-display font-semibold">
-              Clear list
-            </button>
-          </div>
-          <div className="space-y-1.5 max-h-36 overflow-y-auto no-scrollbar">
-            {cart.map((item, i) => (
-              <div key={item.productId} className="flex items-center justify-between text-xs py-1 px-1.5 rounded-lg bg-card border border-border/30">
-                <div className="flex-1 min-w-0 pr-2">
-                  <p className="font-display font-semibold truncate">{item.productName}</p>
-                  <p className="text-[10px] text-muted-foreground">₦{item.unitPrice.toLocaleString()} × {item.quantity}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-display font-semibold text-primary">
-                    ₦{(item.unitPrice * item.quantity).toLocaleString()}
-                  </span>
-                  <button
-                    onClick={() => changeCartQty(i, -item.quantity)}
-                    className="w-6 h-6 rounded-md bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center justify-center text-sm font-bold active:scale-90 transition-transform ml-1"
-                    title="Remove item"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {categories.length > 1 && (
         <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 no-scrollbar">
           {categories.map(c => (
@@ -737,7 +726,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
 
       {visibleProducts.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-6 text-center text-sm text-muted-foreground">
-          {store.products.length === 0 ? 'Add products in the Inventory tab to start selling.' : 'No products match.'}
+          {store.products.length === 0 ? 'Add products in the Stock tab to start selling.' : 'No products match.'}
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 w-full">

@@ -7,8 +7,6 @@ import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Ca
 import Mascot, { MascotBadge } from '@/components/Mascot';
 import { ChevronDown, Check } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths } from 'date-fns';
-import BusinessPulse from '@/components/BusinessPulse';
-import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
 
 // ---------- Metric reporting period (Revenue / Net Profit) ----------
 
@@ -423,9 +421,6 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
 
   return (
     <div className="animate-fade-in space-y-4 md:space-y-6 text-left">
-      <FeatureErrorBoundary name="Business insights">
-        <BusinessPulse store={store} orders={orders} onNavigate={onNavigate} />
-      </FeatureErrorBoundary>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
         {/* Left Column */}
         <div className="md:col-span-5 space-y-4">
@@ -460,7 +455,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                 <div className="flex justify-center mb-1">
                   <Mascot size={56} mood="sleeping" store={store} />
                 </div>
-                <p className="text-xs text-muted-foreground text-center">Store Manager is off</p>
+                <p className="text-xs text-muted-foreground text-center">Flow is off</p>
                 <p className="text-[10px] text-primary text-center mt-1 font-display font-semibold">Tap to enable →</p>
               </button>
             )}
@@ -468,14 +463,11 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
             <div className="p-4 rounded-2xl bg-card shadow-card border border-border/40 flex flex-col">
               <div className="flex items-center gap-2 mb-2">
                 <Mascot size={36} mood={flowMood} store={store} />
-                <div className="flex-1 min-w-0">
-                  <p className="font-display font-bold text-sm leading-tight truncate">Store Manager</p>
-                  <MascotBadge on={managerEnabled} />
-                </div>
+                <p className="flex-1 min-w-0 font-display font-bold text-sm leading-tight truncate">Flow</p>
               </div>
               <div className="space-y-1 flex-1">
                 {!managerEnabled && (
-                  <p className="text-[11px] text-muted-foreground">Turn on Store Manager to receive insights, forecasts and recommendations.</p>
+                  <p className="text-[11px] text-muted-foreground">Turn on Flow to receive insights, forecasts and recommendations.</p>
                 )}
                 {managerEnabled && insights.length === 0 && <p className="text-[11px] text-muted-foreground">Insights appear as you record sales.</p>}
                 {managerEnabled &&

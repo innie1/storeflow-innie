@@ -179,7 +179,7 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
         onPointerUp={endHold}
         onPointerCancel={endHold}
         onPointerLeave={endHold}
-        className={`fixed right-4 bottom-24 md:bottom-8 z-[55] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center active:scale-95 transition-all ${holding ? 'ring-4 ring-primary/25 scale-105' : ''}`}
+        className={`fixed right-4 bottom-24 md:bottom-8 z-[45] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center active:scale-95 transition-all ${holding ? 'ring-4 ring-primary/25 scale-105' : ''}`}
         title={isLaundry ? 'Record Laundry' : 'Message with Flow · hold 3 seconds to talk'}
         aria-label={isLaundry ? 'Record Laundry' : 'Message with Flow. Hold for 3 seconds to speak.'}
       >

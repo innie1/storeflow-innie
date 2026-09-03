@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Product, StoreData } from '@/types/store';
-import { Check, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Package, Plus } from 'lucide-react';
 
 interface QuickSellGridProps {
   store: StoreData;
   onSell: (productId: string, quantity: number) => void;
+  onNavigate?: (tab: any) => void;
 }
 
 const GRID_SIZE = 6;
@@ -42,7 +43,7 @@ function sortSellProducts(store: StoreData): Product[] {
     });
 }
 
-export default function QuickSellGrid({ store, onSell }: QuickSellGridProps) {
+export default function QuickSellGrid({ store, onSell, onNavigate }: QuickSellGridProps) {
   const allProducts = useMemo(() => sortSellProducts(store), [store]);
   const [showAll, setShowAll] = useState(false);
   const [active, setActive] = useState<Product | null>(null);
@@ -51,7 +52,27 @@ export default function QuickSellGrid({ store, onSell }: QuickSellGridProps) {
   const products = showAll ? allProducts : allProducts.slice(0, GRID_SIZE);
   const hasMore = allProducts.length > GRID_SIZE;
 
-  if (allProducts.length === 0) return null;
+  if (allProducts.length === 0) {
+    return (
+      <div className="w-full mt-6 flex flex-col items-center text-center px-4 py-8 rounded-xl border border-dashed border-border/80 bg-surface-2/20">
+        <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mb-3">
+          <Package className="w-5 h-5 text-primary" />
+        </div>
+        <p className="font-display font-bold text-sm text-foreground">No products yet</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">
+          Add your first product to start selling with one tap.
+        </p>
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('inventory')}
+            className="mt-4 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+          >
+            <Plus className="w-4 h-4" /> Add Your First Product
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const openTile = (p: Product) => {
     setActive(p);
