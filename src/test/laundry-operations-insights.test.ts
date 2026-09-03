@@ -61,7 +61,10 @@ describe('laundry operations and business insights', () => {
     const owner = fs.readFileSync('src/components/dashboards/OwnerDashboard.tsx', 'utf8');
     const businessOwner = fs.readFileSync('src/components/dashboards/BusinessOwnerDashboard.tsx', 'utf8');
     const boundary = fs.readFileSync('src/components/FeatureErrorBoundary.tsx', 'utf8');
-    expect(owner).toContain('<FeatureErrorBoundary name="Business insights">');
+    // OwnerDashboard (generic/non-template stores) dropped the Earnings Pulse /
+    // Customer Activity / Promised-Time Reminders cards entirely — the merchant
+    // asked for them removed as clutter, not just error-isolated.
+    expect(owner).not.toContain('BusinessPulse');
     expect(businessOwner).toContain('<FeatureErrorBoundary name="Business insights">');
     expect(boundary).toContain('sales, orders, laundry records');
     expect(businessOwner).toContain('Start here');

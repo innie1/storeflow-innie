@@ -2564,6 +2564,52 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <ToggleRow label="Business Expansion" checked={mgr.businessExpansion} onChange={v => updateMgr({ businessExpansion: v })} />
           </div>
 
+          {/* Sales Target */}
+          <div className="px-1">
+            <SectionLabel>Sales Target</SectionLabel>
+          </div>
+          <div className={`${card} p-3.5 space-y-2.5`}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-display font-semibold">Goal mode</p>
+              <div className="flex gap-1 bg-surface-2 p-0.5 rounded-lg border border-border/60">
+                <button
+                  onClick={() => saveTarget({ mode: 'auto' })}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-display font-bold transition ${targetMode === 'auto' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+                >
+                  Auto
+                </button>
+                <button
+                  onClick={() => saveTarget({ mode: 'manual' })}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-display font-bold transition ${targetMode === 'manual' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+                >
+                  Manual
+                </button>
+              </div>
+            </div>
+            {targetMode === 'manual' && (
+              <div className="flex gap-1.5">
+                <div className="flex gap-1 bg-surface-2 p-0.5 rounded-lg border border-border/60 shrink-0">
+                  {(['daily', 'weekly'] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => saveTarget({ period: p })}
+                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-display font-bold capitalize transition ${targetPeriod === p ? 'bg-primary/15 text-primary' : 'text-muted-foreground'}`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  value={targetAmountInput}
+                  onChange={e => saveTarget({ amount: e.target.value })}
+                  placeholder={`₦ target per ${targetPeriod === 'daily' ? 'day' : 'week'}`}
+                  className="flex-1 min-w-0 px-2.5 rounded-lg bg-surface-2 border border-border/60 text-xs focus:outline-none focus:border-primary"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Tools */}
           <div className="px-1">
             <SectionLabel>Tools</SectionLabel>
@@ -4376,53 +4422,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
 
 
-
-          {/* Sales Target Card */}
-          <div className={`${card} w-full p-4 space-y-3`}>
-            <div className="flex items-center justify-between">
-              <h3 className="font-display font-bold text-sm">Sales Target</h3>
-              <span className="text-[10px] text-muted-foreground uppercase font-bold">{targetMode === 'auto' ? 'Auto' : 'Manual'}</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-snug">
-              Auto adjusts your target to how often this store sells. Switch to Manual to set your own.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => saveTarget({ mode: 'auto' })}
-                className={`flex-1 py-2 rounded-lg text-xs font-display font-bold border ${targetMode === 'auto' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
-              >
-                Auto
-              </button>
-              <button
-                onClick={() => saveTarget({ mode: 'manual' })}
-                className={`flex-1 py-2 rounded-lg text-xs font-display font-bold border ${targetMode === 'manual' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
-              >
-                Manual
-              </button>
-            </div>
-            {targetMode === 'manual' && (
-              <div className="space-y-2 pt-1">
-                <div className="flex gap-2">
-                  {(['daily', 'weekly'] as const).map(p => (
-                    <button
-                      key={p}
-                      onClick={() => saveTarget({ period: p })}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-display font-bold border capitalize ${targetPeriod === p ? 'bg-primary/15 border-primary text-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="number"
-                  value={targetAmountInput}
-                  onChange={e => saveTarget({ amount: e.target.value })}
-                  placeholder={`₦ target per ${targetPeriod === 'daily' ? 'day' : 'week'}`}
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-sm focus:outline-none focus:border-primary"
-                />
-              </div>
-            )}
-          </div>
 
           {/* Flow Card */}
           <button onClick={() => setView('flow')} className={`${card} w-full p-4 text-left hover:ring-1 hover:ring-primary/30 transition-all border ${mgr.enabled ? 'border-success/30 bg-gradient-to-br from-success/10 to-transparent' : 'border-border'}`}>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { startOfDay, startOfWeek, startOfMonth, subDays } from 'date-fns';
 import { StoreData, Sale, Expense, Restock } from '@/types/store';
 import { clearSales, deleteSale, deleteExpense, getTrash } from '@/lib/store-data';
 import { exportHistoryCSV, exportHistoryPDF } from '@/lib/export-data';
@@ -6,6 +7,7 @@ import { showToast } from '@/components/Toast';
 import SaleReceipt from '@/components/SaleReceipt';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
+import { Search, Trash2, FileText, FileSpreadsheet, Wallet, Package, Receipt, ListFilter, X, ChevronDown } from 'lucide-react';
 
 interface SalesHistoryProps {
   store: StoreData;
@@ -13,6 +15,7 @@ interface SalesHistoryProps {
 }
 
 type HistoryFilter = 'all' | 'sales' | 'restocks' | 'expenses';
+type DateRange = 'today' | 'yesterday' | '7days' | 'month' | 'all';
 
 interface HistoryEntry {
   id: string;
@@ -22,13 +25,35 @@ interface HistoryEntry {
   subtitle: string;
   amount: number;
   amountColor: string;
-  icon: string;
+  icon: React.ReactNode;
   raw: Sale | Sale[] | Restock | Expense;
+}
+
+const DATE_RANGE_LABELS: Record<DateRange, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  '7days': 'Last 7 Days',
+  month: 'This Month',
+  all: 'All Time',
+};
+const DATE_RANGE_OPTIONS: DateRange[] = ['today', 'yesterday', '7days', 'month', 'all'];
+
+function dateRangeWindow(range: DateRange): { start: number | null; end: number | null } {
+  const now = new Date();
+  switch (range) {
+    case 'today': return { start: startOfDay(now).getTime(), end: null };
+    case 'yesterday': return { start: startOfDay(subDays(now, 1)).getTime(), end: startOfDay(now).getTime() };
+    case '7days': return { start: startOfDay(subDays(now, 6)).getTime(), end: null };
+    case 'month': return { start: startOfMonth(now).getTime(), end: null };
+    case 'all': return { start: null, end: null };
+  }
 }
 
 export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<HistoryFilter>('all');
+  const [dateRange, setDateRange] = useState<DateRange>('all');
+  const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [viewReceipt, setViewReceipt] = useState<Sale | Sale[] | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDelId, setConfirmDelId] = useState<HistoryEntry | null>(null);
@@ -126,7 +151,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             : `${totalQty} items${isOnlineOrder ? ' · Online Order' : ''}`,
           amount: total,
           amountColor: 'text-primary',
-          icon: isOnlineOrder ? '📦' : '💰',
+          icon: isOnlineOrder ? <Package className="w-4 h-4" /> : <Wallet className="w-4 h-4" />,
           raw: group,
         });
       });
@@ -140,7 +165,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
           subtitle: `${s.quantity} × ₦${s.unitPrice.toLocaleString()}`,
           amount: s.total,
           amountColor: 'text-primary',
-          icon: '💰',
+          icon: <Wallet className="w-4 h-4" />,
           raw: s,
         });
       });
@@ -163,7 +188,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         const total = batch.reduce((s, r) => s + r.total, 0);
         const totalQty = batch.reduce((s, r) => s + r.quantity, 0);
         const funding = batch[0].funding;
-        const fundingLabel = funding === 'new_money' ? '💵 new money' : funding === 'balance' ? '🏦 from balance' : '';
+        const fundingLabel = funding === 'new_money' ? 'new money' : funding === 'balance' ? 'from balance' : '';
         items.push({
           id: batchId,
           type: 'restock',
@@ -172,7 +197,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
           subtitle: `${totalQty} units${fundingLabel ? ' • ' + fundingLabel : ''}`,
           amount: -total,
           amountColor: 'text-warning',
-          icon: '📦',
+          icon: <Package className="w-4 h-4" />,
           raw: batch[0],
         });
       });
@@ -185,7 +210,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
           subtitle: `Restocked ${r.quantity} units @ ₦${r.costPrice.toLocaleString()}`,
           amount: -r.total,
           amountColor: 'text-warning',
-          icon: '📦',
+          icon: <Package className="w-4 h-4" />,
           raw: r,
         });
       });
@@ -201,7 +226,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
           subtitle: e.note || 'Manual expense',
           amount: -e.amount,
           amountColor: 'text-destructive',
-          icon: '🧾',
+          icon: <Receipt className="w-4 h-4" />,
           raw: e,
         });
       });
@@ -211,13 +236,43 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
     return items;
   }, [store, filter]);
 
+  const inDateRange = (dateStr: string) => {
+    const { start, end } = dateRangeWindow(dateRange);
+    const t = new Date(dateStr).getTime();
+    return (start === null || t >= start) && (end === null || t < end);
+  };
+
+  const periodEntries = useMemo(() => entries.filter(e => inDateRange(e.date)), [entries, dateRange]);
+
+  const periodSummary = useMemo(() => {
+    const income = periodEntries.filter(e => e.amount > 0).reduce((s, e) => s + e.amount, 0);
+    const outgoing = periodEntries.filter(e => e.amount < 0).reduce((s, e) => s + e.amount, 0);
+    return { income, outgoing, net: income + outgoing };
+  }, [periodEntries]);
+
+  const referenceStats = useMemo(() => {
+    const now = new Date();
+    const sumInRange = (start: number | null, end: number | null) => entries
+      .filter(e => {
+        const t = new Date(e.date).getTime();
+        return (start === null || t >= start) && (end === null || t < end);
+      })
+      .reduce((s, e) => s + e.amount, 0);
+    return {
+      today: sumInRange(startOfDay(now).getTime(), null),
+      yesterday: sumInRange(startOfDay(subDays(now, 1)).getTime(), startOfDay(now).getTime()),
+      week: sumInRange(startOfWeek(now).getTime(), null),
+      month: sumInRange(startOfMonth(now).getTime(), null),
+    };
+  }, [entries]);
+
   const filtered = search
-    ? entries.filter(e => 
-        e.title.toLowerCase().includes(search.toLowerCase()) || 
+    ? periodEntries.filter(e =>
+        e.title.toLowerCase().includes(search.toLowerCase()) ||
         e.subtitle.toLowerCase().includes(search.toLowerCase()) ||
         e.id.toLowerCase().includes(search.toLowerCase())
       )
-    : entries;
+    : periodEntries;
 
   const handleClear = () => {
     if (store.sales.length === 0) return;
@@ -241,11 +296,11 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
     showToast('Item deleted (recoverable for 7 days)');
   };
 
-  const filters: { key: HistoryFilter; label: string; icon: string }[] = [
-    { key: 'all', label: 'All', icon: '📋' },
-    { key: 'sales', label: 'Sales', icon: '💰' },
-    { key: 'restocks', label: 'Restocks', icon: '📦' },
-    { key: 'expenses', label: 'Expenses', icon: '🧾' },
+  const filters: { key: HistoryFilter; label: string; icon: React.ReactNode }[] = [
+    { key: 'all', label: 'All', icon: <ListFilter className="w-3.5 h-3.5" /> },
+    { key: 'sales', label: 'Sales', icon: <Wallet className="w-3.5 h-3.5" /> },
+    { key: 'restocks', label: 'Restocks', icon: <Package className="w-3.5 h-3.5" /> },
+    { key: 'expenses', label: 'Expenses', icon: <Receipt className="w-3.5 h-3.5" /> },
   ];
 
   const channelSplit = useMemo(() => {
@@ -281,20 +336,93 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         </div>
       )}
 
-      {/* Search + actions */}
-      <div className="flex flex-wrap gap-2">
+      {/* Time frame + summary */}
+      <div className="p-3.5 rounded-xl bg-card border border-border space-y-3">
+        <div className="relative">
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={() => setDateMenuOpen(v => !v)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setDateMenuOpen(v => !v); }}
+            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wide font-display font-bold hover:text-foreground active:scale-95 transition cursor-pointer"
+          >
+            {DATE_RANGE_LABELS[dateRange]} <ChevronDown className={`w-3 h-3 transition-transform ${dateMenuOpen ? 'rotate-180' : ''}`} />
+          </span>
+          {dateMenuOpen && (
+            <>
+              <span role="presentation" className="fixed inset-0 z-10" onClick={() => setDateMenuOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[150px]">
+                {DATE_RANGE_OPTIONS.map(r => (
+                  <span
+                    key={r}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { setDateRange(r); setDateMenuOpen(false); }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setDateRange(r); setDateMenuOpen(false); } }}
+                    className={`block w-full text-left px-3 py-2 text-xs font-display font-semibold cursor-pointer ${r === dateRange ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'}`}
+                  >
+                    {DATE_RANGE_LABELS[r]}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-display font-semibold">Total</p>
+          <p className={`font-display font-black text-2xl ${periodSummary.net >= 0 ? 'text-success' : 'text-destructive'}`}>
+            {periodSummary.net >= 0 ? '+' : '−'}₦{Math.abs(periodSummary.net).toLocaleString()}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-2.5 rounded-lg bg-success/10 border border-success/20 min-w-0">
+            <p className="text-[10px] text-muted-foreground uppercase">In</p>
+            <p className="font-display font-bold text-sm text-success truncate">+₦{periodSummary.income.toLocaleString()}</p>
+          </div>
+          <div className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 min-w-0">
+            <p className="text-[10px] text-muted-foreground uppercase">Out</p>
+            <p className="font-display font-bold text-sm text-destructive truncate">−₦{Math.abs(periodSummary.outgoing).toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div className="pt-2.5 border-t border-border/60 grid grid-cols-4 gap-1.5 text-center">
+          {[
+            { label: 'Today', value: referenceStats.today },
+            { label: 'Yesterday', value: referenceStats.yesterday },
+            { label: 'This Week', value: referenceStats.week },
+            { label: 'This Month', value: referenceStats.month },
+          ].map(r => (
+            <div key={r.label} className="min-w-0">
+              <p className="text-[9px] text-muted-foreground uppercase truncate">{r.label}</p>
+              <p className={`text-[11px] font-display font-bold truncate ${r.value >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {r.value >= 0 ? '+' : '−'}₦{Math.abs(r.value).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search by product, category or receipt ID..."
-          className="flex-1 min-w-[200px] p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+          placeholder="Search product, category or receipt ID..."
+          className="w-full p-2.5 pl-9 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
         />
+      </div>
+
+      {/* Actions */}
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setShowTrash(true)}
-          className="relative px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-sm font-display font-semibold text-muted-foreground hover:text-foreground"
+          className="relative px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-sm font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
           title="Recently deleted"
         >
-          🗑
+          <Trash2 className="w-4 h-4" />
           {trashCount > 0 && (
             <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
               {trashCount}
@@ -303,17 +431,17 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         </button>
         <button
           onClick={() => exportHistoryPDF(store)}
-          className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground"
+          className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
           title="Export PDF"
         >
-          📄 PDF
+          <FileText className="w-4 h-4" /> PDF
         </button>
         <button
           onClick={() => exportHistoryCSV(store)}
-          className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground"
+          className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
           title="Export CSV"
         >
-          📊 CSV
+          <FileSpreadsheet className="w-4 h-4" /> CSV
         </button>
         {store.sales.length > 0 && (
           <button onClick={handleClear} className="px-3 py-2.5 rounded-lg bg-destructive/10 text-destructive text-xs font-display font-semibold hover:bg-destructive/20 border border-destructive/20">
@@ -346,7 +474,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             key={`${entry.type}-${entry.id}`}
             className="p-3 rounded-xl bg-card shadow-card border border-border flex items-center gap-3 hover:border-primary/30 transition-colors"
           >
-            <div className="w-9 h-9 rounded-lg bg-surface-2 flex items-center justify-center text-lg shrink-0">
+            <div className="w-9 h-9 rounded-lg bg-surface-2 flex items-center justify-center text-muted-foreground shrink-0">
               {entry.icon}
             </div>
             <div
@@ -382,9 +510,9 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
               <button
                 onClick={() => setConfirmDelId(entry)}
                 title="Delete"
-                className="w-7 h-7 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs flex items-center justify-center border border-destructive/20 shrink-0"
+                className="w-7 h-7 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center justify-center border border-destructive/20 shrink-0"
               >
-                ✕
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -437,16 +565,16 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
           >
             <div className="p-4 border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="font-display font-bold text-foreground">📦 Restock details</h3>
+                <h3 className="font-display font-bold text-foreground flex items-center gap-1.5"><Package className="w-4 h-4" /> Restock details</h3>
                 <p className="text-[11px] text-muted-foreground">
                   {new Date(viewBatch[0].date).toLocaleString()}
                 </p>
               </div>
               <button
                 onClick={() => setViewBatch(null)}
-                className="w-8 h-8 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground"
+                className="w-8 h-8 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground flex items-center justify-center"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
             <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
@@ -454,9 +582,9 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
                 <span className="text-xs text-muted-foreground font-display">Funded by</span>
                 <span className="text-xs font-display font-semibold text-foreground">
                   {viewBatch[0].funding === 'new_money'
-                    ? '💵 New money invested'
+                    ? 'New money invested'
                     : viewBatch[0].funding === 'balance'
-                    ? '🏦 From balance'
+                    ? 'From balance'
                     : '—'}
                 </span>
               </div>

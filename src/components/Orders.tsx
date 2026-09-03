@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback } from 'react';
 import { Search, SlidersHorizontal, Calendar, User, Phone, MapPin, Package, ArrowLeftRight, Wallet, ChevronUp, ChevronDown } from 'lucide-react';
 import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
-import { saveStore } from '@/lib/store-data';
 import OrderReceipt from '@/components/OrderReceipt';
 import { subscribeToOrderPush } from '@/lib/push-notifications';
 
@@ -286,37 +285,9 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
           </div>
         </div>
       )}
-      {/* Top Action Bar (Store Open/Close Toggle & Capacity Badge) */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <button
-          onClick={() => {
-            const wasOpen = store.marketplaceSettings?.storeOpen !== false;
-            const updatedStore = {
-              ...store,
-              marketplaceSettings: {
-                ...(store.marketplaceSettings || {}),
-                storeOpen: !wasOpen,
-              },
-            };
-            onUpdate(updatedStore);
-            saveStore(updatedStore);
-            showToast(
-              wasOpen ? 'Store is now closed to customers' : 'Store is now open to the marketplace',
-              wasOpen ? 'info' : 'success'
-            );
-          }}
-          className={`px-3.5 py-1.5 rounded-lg border text-xs font-display font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer ${
-            store.marketplaceSettings?.storeOpen !== false
-              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-500'
-              : 'bg-destructive/10 border-destructive/25 text-destructive'
-          }`}
-          title="Toggle whether customers can see and order from your store"
-        >
-          <span className={`w-2 h-2 rounded-full ${store.marketplaceSettings?.storeOpen !== false ? 'bg-emerald-500 animate-pulse' : 'bg-destructive'}`} />
-          {store.marketplaceSettings?.storeOpen !== false ? 'Open to Market' : 'Closed to Market — tap to open'}
-        </button>
-
-        {maxDailyOrders && (
+      {/* Capacity Badge */}
+      {maxDailyOrders && (
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
           <div className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-2 ${
             isLimitReached ? 'bg-red-500/10 border-red-500/25 text-red-500' : 'bg-surface-2 border-border text-muted-foreground'
           }`}>
@@ -324,8 +295,8 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
             <span className="font-mono font-bold">{todayOrders.length} / {maxDailyOrders}</span>
             {isLimitReached && <span className="animate-pulse">⚠️ Full</span>}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Warning banner if limit reached */}
       {isLimitReached && (
@@ -340,25 +311,28 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
       )}
 
       {/* Tabs list with counts — pill style matching the reference design */}
-      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar -mx-4 px-4 md:-mx-0 md:px-0">
-        {(['All', 'Pending', 'Accepted', 'Preparing', 'Ready', 'Completed', 'Rejected', 'Cancelled'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-display font-bold transition-all whitespace-nowrap cursor-pointer ${
-              activeTab === tab
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-border/60 text-muted-foreground bg-surface-2 hover:text-foreground'
-            }`}
-          >
-            {tab}
-            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
-              activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-surface-3 text-muted-foreground'
-            }`}>
-              {counts[tab as keyof typeof counts] ?? 0}
-            </span>
-          </button>
-        ))}
+      <div className="relative -mx-4 px-4 md:-mx-0 md:px-0">
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {(['All', 'Pending', 'Accepted', 'Preparing', 'Ready', 'Completed', 'Rejected', 'Cancelled'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-display font-bold transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === tab
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-border/60 text-muted-foreground bg-surface-2 hover:text-foreground'
+              }`}
+            >
+              {tab}
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
+                activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-surface-3 text-muted-foreground'
+              }`}>
+                {counts[tab as keyof typeof counts] ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="absolute right-4 md:right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none" />
       </div>
 
       {/* Search Input + Filter button */}

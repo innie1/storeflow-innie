@@ -6,7 +6,7 @@ import { healthScore, generateInsights, generateRecommendations, restockScore } 
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import Mascot, { MascotBadge } from '@/components/Mascot';
 import { ChevronDown, Check } from 'lucide-react';
-import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths } from 'date-fns';
+import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths, subDays } from 'date-fns';
 
 // ---------- Metric reporting period (Revenue / Net Profit) ----------
 
@@ -41,6 +41,37 @@ function loadStoredPeriod(accessCode: string, metric: 'revenue' | 'netProfit'): 
   return (PERIOD_OPTIONS as string[]).includes(raw || '') ? (raw as MetricPeriod) : 'lifetime';
 }
 
+// Business Balance reporting period — a narrower set than Revenue/Net Profit
+// (yesterday is meaningful here as a "how much did I actually keep" check).
+type BalancePeriod = 'today' | 'yesterday' | 'month' | '3months' | 'lifetime';
+
+const BALANCE_PERIOD_LABELS: Record<BalancePeriod, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  month: 'This Month',
+  '3months': 'Last 3 Months',
+  lifetime: 'Business Balance',
+};
+
+const BALANCE_PERIOD_OPTIONS: BalancePeriod[] = ['today', 'yesterday', 'month', '3months', 'lifetime'];
+
+function balancePeriodRange(period: BalancePeriod): { start: number | null; end: number | null } {
+  const now = new Date();
+  switch (period) {
+    case 'today': return { start: startOfDay(now).getTime(), end: null };
+    case 'yesterday': return { start: startOfDay(subDays(now, 1)).getTime(), end: startOfDay(now).getTime() };
+    case 'month': return { start: startOfMonth(now).getTime(), end: null };
+    case '3months': return { start: startOfDay(subMonths(now, 3)).getTime(), end: null };
+    case 'lifetime': return { start: null, end: null };
+  }
+}
+
+function loadStoredBalancePeriod(accessCode: string): BalancePeriod {
+  if (typeof localStorage === 'undefined') return 'lifetime';
+  const raw = localStorage.getItem(`storeflow_dash_period_${accessCode}_balance`);
+  return (BALANCE_PERIOD_OPTIONS as string[]).includes(raw || '') ? (raw as BalancePeriod) : 'lifetime';
+}
+
 interface OwnerDashboardProps {
   store: StoreData;
   orders?: any[];
@@ -53,6 +84,7 @@ type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 export default function OwnerDashboard({ store, orders = [], onNavigate }: OwnerDashboardProps) {
   const stats = getDashboardStats(store);
   const topSellers = getTopSellers(store, 5);
+  const target = useMemo(() => getSalesTargetStatus(store), [store]);
   const pendingSummary = useMemo(() => {
     const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
     return {
@@ -96,6 +128,25 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
 
   const revenuePeriodStats = useMemo(() => getPeriodTotals(revenuePeriod), [store.sales, revenuePeriod]);
   const netProfitPeriodStats = useMemo(() => getPeriodTotals(netProfitPeriod), [store.sales, netProfitPeriod]);
+
+  // Business Balance reporting period — remembered per store
+  const [balancePeriod, setBalancePeriod] = useState<BalancePeriod>(() => loadStoredBalancePeriod(store.accessCode));
+  const [balancePeriodMenuOpen, setBalancePeriodMenuOpen] = useState(false);
+  const balanceStats = useMemo(() => {
+    const { start, end } = balancePeriodRange(balancePeriod);
+    const inRange = (dateStr: string) => {
+      const t = new Date(dateStr).getTime();
+      return (start === null || t >= start) && (end === null || t < end);
+    };
+    const revenue = store.sales.filter(s => inRange(s.date)).reduce((sum, s) => sum + s.total, 0);
+    const expenses = (store.expenses || []).filter(e => inRange(e.date)).reduce((sum, e) => sum + e.amount, 0);
+    return { revenue, expenses, balance: revenue - expenses };
+  }, [store.sales, store.expenses, balancePeriod]);
+  const selectBalancePeriod = (period: BalancePeriod) => {
+    setBalancePeriod(period);
+    if (typeof localStorage !== 'undefined') localStorage.setItem(`storeflow_dash_period_${store.accessCode}_balance`, period);
+    setBalancePeriodMenuOpen(false);
+  };
 
   const selectPeriod = (period: MetricPeriod) => {
     if (periodSheetFor === 'revenue') {
@@ -377,7 +428,6 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
   const managerEnabled = (store.managerSettings ?? DEFAULT_MANAGER_SETTINGS).enabled;
   const mgrSettings = store.managerSettings ?? DEFAULT_MANAGER_SETTINGS;
   const health = healthScore(store);
-  const target = useMemo(() => getSalesTargetStatus(store), [store]);
   const insights = managerEnabled ? generateInsights(store, '7d') : [];
   const recs = (managerEnabled ? generateRecommendations(store) : []).filter(r => r.action !== 'restock' || mgrSettings.restockSuggestions);
   const restockScoreResult = useMemo(() => restockScore(store), [store]);
@@ -541,15 +591,42 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
               </span>
             </div>
             <div className="mt-2 pt-2 border-t border-border flex items-end justify-between">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Business Balance</p>
-                <p className={`font-display font-bold text-lg ${stats.netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
-                  {stats.netIncome >= 0 ? '' : '−'}₦{Math.abs(stats.netIncome).toLocaleString()}
+              <div className="relative">
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); setBalancePeriodMenuOpen(v => !v); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setBalancePeriodMenuOpen(v => !v); } }}
+                  className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground uppercase tracking-wide font-display font-semibold hover:text-foreground active:scale-95 transition cursor-pointer"
+                >
+                  {balancePeriod === 'lifetime' ? 'Business Balance' : `${BALANCE_PERIOD_LABELS[balancePeriod]} Balance`} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
+                </span>
+                <p className={`font-display font-bold text-lg ${balanceStats.balance >= 0 ? 'text-success' : 'text-destructive'}`}>
+                  {balanceStats.balance >= 0 ? '' : '−'}₦{Math.abs(balanceStats.balance).toLocaleString()}
                 </p>
+                {balancePeriodMenuOpen && (
+                  <>
+                    <span role="presentation" className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setBalancePeriodMenuOpen(false); }} />
+                    <div className="absolute left-0 bottom-full mb-1 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[140px]" onClick={e => e.stopPropagation()}>
+                      {BALANCE_PERIOD_OPTIONS.map(p => (
+                        <span
+                          key={p}
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); selectBalancePeriod(p); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); selectBalancePeriod(p); } }}
+                          className={`block w-full text-left px-3 py-2 text-xs font-display font-semibold cursor-pointer ${p === balancePeriod ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'}`}
+                        >
+                          {BALANCE_PERIOD_LABELS[p]}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expenses</p>
-                <p className="font-display font-semibold text-sm text-destructive">₦{stats.totalExpenses.toLocaleString()}</p>
+                <p className="font-display font-semibold text-sm text-destructive">₦{balanceStats.expenses.toLocaleString()}</p>
               </div>
             </div>
           </button>
