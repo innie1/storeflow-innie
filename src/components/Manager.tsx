@@ -24,7 +24,11 @@ import FlowChat from '@/components/FlowChat';
 import { executeAutoFix, AutoFixSpec } from '@/lib/auto-fix';
 import { logPrediction, submitPredictionFeedback } from '@/lib/prediction-log';
 import PredictionHistory from '@/components/PredictionHistory';
-import { MessageCircle, Package, Star } from 'lucide-react';
+import {
+  MessageCircle, Package, Star, CreditCard, TrendingUp, Factory, MapPin, ThumbsUp, ThumbsDown,
+  Calendar, Rocket, AlertTriangle, ClipboardList, Banknote, Hourglass, Clock, PiggyBank, ShoppingCart,
+  Info, Flame, Moon, Receipt, Home, Bot, Undo2, BarChart3, Sparkles, Archive, Bell, Zap, PartyPopper, X,
+} from 'lucide-react';
 
 interface ManagerProps {
   store: StoreData;
@@ -189,7 +193,7 @@ function MoneyOwedCard({ store, onClick }: { store: StoreData; onClick?: () => v
       className={`w-full text-left p-4 rounded-2xl bg-card shadow-card space-y-3 border border-transparent transition-colors ${onClick ? 'cursor-pointer hover:border-warning/30' : ''}`}
     >
       <div className="flex items-start justify-between">
-        <div><h3 className="font-display font-bold text-sm">💳 Money Owed To You</h3><p className="text-[11px] text-muted-foreground">Outstanding customer balances</p></div>
+        <div><h3 className="font-display font-bold text-sm flex items-center gap-1.5"><CreditCard className="w-4 h-4" /> Money Owed To You</h3><p className="text-[11px] text-muted-foreground">Outstanding customer balances</p></div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-display font-bold ${s.recoveryRate >= 70 ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'}`}>{s.recoveryRate}% recovered</span>
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -293,7 +297,7 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
           </div>
           {data.peakWindow && (
             <div className="mt-3 p-3 rounded-xl bg-primary/5 border border-primary/30 flex items-center gap-2">
-              <span className="text-base">📈</span>
+              <TrendingUp className="w-4 h-4 text-primary shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs"><span className="text-foreground">Peak: </span><span className="font-display font-bold text-primary">{data.peakWindow.startLabel} – {data.peakWindow.endLabel}</span></p>
                 <p className="text-[11px] text-muted-foreground">Plan stock and promotions around these hours.</p>
@@ -341,7 +345,7 @@ function SupplierPanel() {
   return (
     <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-display font-bold text-sm">🏭 Suppliers</h3>
+        <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Factory className="w-4 h-4" /> Suppliers</h3>
         <button onClick={() => setAdding(!adding)} className="text-xs px-3 py-1.5 rounded-full bg-primary text-primary-foreground font-display font-bold">+ Add</button>
       </div>
       {adding && (
@@ -371,10 +375,10 @@ function SupplierPanel() {
                   {s.products.length > 0 && <p className="text-[11px] text-muted-foreground mt-0.5">{s.products.join(', ')}</p>}
                   <div className="flex flex-wrap gap-2 mt-1">
                     {s.pricePerUnit > 0 && <span className="text-[10px] text-primary font-display font-bold">₦{s.pricePerUnit.toLocaleString()} {s.unit ? `/ ${s.unit}` : ''}</span>}
-                    {s.distance && <span className="text-[10px] text-muted-foreground">📍 {s.distance}</span>}
+                    {s.distance && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><MapPin className="w-3 h-3" /> {s.distance}</span>}
                   </div>
                 </div>
-                <button onClick={() => handleDelete(s.id)} className="text-destructive text-sm px-2">✕</button>
+                <button onClick={() => handleDelete(s.id)} className="text-destructive px-2"><X className="w-3.5 h-3.5" /></button>
               </div>
             </div>
           ))}
@@ -912,7 +916,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             return (
               <div className="p-4 rounded-2xl bg-card border border-border/40 shadow-card space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display font-bold text-sm">📅 Last Week's Recap</h3>
+                  <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Calendar className="w-4 h-4" /> Last Week's Recap</h3>
                   <span className="text-[10px] text-muted-foreground">{recap.weekLabel}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
@@ -935,7 +939,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                   </p>
                 )}
                 {recap.bestSeller && (
-                  <p className="text-xs text-muted-foreground">⭐ Best seller: {recap.bestSeller}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Star className="w-3.5 h-3.5" /> Best seller: {recap.bestSeller}</p>
                 )}
               </div>
             );
@@ -947,7 +951,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             className="w-full flex items-center justify-between p-4 rounded-2xl bg-card border border-border/40 shadow-card text-left"
           >
             <div className="flex items-center gap-3">
-              <span className="text-2xl">📅</span>
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0"><Calendar className="w-5 h-5" /></div>
               <div>
                 <p className="font-display font-bold text-sm">Performance Calendar</p>
                 <p className="text-[11px] text-muted-foreground">See your consistency at a glance</p>
@@ -978,7 +982,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             return (
               <div className="p-4 rounded-2xl bg-card border border-primary/20 shadow-card space-y-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-base">🚀</span>
+                  <Rocket className="w-4 h-4 text-primary" />
                   <div>
                     <h3 className="font-display font-bold text-sm">Top Opportunities</h3>
                     <p className="text-[10px] text-slate-400 font-semibold">Flow recommendations to boost revenue</p>
@@ -1011,7 +1015,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               <div className="p-4 rounded-2xl bg-card border border-destructive/25 shadow-card space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-base">🚨</span>
+                    <AlertTriangle className="w-4 h-4 text-destructive" />
                     <div>
                       <h3 className="font-display font-bold text-sm">Profit Leak Detector</h3>
                       <p className="text-[10px] text-slate-400">Flow identified capital leakage factors</p>
@@ -1028,7 +1032,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     <div key={idx} className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
                       <div className="flex justify-between items-start">
                         <p className="font-display font-bold text-xs text-foreground flex items-center gap-1">
-                          <span>⚠️</span> {l.title}
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {l.title}
                         </p>
                         <span className="text-[9px] font-mono font-bold text-destructive">
                           -₦{l.amountLeak.toLocaleString()}
@@ -1054,7 +1058,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             return (
               <div className="p-4 rounded-2xl bg-card border border-primary/20 shadow-card space-y-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-base">📅</span>
+                  <Calendar className="w-4 h-4 text-primary" />
                   <div>
                     <h3 className="font-display font-bold text-sm">Seasonal &amp; Climate Insights</h3>
                     <p className="text-[10px] text-slate-400 font-semibold">General patterns for this time of year — not personalized predictions</p>
@@ -1065,7 +1069,6 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     <div className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
                       <p className="font-display font-bold text-xs text-foreground">{weather.weatherCondition}</p>
                       <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{weather.effect}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1 leading-normal italic">{weather.impactDetails}</p>
                       <p className="text-[10px] text-emerald-400 mt-1 bg-emerald-500/5 p-1 rounded border border-emerald-500/10">
                         {weather.suggestedAction}
                       </p>
@@ -1143,7 +1146,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               <div className="p-4 rounded-2xl bg-card border border-warning/20 shadow-card space-y-3">
                 <div className="flex justify-between items-start gap-4">
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span className="text-base shrink-0">📋</span>
+                    <ClipboardList className="w-4 h-4 shrink-0" />
                     <div className="text-left min-w-0">
                       <h3 className="font-display font-bold text-sm truncate">Smart Restocking List</h3>
                       <p className="text-[10px] text-slate-400 leading-normal">
@@ -1209,7 +1212,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               className="p-3 rounded-xl bg-card border border-border hover:border-primary/30 transition-all flex items-center justify-between text-left group shadow-card"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-base bg-primary/10 w-8 h-8 rounded-lg flex items-center justify-center">💵</span>
+                <span className="bg-primary/10 text-primary w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><Banknote className="w-4 h-4" /></span>
                 <div className="min-w-0">
                   <p className="font-display font-bold text-xs text-foreground group-hover:text-primary transition-colors">Open Cash Drawer</p>
                   <p className="text-[10px] text-muted-foreground truncate">View cash flows & shifts</p>
@@ -1223,7 +1226,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               className="p-3 rounded-xl bg-card border border-border hover:border-warning/30 transition-all flex items-center justify-between text-left group shadow-card"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-base bg-warning/10 w-8 h-8 rounded-lg flex items-center justify-center">💳</span>
+                <span className="bg-warning/10 text-warning w-8 h-8 rounded-lg flex items-center justify-center shrink-0"><CreditCard className="w-4 h-4" /></span>
                 <div className="min-w-0">
                   <p className="font-display font-bold text-xs text-foreground group-hover:text-warning transition-colors">Pending Payments</p>
                   <p className="text-[10px] text-muted-foreground truncate">Track customer debts</p>
@@ -1241,7 +1244,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             if (events.length === 0) return null;
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-                <h3 className="font-display font-bold text-sm text-left">⏳ Store Milestones & Timeline</h3>
+                <h3 className="font-display font-bold text-sm text-left flex items-center gap-1.5"><Clock className="w-4 h-4" /> Store Milestones & Timeline</h3>
                 <div className="relative pl-4 border-l border-border/80 space-y-4 text-left ml-2 py-1">
                   {events.slice(0, 5).map((e, idx) => (
                     <div key={e.id || idx} className="relative">
@@ -1265,7 +1268,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             if (alerts.length === 0) return null;
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-                <h3 className="font-display font-bold text-sm">📦 Stock Alerts</h3>
+                <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Package className="w-4 h-4" /> Stock Alerts</h3>
                 <div className="space-y-2">
                   {alerts.map(f => (
                     <div key={f.product.id} className={`flex items-center justify-between p-2.5 rounded-xl border ${f.urgency === 'critical' ? 'bg-destructive/5 border-destructive/30' : 'bg-warning/5 border-warning/30'}`}>
@@ -1273,7 +1276,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                         <p className="text-sm font-display font-semibold">{f.product.name}</p>
                         <p className="text-[11px] text-muted-foreground">{f.daysLeft === 0 ? 'Running out today' : `${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} left`} · Order {f.restockQty} units</p>
                       </div>
-                      <span className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full ${f.urgency === 'critical' ? 'bg-destructive/15 text-destructive' : 'bg-warning/15 text-warning'}`}>{f.urgency === 'critical' ? '🚨 Critical' : '⚠️ Soon'}</span>
+                      <span className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 ${f.urgency === 'critical' ? 'bg-destructive/15 text-destructive' : 'bg-warning/15 text-warning'}`}><AlertTriangle className="w-3 h-3" /> {f.urgency === 'critical' ? 'Critical' : 'Soon'}</span>
                     </div>
                   ))}
                 </div>
@@ -1283,7 +1286,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
           {settings.savingsPlanner && savings && (
             <div className="p-4 rounded-2xl bg-card shadow-card">
-              <h3 className="font-display font-bold text-sm mb-3">💰 Savings Plan</h3>
+              <h3 className="font-display font-bold text-sm mb-3 flex items-center gap-1.5"><PiggyBank className="w-4 h-4" /> Savings Plan</h3>
               <div className="flex items-center gap-4">
                 <div className="relative flex-shrink-0">
                   <Ring value={(savings.saved / Math.max(1, savings.amount)) * 100} size={84} tone="success" />
@@ -1303,7 +1306,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
           {settings.customerRequests && (
             <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-              <h3 className="font-display font-bold text-sm">🛒 Customer Requests</h3>
+              <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><ShoppingCart className="w-4 h-4" /> Customer Requests</h3>
               <div className="flex gap-2">
                 <input value={requestText} onChange={e => setRequestText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRequest()}
                   placeholder='e.g. "Peak Milk"'
@@ -1364,21 +1367,21 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     </div>
                     {settings.revenueForecasts && <p className="text-[10px] text-muted-foreground mt-1">Range: ₦{Math.round(f.expectedRevenue * 0.8).toLocaleString()} – ₦{Math.round(f.expectedRevenue * 1.2).toLocaleString()}</p>}
                     {f.caveat && (
-                      <p className="text-[10px] text-muted-foreground mt-1.5 italic bg-surface-3/50 p-1.5 rounded">ℹ️ {f.caveat}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1.5 italic bg-surface-3/50 p-1.5 rounded flex items-center gap-1"><Info className="w-3 h-3 shrink-0" /> {f.caveat}</p>
                     )}
                     <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-border/40">
                       <span className="text-[10px] text-muted-foreground mr-auto">Was this accurate?</span>
                       <button
                         onClick={() => handleForecastFeedback(h, 'correct')}
-                        className={`text-xs px-2 py-1 rounded-lg transition ${feedbackGiven === 'correct' ? 'bg-success/20 text-success' : 'text-muted-foreground hover:text-foreground'}`}
+                        className={`text-xs px-2 py-1 rounded-lg transition flex items-center gap-1 ${feedbackGiven === 'correct' ? 'bg-success/20 text-success' : 'text-muted-foreground hover:text-foreground'}`}
                       >
-                        👍 Correct
+                        <ThumbsUp className="w-3.5 h-3.5" /> Correct
                       </button>
                       <button
                         onClick={() => handleForecastFeedback(h, 'incorrect')}
-                        className={`text-xs px-2 py-1 rounded-lg transition ${feedbackGiven === 'incorrect' ? 'bg-destructive/20 text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
+                        className={`text-xs px-2 py-1 rounded-lg transition flex items-center gap-1 ${feedbackGiven === 'incorrect' ? 'bg-destructive/20 text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
                       >
-                        👎 Incorrect
+                        <ThumbsDown className="w-3.5 h-3.5" /> Incorrect
                       </button>
                     </div>
                   </div>
@@ -1387,7 +1390,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             </div>
             )}
             {store.sales.length < 10 && (
-              <p className="text-xs text-warning mt-3 p-2 rounded-lg bg-warning/10 border border-warning/20">📊 Forecasts become more accurate as you record more sales. Keep going!</p>
+              <p className="text-xs text-warning mt-3 p-2 rounded-lg bg-warning/10 border border-warning/20 flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5 shrink-0" /> Forecasts become more accurate as you record more sales. Keep going!</p>
             )}
           </div>
 
@@ -1410,7 +1413,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 <h3 className="font-display font-bold text-base">Sales Breakdown</h3>
                 {sa.fastMovers.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-muted-foreground uppercase font-display font-semibold mb-2">🔥 Fast Movers (Last 30d)</p>
+                    <p className="text-[11px] text-muted-foreground uppercase font-display font-semibold mb-2 flex items-center gap-1"><Flame className="w-3.5 h-3.5" /> Fast Movers (Last 30d)</p>
                     <div className="space-y-1.5">
                       {sa.fastMovers.map((p, i) => (
                         <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-surface-2 text-sm">
@@ -1423,7 +1426,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 )}
                 {sa.neverSold.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-muted-foreground uppercase font-display font-semibold mb-2">😴 Never Sold</p>
+                    <p className="text-[11px] text-muted-foreground uppercase font-display font-semibold mb-2 flex items-center gap-1"><Moon className="w-3.5 h-3.5" /> Never Sold</p>
                     <div className="space-y-1">
                       {sa.neverSold.map((p, i) => (
                         <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-warning/5 border border-warning/20 text-sm">
@@ -1436,7 +1439,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 )}
                 {sa.coPurchases.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-muted-foreground uppercase font-display font-semibold mb-2">🛒 Often Bought Together</p>
+                    <p className="text-[11px] text-muted-foreground uppercase font-display font-semibold mb-2 flex items-center gap-1"><ShoppingCart className="w-3.5 h-3.5" /> Often Bought Together</p>
                     {sa.coPurchases.map((cp, i) => (
                       <p key={i} className="text-xs p-2 rounded-lg bg-surface-2 mb-1">{cp.a} + {cp.b} <span className="text-primary font-display font-bold">({cp.count}x)</span></p>
                     ))}
@@ -1456,7 +1459,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-display font-bold text-sm">🧾 Expense Breakdown</h3>
+                  <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Receipt className="w-4 h-4" /> Expense Breakdown</h3>
                   <span className={`text-[10px] font-display font-bold ${ea.trendPct > 0 ? 'text-destructive' : 'text-success'}`}>
                     {ea.trendPct > 0 ? '↑' : '↓'} {Math.abs(ea.trendPct).toFixed(0)}% vs prev month
                   </span>
@@ -1489,7 +1492,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             if (!rent) return null;
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-                <h3 className="font-display font-bold text-sm">🏠 Rent Analysis</h3>
+                <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Home className="w-4 h-4" /> Rent Analysis</h3>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="p-2.5 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Monthly Rent</p><p className="font-display font-bold">₦{rent.monthly.toLocaleString()}</p></div>
                   <div className="p-2.5 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground">Weekly Target</p><p className="font-display font-bold">₦{rent.weeklyTarget.toLocaleString()}</p></div>
@@ -1510,7 +1513,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             if (recentEvents.length === 0) return null;
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-                <h3 className="font-display font-bold text-sm">🤖 Auto-Applied Prices</h3>
+                <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Bot className="w-4 h-4" /> Auto-Applied Prices</h3>
                 <p className="text-[11px] text-muted-foreground -mt-1">Changes your Auto-Apply setting made on its own. Undo any of them any time.</p>
                 <div className="space-y-2">
                   {recentEvents.map(e => {
@@ -1537,9 +1540,9 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                               onUpdate(updated);
                               showToast(`${e.productName} reverted to ₦${e.oldPrice.toLocaleString()}`);
                             }}
-                            className="mt-1 px-3 py-1.5 rounded-lg text-[11px] font-display font-bold bg-destructive/10 text-destructive border border-destructive/30"
+                            className="mt-1 px-3 py-1.5 rounded-lg text-[11px] font-display font-bold bg-destructive/10 text-destructive border border-destructive/30 flex items-center gap-1"
                           >
-                            ↩ Undo
+                            <Undo2 className="w-3 h-3" /> Undo
                           </button>
                         ) : (
                           <p className="text-[10px] text-muted-foreground italic">Price has changed again since — undo unavailable.</p>
@@ -1558,7 +1561,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             if (alerts.length === 0) return null;
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-                <h3 className="font-display font-bold text-sm">📊 Pricing Alerts</h3>
+                <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><BarChart3 className="w-4 h-4" /> Pricing Alerts</h3>
                 <p className="text-[11px] text-muted-foreground -mt-1">Suggestions only — nothing changes until you tap Accept.</p>
                 <div className="space-y-2">
                   {alerts.slice(0, 4).map(a => {
@@ -1666,7 +1669,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           {/* Get fresh advice button */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border border-primary/20">
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-3xl">✨</span>
+              <Sparkles className="w-7 h-7 text-primary shrink-0" />
               <div>
                 <h3 className="font-display font-bold text-base">Flow Advice Engine</h3>
                 <p className="text-xs text-muted-foreground">Analysing your sales, inventory, expenses &amp; debts</p>
@@ -1675,7 +1678,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             <div className="flex gap-2">
               <button onClick={handleGetAdvice} disabled={adviceLoading}
                 className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-70">
-                {adviceLoading ? '⏳ Analysing...' : '✨ Get Advice'}
+                {adviceLoading ? <><Hourglass className="w-4 h-4" /> Analysing...</> : <><Sparkles className="w-4 h-4" /> Get Advice</>}
               </button>
               <button onClick={() => setChatOpen(true)}
                 className="flex-1 py-3 rounded-xl bg-surface-2/60 border border-primary/30 text-foreground font-display font-bold text-sm flex items-center justify-center gap-2">
@@ -1704,7 +1707,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           {/* Past Notifications Archive Button */}
           <div className="p-4 rounded-2xl bg-surface-2 border border-border/80 flex items-center justify-between shadow-xs">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">📂</span>
+              <Archive className="w-5 h-5 text-muted-foreground shrink-0" />
               <div className="text-left">
                 <p className="font-display font-bold text-xs text-foreground">Past Notifications Archive</p>
                 <p className="text-[10px] text-muted-foreground">View all read and closed Flow alerts ({store.flowNotifications?.length || 0})</p>
@@ -1725,11 +1728,11 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 <div className="flex justify-between items-start border-b border-border pb-3">
                   <div>
                     <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2">
-                      <span>📂</span> Notification Archive
+                      <Archive className="w-4 h-4" /> Notification Archive
                     </h3>
                     <p className="text-[10px] text-muted-foreground">Full history of alerts and insights from Flow.</p>
                   </div>
-                  <button onClick={() => setShowArchive(false)} className="p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground">✕</button>
+                  <button onClick={() => setShowArchive(false)} className="p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
                 </div>
 
                 <div className="space-y-2 flex-1 overflow-y-auto max-h-[50vh] pr-1">
@@ -1740,7 +1743,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                   ) : (
                     (store.flowNotifications || []).map(n => (
                       <div key={n.id} className={`p-3 rounded-xl border flex gap-3 text-left bg-surface-2 border-border/40`}>
-                        <span className="text-lg shrink-0 mt-0.5">{n.icon || '🔔'}</span>
+                        <span className="text-lg shrink-0 mt-0.5">{n.icon || <Bell className="w-4 h-4" />}</span>
                         <div className="space-y-1 flex-1 min-w-0">
                           <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'Flow Alert'}</p>
                           <p className="text-[11px] text-muted-foreground leading-normal">{n.description || n.text}</p>
@@ -1770,7 +1773,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             <div className="p-4 rounded-2xl bg-card border border-primary/25 shadow-card space-y-2 animate-fade-in relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-[#9b5de5] to-success" />
               <div className="flex items-center gap-2">
-                <span className="text-xs">🤖</span>
+                <Bot className="w-3.5 h-3.5 text-primary" />
                 <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">Flow's Analysis Breakdown</h4>
               </div>
               <Typewriter text={adviceReport} speed={30} speak={true} />
@@ -1813,9 +1816,9 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                           {a.autoFix && (
                             <button
                               onClick={() => setAutoFixTarget(a.autoFix!)}
-                              className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-foreground/90 text-background active:scale-[0.97] transition"
+                              className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-foreground/90 text-background active:scale-[0.97] transition flex items-center justify-center gap-1"
                             >
-                              ⚡ Auto Fix
+                              <Zap className="w-3.5 h-3.5" /> Auto Fix
                             </button>
                           )}
                         </div>
@@ -1825,13 +1828,13 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                           onClick={() => handleHelpfulAdvice(a.id)}
                           className="text-xs text-muted-foreground hover:text-foreground transition flex items-center gap-1"
                         >
-                          👍 Helpful
+                          <ThumbsUp className="w-3.5 h-3.5" /> Helpful
                         </button>
                         <button
                           onClick={() => handleDismissAdvice(a.id)}
                           className="text-xs text-muted-foreground hover:text-foreground transition flex items-center gap-1"
                         >
-                          👎 Not relevant
+                          <ThumbsDown className="w-3.5 h-3.5" /> Not relevant
                         </button>
                       </div>
                     </div>
@@ -1841,7 +1844,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             </div>
           ) : (
             <div className="p-6 text-center">
-              <p className="text-4xl mb-2">🌟</p>
+              <PartyPopper className="w-9 h-9 mx-auto mb-2 text-primary" />
               <p className="font-display font-bold">Looking good!</p>
               <p className="text-sm text-muted-foreground mt-1">No critical actions needed right now. Keep recording sales to unlock deeper advice.</p>
             </div>
@@ -1850,7 +1853,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           {/* Recommendations */}
           {recs.length > 0 && (
             <div className="space-y-2">
-              <h3 className="font-display font-bold text-sm px-1">📋 Recommendations</h3>
+              <h3 className="font-display font-bold text-sm px-1 flex items-center gap-1.5"><ClipboardList className="w-4 h-4" /> Recommendations</h3>
               {recs.map(r => (
                 <div key={r.id} className="p-3 rounded-xl bg-card shadow-card flex items-start gap-3">
                   <span className="text-xl">{r.icon}</span>
@@ -1869,7 +1872,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           {/* Customer requests */}
           {settings.customerRequests && requests.length > 0 && (
             <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-              <h3 className="font-display font-bold text-sm">🛒 Top Customer Requests</h3>
+              <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><ShoppingCart className="w-4 h-4" /> Top Customer Requests</h3>
               <div className="space-y-1.5">
                 {requests.map((r, i) => (
                   <div key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-surface-2 border border-border text-sm">
@@ -2007,14 +2010,14 @@ function RepaymentPredictionsCard({ store }: { store: StoreData }) {
         <div className="grid grid-cols-2 gap-2">
           {insights.mostReliable && (
             <div className="p-2.5 rounded-xl bg-success/10 border border-success/30">
-              <p className="text-[10px] text-success uppercase font-semibold">⭐ Most reliable</p>
+              <p className="text-[10px] text-success uppercase font-semibold flex items-center gap-1"><Star className="w-3 h-3" /> Most reliable</p>
               <p className="text-xs font-display font-bold truncate">{insights.mostReliable.customerName}</p>
               <p className="text-[10px] text-muted-foreground">{insights.mostReliable.reliabilityScore}% score</p>
             </div>
           )}
           {insights.riskiest && insights.riskiest.customerKey !== insights.mostReliable?.customerKey && (
             <div className="p-2.5 rounded-xl bg-destructive/10 border border-destructive/30">
-              <p className="text-[10px] text-destructive uppercase font-semibold">⚠️ Watch closely</p>
+              <p className="text-[10px] text-destructive uppercase font-semibold flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Watch closely</p>
               <p className="text-xs font-display font-bold truncate">{insights.riskiest.customerName}</p>
               <p className="text-[10px] text-muted-foreground">{insights.riskiest.reliabilityScore}% score</p>
             </div>
@@ -2067,7 +2070,7 @@ function RepaymentPredictionsCard({ store }: { store: StoreData }) {
       </div>
 
       {insights.customers.reduce((s, c) => s + c.sampleSize, 0) < 5 && (
-        <p className="text-[11px] text-warning p-2 rounded-lg bg-warning/10 border border-warning/20">📈 Predictions sharpen as more repayments are recorded.</p>
+        <p className="text-[11px] text-warning p-2 rounded-lg bg-warning/10 border border-warning/20 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 shrink-0" /> Predictions sharpen as more repayments are recorded.</p>
       )}
     </div>
   );

@@ -1783,8 +1783,8 @@ export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
       periodName: 'Back-to-School Season',
       expectedTrend: 'increase',
       details: fromCatalog.length
-        ? 'Stationery, snacks, and beverage items in your catalog tend to see higher demand as school terms resume.'
-        : "Stationery, notebooks, snacks, and beverage rolls typically see higher local demand as school terms resume — you don't currently stock items matching this pattern, so these are general regional examples.",
+        ? 'Stationery, snacks & drinks in your catalog typically see higher demand as school resumes.'
+        : 'Stationery, snacks & drinks typically see higher demand as school resumes.',
       suggestedItems: fromCatalog.length ? fromCatalog : genericFallback,
       itemsFromYourCatalog: fromCatalog.length > 0,
     });
@@ -1798,8 +1798,8 @@ export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
       periodName: 'Christmas Festive Period',
       expectedTrend: 'increase',
       details: fromCatalog.length
-        ? 'Provisions and drinks in your catalog typically see heavy demand as customers stock up for celebrations.'
-        : "Provisions, soft drinks, and alcoholic drinks typically see heavy demand for celebrations — you don't currently stock items matching this pattern, so these are general regional examples.",
+        ? 'Provisions & drinks in your catalog typically see heavy demand for celebrations.'
+        : 'Provisions & drinks typically see heavy demand for celebrations.',
       suggestedItems: fromCatalog.length ? fromCatalog : genericFallback,
       itemsFromYourCatalog: fromCatalog.length > 0,
     });
@@ -1813,8 +1813,8 @@ export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
       periodName: 'Easter Festive Season',
       expectedTrend: 'increase',
       details: fromCatalog.length
-        ? 'Groceries and drinks in your catalog typically see higher traffic during this holiday weekend period.'
-        : "Groceries, soft drinks, and packaged items typically see higher traffic during holiday weekends — you don't currently stock items matching this pattern, so these are general regional examples.",
+        ? 'Groceries & drinks in your catalog typically see higher traffic this holiday weekend.'
+        : 'Groceries & drinks typically see higher traffic this holiday weekend.',
       suggestedItems: fromCatalog.length ? fromCatalog : genericFallback,
       itemsFromYourCatalog: fromCatalog.length > 0,
     });
@@ -1825,7 +1825,7 @@ export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
     predictions.push({
       periodName: 'No Specific Seasonal Pattern Right Now',
       expectedTrend: 'stable',
-      details: 'General wholesale prices tend to shift through the year. Focus on locked-in supplier contracts for stable margins.',
+      details: 'Focus on locked-in supplier contracts for stable margins.',
       suggestedItems: [],
       itemsFromYourCatalog: false,
     });
@@ -1845,7 +1845,6 @@ export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
 export interface WeatherInsight {
   weatherCondition: string;
   effect: string;
-  impactDetails: string;
   suggestedAction: string;
 }
 
@@ -1856,25 +1855,22 @@ export function getWeatherInsights(store: StoreData): WeatherInsight {
     // Nov–Feb: Harmattan / cool dry season
     return {
       weatherCondition: 'Harmattan Season (Nov–Feb)',
-      effect: 'Cold mornings and dusty, dry air typically increase demand for hot drinks and skincare.',
-      impactDetails: 'This is a general seasonal pattern for this time of year in Nigeria, not a live weather reading — check your own sales trend to confirm it applies to your customers.',
-      suggestedAction: 'Consider stocking more hot Milo/Nescafé, tea, and moisturizing products through this period.'
+      effect: 'Cold, dusty air typically increases demand for hot drinks & skincare.',
+      suggestedAction: 'Stock more Milo/Nescafé, tea & moisturizers.'
     };
   } else if (month === 2 || month === 3) {
     // Mar–Apr: hot dry season
     return {
       weatherCondition: 'Hot Dry Season (Mar–Apr)',
-      effect: 'Rising temperatures typically increase demand for cold beverages.',
-      impactDetails: 'This is a general seasonal pattern for this time of year in Nigeria, not a live weather reading — check your own sales trend to confirm it applies to your customers.',
-      suggestedAction: 'Keep drink coolers stocked and ensure ice supply is reliable.'
+      effect: 'Rising heat typically increases demand for cold drinks.',
+      suggestedAction: 'Keep coolers stocked and ice supply reliable.'
     };
   } else {
     // May–Oct: rainy season
     return {
       weatherCondition: 'Rainy Season (May–Oct)',
-      effect: 'Rain can reduce walk-in foot traffic, while demand for pantry staples and indoor items tends to hold steady or rise.',
-      impactDetails: 'This is a general seasonal pattern for this time of year in Nigeria, not a live weather reading — check your own sales trend to confirm it applies to your customers.',
-      suggestedAction: 'Consider offering WhatsApp/phone ordering with delivery for rainy days.'
+      effect: 'Rain can reduce foot traffic; pantry staples tend to hold steady.',
+      suggestedAction: 'Offer WhatsApp/phone ordering with delivery.'
     };
   }
 }

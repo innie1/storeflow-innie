@@ -321,7 +321,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
   }, [store.sales]);
 
   return (
-    <div className="animate-fade-in space-y-3">
+    <div className="animate-fade-in space-y-2">
       {channelSplit.total > 0 && (channelSplit.onlineRevenue > 0 || channelSplit.inStoreRevenue > 0) && (
         <div className="p-3.5 rounded-xl bg-card border border-border">
           <p className="text-[10px] text-muted-foreground uppercase font-bold mb-2">Where Your Sales Come From</p>
@@ -337,57 +337,55 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
       )}
 
       {/* Time frame + summary */}
-      <div className="p-3.5 rounded-xl bg-card border border-border space-y-3">
-        <div className="relative">
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={() => setDateMenuOpen(v => !v)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setDateMenuOpen(v => !v); }}
-            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wide font-display font-bold hover:text-foreground active:scale-95 transition cursor-pointer"
-          >
-            {DATE_RANGE_LABELS[dateRange]} <ChevronDown className={`w-3 h-3 transition-transform ${dateMenuOpen ? 'rotate-180' : ''}`} />
-          </span>
-          {dateMenuOpen && (
-            <>
-              <span role="presentation" className="fixed inset-0 z-10" onClick={() => setDateMenuOpen(false)} />
-              <div className="absolute left-0 top-full mt-1 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[150px]">
-                {DATE_RANGE_OPTIONS.map(r => (
-                  <span
-                    key={r}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { setDateRange(r); setDateMenuOpen(false); }}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setDateRange(r); setDateMenuOpen(false); } }}
-                    className={`block w-full text-left px-3 py-2 text-xs font-display font-semibold cursor-pointer ${r === dateRange ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'}`}
-                  >
-                    {DATE_RANGE_LABELS[r]}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-display font-semibold">Total</p>
-          <p className={`font-display font-black text-2xl ${periodSummary.net >= 0 ? 'text-success' : 'text-destructive'}`}>
+      <div className="p-2.5 rounded-xl bg-card border border-border space-y-2">
+        <div className="flex items-end justify-between gap-2">
+          <div className="relative">
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={() => setDateMenuOpen(v => !v)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setDateMenuOpen(v => !v); }}
+              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wide font-display font-bold hover:text-foreground active:scale-95 transition cursor-pointer"
+            >
+              {DATE_RANGE_LABELS[dateRange]} <ChevronDown className={`w-3 h-3 transition-transform ${dateMenuOpen ? 'rotate-180' : ''}`} />
+            </span>
+            {dateMenuOpen && (
+              <>
+                <span role="presentation" className="fixed inset-0 z-10" onClick={() => setDateMenuOpen(false)} />
+                <div className="absolute left-0 top-full mt-1 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[150px]">
+                  {DATE_RANGE_OPTIONS.map(r => (
+                    <span
+                      key={r}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => { setDateRange(r); setDateMenuOpen(false); }}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setDateRange(r); setDateMenuOpen(false); } }}
+                      className={`block w-full text-left px-3 py-2 text-xs font-display font-semibold cursor-pointer ${r === dateRange ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'}`}
+                    >
+                      {DATE_RANGE_LABELS[r]}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <p className={`font-display font-black text-lg leading-none ${periodSummary.net >= 0 ? 'text-success' : 'text-destructive'}`}>
             {periodSummary.net >= 0 ? '+' : '−'}₦{Math.abs(periodSummary.net).toLocaleString()}
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="p-2.5 rounded-lg bg-success/10 border border-success/20 min-w-0">
-            <p className="text-[10px] text-muted-foreground uppercase">In</p>
-            <p className="font-display font-bold text-sm text-success truncate">+₦{periodSummary.income.toLocaleString()}</p>
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="px-2 py-1.5 rounded-lg bg-success/10 border border-success/20 min-w-0 flex items-center justify-between gap-1">
+            <p className="text-[9px] text-muted-foreground uppercase">In</p>
+            <p className="font-display font-bold text-xs text-success truncate">+₦{periodSummary.income.toLocaleString()}</p>
           </div>
-          <div className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 min-w-0">
-            <p className="text-[10px] text-muted-foreground uppercase">Out</p>
-            <p className="font-display font-bold text-sm text-destructive truncate">−₦{Math.abs(periodSummary.outgoing).toLocaleString()}</p>
+          <div className="px-2 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 min-w-0 flex items-center justify-between gap-1">
+            <p className="text-[9px] text-muted-foreground uppercase">Out</p>
+            <p className="font-display font-bold text-xs text-destructive truncate">−₦{Math.abs(periodSummary.outgoing).toLocaleString()}</p>
           </div>
         </div>
 
-        <div className="pt-2.5 border-t border-border/60 grid grid-cols-4 gap-1.5 text-center">
+        <div className="pt-1.5 border-t border-border/60 grid grid-cols-4 gap-1 text-center">
           {[
             { label: 'Today', value: referenceStats.today },
             { label: 'Yesterday', value: referenceStats.yesterday },
@@ -395,8 +393,8 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             { label: 'This Month', value: referenceStats.month },
           ].map(r => (
             <div key={r.label} className="min-w-0">
-              <p className="text-[9px] text-muted-foreground uppercase truncate">{r.label}</p>
-              <p className={`text-[11px] font-display font-bold truncate ${r.value >= 0 ? 'text-success' : 'text-destructive'}`}>
+              <p className="text-[8px] text-muted-foreground uppercase truncate">{r.label}</p>
+              <p className={`text-[10px] font-display font-bold truncate ${r.value >= 0 ? 'text-success' : 'text-destructive'}`}>
                 {r.value >= 0 ? '+' : '−'}₦{Math.abs(r.value).toLocaleString()}
               </p>
             </div>
@@ -404,19 +402,17 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search product, category or receipt ID..."
-          className="w-full p-2.5 pl-9 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
-        />
-      </div>
-
-      {/* Actions */}
+      {/* Search + actions */}
       <div className="flex flex-wrap gap-2">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search product, category or receipt ID..."
+            className="w-full p-2.5 pl-9 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
+          />
+        </div>
         <button
           onClick={() => setShowTrash(true)}
           className="relative px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-sm font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
@@ -434,14 +430,14 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
           className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
           title="Export PDF"
         >
-          <FileText className="w-4 h-4" /> PDF
+          <FileText className="w-4 h-4" />
         </button>
         <button
           onClick={() => exportHistoryCSV(store)}
           className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
           title="Export CSV"
         >
-          <FileSpreadsheet className="w-4 h-4" /> CSV
+          <FileSpreadsheet className="w-4 h-4" />
         </button>
         {store.sales.length > 0 && (
           <button onClick={handleClear} className="px-3 py-2.5 rounded-lg bg-destructive/10 text-destructive text-xs font-display font-semibold hover:bg-destructive/20 border border-destructive/20">
