@@ -17,6 +17,28 @@ interface MarketplaceSettingsProps {
   onUpdate: (store: StoreData) => void;
 }
 
+/**
+ * Bank details this app used to ship as defaults.
+ *
+ * They were real-looking but belong to nobody, and stored settings win over
+ * defaults — so blanking the defaults alone does not help any store that has
+ * already saved them. `1234567890` is a sequential dummy, not a valid NUBAN,
+ * so its presence is an unambiguous marker that these were never edited. The
+ * bank name is only cleared alongside it, since a merchant may genuinely bank
+ * with Access Bank.
+ */
+const PLACEHOLDER_ACCOUNT_NUMBER = '1234567890';
+const PLACEHOLDER_BANK_NAME = 'Access Bank';
+
+function clearPlaceholderBankDetails<T extends Record<string, any>>(settings: T): T {
+  if (String(settings.bankAccountNumber || '').trim() !== PLACEHOLDER_ACCOUNT_NUMBER) return settings;
+  return {
+    ...settings,
+    bankAccountNumber: '',
+    bankName: String(settings.bankName || '').trim() === PLACEHOLDER_BANK_NAME ? '' : settings.bankName,
+  };
+}
+
 export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSettingsProps) {
   // Load initial settings or fallback to defaults
   const settings = useMemo(() => {
@@ -111,10 +133,10 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       reqCustomerNotes: false,
     };
 
-    return {
+    return clearPlaceholderBankDetails({
       ...defaultSettings,
       ...(store.marketplaceSettings || {})
-    };
+    });
   }, [store.marketplaceSettings, store.storeName, store.profile]);
 
   // Form states matching variables
