@@ -62,9 +62,14 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       paymentTransferEnabled: true,
       paymentWalletEnabled: true,
       paymentTiming: 'after' as 'before' | 'after' | 'pickup' | 'delivery',
-      bankName: 'Access Bank',
+      // Blank, not placeholders. These defaults used to be 'Access Bank' and
+      // '1234567890', and publishing writes marketplaceSettings through
+      // unfiltered — so a merchant who opened this screen and saved without
+      // editing published a bank account that is not theirs, and the customer
+      // app showed it at checkout as their real transfer destination.
+      bankName: '',
       bankAccountName: store.storeName,
-      bankAccountNumber: '1234567890',
+      bankAccountNumber: '',
       paymentQr: '',
 
       // 7. Delivery Settings
@@ -1077,12 +1082,18 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
               {form.paymentTransferEnabled && (
                 <div className="space-y-3 bg-surface-2 p-4 rounded-2xl border border-border">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-primary">Bank Account Configuration</h4>
+                  {(!form.bankName?.trim() || !form.bankAccountNumber?.trim()) && (
+                    <p className="text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+                      Add your bank details to offer Bank Transfer. Until then customers are only shown Cash.
+                    </p>
+                  )}
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[10px] text-muted-foreground uppercase font-bold mb-1">Bank Name</label>
                       <input
                         value={form.bankName}
                         onChange={e => handleChange('bankName', e.target.value)}
+                        placeholder="e.g. GTBank"
                         className="w-full p-2 bg-card border border-border rounded text-xs text-foreground"
                       />
                     </div>
@@ -1099,6 +1110,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                       <input
                         value={form.bankAccountNumber}
                         onChange={e => handleChange('bankAccountNumber', e.target.value)}
+                        placeholder="10-digit account number"
                         className="w-full p-2 bg-card border border-border rounded text-xs text-foreground"
                       />
                     </div>

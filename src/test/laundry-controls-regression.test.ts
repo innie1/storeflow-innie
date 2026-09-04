@@ -6,6 +6,7 @@ import {
   requestLaundryWorkspace,
 } from '@/lib/laundry-workspace';
 import { LAUNDRY_SETTLED_STAGES, nextLaundryStage } from '@/lib/laundry-offline';
+import { rankGarmentsByUsage } from '@/components/laundry/LaundryWalkInIntakeV2';
 
 describe('laundry control regressions', () => {
   beforeEach(() => window.sessionStorage.clear());
@@ -36,6 +37,25 @@ describe('laundry control regressions', () => {
     // Anything else is still work in progress, and can therefore run overdue.
     expect(LAUNDRY_SETTLED_STAGES).toEqual(['ready', 'collected']);
     expect(LAUNDRY_SETTLED_STAGES.includes('washing' as never)).toBe(false);
+  });
+
+  it('puts the clothing this shop records most at the top of the picker', () => {
+    const priceListOrder = ['Shirt', 'Trouser', 'T-shirt', 'Nicker / Shorts', 'Gown / Dress', 'Skirt'];
+    localStorage.setItem('storeflow_laundry_local_records_ZZTEST', JSON.stringify([
+      { garments: [{ garmentType: 'Skirt', quantity: 9 }, { garmentType: 'Gown / Dress', quantity: 7 }] },
+      { garments: [{ garmentType: 'Skirt', quantity: 6 }, { garmentType: 'Nicker / Shorts', quantity: 4 }] },
+    ]));
+
+    // Skirt (15) beats Gown / Dress (7) beats Nicker / Shorts (4); everything
+    // never recorded keeps the merchant's own price-list order behind them.
+    expect(rankGarmentsByUsage('ZZTEST', priceListOrder)).toEqual([
+      'Skirt', 'Gown / Dress', 'Nicker / Shorts', 'Shirt', 'Trouser', 'T-shirt',
+    ]);
+  });
+
+  it('leaves the price-list order alone for a shop with no history', () => {
+    const priceListOrder = ['Shirt', 'Trouser', 'Skirt'];
+    expect(rankGarmentsByUsage('NOHIST', priceListOrder)).toEqual(priceListOrder);
   });
 
   it('gives laundry pricing show/hide controls and stronger custom clothing handling', () => {

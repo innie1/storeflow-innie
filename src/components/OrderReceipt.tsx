@@ -60,6 +60,15 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
       receipt += `  ${i.quantity} × ₦${i.unitPrice.toLocaleString()} = ₦${i.total.toLocaleString()}\n`;
     });
     receipt += `------------------------------\n`;
+    // Without these the receipt's items never add up to its total on any
+    // discounted or delivered order. The customer app records them in the
+    // order notes; nothing here used to read them.
+    if (Number(meta?.online_discount) > 0) receipt += `Online discount: -₦${Number(meta.online_discount).toLocaleString()}
+`;
+    if (Number(meta?.loyalty_discount) > 0) receipt += `Loyalty: -₦${Number(meta.loyalty_discount).toLocaleString()}
+`;
+    if (Number(meta?.delivery_fee) > 0) receipt += `Delivery: +₦${Number(meta.delivery_fee).toLocaleString()}
+`;
     receipt += `TOTAL: ₦${total.toLocaleString()}\n`;
     receipt += `==============================\n`;
     if (isCancelled) {
@@ -182,6 +191,21 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
 
           <div className="border-t border-dashed border-border my-2" />
 
+          {Number(meta?.online_discount) > 0 && (
+            <div className="flex justify-between text-xs text-emerald-600">
+              <span>Online discount</span><span>−₦{Number(meta.online_discount).toLocaleString()}</span>
+            </div>
+          )}
+          {Number(meta?.loyalty_discount) > 0 && (
+            <div className="flex justify-between text-xs text-emerald-600">
+              <span>Loyalty</span><span>−₦{Number(meta.loyalty_discount).toLocaleString()}</span>
+            </div>
+          )}
+          {Number(meta?.delivery_fee) > 0 && (
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Delivery</span><span>+₦{Number(meta.delivery_fee).toLocaleString()}</span>
+            </div>
+          )}
           <div className="flex justify-between font-bold text-foreground text-sm">
             <span>TOTAL</span>
             <span className="text-primary">₦{total.toLocaleString()}</span>

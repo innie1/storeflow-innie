@@ -590,6 +590,28 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                   <span className="text-[10px] text-muted-foreground font-mono">Subtotal: ₦{order.subtotal?.toLocaleString() || '0.00'}</span>
                 </div>
 
+                {/*
+                  Why the total differs from the subtotal.
+                  The customer app records the delivery fee, the online
+                  discount and any loyalty redemption in the order notes, but
+                  nothing here read them — so a discounted or delivered order
+                  showed a total that did not match its items, with no
+                  explanation on this screen.
+                */}
+                {(Number(meta?.delivery_fee) > 0 || Number(meta?.online_discount) > 0 || Number(meta?.loyalty_discount) > 0) && (
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono text-muted-foreground px-1">
+                    {Number(meta?.online_discount) > 0 && (
+                      <span className="text-emerald-600">Online discount: −₦{Number(meta.online_discount).toLocaleString()}</span>
+                    )}
+                    {Number(meta?.loyalty_discount) > 0 && (
+                      <span className="text-emerald-600">Loyalty: −₦{Number(meta.loyalty_discount).toLocaleString()}</span>
+                    )}
+                    {Number(meta?.delivery_fee) > 0 && (
+                      <span>Delivery: +₦{Number(meta.delivery_fee).toLocaleString()}</span>
+                    )}
+                  </div>
+                )}
+
                 {/* Rejection Reason Notice */}
                 {meta?.rejection_reason && (
                   <div className="p-2.5 bg-red-500/10 border border-red-500/20 text-red-500 text-xs rounded-xl">

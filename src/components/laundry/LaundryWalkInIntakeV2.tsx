@@ -11,6 +11,7 @@ import {
 } from '@/lib/laundry-pricing';
 import {
   createLocalLaundryRecord,
+  getLocalLaundryRecords,
   LAUNDRY_SYNC_CHANGED_EVENT,
   localLaundryRecordToOrder,
   syncLaundryRecord,
@@ -30,6 +31,31 @@ const OPEN_STORAGE = 'storeflow-open-laundry-intake';
 
 function emptyCounts(garments: string[]): Record<string, number> {
   return Object.fromEntries(garments.map(name => [name, 0]));
+}
+
+/**
+ * Put the clothing this shop actually handles most at the top of the picker,
+ * based on everything it has recorded before. Ties keep the merchant's own
+ * price-list order, so an untouched shop still sees a predictable list.
+ *
+ * The ranking is captured when the sheet opens rather than recomputed live, so
+ * tiles never reshuffle under the counter's finger mid-entry.
+ */
+export function rankGarmentsByUsage(accessCode: string, garmentTypes: string[]): string[] {
+  const used = new Map<string, number>();
+  for (const record of getLocalLaundryRecords(accessCode)) {
+    for (const garment of record.garments || []) {
+      const name = String(garment.garmentType || '');
+      if (!name) continue;
+      used.set(name, (used.get(name) || 0) + (Number(garment.quantity) || 0));
+    }
+  }
+
+  return [...garmentTypes].sort((a, b) => {
+    const byUsage = (used.get(b) || 0) - (used.get(a) || 0);
+    if (byUsage !== 0) return byUsage;
+    return garmentTypes.indexOf(a) - garmentTypes.indexOf(b);
+  });
 }
 
 function validPhone(phone: string): boolean {
@@ -76,6 +102,8 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   // Address, processing methods and notes are needed on a minority of jobs, so
   // they stay folded away and out of the counter's fastest path.
   const [showMore, setShowMore] = useState(false);
+  // Frozen for the life of one entry -- see rankGarmentsByUsage.
+  const [garmentOrder, setGarmentOrder] = useState<string[]>(garmentTypes);
 
   const selectedService = services.find(service => String(service.id) === selectedServiceId) || services[0] || null;
   const equipment = (store.laundryEquipment || []).filter(item => item.active);
@@ -88,6 +116,14 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     [garmentCounts],
   );
   const pieceCount = countLaundryPieces(selections);
+  // Most-used clothing first, then anything typed into "Other clothing type"
+  // during this entry. Order is stable while tapping because garmentOrder is
+  // only recalculated when the sheet opens.
+  const displayGarments = useMemo(() => {
+    const ranked = garmentOrder.filter(name => name in garmentCounts);
+    const extras = Object.keys(garmentCounts).filter(name => !ranked.includes(name));
+    return [...ranked, ...extras];
+  }, [garmentOrder, garmentCounts]);
   const calculated = useMemo(
     () => selectedService ? calculateLaundryPriceLines(store, selectedService, selections, Number(billingQuantity) || 0) : { lines: [], total: 0 },
     [store, selectedService, selections, billingQuantity],
@@ -159,6 +195,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const openIntake = () => {
     sessionStorage.removeItem(OPEN_STORAGE);
     reset();
+    setGarmentOrder(rankGarmentsByUsage(String((store as any).accessCode || ''), garmentTypes));
     setOpen(true);
   };
 
@@ -368,18 +405,20 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
                 <p className="text-[11px] uppercase font-black text-muted-foreground">3. Clothes</p>
                 <span className="text-xs font-black text-primary">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">{Object.keys(garmentCounts).map(garment => {
+              <div className="grid grid-cols-2 gap-1.5">{displayGarments.map(garment => {
                 const quantity = garmentCounts[garment] || 0;
                 const unitPrice = selectedService && pricing === 'per_piece' ? getLaundryGarmentPrice(store, selectedService, garment) : 0;
                 return (
-                  <div key={garment} className={`flex items-center gap-2 h-12 rounded-xl border pl-3 pr-1.5 ${quantity > 0 ? 'border-primary bg-primary/5' : 'border-border bg-surface-2'}`}>
-                    <div className="min-w-0 flex-1 leading-tight">
+                  <div key={garment} className={`rounded-xl border px-2 pt-1.5 pb-1.5 ${quantity > 0 ? 'border-primary bg-primary/5' : 'border-border bg-surface-2'}`}>
+                    <div className="flex items-baseline justify-between gap-1.5 leading-tight">
                       <p className="text-xs font-bold truncate">{garment}</p>
-                      {selectedService && pricing === 'per_piece' && <p className="text-[10px] text-primary font-bold">₦{unitPrice.toLocaleString()}</p>}
+                      {selectedService && pricing === 'per_piece' && <span className="text-[10px] text-primary font-bold shrink-0">₦{unitPrice.toLocaleString()}</span>}
                     </div>
-                    <button type="button" onClick={() => changeCount(garment, -1)} disabled={quantity === 0} className="w-8 h-8 shrink-0 rounded-lg border border-border bg-card flex items-center justify-center disabled:opacity-30" aria-label={`Remove one ${garment}`}><Minus className="w-3.5 h-3.5" /></button>
-                    <span className="w-5 text-center text-sm font-black tabular-nums">{quantity}</span>
-                    <button type="button" onClick={() => changeCount(garment, 1)} className="w-8 h-8 shrink-0 rounded-lg bg-primary text-primary-foreground flex items-center justify-center" aria-label={`Add one ${garment}`}><Plus className="w-3.5 h-3.5" /></button>
+                    <div className="flex items-center justify-between gap-1 mt-1.5">
+                      <button type="button" onClick={() => changeCount(garment, -1)} disabled={quantity === 0} className="w-8 h-8 shrink-0 rounded-lg border border-border bg-card flex items-center justify-center disabled:opacity-30" aria-label={`Remove one ${garment}`}><Minus className="w-3.5 h-3.5" /></button>
+                      <span className="text-sm font-black tabular-nums">{quantity}</span>
+                      <button type="button" onClick={() => changeCount(garment, 1)} className="w-8 h-8 shrink-0 rounded-lg bg-primary text-primary-foreground flex items-center justify-center" aria-label={`Add one ${garment}`}><Plus className="w-3.5 h-3.5" /></button>
+                    </div>
                   </div>
                 );
               })}</div>
