@@ -104,3 +104,14 @@ body.storeflow-ui-overhaul textarea:focus-visible {
     display: flex !important;
   }
 }
+
+/* The Flow composer is one 36px pill that sizes itself: the icon buttons are
+   fixed circles and the textarea grows a line at a time. The global touch
+   minimums above are for full-width CTAs and form fields — applied here they
+   made Send 42px against the mic's 36px, so the pill jumped 6px the moment you
+   started typing, and pinned the textarea open at 42px so a one-line message
+   still got a two-line box. */
+body.storeflow-ui-overhaul .flow-composer button,
+body.storeflow-ui-overhaul .flow-composer textarea {
+  min-height: 0;
+}

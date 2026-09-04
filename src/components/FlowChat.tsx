@@ -12,10 +12,11 @@ import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/fl
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
 import { resolveFlowSettingCommand, flowSettingsHelp } from '@/lib/flow-settings-resolver';
 import { getNextFlowCheckIn, notifyFlowCheckIn, requestFlowNotificationPermission, checkInsQuiet } from '@/lib/flow-checkins';
-import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText, KeyRound, Mic, MicOff } from 'lucide-react';
+import { X, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText, KeyRound, MoreHorizontal } from 'lucide-react';
 import Mascot from '@/components/Mascot';
 import ReceiptScanner from '@/components/ReceiptScanner';
 import FlowAttachmentMenu from '@/components/FlowAttachmentMenu';
+import FlowComposer, { makeFlowAttachment, type FlowAttachment } from '@/components/FlowComposer';
 import FlowCameraCapture from '@/components/FlowCameraCapture';
 
 interface FlowChatProps { store: StoreData; orders?: any[]; onClose: () => void; onNavigate?: (tab: TabId) => void; onUpdate: (s: StoreData) => void; }
@@ -76,8 +77,11 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const [showRestockCodeImport, setShowRestockCodeImport] = useState(false);
   const [restockCodeInput, setRestockCodeInput] = useState('');
   const [showAttachments, setShowAttachments] = useState(false);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [showFlowCamera, setShowFlowCamera] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  // What the merchant picked from "+", held in the composer until they send.
+  const [attachment, setAttachment] = useState<FlowAttachment | null>(null);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const [flowOrderDraftState, setFlowOrderDraftState] = useState<FlowConversationOrderDraft | null>(null);
@@ -132,19 +136,62 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     showToast('Restock code imported', 'success');
   };
 
+  const SUPPORTED_FILE_EXTS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'tsv', 'txt', 'json'];
+
+  /**
+   * Hold a picked file in the composer rather than acting on it immediately.
+   *
+   * This used to send images straight into the receipt scanner and, for a
+   * stock file, show a toast and navigate out of the chat — discarding the
+   * file the merchant had just chosen. Now it becomes a visible attachment
+   * they can remove, describe, or send.
+   */
   const handleFlowAttachment = (file: File) => {
-    if (file.type.startsWith('image/')) {
-      setPendingImportFile(file);
-      setShowReceiptImport(true);
-      return;
-    }
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'tsv', 'txt', 'json'].includes(ext)) {
-      showToast(file.name + ' selected. Open Inventory to import this stock file.', 'info');
-      onNavigate?.('inventory');
+    if (!file.type.startsWith('image/') && !SUPPORTED_FILE_EXTS.includes(ext)) {
+      showToast('Flow can read images, PDFs, Word, Excel, CSV and text files.', 'error');
       return;
     }
-    showToast('That file type is not supported for StoreFlow import.', 'error');
+    setAttachment(prev => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return makeFlowAttachment(file);
+    });
+  };
+
+  const clearAttachment = () => {
+    setAttachment(prev => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  };
+
+  /** Send whatever is in the composer: text, an attachment, or both. */
+  const sendComposer = (text: string, file: FlowAttachment | null) => {
+    if (file) {
+      const ext = file.file.name.split('.').pop()?.toLowerCase() || '';
+      you(text ? `${text}
+📎 ${file.file.name}` : `📎 ${file.file.name}`);
+      setInput('');
+      clearAttachment();
+      if (file.file.type.startsWith('image/')) {
+        setPendingImportFile(file.file);
+        setShowReceiptImport(true);
+        flow(`Opening **${file.file.name}** in the receipt scanner.`);
+        return;
+      }
+      if (SUPPORTED_FILE_EXTS.includes(ext)) {
+        // Offer the import rather than yanking the merchant out of the chat.
+        flow(`**${file.file.name}** looks like a stock file. Inventory does the import — shall I take you there?`, [
+          { label: 'Open Inventory', onClick: () => onNavigate?.('inventory') },
+          { label: 'Not now', onClick: () => flow('Fine — it is still here when you need it.') },
+        ]);
+        return;
+      }
+      return;
+    }
+    if (!text) return;
+    setInput('');
+    ask(text);
   };
 
   const executeSales = (items: FlowLineItem[]) => {
@@ -425,6 +472,43 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     return true;
   };
 
+  /**
+   * What Flow says when it does not understand, and for "help".
+   *
+   * The engine returned a fixed wall of eleven bullets with hard-coded example
+   * products — "Sell 2 Indomie", "Add 5 Milo" — which mean nothing to a
+   * pharmacy, a laundry or a barber, and offered nothing to tap. This grounds
+   * the examples in what this store actually stocks and turns them into
+   * one-tap chips.
+   */
+  const suggestFromStore = (): { text: string; actions: ChatAction[] } => {
+    const a = storeAnalysis(store);
+    const seller = a.top[0]?.product;
+    const needsStock = a.out[0] || a.low[0];
+    const actions: ChatAction[] = [];
+
+    if (seller) actions.push({ label: `Sell 1 ${seller.name}`, onClick: () => ask(`sell 1 ${seller.name}`) });
+    if (needsStock) actions.push({ label: `Restock ${needsStock.name}`, onClick: () => ask(`restock ${needsStock.name}`) });
+    if (a.out.length || a.low.length) actions.push({ label: "What's low?", onClick: () => ask("what's low?") });
+    if ((store.sales || []).length) actions.push({ label: 'Best sellers', onClick: () => ask('show my best sellers') });
+    actions.push({ label: 'How is my store?', onClick: () => ask('how is my store?') });
+    if ((store.expenses || []).length) actions.push({ label: 'My spending', onClick: () => ask('how much did I spend?') });
+
+    const examples: string[] = [];
+    if (seller) examples.push(`**Sell 2 ${seller.name}**`);
+    if (needsStock) examples.push(`**Add 10 ${needsStock.name}**`);
+    examples.push('**Undo that**');
+
+    return {
+      text: (store.products || []).length
+        ? `I did not catch that. I work on this store's own records — sales, stock, prices, spending and orders.
+
+Things you can say: ${examples.join(', ')}.`
+        : 'I did not catch that. Add a few products first and I can sell, restock and report on them for you.',
+      actions,
+    };
+  };
+
   const ask = (raw: string) => {
     const text = clean(raw); if (!text) return; you(text);
     if (handleFlowConversationOrder(text)) return;
@@ -546,6 +630,11 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       const p = plan.product.product;
       flow(`I think you mean **${p.name}**. Is that right?`, [{ label: 'Yes — use it', onClick: () => { learnBrainAlias(store, text, p); setLastProductId(p.id); rememberBrainContext(store, { lastProductId: p.id, lastTopic: 'product', lastAction: 'learned alias' }); flow(`Got it. I’ll remember **${text}** as **${p.name}** on this device.`); } }]); return;
     }
+    if (plan.intent === 'unknown' || plan.intent === 'help') {
+      const suggestion = suggestFromStore();
+      flow(suggestion.text, suggestion.actions);
+      return;
+    }
     flow(responseFor(store, plan));
   };
 
@@ -567,7 +656,55 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const deleteSession = (sid: string) => setSessions(prev => { const n = prev.filter(s => s.id !== sid); saveSessions(storeKey, n); return n; });
 
   return (<div className="fixed inset-0 z-50 flex flex-col bg-background">
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border"><div className="flex items-center gap-2"><div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full"><Mascot size={28} /></div><div><h3 className="text-base font-display font-bold">Flow Messages</h3><p className="text-[10px] text-muted-foreground">Talk, take orders & message customers</p></div></div><div className="flex items-center gap-1"><button onClick={newChat} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><Plus className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => setShowHistory(true)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><History className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => lastUndo && (onUpdate(lastUndo), setLastUndo(null), flow('Undone.'))} disabled={!lastUndo} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60 disabled:opacity-30"><RotateCcw className="w-4 h-4" /></button><button onClick={() => enableDeviceCheckins()} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60" title="Enable Flow device check-ins"><Bell className="w-4 h-4 text-muted-foreground" /></button><button onClick={() => setVoiceOn(v => !v)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60">{voiceOn ? <Volume2 className="w-5 h-5 text-primary" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}</button><button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><X className="w-5 h-5" /></button></div></div>
+    {/*
+      The header carried a two-line title, a three-line subtitle and six icon
+      buttons, all competing in a 375px bar — the title wrapped and the
+      subtitle wrapped again. It is now one line: who you are talking to, what
+      Flow is doing right now, and the two controls used most. Everything else
+      moved behind the overflow menu.
+    */}
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+      <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full"><Mascot size={26} /></div>
+      <div className="min-w-0 flex-1">
+        <h3 className="text-sm font-display font-bold leading-tight truncate">Flow Messages</h3>
+        {/* Says what Flow is doing, not a fixed tagline. */}
+        <p className="text-[10px] text-muted-foreground leading-tight truncate">
+          {isListening ? 'Listening…'
+            : flowOrderDraftState ? 'Building a customer order'
+            : addDraft ? `Adding ${addDraft.name}`
+            : store.storeName}
+        </p>
+      </div>
+      <button onClick={() => setVoiceOn(v => !v)} aria-label={voiceOn ? 'Mute Flow' : 'Let Flow speak'} className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full hover:bg-surface-2/60">
+        {voiceOn ? <Volume2 className="w-[18px] h-[18px] text-primary" /> : <VolumeX className="w-[18px] h-[18px] text-muted-foreground" />}
+      </button>
+      <div className="relative shrink-0">
+        <button onClick={() => setShowHeaderMenu(v => !v)} aria-label="More options" aria-expanded={showHeaderMenu} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60">
+          <MoreHorizontal className="w-[18px] h-[18px] text-muted-foreground" />
+        </button>
+        {showHeaderMenu && (
+          <>
+            <button type="button" aria-label="Close menu" onClick={() => setShowHeaderMenu(false)} className="fixed inset-0 z-[70] cursor-default" />
+            <div className="absolute right-0 top-11 z-[80] w-52 rounded-2xl border border-border bg-background shadow-2xl p-1.5" role="menu">
+              {[
+                { label: 'New message', icon: Plus, onClick: () => { setShowHeaderMenu(false); newChat(); }, disabled: false },
+                { label: 'Message history', icon: History, onClick: () => { setShowHeaderMenu(false); setShowHistory(true); }, disabled: false },
+                { label: lastUndo ? 'Undo last change' : 'Nothing to undo', icon: RotateCcw, onClick: () => { setShowHeaderMenu(false); if (lastUndo) { onUpdate(lastUndo); setLastUndo(null); flow('Undone.'); } }, disabled: !lastUndo },
+                { label: 'Enable check-ins', icon: Bell, onClick: () => { setShowHeaderMenu(false); enableDeviceCheckins(); }, disabled: false },
+              ].map(({ label, icon: Icon, onClick, disabled }) => (
+                <button key={label} onClick={onClick} disabled={disabled} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold hover:bg-surface-2/60 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      <button onClick={onClose} aria-label="Close Flow" className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full hover:bg-surface-2/60">
+        <X className="w-[18px] h-[18px]" />
+      </button>
+    </div>
     {showHistory && <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setShowHistory(false)}><div className="w-full sm:max-w-sm max-h-[75vh] bg-background border border-border rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between px-4 py-3 border-b border-border"><h4 className="font-display font-bold text-sm">Message history</h4><button onClick={() => setShowHistory(false)}><X className="w-4 h-4" /></button></div><div className="overflow-y-auto">{sessions.length === 0 ? <p className="text-xs text-muted-foreground text-center py-8">No past messages yet.</p> : sessions.map(s => <div key={s.id} className="flex items-center gap-2 px-4 py-3 border-b border-border/60 cursor-pointer hover:bg-surface-2/40" onClick={() => openSession(s)}><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{s.title}</p><p className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleString()}</p></div><button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}><Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" /></button></div>)}</div></div></div>}
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">{messages.map(m => <div key={m.id} className="flex flex-col gap-1.5" style={{ alignItems: m.from === 'you' ? 'flex-end' : 'flex-start' }}><div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.from === 'flow' ? 'bg-surface-2/60 text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>{m.from === 'flow' ? renderFlowText(m.text) : m.text}</div>{m.actions && <div className="flex gap-2 flex-wrap">{m.actions.map(a => <button key={a.label} onClick={a.onClick} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">{a.label}</button>)}</div>}</div>)}{messages.length === 1 && !addDraft && (
       <div className="flex flex-wrap gap-2 pt-1 pb-2">
@@ -608,6 +745,27 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     </div>}
     {showReceiptImport && <ReceiptScanner store={store} onUpdate={onUpdate} onClose={() => { setShowReceiptImport(false); setPendingImportFile(null); }} initialFile={pendingImportFile} />}
     {showFlowCamera && <FlowCameraCapture onClose={() => setShowFlowCamera(false)} onCapture={(file) => { setShowFlowCamera(false); setPendingImportFile(file); setShowReceiptImport(true); }} />}
-    <form className="relative flex items-center gap-2 px-4 py-3 border-t border-border" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><button type="button" onClick={() => setShowAttachments(v => !v)} className="w-11 h-11 shrink-0 flex items-center justify-center rounded-full border border-border bg-surface-2/40 text-muted-foreground" aria-label="Add attachment"><Plus className="w-4 h-4" /></button><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : flowOrderDraftState ? 'Edit the order or add missing details…' : supportsFlowMessageOrders(store) ? 'Type or speak a customer order…' : 'Message Flow…'} className="flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm" /><button type="button" onClick={startFlowVoiceInput} className={`w-11 h-11 shrink-0 flex items-center justify-center rounded-full border ${isListening ? 'border-destructive bg-destructive/10 text-destructive animate-pulse' : 'border-border bg-surface-2/40 text-muted-foreground hover:text-primary'}`} aria-label={isListening ? 'Stop listening' : 'Speak to Flow'} title={isListening ? 'Listening… tap to stop' : 'Speak to Flow'}>{isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</button><button type="submit" disabled={!input.trim()} className="w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button>{showAttachments && <FlowAttachmentMenu onClose={() => setShowAttachments(false)} onCamera={() => { setShowAttachments(false); setShowFlowCamera(true); }} onImage={handleFlowAttachment} onFile={handleFlowAttachment} onRestockCode={() => { setShowAttachments(false); setShowRestockCodeImport(true); }} onBuyList={() => { setShowAttachments(false); ask('create list'); }} />}</form>
+    <FlowComposer
+      value={input}
+      onChange={setInput}
+      onSend={sendComposer}
+      placeholder={addDraft ? 'Answer Flow…' : flowOrderDraftState ? 'Edit the order or add missing details…' : supportsFlowMessageOrders(store) ? 'Type or speak a customer order…' : 'Message Flow…'}
+      isListening={isListening}
+      onToggleVoice={startFlowVoiceInput}
+      onOpenAttachments={() => setShowAttachments(v => !v)}
+      attachmentsOpen={showAttachments}
+      attachment={attachment}
+      onClearAttachment={clearAttachment}
+    >
+      {showAttachments && (
+        <FlowAttachmentMenu
+          onClose={() => setShowAttachments(false)}
+          onCamera={() => { setShowAttachments(false); setShowFlowCamera(true); }}
+          onPickFile={handleFlowAttachment}
+          onRestockCode={() => { setShowAttachments(false); setShowRestockCodeImport(true); }}
+          onBuyList={() => { setShowAttachments(false); ask('create list'); }}
+        />
+      )}
+    </FlowComposer>
   </div>);
 }

@@ -12,7 +12,10 @@ describe('Flow message UI', () => {
     expect(source).toContain('WhatsApp customer');
     expect(source).toContain('startFlowVoiceInput');
     expect(source).toContain('storeflow:start-flow-voice');
-    expect(source).toContain('<Mic className="w-4 h-4" />');
+    // The mic button moved into FlowComposer; what matters here is that
+    // FlowChat still hands it voice control.
+    expect(source).toContain('isListening={isListening}');
+    expect(source).toContain('onToggleVoice={startFlowVoiceInput}');
     expect(source).toContain('New customer order');
     expect(source).toContain('Flow Messages');
   });
@@ -48,5 +51,19 @@ describe('Flow message UI', () => {
     expect(source).toContain('storeflow:open-flow-messages');
     expect(source).toContain('setChatOpen(true)');
     expect(source).toContain('storeflow:start-flow-voice');
+  });
+
+  it('keeps the composer to one pill with a single right-hand action', () => {
+    const source = readSource('src/components/FlowComposer.tsx');
+    // Mic until there is something to send, then Send — never both.
+    expect(source).toContain('canSend ? (');
+    expect(source).toContain("aria-label=\"Send\"");
+    expect(source).toContain('<Mic className="w-[18px] h-[18px]" />');
+    // Every control in the pill must be shrink-0; the send button was being
+    // crushed from 44px to 16px because it was the one child without it.
+    for (const button of source.split('<button').slice(1)) {
+      const tag = button.slice(0, button.indexOf('>'));
+      if (tag.includes('w-9 h-9')) expect(tag).toContain('shrink-0');
+    }
   });
 });

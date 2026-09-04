@@ -80,6 +80,14 @@ export function understandFlexible(store:StoreData,input:string):FlowUnderstandi
  if(isStoreQuestion(q))return{kind:'store',reply:'I’ll give you an overview of your business.'};
  if(isLowStockQuestion(q))return{kind:'topic',topic:'stock',reply:lowStockReply(store)};
  for(const [topic,re,reply] of TOPICS)if(re.test(q)&&tokens(q).length<=3)return{kind:'topic',topic,reply};
+ // An explicit command carries a product name inside it, so the fuzzy matcher
+ // below would claim "sell 2 Milo Sachet" as a lookup for the product "Milo
+ // Sachet" and never sell anything — while "sell 2 milo" scored too low to be
+ // claimed and worked fine. That made the exact product name less reliable
+ // than a partial one, and broke the very syntax Flow suggests in its own
+ // help. A verb followed by a quantity belongs to the command engine; bare
+ // product names and topics still fall through to the matcher below.
+ if(/\b(sell|sold|add|restock|buy|bought|remove|reduce)\b[^a-z0-9]*\d/i.test(q))return{kind:'unknown',reply:''};
  const products=store.products||[];
  const scored=products.map(product=>({product,score:Math.max(...[product.name,...(product.voiceAliases||[])].map(name=>similarity(q,name)))})).filter(x=>x.score>=.55).sort((a,b)=>b.score-a.score);
  if(scored.length){const best=scored[0],close=scored.filter(x=>x.score>=Math.max(.55,best.score-.12));if(close.length>1&&best.score<1)return{kind:'product_choices',query:input,products:close.slice(0,8).map(x=>x.product)};return{kind:'product',product:best.product,score:best.score};}
