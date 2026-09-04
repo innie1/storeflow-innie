@@ -21,6 +21,7 @@ interface ReceiptScannerProps {
   onUpdate: (store: StoreData) => void;
   onClose: () => void;
   currentUser?: any;
+  initialFile?: File | null;
 }
 
 interface GroupInfo {
@@ -39,12 +40,13 @@ interface GroupInfo {
   sachetsPerRoll?: number;
 }
 
-export default function ReceiptScanner({ store, onUpdate, onClose, currentUser }: ReceiptScannerProps) {
+export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, initialFile }: ReceiptScannerProps) {
   const [scanning, setScanning] = useState(false);
   const [items, setItems] = useState<ScannedItem[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const initialProcessedRef = useRef<File | null>(null);
 
   // V1 Import Learning Logic States
   const [learningStep, setLearningStep] = useState<'upload' | 'learning' | 'summary' | 'success'>('upload');
@@ -218,6 +220,13 @@ export default function ReceiptScanner({ store, onUpdate, onClose, currentUser }
       setScanning(false);
     }
   };
+
+  useEffect(() => {
+    if (!initialFile || initialProcessedRef.current === initialFile) return;
+    initialProcessedRef.current = initialFile;
+    const synthetic = { target: { files: [initialFile] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+    void handleFileSelect(synthetic);
+  }, [initialFile]);
 
   const applyStructureToItems = (targetItems: ScannedItem[], pUnit: string, sUnit: string, unitsPerPurchase: number) => {
     const defaultMargin = store.managerSettings?.defaultMargin ?? 20;
