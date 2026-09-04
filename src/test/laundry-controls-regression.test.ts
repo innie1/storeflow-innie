@@ -5,6 +5,7 @@ import {
   LAUNDRY_INTAKE_OPEN_STORAGE,
   requestLaundryWorkspace,
 } from '@/lib/laundry-workspace';
+import { LAUNDRY_SETTLED_STAGES, nextLaundryStage } from '@/lib/laundry-offline';
 
 describe('laundry control regressions', () => {
   beforeEach(() => window.sessionStorage.clear());
@@ -20,6 +21,21 @@ describe('laundry control regressions', () => {
     expect(window.sessionStorage.getItem(LAUNDRY_INTAKE_OPEN_STORAGE)).toBe('1');
     expect(opens).toBe(2);
     window.removeEventListener(LAUNDRY_INTAKE_OPEN_SIGNAL, listener);
+  });
+
+  it('advances a laundry bundle one stage at a time and stops after collection', () => {
+    // Powers the one-tap "Mark <next>" button on each record row.
+    expect(nextLaundryStage('received')).toEqual({ id: 'washing', label: 'Washing' });
+    expect(nextLaundryStage('washing')).toEqual({ id: 'drying', label: 'Drying' });
+    expect(nextLaundryStage('folding')).toEqual({ id: 'ready', label: 'Ready' });
+    expect(nextLaundryStage('ready')).toEqual({ id: 'collected', label: 'Collected' });
+    expect(nextLaundryStage('collected')).toBeNull();
+  });
+
+  it('treats only ready and collected bundles as settled', () => {
+    // Anything else is still work in progress, and can therefore run overdue.
+    expect(LAUNDRY_SETTLED_STAGES).toEqual(['ready', 'collected']);
+    expect(LAUNDRY_SETTLED_STAGES.includes('washing' as never)).toBe(false);
   });
 
   it('gives laundry pricing show/hide controls and stronger custom clothing handling', () => {

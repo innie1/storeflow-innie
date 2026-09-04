@@ -14,6 +14,20 @@ export const LAUNDRY_WORKFLOW_STAGES: { id: LaundryWorkflowStage; label: string 
   { id: 'collected', label: 'Collected' },
 ];
 
+/** Stages a bundle has already passed through -- nothing is pending on it. */
+export const LAUNDRY_SETTLED_STAGES: LaundryWorkflowStage[] = ['ready', 'collected'];
+
+/**
+ * The stage a bundle moves to next, so the counter can advance a job in one
+ * tap instead of opening the full stage dropdown. Returns null once a bundle
+ * has been collected, which is the end of the workflow.
+ */
+export function nextLaundryStage(stage: LaundryWorkflowStage): { id: LaundryWorkflowStage; label: string } | null {
+  const index = LAUNDRY_WORKFLOW_STAGES.findIndex(item => item.id === stage);
+  if (index < 0 || index >= LAUNDRY_WORKFLOW_STAGES.length - 1) return null;
+  return LAUNDRY_WORKFLOW_STAGES[index + 1];
+}
+
 export interface LocalLaundryRecord {
   clientRef: string;
   accessCode: string;
