@@ -4,6 +4,7 @@ import LaundryWalkInIntake from '@/components/laundry/LaundryWalkInIntake';
 import {
   consumeLaundryWorkspaceView,
   getLaundryRecordSearchText,
+  LAUNDRY_INTAKE_OPEN_SIGNAL,
   parseLaundryRecordMetadata,
   requestLaundryWorkspace,
   type LaundryWorkspaceView,
@@ -45,6 +46,19 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
       window.removeEventListener(LAUNDRY_SYNC_CHANGED_EVENT, refresh);
     };
   }, [store.accessCode]);
+
+  useEffect(() => {
+    // This workspace is kept mounted (hidden) when another tab is active, so a
+    // "Record Laundry" / "Laundry Records" control tapped elsewhere can't rely
+    // on the initial consumeLaundryWorkspaceView() mount-time read alone — it
+    // needs a live broadcast to switch view while already mounted.
+    const onWorkspaceViewRequested = (event: Event) => {
+      const requested = (event as CustomEvent<LaundryWorkspaceView>).detail;
+      if (requested === 'record' || requested === 'records') setView(requested);
+    };
+    window.addEventListener(LAUNDRY_INTAKE_OPEN_SIGNAL, onWorkspaceViewRequested);
+    return () => window.removeEventListener(LAUNDRY_INTAKE_OPEN_SIGNAL, onWorkspaceViewRequested);
+  }, []);
 
   const laundryRecords = useMemo(() => {
     const query = search.trim().toLowerCase();

@@ -1,6 +1,8 @@
 import { StoreData, TabId } from '@/types/store';
 import { getBusinessTemplate, isBusinessTabAllowed } from '@/lib/business-runtime';
-import { CalendarClock, ClipboardList, DollarSign, Package, Settings2, Sparkles, Users } from 'lucide-react';
+import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
+import { CalendarClock, ClipboardList, DollarSign, Gamepad2, Package, Receipt, Settings2, Shirt, Sparkles, Tag, Users } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 interface Props {
   store: StoreData;
@@ -18,18 +20,18 @@ export default function BusinessSimpleHome({ store, onNavigate }: Props) {
   const primary = isLaundry ? 'Record Laundry' : template.labels.primaryAction;
   const noun = template.labels.offeringNoun;
 
-  const candidateActions: { label: string; icon: string; tab: TabId }[] = [
-    { label: primary, icon: isLaundry ? '🧺' : '✨', tab: isSession ? 'games-dashboard' : 'orders' },
-    { label: noun + (noun.endsWith('s') ? '' : 's'), icon: template.icon, tab: 'inventory' },
-    { label: isAppointment ? 'Appointments' : isSession ? 'Sessions' : 'Customers', icon: isAppointment ? '📅' : isSession ? '🎮' : '👥', tab: isAppointment ? 'orders' : isSession ? 'games-dashboard' : 'customers' },
-    ...(isLaundry ? [{ label: 'Laundry Records', icon: '🧾', tab: 'orders' as TabId }] : [{ label: 'Sales', icon: '💰', tab: 'sales' as TabId }]),
+  const candidateActions: { label: string; icon: ReactNode; tab: TabId }[] = [
+    { label: primary, icon: isLaundry ? <Shirt className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />, tab: isLaundry ? ('laundry-records' as TabId) : isSession ? 'games-dashboard' : 'orders' },
+    { label: noun + (noun.endsWith('s') ? '' : 's'), icon: <Tag className="w-6 h-6" />, tab: 'inventory' },
+    { label: isAppointment ? 'Appointments' : isSession ? 'Sessions' : 'Customers', icon: isAppointment ? <CalendarClock className="w-6 h-6" /> : isSession ? <Gamepad2 className="w-6 h-6" /> : <Users className="w-6 h-6" />, tab: isAppointment ? 'orders' : isSession ? 'games-dashboard' : 'customers' },
+    ...(isLaundry ? [{ label: 'Laundry Records', icon: <Receipt className="w-6 h-6" />, tab: 'laundry-records' as TabId }] : [{ label: 'Sales', icon: <DollarSign className="w-6 h-6" />, tab: 'sales' as TabId }]),
   ];
   const actions = candidateActions.filter(action => isBusinessTabAllowed(store, action.tab));
 
   const navigate = (action: { label: string; tab: TabId }) => {
-    if (isLaundry && action.label === 'Record Laundry') {
-      sessionStorage.setItem('storeflow-open-laundry-intake', '1');
-      window.dispatchEvent(new Event('storeflow:open-laundry-intake'));
+    if (isLaundry) {
+      const view = getLaundryActionView(action.label);
+      if (view) requestLaundryWorkspace(view);
     }
     onNavigate(action.tab);
   };
@@ -68,7 +70,7 @@ export default function BusinessSimpleHome({ store, onNavigate }: Props) {
         <div className="grid grid-cols-2 gap-3">
           {actions.map(action => (
             <button key={`${action.tab}-${action.label}`} onClick={() => navigate(action)} className="min-h-24 rounded-2xl bg-surface-2/50 border border-border p-3 text-left hover:border-primary/30 active:scale-[.99] transition-all">
-              <span className="text-2xl">{action.icon}</span>
+              <span className="text-primary">{action.icon}</span>
               <p className="font-display font-bold text-sm mt-2">{action.label}</p>
             </button>
           ))}

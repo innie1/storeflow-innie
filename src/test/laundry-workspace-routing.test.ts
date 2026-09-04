@@ -79,7 +79,11 @@ describe('laundry workspace routing', () => {
     const result = transform(fixture, '/repo/src/pages/Index.tsx');
     const code = result?.code || fixture;
 
-    expect(code).toContain("label: 'Laundry Records'");
+    // Labeled "Intake" rather than "Laundry Records" in the nav — the full
+    // phrase truncated on the 6-tab bottom bar ("Laundry ..."); the fuller
+    // name still appears on the workspace screen itself and its quick-action
+    // entry points, where there's room for it.
+    expect(code).toContain("label: 'Intake'");
     expect(code).toContain("id: 'laundry-records' as TabId");
     expect(code).not.toContain("if (t.id === 'orders' && businessType === 'laundry') return { ...t, label: 'Laundry Records'");
     expect(code).toContain("case 'laundry-records':");

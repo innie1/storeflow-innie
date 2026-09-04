@@ -87,6 +87,8 @@ export async function publishStorefrontToCloud(
     p_marketplace_settings: (published as any).marketplaceSettings || {},
     p_business_template: businessTemplate,
     p_laundry_pricing: laundryPricing,
+    p_business_name: store.storeName || 'My Store',
+    p_business_type: store.category || 'retail',
   });
   if (error) {
     if (!ownerPassword && /authoriz|permission|42501/i.test(String(error.message || error.code || ''))) {

@@ -18,14 +18,16 @@ export function requestLaundryWorkspace(view: LaundryWorkspaceView): void {
   if (typeof window === 'undefined') return;
   window.sessionStorage.setItem(LAUNDRY_WORKSPACE_VIEW_STORAGE, view);
   if (view === 'record') {
-    // Persist the intent so a newly mounted intake can consume it, and also
-    // broadcast immediately so an intake that is already mounted opens too.
-    // This makes every Record Laundry control behave identically.
     window.sessionStorage.setItem(LAUNDRY_INTAKE_OPEN_STORAGE, '1');
-    window.dispatchEvent(new CustomEvent(LAUNDRY_INTAKE_OPEN_SIGNAL));
   } else {
     window.sessionStorage.removeItem(LAUNDRY_INTAKE_OPEN_STORAGE);
   }
+  // Persist the intent so a newly mounted workspace can consume it via
+  // consumeLaundryWorkspaceView(), and also broadcast immediately so a
+  // workspace that is already mounted (kept alive in a hidden tab) switches
+  // too — otherwise every Record Laundry / Laundry Records control would only
+  // work on first mount instead of behaving identically everywhere.
+  window.dispatchEvent(new CustomEvent(LAUNDRY_INTAKE_OPEN_SIGNAL, { detail: view }));
 }
 
 export function consumeLaundryWorkspaceView(): LaundryWorkspaceView {
