@@ -224,12 +224,8 @@ function addFlowRewardInternal(
 /** Public API to award FLOW safely */
 export function addFlowReward(amount: number, type: FlowTransaction['type'], description: string): number {
   const m = load();
-  try {
-    addFlowRewardInternal(m, amount, type, description);
-    return m.flowBalance;
-  } catch (err: any) {
-    throw err;
-  }
+  addFlowRewardInternal(m, amount, type, description);
+  return m.flowBalance;
 }
 
 /** Legacy API compatibility - maps to Flow reward */
@@ -267,7 +263,7 @@ export function processDailyStreak(): {
 
   // Determine if streak continues (opened yesterday)
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-  let isNewDay = m.lastClaimDate !== today;
+  const isNewDay = m.lastClaimDate !== today;
   
   if (isNewDay) {
     m.flowEarnedToday = 0; // reset daily earnings counter

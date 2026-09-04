@@ -249,7 +249,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     }
 
     // Two-Pool Budget Splitter: 60% High, 40% Medium/Low
-    let highPool = budget * 0.60;
+    const highPool = budget * 0.60;
     let mediumPool = budget * 0.40;
 
     // 1. Allocate High Priority Pool (60%)

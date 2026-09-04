@@ -850,8 +850,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   };
 
   const handleActualAdd = () => {
-    let singlesPerCartonVal = newProduct.isCartonSingleEnabled ? Number(newProduct.singlesPerCarton) : undefined;
-    let singlePriceVal = (newProduct.isCartonSingleEnabled && newProduct.singleSellingPrice) ? Number(newProduct.singleSellingPrice) : undefined;
+    const singlesPerCartonVal = newProduct.isCartonSingleEnabled ? Number(newProduct.singlesPerCarton) : undefined;
+    const singlePriceVal = (newProduct.isCartonSingleEnabled && newProduct.singleSellingPrice) ? Number(newProduct.singleSellingPrice) : undefined;
     
     const updated = addProduct(store, {
       name: newProduct.name,
@@ -1061,7 +1061,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   };
 
   const handleDeleteSelected = () => {
-    let updatedProducts = store.products.filter(p => !selectedProductIds.includes(p.id));
+    const updatedProducts = store.products.filter(p => !selectedProductIds.includes(p.id));
     const updatedStore = {
       ...store,
       products: updatedProducts
@@ -3063,7 +3063,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                           const nextBuy = batchBuy || it.purchaseUnit;
                           const nextSell = batchSell || it.sellingUnit;
                           const cp = nextContains > 1 ? (it.purchasePrice / nextContains) : it.purchasePrice;
-                          let sp = it.sellingPrice;
+                          const sp = it.sellingPrice;
                           let psp = it.purchaseSellingPrice;
                           if (it.pricingMode === 'auto') {
                             psp = sp * nextContains;
@@ -3242,7 +3242,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                             const val = Math.max(1, Number(e.target.value) || 1);
                             const cp = it.purchasePrice / val;
                             let psp = it.purchaseSellingPrice;
-                            let sp = it.sellingPrice;
+                            const sp = it.sellingPrice;
                             if (isAuto) {
                               psp = sp * val;
                             }
@@ -3631,7 +3631,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 if (!transferDestCode || qty <= 0 || qty > selectedTransferProduct.quantity) {
                   return showToast('Invalid destination store or transfer quantity', 'error');
                 }
-                let destCode = transferDestCode.trim().toUpperCase();
+                const destCode = transferDestCode.trim().toUpperCase();
                 if (destCode === 'MANUAL') {
                   return showToast('Please enter store code', 'error');
                 }

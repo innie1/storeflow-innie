@@ -153,7 +153,6 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     };
     const line = lines[mode];
     if (line) say(line);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   // Revert back to idle after typing pause
@@ -861,11 +860,12 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       }
 
       // Get or create profile
-      let { data: profile, error: profileErr } = await supabase
+      const { data: existingProfile, error: profileErr } = await supabase
         .from('profiles')
         .select('*')
         .eq('auth_user_id', authData.user.id)
         .maybeSingle();
+      let profile = existingProfile;
 
       if (!profile) {
         const { data: newProfile } = await supabase

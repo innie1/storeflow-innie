@@ -341,24 +341,35 @@ export default function Index() {
   // through, one back-swipe always lands you cleanly on Dashboard, in a
   // single synchronous step, never a multi-entry unwind.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const queryTab = params.get('tab') as TabId | null;
-    const hash = window.location.hash.replace('#', '') as TabId;
-    const initialTab = queryTab || hash;
-    if (initialTab && initialTab !== 'dashboard') {
-      setTabState(initialTab);
-      window.history.replaceState({ tab: initialTab, index: 1 }, '', '#' + initialTab);
-    } else {
-      window.history.replaceState({ tab: 'dashboard', index: 0 }, '', '#dashboard');
-    }
+    const validTabs = new Set<TabId>([
+      ...RETAIL_MAIN_TABS.map(item => item.id),
+      ...RETAIL_MORE_ITEMS.map(item => item.id),
+      ...GAMES_MAIN_TABS.map(item => item.id),
+      ...GAMES_MORE_ITEMS.map(item => item.id),
+    ]);
+    const saved = sessionStorage.getItem('storeflow-active-tab') as TabId | null;
+    const candidate = saved && validTabs.has(saved) ? saved : 'dashboard';
+    setTabState(candidate);
+    window.history.replaceState({ tab: candidate, index: candidate === 'dashboard' ? 0 : 1 }, '', '#' + candidate);
 
     const handlePopState = (e: PopStateEvent) => {
-      setTabState(e.state?.tab || 'dashboard');
+      const next = e.state?.tab as TabId | undefined;
+      setTabState(next && validTabs.has(next) ? next : 'dashboard');
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  useEffect(() => {
+    const validTabs = new Set<TabId>([
+      ...RETAIL_MAIN_TABS.map(item => item.id),
+      ...RETAIL_MORE_ITEMS.map(item => item.id),
+      ...GAMES_MAIN_TABS.map(item => item.id),
+      ...GAMES_MORE_ITEMS.map(item => item.id),
+    ]);
+    if (validTabs.has(tab)) sessionStorage.setItem('storeflow-active-tab', tab);
+  }, [tab]);
 
   // Ensure body scroll is never left locked on initial app load, store load, or when switching tabs
   useEffect(() => {
@@ -1152,7 +1163,7 @@ export default function Index() {
       targetId = parts[parts.length - 1];
     }
     const existing = store.products.find(p => p.barcode === targetId || p.id === targetId);
-    let workingStore = logScanEvent(store, {
+    const workingStore = logScanEvent(store, {
       kind: 'barcode',
       purpose: 'quick-scan',
       productId: existing?.id,

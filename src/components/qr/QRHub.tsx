@@ -5,6 +5,7 @@ import { encodeQRData, decodeQRData, QRData, parseScannedQRText } from '@/lib/qr
 import { logScanEvent } from '@/lib/store-data';
 import QRDisplayCard from './QRDisplayCard';
 import QRScannerPage from './QRScannerPage';
+import QRAnalyticsPanel from './QRAnalyticsPanel';
 import { showToast } from '@/components/Toast';
 
 interface QRHubProps {
@@ -118,9 +119,7 @@ export default function QRHub({ store, onUpdate, currentUser: _currentUser, orde
           {scannedResult && <div className="p-4 rounded-xl bg-success/5 border border-success/20 text-left"><p className="text-xs font-bold text-success">Recognized: {scannedResult.type}</p><p className="text-xs text-muted-foreground mt-1">Store: {scannedResult.storeId}</p>{rawScannedText && <p className="text-[10px] text-muted-foreground break-all mt-1">{rawScannedText}</p>}</div>}
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-2xl p-8 text-center space-y-3">
-          <Database className="w-10 h-10 mx-auto text-muted-foreground" /><h2 className="font-display font-bold">QR Analytics</h2><p className="text-xs text-muted-foreground">Detailed scan analytics are not exposed until real telemetry is available.</p>
-        </div>
+        <QRAnalyticsPanel store={store} />
       )}
     </div>
   );

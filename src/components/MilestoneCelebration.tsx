@@ -81,7 +81,7 @@ export default function MilestoneCelebration({ milestone, onDismiss }: Milestone
             opacity: visible ? 0 : 0,
             animation: visible ? `milestone-confetti-${p.id % 2 === 0 ? 'a' : 'b'} 1.4s ease-out forwards` : 'none',
             animationDelay: `${p.delay}ms`,
-            // @ts-ignore custom props read by the keyframes below via inline style vars
+            // @ts-expect-error custom props read by the keyframes below via inline style vars
             '--dx': `${p.dx}px`,
             '--dy': `${p.dy}px`,
             '--rot': `${p.rotate}deg`,

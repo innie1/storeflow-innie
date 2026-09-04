@@ -39,7 +39,7 @@ function simulateOrderStatusUpdate(
   order: { status: string; order_items: { product_id: string; quantity: number }[] },
   newStatus: string
 ) {
-  let updatedStore = { ...store };
+  const updatedStore = { ...store };
   const currentNormalized = getNormalizedStatus(order.status);
   const targetNormalized = getNormalizedStatus(newStatus);
 

@@ -492,7 +492,7 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
     if (lastTime.getTime() >= nowTime.getTime()) return goal;
 
     const occurrences: Date[] = [];
-    let current = new Date(lastTime.getTime());
+    const current = new Date(lastTime.getTime());
     const [hStr, mStr] = (goal.timeOfDay || "00:00").split(":");
     const schedHours = parseInt(hStr, 10) || 0;
     const schedMinutes = parseInt(mStr, 10) || 0;
@@ -979,7 +979,7 @@ export function deleteSale(store: StoreData, id: string): StoreData {
     }
   }
 
-  let nextProducts = [...store.products];
+  const nextProducts = [...store.products];
   let nextMovements = store.inventoryMovements || [];
   
   for (const sale of salesToDelete) {
@@ -1703,7 +1703,7 @@ export function recordCheckout(
   if (opts.customerName) {
     const nowStr = new Date().toISOString();
     const customers = updated.customers || [];
-    let cust = customers.find(c => c.name.toLowerCase() === opts.customerName!.toLowerCase());
+    const cust = customers.find(c => c.name.toLowerCase() === opts.customerName!.toLowerCase());
     const itemsSummary = pendingItems.map(pi => `${pi.productName} (x${pi.quantity})`).join(', ');
     const purchase = { date: nowStr, amount: total, items: itemsSummary };
     

@@ -29,7 +29,7 @@ export interface InterpretResult {
  * Interprets product name and extracts fractions & dictionary official names
  */
 export function interpretProductName(rawName: string): InterpretResult {
-  let name = rawName.trim();
+  const name = rawName.trim();
   const lower = name.toLowerCase();
   
   let parsedFraction: 'half_carton' | 'half_pack' | 'half_roll' | undefined;

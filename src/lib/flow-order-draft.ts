@@ -315,7 +315,7 @@ export function flowDraftBalance(draft: FlowConversationOrderDraft): number {
 export function mergeFlowConversationOrderDraft(store: StoreData, current: FlowConversationOrderDraft, text: string): FlowDraftMergeResult {
   if (/^\s*(?:cancel|discard|forget|stop)(?:\s+(?:this\s+)?order)?\s*$/i.test(text)) return { draft: current, changed: false, cancelled: true, note: 'Order draft cancelled.' };
 
-  let draft: FlowConversationOrderDraft = {
+  const draft: FlowConversationOrderDraft = {
     ...current,
     items: current.items.map(item => ({ ...item, metadata: { ...(item.metadata || {}) } })),
     payment: { ...current.payment },
@@ -567,7 +567,7 @@ function localId(prefix: string): string {
 }
 
 export function applyFlowConversationOrderLocalEffects(store: StoreData, order: CreatedFlowOrder, draft: FlowConversationOrderDraft): StoreData {
-  let customers = [...(store.customers || [])];
+  const customers = [...(store.customers || [])];
   let customerIndex = customers.findIndex(customer => customer.id === draft.customerId);
   if (customerIndex < 0) customerIndex = customers.findIndex(customer => phoneDigits(customer.phone) === phoneDigits(draft.customerPhone));
   if (customerIndex < 0) customerIndex = customers.findIndex(customer => normalize(customer.name) === normalize(draft.customerName));
@@ -593,7 +593,7 @@ export function applyFlowConversationOrderLocalEffects(store: StoreData, order: 
     });
   }
 
-  let pendingPayments = [...(store.pendingPayments || [])];
+  const pendingPayments = [...(store.pendingPayments || [])];
   const paid = Math.max(0, draft.payment.paidAmount || 0);
   const balance = flowDraftBalance(draft);
   const shouldTrackBalance = draft.payment.explicitlyMentioned && balance > 0 && (paid > 0 || draft.payment.balanceLater);

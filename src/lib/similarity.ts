@@ -35,7 +35,7 @@ export function extractCoreProduct(name: string): { core: string; attributes: Pr
   ];
 
   // Split string into words and filter out stopWords
-  let words = name.toLowerCase()
+  const words = name.toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(w => w && !stopWords.includes(w) && w.length > 1);
@@ -94,7 +94,7 @@ export function getSimilarity(s1: string, s2: string): number {
   const len = Math.max(l1.length, l2.length);
   if (len === 0) return 1.0;
 
-  let track = Array(l2.length + 1).fill(null).map(() => Array(l1.length + 1).fill(null));
+  const track = Array(l2.length + 1).fill(null).map(() => Array(l1.length + 1).fill(null));
   for (let i = 0; i <= l1.length; i += 1) track[0][i] = i;
   for (let j = 0; j <= l2.length; j += 1) track[j][0] = j;
   for (let j = 1; j <= l2.length; j += 1) {
