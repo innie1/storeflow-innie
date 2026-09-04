@@ -1792,7 +1792,12 @@ export default function Index() {
           </div>
         )}
 
-        <FlowShirtFab store={store} onUpdate={setStore} onNavigate={handleNavigate} currentUser={currentUser} />
+        {/* For laundry this button IS "Record Laundry", so on the intake tab it
+            is a shortcut to the screen you are already on — and it sits on top
+            of that screen's own record button. */}
+        {!(businessType === 'laundry' && String(tab) === 'laundry-records') && (
+          <FlowShirtFab store={store} onUpdate={setStore} onNavigate={handleNavigate} currentUser={currentUser} />
+        )}
 
         <main className={`flex-1 ${store.uiMode === 'simple' && tab === 'dashboard' ? 'px-3 pt-1 pb-16 md:pt-2 space-y-3' : 'p-4 md:p-6 pb-20 md:pb-6 space-y-6'} w-full max-w-5xl lg:max-w-6xl mx-auto`} style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))' }}>
           <Suspense fallback={

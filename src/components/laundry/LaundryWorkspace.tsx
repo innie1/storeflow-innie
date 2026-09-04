@@ -22,7 +22,7 @@ import {
 } from '@/lib/laundry-offline';
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
-import { ChevronDown, ChevronUp, ClipboardList, MessageCircle, Plus, Search, Shirt, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ClipboardList, MessageCircle, Plus, Search, X } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { getPromisedTime } from '@/lib/business-insights';
 
@@ -216,11 +216,9 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
         <div>
           <p className="text-[11px] uppercase tracking-wider text-primary font-black">Laundry workspace</p>
           <h1 className="font-display font-black text-xl mt-0.5">{view === 'record' ? 'Record Laundry' : 'Laundry Records'}</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            {view === 'record'
-              ? 'Record clothes brought physically to the shop and generate one shared 6-character tag.'
-              : 'Find in-store laundry bundles by tag, customer, service or clothing details.'}
-          </p>
+          {view === 'records' && (
+            <p className="text-xs text-muted-foreground mt-1">Find bundles by tag, customer, service or clothing.</p>
+          )}
         </div>
 
         <div className="flex gap-2 shrink-0">
@@ -234,15 +232,10 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
       </div>
 
       {view === 'record' ? (
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 text-sm text-left">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Shirt className="w-4 h-4 text-primary" /></div>
-              <div><p className="font-display font-black">One tag for the whole bundle</p><p className="text-xs text-muted-foreground mt-1">StoreFlow generates one 6-character code such as K7M2Q9. Write that same code on every cloth tag belonging to this customer.</p></div>
-            </div>
-          </div>
-          <LaundryWalkInIntake store={store} onUpdate={onUpdate} />
-        </div>
+        // No explainer card here: the tag rule is stated on the receipt at the
+        // moment it matters, and this screen exists to record a bundle, not to
+        // describe one.
+        <LaundryWalkInIntake store={store} onUpdate={onUpdate} />
       ) : (
         <div className="space-y-3">
           <div className="relative h-11 rounded-xl bg-surface-2 border border-border flex items-center px-3.5">

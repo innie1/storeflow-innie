@@ -319,12 +319,11 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
   return (
     <>
-      <button onClick={openIntake} className="w-full rounded-2xl border border-primary/25 bg-primary/5 p-3.5 flex items-center justify-between gap-3 text-left active:scale-[.99] transition-transform">
-        <span className="flex items-center gap-2.5 min-w-0">
-          <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Shirt className="w-4 h-4 text-primary" /></span>
-          <span className="font-display font-black text-sm">New walk-in bundle</span>
-        </span>
-        <span className="shrink-0 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-display font-black text-xs">Record</span>
+      <button
+        onClick={openIntake}
+        className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[.99] transition-transform"
+      >
+        <Plus className="w-4 h-4" strokeWidth={3} /> Record a walk-in bundle
       </button>
 
       {open && <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center" onClick={close}>
