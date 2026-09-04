@@ -426,7 +426,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       </div>
 
       {/* Navigation list */}
-      <div className="w-full md:col-span-4 flex md:flex-col gap-1.5 overflow-x-auto no-scrollbar md:overflow-x-visible pb-2 md:pb-0">
+      <div className="w-full md:col-span-4 flex flex-wrap md:flex-col gap-1.5 pb-2 md:pb-0">
         {sections.map(sec => (
           <button
             key={sec.id}
@@ -658,7 +658,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                   {/* Categories list */}
                   <div>
                     <p className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider mb-1.5">Categories</p>
-                    <div className="flex gap-1 overflow-x-auto no-scrollbar">
+                    <div className="flex flex-wrap gap-1">
                       {['All', store.category || 'Retail', 'Fast Sellers'].map((cat, idx) => (
                         <span key={idx} className={`px-2.5 py-1 rounded-full text-[9px] font-semibold ${idx === 0 ? 'bg-primary text-white' : 'bg-zinc-800 text-zinc-400'}`}>
                           {cat}

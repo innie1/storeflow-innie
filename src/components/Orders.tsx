@@ -339,8 +339,8 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
       )}
 
       {/* Tabs list with counts — pill style matching the reference design */}
-      <div className="relative -mx-4 px-4 md:-mx-0 md:px-0">
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+      <div className="relative">
+        <div className="flex flex-wrap gap-2">
           {(['All', 'Pending', 'Accepted', 'Preparing', 'Ready', 'Completed', 'Rejected', 'Cancelled'] as const).map(tab => (
             <button
               key={tab}

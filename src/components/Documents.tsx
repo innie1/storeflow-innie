@@ -187,7 +187,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
             <h3 className="font-display font-bold text-base text-foreground text-left">Stored Documents</h3>
             
             {/* Category filter */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
               {['All', ...categories].map((c, i) => (
                 <button 
                   key={i} 

@@ -253,7 +253,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
             )}
           </div>
 
-          <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-0.5">
+          <div className="flex flex-wrap gap-2">
             {FILTERS.map(option => {
               const count = counts[option.id];
               const active = filter === option.id;

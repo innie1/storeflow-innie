@@ -116,7 +116,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex flex-wrap gap-2">
         {([['7d', '7 days'], ['30d', '30 days'], ['all', 'Lifetime']] as [Range, string][]).map(([id, label]) => <button key={id} onClick={() => setRange(id)} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border ${range === id ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border'}`}>{label}</button>)}
       </div>
 

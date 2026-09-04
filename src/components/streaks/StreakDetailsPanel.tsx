@@ -352,7 +352,7 @@ export default function StreakDetailsPanel({ store, onClose }: { store: StoreDat
               </span>
               <span className="text-[10px] font-bold text-primary">{streak.rewards.length}</span>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <div className="flex flex-wrap gap-2">
               {streak.rewards.map((r) => (
                 <button
                   key={r.day}

@@ -714,7 +714,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       )}
 
       {categories.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 no-scrollbar">
+        <div className="flex flex-wrap gap-2">
           {categories.map(c => (
             <button key={c} onClick={() => setCategory(c)}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-display font-semibold border transition-colors ${
