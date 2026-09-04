@@ -38,7 +38,7 @@ const FILTERS: { id: RecordFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'overdue', label: 'Overdue' },
   { id: 'ready', label: 'Ready' },
-  { id: 'active', label: 'In progress' },
+  { id: 'active', label: 'Active' },
   { id: 'collected', label: 'Collected' },
 ];
 
@@ -253,7 +253,9 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          {/* One row, equal columns. Five separate pills wrapped onto a second
+              line and read as clutter; a segmented control always fits. */}
+          <div className="grid grid-cols-5 gap-1 rounded-xl border border-border bg-surface-2 p-1">
             {FILTERS.map(option => {
               const count = counts[option.id];
               const active = filter === option.id;
@@ -262,16 +264,16 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                 <button
                   key={option.id}
                   onClick={() => setFilter(option.id)}
-                  className={`shrink-0 h-8 px-3 rounded-full border text-xs font-display font-bold flex items-center gap-1.5 transition-colors ${
+                  className={`rounded-lg py-1.5 px-0.5 text-center transition-colors ${
                     active
-                      ? 'bg-primary text-primary-foreground border-primary'
+                      ? 'bg-primary text-primary-foreground'
                       : isOverdue
-                        ? 'bg-destructive/5 border-destructive/30 text-destructive'
-                        : 'bg-card border-border text-muted-foreground'
+                        ? 'text-destructive'
+                        : 'text-muted-foreground'
                   }`}
                 >
-                  {option.label}
-                  <span className={`px-1.5 rounded-full text-[10px] font-black ${active ? 'bg-primary-foreground/20' : 'bg-surface-2'}`}>{count}</span>
+                  <span className="block text-[10px] font-display font-bold leading-none truncate">{option.label}</span>
+                  <span className="block mt-1 text-sm font-display font-black tabular-nums leading-none">{count}</span>
                 </button>
               );
             })}
@@ -326,11 +328,14 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
-                      <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Treatment</p><p className="text-xs font-bold mt-1">{record.serviceName}</p></div>
-                      <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Pieces</p><p className="text-xs font-bold mt-1">{record.pieceCount || '—'}</p></div>
-                      <div className="rounded-xl bg-surface-2 border border-border/60 p-2.5"><p className="text-[9px] uppercase font-black text-muted-foreground">Clothes</p><p className="text-xs font-bold mt-1 break-words">{record.garmentSummary || 'Not listed'}</p></div>
-                    </div>
+                    {/* One line of plain text. These were three bordered boxes
+                        that stacked into three more rows on a phone, which is
+                        a lot of furniture for three short facts. */}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      <span className="font-bold text-foreground">{record.serviceName}</span>
+                      {record.pieceCount ? ` · ${record.pieceCount} ${record.pieceCount === 1 ? 'piece' : 'pieces'}` : ''}
+                      {record.garmentSummary ? ` · ${record.garmentSummary}` : ''}
+                    </p>
 
                     {(record.address || record.washMethod || record.dryMethod) && (
                       <div className="mt-2 rounded-xl border border-border/60 bg-surface-2 p-2.5 text-xs text-muted-foreground">
