@@ -3,6 +3,8 @@ import { StoreData, Product } from '@/types/store';
 import { addProduct, saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { FlowIcon } from './FlowIcon';
+import { askFlowMarketplace, flowMarketplaceSuggestions, flowTopRecommendation, type FlowAnswer } from '@/lib/flow-marketplace-intel';
+import { topCustomerRequests } from '@/lib/manager-intel';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface MarketplaceProps {
@@ -59,97 +61,29 @@ interface ExcessListing {
   whatsapp: string;
 }
 
-// ─── Static Mock Data ──────────────────────────────────────────────────────────
-const MOCK_SUPPLIERS: Supplier[] = [
-  {
-    id: 'sup-abc',
-    name: 'ABC Food Wholesale',
-    distance: '2.4km',
-    rating: 4.8,
-    productsCount: 53,
-    verified: true,
-    phone: '07025517388',
-    whatsapp: 'https://wa.me/2347025517388?text=Hello%20ABC%20Food%20Wholesale,%20I%20want%20to%20place%20an%20order%20for%20some%20supplies%20seen%20on%20StoreFlow.',
-    products: [
-      { name: 'Rice (50kg)', price: 96000, category: 'Groceries' },
-      { name: 'Beans (50kg)', price: 72000, category: 'Groceries' },
-      { name: 'Garri White (50kg)', price: 38000, category: 'Groceries' },
-      { name: 'Peak Milk Roll (Case)', price: 29000, category: 'Beverages' },
-      { name: 'Milo Sachet Pack (Case)', price: 24000, category: 'Beverages' },
-      { name: 'Semovita (10kg)', price: 15500, category: 'Groceries' },
-    ],
-  },
-  {
-    id: 'sup-tommy',
-    name: 'Tommy Wholesale',
-    distance: '3.1km',
-    rating: 4.4,
-    productsCount: 48,
-    verified: true,
-    phone: '07025517388',
-    whatsapp: 'https://wa.me/2347025517388?text=Hello%20Tommy%20Wholesale,%20I%20want%20to%20place%20an%20order%20for%20some%20supplies%20seen%20on%20StoreFlow.',
-    products: [
-      { name: 'Rice (50kg)', price: 92000, category: 'Groceries' },
-      { name: 'Beans (50kg)', price: 70000, category: 'Groceries' },
-      { name: 'Garri White (50kg)', price: 39000, category: 'Groceries' },
-      { name: 'Peak Milk Roll (Case)', price: 30000, category: 'Beverages' },
-      { name: 'Vegetable Oil (25L)', price: 42000, category: 'Groceries' },
-    ],
-  },
-  {
-    id: 'sup-innie',
-    name: 'Innie Provisions & Co',
-    distance: '1.2km',
-    rating: 4.9,
-    productsCount: 120,
-    verified: true,
-    phone: '07025517388',
-    whatsapp: 'https://wa.me/2347025517388?text=Hello%20Innie%20Provisions,%20I%20want%20to%20place%20an%20order%20for%20some%20supplies%20seen%20on%20StoreFlow.',
-    products: [
-      { name: 'Rice (50kg)', price: 99000, category: 'Groceries' },
-      { name: 'Beans (50kg)', price: 69000, category: 'Groceries' },
-      { name: 'Garri White (50kg)', price: 37000, category: 'Groceries' },
-      { name: 'Peak Milk Roll (Case)', price: 28000, category: 'Beverages' },
-      { name: 'Indomie Crate (Case)', price: 18000, category: 'Groceries' },
-    ],
-  },
-];
+// ─── Marketplace data ──────────────────────────────────────────────────────
+//
+// These lists were populated with invented suppliers, stores, trending items,
+// deals and customer demand — complete with prices, ratings, distances and
+// "127 stores buying" counts. None of it came from anywhere; every merchant
+// saw the same figures. Worse, the fabricated suppliers and excess listings
+// were merged into the same arrays as the merchant's own real entries, so the
+// two were indistinguishable, and each fake business linked to a WhatsApp
+// chat on the StoreFlow support line — a merchant tapping "contact supplier"
+// was messaging support believing they were ordering stock.
+//
+// They are empty until there is real marketplace data behind them. Each
+// section now says so rather than inventing something to fill the space.
+const MOCK_SUPPLIERS: Supplier[] = [];
 
-const MOCK_TRENDING: TrendingItem[] = [
-  { id: 'tr-garri', name: 'Garri (White) Bucket', demand: 94, profit: 450, storesBuying: 127, averageCost: 2050, averageSelling: 2500, category: 'Groceries' },
-  { id: 'tr-rice', name: 'Rice (Foreign) Bucket', demand: 89, profit: 1000, storesBuying: 94, averageCost: 7000, averageSelling: 8000, category: 'Groceries' },
-  { id: 'tr-beans', name: 'Beans (White) Bucket', demand: 82, profit: 900, storesBuying: 78, averageCost: 6100, averageSelling: 7000, category: 'Groceries' },
-  { id: 'tr-milk', name: 'Peak Milk Roll', demand: 78, profit: 400, storesBuying: 150, averageCost: 2100, averageSelling: 2500, category: 'Beverages' },
-];
+const MOCK_TRENDING: TrendingItem[] = [];
 
-const MOCK_RECOMMENDED: RecommendedItem[] = [
-  { name: 'Garri Bucket', marketPrice: 2500, expectedProfit: 450, suppliersCount: 3, category: 'Groceries', averageCost: 2050 },
-  { name: 'Rice Bucket', marketPrice: 8000, expectedProfit: 1000, suppliersCount: 3, category: 'Groceries', averageCost: 7000 },
-  { name: 'Beans Bucket', marketPrice: 7000, expectedProfit: 900, suppliersCount: 3, category: 'Groceries', averageCost: 6100 },
-  { name: 'Peak Milk Roll', marketPrice: 2500, expectedProfit: 400, suppliersCount: 3, category: 'Beverages', averageCost: 2100 },
-  { name: 'Bread Loaf', marketPrice: 1200, expectedProfit: 300, suppliersCount: 2, category: 'Groceries', averageCost: 900 },
-];
+const MOCK_RECOMMENDED: RecommendedItem[] = [];
 
-const MOCK_DEALS: DealItem[] = [
-  { name: 'Rice (50kg)', originalPrice: 98000, discountedPrice: 92000, discountPercent: 6, supplier: 'Tommy Wholesale' },
-  { name: 'Beans (50kg)', originalPrice: 75000, discountedPrice: 69000, discountPercent: 8, supplier: 'Innie Provisions & Co' },
-  { name: 'Semovita (10kg)', originalPrice: 18000, discountedPrice: 15000, discountPercent: 16, supplier: 'ABC Food Wholesale' },
-  { name: 'Vegetable Oil (25L)', originalPrice: 48000, discountedPrice: 42000, discountPercent: 12, supplier: 'Tommy Wholesale' },
-  { name: 'Peak Milk Roll (Case)', originalPrice: 30000, discountedPrice: 28000, discountPercent: 6, supplier: 'Innie Provisions & Co' },
-];
+const MOCK_DEALS: DealItem[] = [];
 
-const MOCK_EXCESS: ExcessListing[] = [
-  { id: 'ex-1', productName: 'Bread (Sweet loaf)', quantity: 20, price: 900, storeName: 'Alaba Grocery Store', whatsapp: 'https://wa.me/2347025517388?text=Hello%20Alaba%20Store,%20I\'m%20interested%20in%20your%20excess%20inventory%20listing.' },
-  { id: 'ex-2', productName: 'Spaghetti Case', quantity: 1, price: 8500, storeName: 'Lekki Minimart', whatsapp: 'https://wa.me/2347025517388?text=Hello%20Lekki%20Minimart,%20I\'m%20interested%20in%20your%20excess%20inventory%20listing.' },
-];
+const MOCK_EXCESS: ExcessListing[] = [];
 
-const CUSTOMER_REQUESTS = [
-  { name: 'Garri', count: 43 },
-  { name: 'Beans', count: 35 },
-  { name: 'Rice', count: 29 },
-  { name: 'Peak Milk', count: 22 },
-  { name: 'Bread', count: 18 },
-];
 
 const REDEEMABLES = [
   { id: 'red-premium', name: 'Premium Access (1 Month)', cost: 500, description: 'Unlock advanced multi-store and automated forecasting.' },
@@ -160,6 +94,17 @@ const REDEEMABLES = [
 
 // Price comparison options
 const COMPARISON_PRODUCTS = ['Rice (50kg)', 'Beans (50kg)', 'Garri White (50kg)', 'Peak Milk Roll (Case)'];
+
+/** Shown where a marketplace section has no real data behind it yet. */
+function MarketplaceEmpty({ icon, title, detail }: { icon: string; title: string; detail: string }) {
+  return (
+    <div className="col-span-full flex flex-col items-center justify-center text-center gap-1.5 py-8 px-4 rounded-2xl border border-dashed border-border bg-[#16181D]/40">
+      <span className="text-2xl opacity-60" aria-hidden="true">{icon}</span>
+      <p className="font-display font-bold text-sm text-white">{title}</p>
+      <p className="text-[11px] text-muted-foreground max-w-[260px] leading-relaxed">{detail}</p>
+    </div>
+  );
+}
 
 export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
   // ─── State ──────────────────────────────────────────────────────────────────
@@ -224,17 +169,17 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
 
   // Flow AI Assistant prompts
   const [aiAssistantQuery, setAiAssistantQuery] = useState('');
-  const [aiAssistantAnswer, setAiAssistantAnswer] = useState('');
+  const [aiAssistantAnswer, setAiAssistantAnswer] = useState<FlowAnswer | null>(null);
   const [aiAssistantLoading, setAiAssistantLoading] = useState(false);
 
   // ─── Excess Inventory Listings ─────────────────────────────────────────────
   const localExcessListings = useMemo(() => {
-    return [...MOCK_EXCESS, ...(store.marketplaceListings || [])];
+    return [...(store.marketplaceListings || [])];
   }, [store.marketplaceListings]);
 
   // ─── Registered Suppliers ──────────────────────────────────────────────────
   const allSuppliers = useMemo(() => {
-    return [...MOCK_SUPPLIERS, ...(store.registeredSuppliers || [])];
+    return [...(store.registeredSuppliers || [])];
   }, [store.registeredSuppliers]);
 
   // ─── Live Stock Tracking for High Demand Opportunity ───────────────────────
@@ -319,13 +264,20 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
       showToast('Please fill all excess inventory fields', 'error');
       return;
     }
+    const sellerPhone = String((store as any).profile?.phone || '').replace(/\D/g, '');
     const newListing = {
       id: `ex-user-${Date.now()}`,
       productName: excessProduct.trim(),
       quantity: Number(excessQty),
       price: Number(excessPrice),
       storeName: store.storeName,
-      whatsapp: `https://wa.me/2347025517388?text=Hello,%20I'm%20interested%20in%20your%20excess%20listing%20for%20${excessProduct}.`,
+      // This was hard-coded to the StoreFlow support number, so another
+      // merchant contacting a real listing reached support rather than the
+      // seller. Use the seller's own phone, and omit the link when they have
+      // not set one rather than sending the enquiry somewhere wrong.
+      whatsapp: sellerPhone
+        ? `https://wa.me/${sellerPhone}?text=Hello%20${encodeURIComponent(store.storeName || 'there')},%20I'm%20interested%20in%20your%20excess%20listing%20for%20${encodeURIComponent(excessProduct.trim())}.`
+        : '',
     };
 
     const updated = {
@@ -372,51 +324,59 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
     showToast('📋 Supplier registration submitted! Earned 100 FLOW.');
   };
 
+  /**
+   * Flow Intelligence, answered from this store's own books.
+   *
+   * This used to reply with one of four hard-coded strings after a fake 800ms
+   * "thinking" delay — quoting invented supplier prices, forecasting an "8%
+   * jump due to supplier diesel fuel surcharge", and asserting the merchant's
+   * own sales ("You sold 27 Minerals this week") without reading a single row
+   * of their data. Every merchant saw the same four answers.
+   *
+   * It now routes the question through src/lib/flow-marketplace-intel.ts,
+   * which computes from real sales, stock, cost and expense records using the
+   * same analytics the Manager screen uses. When a store has nothing to answer
+   * from, it says so rather than inventing a figure.
+   */
   const handleAskFlow = (query: string) => {
     setAiAssistantQuery(query);
     setAiAssistantLoading(true);
-    setAiAssistantAnswer('');
-
-    setTimeout(() => {
+    // Yield a frame so the thinking state paints before the (synchronous)
+    // analysis runs over the store's records.
+    requestAnimationFrame(() => {
+      const answer = askFlowMarketplace(store, query);
+      setAiAssistantAnswer(answer ?? {
+        text: "I can't answer that one yet.",
+        points: ['Try asking about restocking, what is selling, your prices, expenses, customer requests, or next month.'],
+      });
       setAiAssistantLoading(false);
-      const q = query.toLowerCase();
-      if (q.includes('semovita')) {
-        setAiAssistantAnswer('Flow Intelligence says: ABC Food Wholesale is currently the cheapest nearby supplier for Semovita (10kg) at ₦15,500 crate. Buying from them saves you ₦1,200 compared to external wholesale averages.');
-      } else if (q.includes('trending')) {
-        setAiAssistantAnswer('Flow Intelligence says: Garri (White) Bucket is currently trending at a massive 94% local demand rate. Average store profit is ₦450 per bucket with 127 local retailers buying. Stock up before supply costs rise!');
-      } else if (q.includes('minerals') || q.includes('restock')) {
-        setAiAssistantAnswer('Flow Intelligence says: You sold 27 Minerals this week. Mineral crate prices are expected to jump 8% due to supplier diesel fuel surcharge. Innie Provisions currently offers crates at ₦28,000. Restock this week to safeguard margins.');
-      } else {
-        setAiAssistantAnswer('Flow Intelligence says: Comparing prices across 3 nearby suppliers. We recommend prioritizing ABC Food Wholesale for grains, and Innie Provisions for sachet beverage packs to maximize margins.');
-      }
-    }, 800);
+    });
   };
 
+  const flowSuggestions = useMemo(() => flowMarketplaceSuggestions(store), [store]);
+
+  // The hero card's headline, detail and "potential savings" were fixed text
+  // with fixed figures shown to every merchant. This is the highest-value real
+  // insight from their own records.
+  const topRecommendation = useMemo(() => flowTopRecommendation(store), [store]);
+
+  // What shoppers have actually asked this store for. This was a fixed list
+  // ("Garri 43, Beans 35, Rice 29...") identical for every merchant; the app
+  // already records real requests, so read those instead.
+  const customerRequests = useMemo(
+    () => topCustomerRequests(store, 5).map(r => ({ name: r.text, count: r.count })),
+    [store]
+  );
+
   // Price Comparison Grid Calculation
+  /**
+   * This compared three invented suppliers ("ABC Food", "Tommy", "Innie
+   * Provisions") at hard-coded prices and reported the "savings" between
+   * them. There is no supplier price feed, so there is nothing to compare.
+   */
   const currentComparison = useMemo(() => {
-    const prodName = comparisonProduct;
-    let sA = 0, sB = 0, sC = 0;
-    if (prodName.includes('Rice')) {
-      sA = 96000; sB = 92000; sC = 99000;
-    } else if (prodName.includes('Beans')) {
-      sA = 72000; sB = 70000; sC = 69000;
-    } else if (prodName.includes('Garri')) {
-      sA = 38000; sB = 39000; sC = 37000;
-    } else if (prodName.includes('Milk')) {
-      sA = 29000; sB = 30000; sC = 28000;
-    }
-
-    const prices = [
-      { name: 'Supplier A (ABC Food)', price: sA },
-      { name: 'Supplier B (Tommy)', price: sB },
-      { name: 'Supplier C (Innie Provisions)', price: sC },
-    ];
-    const cheapest = [...prices].sort((a, b) => a.price - b.price)[0];
-    const highest = [...prices].sort((a, b) => b.price - a.price)[0];
-    const savings = highest.price - cheapest.price;
-
-    return { prices, cheapest, savings };
-  }, [comparisonProduct]);
+    return { prices: [] as Array<{ name: string; price: number }>, cheapest: null, savings: 0 };
+  }, []);
 
   if (!isUnlocked) {
     return (
@@ -605,15 +565,19 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
               </span>
             </div>
             <h3 className="font-display font-black text-lg text-white mt-1 leading-snug">
-              You sold 27 Minerals this week.
+              {topRecommendation.headline}
             </h3>
             <p className="text-sm text-muted-foreground mt-2 max-w-lg leading-relaxed">
-              Nearby suppliers currently sell Mineral crates at lower prices. Restock early to protect your margin.
+              {topRecommendation.detail}
             </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-4 pt-3 border-t border-[#E8C34E]/10">
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase">Potential savings</p>
-                <p className="font-display text-xl font-black text-emerald-500">₦4,500</p>
+                {topRecommendation.metric ? (
+                  <>
+                    <p className="text-[10px] text-muted-foreground uppercase">{topRecommendation.metric.label}</p>
+                    <p className="font-display text-xl font-black text-emerald-500">{topRecommendation.metric.value}</p>
+                  </>
+                ) : null}
               </div>
               <button 
                 onClick={() => {
@@ -668,6 +632,9 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {MOCK_TRENDING.length === 0 && (
+                <MarketplaceEmpty icon="📦" title="No trending data yet" detail="Once enough stores are trading through StoreFlow, the items moving fastest near you will show here." />
+              )}
               {MOCK_TRENDING.map(trend => (
                 <div
                   key={trend.id}
@@ -701,6 +668,9 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
               ✨ Recommended For Your Store
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {MOCK_RECOMMENDED.length === 0 && (
+                <MarketplaceEmpty icon="✨" title="No recommendations yet" detail="Recommendations appear once there is real supplier pricing to compare your catalogue against." />
+              )}
               {MOCK_RECOMMENDED.map(rec => (
                 <div key={rec.name} className="p-3 bg-[#16181D] border border-border rounded-xl flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -728,16 +698,15 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
               <span className="text-xl">🤖</span>
               <div>
                 <h4 className="font-display font-bold text-sm text-[#E8C34E]">Flow AI Assistant</h4>
-                <p className="text-[10px] text-muted-foreground">Ask Flow for wholesale and market price insights</p>
+                <p className="text-[10px] text-muted-foreground">Ask Flow about your stock, sales, prices and spending</p>
               </div>
             </div>
             
             <div className="flex flex-wrap gap-1.5">
-              {[
-                'Which supplier is cheapest for Semovita?',
-                'What products are trending nearby?',
-                'Should I restock Minerals?',
-              ].map(p => (
+              {/* These were three fixed questions about invented suppliers and
+                  products. They are now drawn from what this store actually
+                  has data for. */}
+              {flowSuggestions.map(p => (
                 <button
                   key={p}
                   onClick={() => handleAskFlow(p)}
@@ -752,10 +721,24 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
               <div className="mt-2.5 p-3 rounded-xl bg-[#0B0B12]/80 border border-border text-xs leading-relaxed space-y-1">
                 <p className="text-muted-foreground font-semibold">Q: "{aiAssistantQuery}"</p>
                 {aiAssistantLoading ? (
-                  <p className="text-amber-500 animate-pulse">Flow is analyzing local supply catalogs...</p>
-                ) : (
-                  <p className="text-white whitespace-pre-line">{aiAssistantAnswer}</p>
-                )}
+                  <p className="text-amber-500 animate-pulse">Flow is reading your records...</p>
+                ) : aiAssistantAnswer ? (
+                  <div className="space-y-1.5">
+                    <p className="text-white font-semibold">{aiAssistantAnswer.text}</p>
+                    {aiAssistantAnswer.points.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {aiAssistantAnswer.points.map((pt, i) => (
+                          <li key={i} className="text-muted-foreground flex gap-1.5">
+                            <span aria-hidden="true">-</span><span>{pt}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {aiAssistantAnswer.action && (
+                      <p className="text-[#E8C34E] font-semibold pt-0.5">{aiAssistantAnswer.action}</p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -1031,7 +1014,10 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
               </div>
 
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {MOCK_DEALS.map(deal => (
+                {MOCK_DEALS.length === 0 && (
+                <MarketplaceEmpty icon="🏷️" title="No supplier deals yet" detail="Deals published by wholesalers on StoreFlow will appear here." />
+              )}
+              {MOCK_DEALS.map(deal => (
                   <div key={deal.name} className="p-2.5 bg-[#0B0B12]/80 border border-border rounded-xl flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-white truncate">{deal.name}</p>
@@ -1059,7 +1045,10 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
               </div>
 
               <div className="space-y-2">
-                {CUSTOMER_REQUESTS.map((req, idx) => (
+                {customerRequests.length === 0 && (
+                <MarketplaceEmpty icon="📋" title="No customer requests yet" detail="What shoppers near you are asking for will appear here as request data builds up." />
+              )}
+              {customerRequests.map((req, idx) => (
                   <div key={req.name} className="flex justify-between items-center p-2.5 bg-[#0B0B12]/80 border border-border rounded-xl">
                     <div className="flex items-center gap-2">
                       <span className="w-5 h-5 rounded-full bg-surface-2 border border-border text-[10px] font-bold flex items-center justify-center">
@@ -1300,7 +1289,7 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
                         Add product
                       </button>
                       <a
-                        href={`https://wa.me/2347025517388?text=Hello%20${activeSupplierCatalog.name},%20I%20want%20to%20order%20the%20${p.name}%20(₦${p.price.toLocaleString()})%20seen%20on%20StoreFlow.`}
+                        href={`https://wa.me/${String(activeSupplierCatalog.phone || '').replace(/\D/g, '')}?text=Hello%20${encodeURIComponent(activeSupplierCatalog.name)},%20I%20want%20to%20order%20the%20${encodeURIComponent(p.name)}%20(₦${p.price.toLocaleString()})%20seen%20on%20StoreFlow.`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold"
