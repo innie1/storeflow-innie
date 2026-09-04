@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Search, SlidersHorizontal, Calendar, User, Phone, MapPin, Package, ArrowLeftRight, Wallet, ChevronUp, ChevronDown } from 'lucide-react';
 import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
@@ -12,6 +12,9 @@ interface OrdersProps {
   orders: any[];
   onUpdateOrderStatus: (orderId: string, status: string, metadata?: any) => void;
   onUpdate: (store: StoreData) => void;
+  /** Order to open and scroll to, set when a push notification is tapped. */
+  focusOrderId?: string | null;
+  onFocusHandled?: () => void;
 }
 
 // Converts a locally-formatted number (e.g. "0803 123 4567") into the
@@ -69,7 +72,7 @@ function openOrderWhatsApp(order: any, store: StoreData, status: string) {
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
 }
 
-export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }: OrdersProps) {
+export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, focusOrderId, onFocusHandled }: OrdersProps) {
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Accepted' | 'Preparing' | 'Ready' | 'Completed' | 'Rejected' | 'Cancelled'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -178,6 +181,35 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
   }, [orders, getNormalizedStatus]);
 
   // Filtering orders
+  // A tapped order notification must land on that order even if the merchant
+  // left a status tab, search term or date range active that would hide it.
+  // Orders arrive asynchronously, so wait for the row before scrolling.
+  const handledFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusOrderId) {
+      handledFocusRef.current = null;
+      return;
+    }
+    if (handledFocusRef.current === focusOrderId) return;
+    if (!orders.some(order => String(order.id) === String(focusOrderId))) return;
+
+    handledFocusRef.current = focusOrderId;
+    setActiveTab('All');
+    setSearchQuery('');
+    setDatePreset('all');
+    setStartDate('');
+    setEndDate('');
+    setStartTime('');
+    setEndTime('');
+    setExpandedOrder(String(focusOrderId));
+
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`order-${focusOrderId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      onFocusHandled?.();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusOrderId, orders, onFocusHandled]);
+
   const filteredOrders = useMemo(() => {
     const now = Date.now();
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -465,9 +497,14 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
             const isExpanded = expandedOrder === order.id;
 
             return (
-              <div 
-                key={order.id} 
-                className="bg-card border border-border/80 rounded-2xl p-3.5 sm:p-4 shadow-sm hover:shadow-md transition-all text-left space-y-3"
+              <div
+                key={order.id}
+                id={`order-${order.id}`}
+                className={`bg-card border rounded-2xl p-3.5 sm:p-4 shadow-sm hover:shadow-md transition-all text-left space-y-3 ${
+                  handledFocusRef.current && String(order.id) === handledFocusRef.current
+                    ? 'border-primary ring-2 ring-primary/30'
+                    : 'border-border/80'
+                }`}
               >
                 {/* Header Row — responsive layout for mobile */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/40 pb-2.5">

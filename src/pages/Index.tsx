@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react
 import { StoreData, TabId, Product } from '@/types/store';
 import FlowShirtFab from '@/components/FlowShirtFab';
 import { getBusinessTemplate, isBusinessTabAllowed, isServiceFirstBusiness, resolveBusinessType, shouldRunRetailRestockEngine } from '@/lib/business-runtime';
+import { readLinkedTab, readOrderDeepLink, stripOrderDeepLink } from '@/lib/order-deep-link';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
@@ -300,6 +301,8 @@ export default function Index() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [tab, setTabState] = useState<TabId>('dashboard');
   const [orders, setOrders] = useState<any[]>([]);
+  // Set when a push notification deep-links to one order; Orders consumes it.
+  const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
 
   // Resolve the real Supabase row id for this store. StoreData (local/cached)
   // has no "id" field — only storeId (short code) and accessCode — but every
@@ -1130,6 +1133,21 @@ export default function Index() {
     }
   }, []);
 
+  // Tapping an order push notification opens /?tab=orders&order_id=... (see
+  // src/sw.ts). Land on that exact order instead of the default tab.
+  useEffect(() => {
+    const search = window.location.search;
+    const deepLink = readOrderDeepLink(search);
+    const linkedTab = readLinkedTab(search);
+    if (!deepLink && !linkedTab) return;
+
+    // Drop the parameters before setTab runs, since setTab owns the history
+    // entry from here on and a refresh must not re-focus a stale order.
+    window.history.replaceState(null, '', window.location.pathname + stripOrderDeepLink(search) + window.location.hash);
+    if (deepLink) setFocusOrderId(deepLink.orderId);
+    setTab(deepLink ? 'orders' : (linkedTab as TabId));
+  }, [setTab]);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [tab]);
@@ -1791,7 +1809,7 @@ export default function Index() {
               )}
             </div>
             <div className={tab === 'orders' ? 'block' : 'hidden'}>
-              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} />
+              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} focusOrderId={focusOrderId} onFocusHandled={() => setFocusOrderId(null)} />
             </div>
             <div className={String(tab) === 'laundry-records' ? 'block' : 'hidden'}>
               {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (
