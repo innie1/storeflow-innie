@@ -4,6 +4,8 @@ import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import OrderReceipt from '@/components/OrderReceipt';
 import { subscribeToOrderPush } from '@/lib/push-notifications';
+import ServiceOrderControls from '@/components/ServiceOrderControls';
+import { getOrderProgressText } from '@/lib/business-runtime';
 
 interface OrdersProps {
   store: StoreData;
@@ -30,20 +32,14 @@ const LAUNDRY_PROCESSING_STAGES = ['Received', 'Counting Clothes', 'Washing', 'D
 
 function buildOrderWhatsAppMessage(order: any, store: StoreData, status: string): string {
   const items = (order.order_items || []).map((item: any) => {
-    const pName = store.products?.find((p: any) => p.id === item.product_id)?.name || 'Item';
+    const pName = item.item_name || item.product_name || store.products?.find((p: any) => String(p.id) === String(item.product_id))?.name || 'Item';
     return `• ${pName} x${Number(item.quantity)} — ₦${Number(item.subtotal || item.price * item.quantity || 0).toLocaleString()}`;
   }).join('\n');
   const total = `₦${Number(order.total || 0).toLocaleString()}`;
   const orderRef = order.order_number ? `Order #${order.order_number}` : 'Your order';
   const name = order.customer_name ? `Hi ${order.customer_name}, ` : 'Hi, ';
 
-  let statusLine = '';
-  if (status === 'Ready') statusLine = `your order from ${store.storeName} is ready for pickup! 🎉`;
-  else if (status === 'Completed') statusLine = `your order from ${store.storeName} has been completed. ✅ Thank you for your patronage!`;
-  else if (status === 'Preparing') statusLine = `your order from ${store.storeName} is being prepared. 👨‍🍳`;
-  else if (status === 'Accepted') statusLine = `your order from ${store.storeName} has been accepted and is being processed. 👍`;
-  else if (status === 'Cancelled' || status === 'Rejected') statusLine = `your order from ${store.storeName} was ${status.toLowerCase()}. We're sorry for the inconvenience.`;
-  else statusLine = `here's an update on your order from ${store.storeName}.`;
+  const statusLine = getOrderProgressText(store, status);
 
   return `${name}${statusLine}\n\n${orderRef}\n${items}\n\nTotal: ${total}`;
 }
@@ -659,7 +655,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                   {isExpanded && (
                     <div className="mt-2 border-t border-border/40 pt-2 space-y-1.5 animate-fadeIn">
                       {(order.order_items || []).map((item: any, idx: number) => {
-                        const pName = store.products?.find((p: any) => p.id === item.product_id)?.name || 'Unknown Product';
+                        const pName = item.item_name || item.product_name || store.products?.find((p: any) => String(p.id) === String(item.product_id))?.name || 'Item';
                         return (
                           <div key={item.id || idx} className="flex justify-between items-center text-xs py-1 px-2 rounded-lg bg-surface-2/40">
                             <div className="flex-1 pr-3">
@@ -700,43 +696,29 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate }:
                     </div>
                   )}
 
-                  {/* Actions for Non-Pending active statuses */}
-                  {normStatus !== 'Pending' && normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (
+                  {/* Service orders use their configured workflow instead of product pickup/preparation states. */}
+                  <ServiceOrderControls
+                    order={order}
+                    store={store}
+                    normStatus={normStatus}
+                    meta={meta}
+                    onUpdateOrderStatus={onUpdateOrderStatus}
+                  />
+
+                  {/* Product-order workflow remains unchanged. */}
+                  {!['service', 'appointment', 'session', 'metered'].includes(String(order.order_kind || '').toLowerCase()) && !((order.order_items || []).some((item: any) => store.products?.some((p: any) => String(p.id) === String(item.product_id) && p.isService))) && normStatus !== 'Pending' && normStatus !== 'Completed' && normStatus !== 'Cancelled' && normStatus !== 'Rejected' && (
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border/30">
                       {(normStatus === 'Accepted' || normStatus === 'Preparing' || normStatus === 'Ready') && (
-                        <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Cancelled')}
-                          className="px-3 py-1.5 rounded-lg border border-destructive/20 bg-destructive/5 text-destructive text-xs font-semibold hover:bg-destructive/10 transition active:scale-95 cursor-pointer mr-auto"
-                        >
-                          Cancel Order
-                        </button>
+                        <button onClick={() => onUpdateOrderStatus(order.id, 'Cancelled')} className="px-3 py-1.5 rounded-lg border border-destructive/20 bg-destructive/5 text-destructive text-xs font-semibold hover:bg-destructive/10 transition active:scale-95 cursor-pointer mr-auto">Cancel Order</button>
                       )}
-
                       {normStatus === 'Accepted' && (
-                        <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Preparing')}
-                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
-                        >
-                          Start Preparing
-                        </button>
+                        <button onClick={() => onUpdateOrderStatus(order.id, 'Preparing')} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">Start Preparing</button>
                       )}
-
                       {normStatus === 'Preparing' && (
-                        <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Ready')}
-                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
-                        >
-                          {meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}
-                        </button>
+                        <button onClick={() => onUpdateOrderStatus(order.id, 'Ready')} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">{meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}</button>
                       )}
-
                       {normStatus === 'Ready' && (
-                        <button
-                          onClick={() => onUpdateOrderStatus(order.id, 'Completed')}
-                          className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer"
-                        >
-                          {meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}
-                        </button>
+                        <button onClick={() => onUpdateOrderStatus(order.id, 'Completed')} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">{meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}</button>
                       )}
                     </div>
                   )}

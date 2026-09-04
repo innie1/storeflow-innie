@@ -2618,6 +2618,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <ToggleRow label="Weekly Recaps" checked={mgr.weeklyRecap} onChange={v => updateMgr({ weeklyRecap: v })} />
             <ToggleRow label="Customer Request Tracking" checked={mgr.customerRequests} onChange={v => updateMgr({ customerRequests: v })} />
             <ToggleRow label="Savings Planner" checked={mgr.savingsPlanner} onChange={toggleSavings} />
+            <ToggleRow
+              label="Floating Flow Shortcut"
+              description="Show the floating Flow message button. Tap to message Flow or hold for 3 seconds to speak."
+              checked={(mgr as any).floatingFlowShortcutEnabled !== false}
+              onChange={v => updateMgr({ floatingFlowShortcutEnabled: v } as any)}
+            />
             <ToggleRow label="Voice Notes" checked={mgr.voiceFeatures} onChange={v => updateMgr({ voiceFeatures: v })} />
             <ToggleRow label="Auto-Listen on Sales" description="Mic starts automatically when you open the Sales page." checked={mgr.autoVoiceListen} onChange={v => updateMgr({ autoVoiceListen: v })} />
             <ToggleRow label="Auto Print Receipts" description="Automatically trigger receipt printing after recording a sale." checked={mgr.autoPrintReceipt} onChange={v => updateMgr({ autoPrintReceipt: v })} />

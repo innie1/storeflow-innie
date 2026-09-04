@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { StoreData, TabId, Product } from '@/types/store';
+import FlowShirtFab from '@/components/FlowShirtFab';
+import { getBusinessTemplate, isBusinessTabAllowed, isServiceFirstBusiness, resolveBusinessType, shouldRunRetailRestockEngine } from '@/lib/business-runtime';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
@@ -16,6 +18,8 @@ import StoreLogo from '@/components/StoreLogo';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
 import Orders from '@/components/Orders';
+import LaundryWorkspace from '@/components/laundry/LaundryWorkspace';
+import LaundrySyncAgent from '@/components/laundry/LaundrySyncAgent';
 import { supabase } from '@/integrations/supabase/client';
 import { autoSubscribeIfGranted, clearAllStoreFlowNotifications } from '@/lib/push-notifications';
 import { forceUnlockBodyScroll } from '@/hooks/use-body-scroll-lock';
@@ -200,6 +204,8 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
       return <Home className={className} />;
     case 'orders':
       return <ShoppingCart className={className} />;
+    case 'laundry-records':
+      return <Receipt className={className} />;
     case 'inventory':
       return <Package className={className} />;
     case 'sales':
@@ -493,6 +499,25 @@ export default function Index() {
       active = false;
     };
   }, [store?.id, getNormalizedStatus]);
+
+  // Refresh a just-created merchant walk-in order after its child rows are saved.
+  // This avoids the realtime INSERT event racing ahead of order_items creation.
+  useEffect(() => {
+    const handleCreatedOrder = async (event: Event) => {
+      const orderId = (event as CustomEvent).detail?.orderId;
+      if (!orderId) return;
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .eq('id', orderId)
+        .single();
+      if (error || !data) return;
+      const normalized = { ...data, status: getNormalizedStatus(data.status) };
+      setOrders(prev => [normalized, ...prev.filter(order => order.id !== orderId)]);
+    };
+    window.addEventListener('storeflow:order-created', handleCreatedOrder);
+    return () => window.removeEventListener('storeflow:order-created', handleCreatedOrder);
+  }, [getNormalizedStatus]);
 
   // Auto-heal / maintain background push notification subscription when store is loaded
   // so streak reminders & order alerts arrive reliably even when the app is closed
@@ -909,17 +934,30 @@ export default function Index() {
     }));
   };
 
-  const isGames = store?.category === 'games';
-  const isLaundry = store?.storeType === 'laundry';
+  const businessTemplate = getBusinessTemplate(store);
+  const businessType = resolveBusinessType(store);
+  const isGames = businessType === 'games';
+  const isServiceFirst = isServiceFirstBusiness(store);
 
   const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;
 
   const mainTabs = isGames
     ? GAMES_MAIN_TABS
-    : isLaundry
-    ? RETAIL_MAIN_TABS.map(t => (t.id === 'inventory' ? { ...t, label: 'Price List', icon: '👕' } : t))
-    : RETAIL_MAIN_TABS;
-  const moreItems = isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS;
+    : RETAIL_MAIN_TABS
+        .filter(t => isBusinessTabAllowed(store, t.id))
+        .flatMap(t => {
+          const mapped = t.id === 'inventory' && isServiceFirst
+            ? { ...t, label: businessType === 'laundry' ? 'Price List' : 'Services', icon: businessTemplate.icon }
+            : t;
+          // Laundry needs BOTH surfaces: Orders is the online customer-app inbox,
+          // while Laundry Records is the physical counter/intake workspace.
+          if (businessType === 'laundry' && t.id === 'orders') {
+            return [mapped, { id: 'laundry-records' as TabId, label: 'Intake', icon: '🧾' }];
+          }
+          return [mapped];
+        });
+  const moreItems = (isGames ? GAMES_MORE_ITEMS : RETAIL_MORE_ITEMS)
+    .filter(t => isBusinessTabAllowed(store, t.id));
 
   const allowedMainTabs = useMemo(() => {
     return mainTabs.filter(t => isTabAllowed(t.id, currentUser));
@@ -944,7 +982,7 @@ export default function Index() {
       }].filter(cat => cat.subItems.length > 0);
     }
     return MORE_CATEGORIES.map(cat => {
-      const allowedSubs = cat.subItems.filter(sub => isTabAllowed(sub.tabId, currentUser));
+      const allowedSubs = cat.subItems.filter(sub => isTabAllowed(sub.tabId, currentUser) && isBusinessTabAllowed(store, sub.tabId));
       return {
         ...cat,
         subItems: allowedSubs
@@ -1009,9 +1047,11 @@ export default function Index() {
         }
 
         // 3. Weekly Auto Restock Draft
-        const withDraft = checkWeeklyRestockDraft(next);
-        if (withDraft) {
-          next = withDraft;
+        if (shouldRunRetailRestockEngine(next)) {
+          const withDraft = checkWeeklyRestockDraft(next);
+          if (withDraft) {
+            next = withDraft;
+          }
         }
 
         // 4. Daily streak check — counts this as today's open, and rolls a
@@ -1214,7 +1254,7 @@ export default function Index() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-display font-bold text-xs truncate leading-tight">{store.storeName}</p>
-              <p className="text-[10px] text-muted-foreground capitalize truncate">{store.category || 'Retail'}</p>
+              <p className="text-[10px] text-muted-foreground capitalize truncate">{businessTemplate.name}</p>
             </div>
           </div>
         </div>
@@ -1723,6 +1763,8 @@ export default function Index() {
           </div>
         )}
 
+        <FlowShirtFab store={store} onUpdate={setStore} onNavigate={handleNavigate} currentUser={currentUser} />
+
         <main className={`flex-1 ${store.uiMode === 'simple' && tab === 'dashboard' ? 'px-3 pt-1 pb-16 md:pt-2 space-y-3' : 'p-4 md:p-6 pb-20 md:pb-6 space-y-6'} w-full max-w-5xl lg:max-w-6xl mx-auto`} style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))' }}>
           <Suspense fallback={
             <div className="flex flex-col items-center justify-center py-24 space-y-3">
@@ -1740,8 +1782,13 @@ export default function Index() {
             <div className={tab === 'orders' ? 'block' : 'hidden'}>
               <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} />
             </div>
+            <div className={String(tab) === 'laundry-records' ? 'block' : 'hidden'}>
+              {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (
+                <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} />
+              )}
+            </div>
             <div className={tab === 'inventory' ? 'block' : 'hidden'}>
-              {store.storeType === 'laundry' ? (
+              {isServiceFirst ? (
                 <LaundryPricingSetup store={store} onUpdate={setStore} currentUser={currentUser} />
               ) : (
                 <Inventory
@@ -2160,6 +2207,7 @@ export default function Index() {
           </div>
         </div>
       )}
+      {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && <LaundrySyncAgent store={store} />}
       <ToastContainer />
       <InstallPrompt />
     </div>

@@ -5,12 +5,14 @@ import { flowAddExpense, flowRecordPayment, flowAddInvestment, flowAddLoan, flow
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
 import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';
+import { buildFlowOrderWhatsAppMessage, createFlowMessageOrder, formatFlowOrderReceipt, isFlowMessageOrderRequest, parseFlowMessageOrder, supportsFlowMessageOrders, whatsappUrl, type FlowMessageOrderDraft } from '@/lib/flow-message-orders';
+import { applyFlowConversationOrderLocalEffects, buildFlowConversationWhatsAppMessage, createFlowConversationOrder, formatFlowConversationDraft, formatFlowConversationReceipt, isFlowConversationOrderRequest, mergeFlowConversationOrderDraft, nextFlowDraftQuestion, parseFlowConversationOrder, type FlowConversationOrderDraft } from '@/lib/flow-order-draft';
 import { understandFlexible } from '@/lib/flow-understanding';
 import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/flow-brain-memory';
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
 import { resolveFlowSettingCommand, flowSettingsHelp } from '@/lib/flow-settings-resolver';
 import { getNextFlowCheckIn, notifyFlowCheckIn, requestFlowNotificationPermission, checkInsQuiet } from '@/lib/flow-checkins';
-import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText, KeyRound } from 'lucide-react';
+import { X, Send, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText, KeyRound, Mic, MicOff } from 'lucide-react';
 import Mascot from '@/components/Mascot';
 import ReceiptScanner from '@/components/ReceiptScanner';
 
@@ -57,7 +59,7 @@ function parseNewProduct(text: string): AddDraft | null {
 export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowChatProps) {
   const storeKey = store.id || store.storeId || store.accessCode || 'default';
   const savedBrain = loadBrainMemory(store);
-  const [messages, setMessages] = useState<ChatMessage[]>([{ id: id('greet'), from: 'flow', text: "Hey 👋 I'm Flow. What would you like to do?" }]);
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: id('greet'), from: 'flow', text: "Hey 👋 I'm Flow. Message me what you need. If this store takes orders, you can type or speak the customer's full order and I'll build the receipt." }]);
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions(storeKey));
   const [sessionId, setSessionId] = useState(() => id('session'));
   const [input, setInput] = useState('');
@@ -71,6 +73,10 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const [showReceiptImport, setShowReceiptImport] = useState(false);
   const [showRestockCodeImport, setShowRestockCodeImport] = useState(false);
   const [restockCodeInput, setRestockCodeInput] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const [flowOrderDraftState, setFlowOrderDraftState] = useState<FlowConversationOrderDraft | null>(null);
+  const flowOrderDraftRef = useRef<FlowConversationOrderDraft | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useMemo(() => storeAnalysis(store), [store]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages]);
@@ -86,7 +92,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     if (messages.length <= 1) return;
     setSessions(prev => {
       const next = [...prev];
-      const item = { id: sessionId, title: (messages.find(m => m.from === 'you')?.text || 'New chat').slice(0, 42), updatedAt: new Date().toISOString(), messages };
+      const item = { id: sessionId, title: (messages.find(m => m.from === 'you')?.text || 'New message').slice(0, 42), updatedAt: new Date().toISOString(), messages };
       const i = next.findIndex(s => s.id === sessionId);
       if (i >= 0) next[i] = item; else next.unshift(item);
       saveSessions(storeKey, next); return next;
@@ -155,6 +161,127 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     else if (addStep === 'category') { d.category = text; setAddStep('confirm'); flow(`Add **${d.name}** — cost ${money(d.costPrice || 0)}, sells ${money(d.sellingPrice || 0)}, ${d.quantity} units, category ${d.category}?`, [{ label: 'Add', onClick: () => finishAdd(d) }, { label: 'Cancel', onClick: () => { setAddDraft(null); flow('Cancelled.'); } }]); }
     else if (/^(yes|y|add|confirm|ok|okay)$/i.test(text)) finishAdd(d); else { setAddDraft(null); flow('Cancelled.'); }
     setAddDraft(d);
+  };
+
+  const setActiveFlowOrderDraft = (draft: FlowConversationOrderDraft | null) => {
+    flowOrderDraftRef.current = draft;
+    setFlowOrderDraftState(draft);
+  };
+
+  const cancelFlowOrderDraft = () => {
+    setActiveFlowOrderDraft(null);
+    flow('Order draft cancelled. Nothing was created.');
+  };
+
+  const presentFlowOrderDraft = (draft: FlowConversationOrderDraft, note?: string) => {
+    setActiveFlowOrderDraft(draft);
+    const question = nextFlowDraftQuestion(draft);
+    const prefix = note ? note + '\n\n' : '';
+    if (question) {
+      flow(prefix + formatFlowConversationDraft(draft) + '\n\n' + question, [
+        { label: 'Cancel order', onClick: cancelFlowOrderDraft },
+      ]);
+      return;
+    }
+    flow(prefix + formatFlowConversationDraft(draft) + '\n\nYou can still say things like **make Jollof Rice to 3**, **remove Coke**, **add 2 Chicken**, **paid ₦5,000 cash**, or **delivery to 12 Airport Road** before creating it.', [
+      { label: 'Create order', onClick: () => void finalizeFlowConversationOrder(draft) },
+      { label: 'Cancel order', onClick: cancelFlowOrderDraft },
+    ]);
+  };
+
+  const sendFlowConversationOrderToWhatsApp = (order: any, draft: FlowConversationOrderDraft) => {
+    if (!order?.customer_phone) {
+      flow('This order has no customer phone number, so I cannot open WhatsApp for it.');
+      return;
+    }
+    const message = buildFlowConversationWhatsAppMessage(store, order, draft);
+    window.open(whatsappUrl(order.customer_phone, message), '_blank', 'noopener,noreferrer');
+  };
+
+  const finalizeFlowConversationOrder = async (draft: FlowConversationOrderDraft) => {
+    const latest = flowOrderDraftRef.current;
+    if (!latest || latest.draftId !== draft.draftId || latest.revision !== draft.revision) {
+      if (latest) presentFlowOrderDraft(latest, 'That order changed after this button was created, so I kept the newest version.');
+      else flow('That order draft is no longer active.');
+      return;
+    }
+    const question = nextFlowDraftQuestion(latest);
+    if (question) {
+      presentFlowOrderDraft(latest, question);
+      return;
+    }
+    try {
+      flow('Creating the order and receipt…');
+      const order = await createFlowConversationOrder(store, latest);
+      const nextStore = applyFlowConversationOrderLocalEffects(store, order, latest);
+      onUpdate(nextStore);
+      setActiveFlowOrderDraft(null);
+      flow('Order created ✅\n\n' + formatFlowConversationReceipt(store, order, latest), [
+        { label: 'WhatsApp customer', onClick: () => sendFlowConversationOrderToWhatsApp(order, latest) },
+        { label: 'Open Orders', onClick: () => onNavigate?.('orders') },
+      ]);
+      showToast('Order ' + order.order_number + ' created by Flow', 'success');
+    } catch (error: any) {
+      flow("I couldn't create that order. **" + (error?.message || 'Please try again.') + '**');
+      showToast('Flow could not create the order', 'error');
+    }
+  };
+
+  const handleFlowConversationOrder = (text: string): boolean => {
+    const active = flowOrderDraftRef.current;
+    if (active) {
+      if (/^\s*(?:yes|yes\s+create|create|create\s+(?:the\s+)?order|confirm|confirm\s+(?:the\s+)?order|save|save\s+(?:the\s+)?order|place\s+(?:the\s+)?order)\s*[.!]?\s*$/i.test(text)) {
+        const question = nextFlowDraftQuestion(active);
+        if (question) presentFlowOrderDraft(active, question);
+        else void finalizeFlowConversationOrder(active);
+        return true;
+      }
+
+      const result = mergeFlowConversationOrderDraft(store, active, text);
+      if (result.cancelled) {
+        cancelFlowOrderDraft();
+        return true;
+      }
+      if (result.changed) {
+        presentFlowOrderDraft(result.draft, result.note);
+        return true;
+      }
+
+      const question = nextFlowDraftQuestion(active);
+      flow(formatFlowConversationDraft(active) + '\n\n' + (question || 'I still have this order open. Tell me what to change, or say **create order** when it is correct.'), [
+        ...(question ? [] : [{ label: 'Create order', onClick: () => void finalizeFlowConversationOrder(active) }]),
+        { label: 'Cancel order', onClick: cancelFlowOrderDraft },
+      ]);
+      return true;
+    }
+
+    if (!isFlowConversationOrderRequest(store, text)) return false;
+    const draft = parseFlowConversationOrder(store, text);
+    presentFlowOrderDraft(draft, draft.customerMatched ? 'I found this customer in your saved customer list.' : undefined);
+    return true;
+  };
+
+  const sendFlowOrderToWhatsApp = (order: any) => {
+    if (!order?.customer_phone) { flow('This order has no customer phone number, so I cannot open WhatsApp for it.'); return; }
+    const message = buildFlowOrderWhatsAppMessage(store, order);
+    const history = Array.isArray((store as any).communicationHistory) ? (store as any).communicationHistory : [];
+    const next = { ...store, communicationHistory: [...history, { id: id('comm'), channel: 'whatsapp', direction: 'outbound', customerName: order.customer_name || '', customerPhone: order.customer_phone || '', message, orderNumber: order.order_number, source: 'flow_message', createdAt: new Date().toISOString() }] } as StoreData;
+    onUpdate(next); window.open(whatsappUrl(order.customer_phone, message), '_blank', 'noopener,noreferrer');
+  };
+
+  const finalizeFlowMessageOrder = async (draft: FlowMessageOrderDraft) => {
+    try { flow('Creating the order and receipt…'); const order = await createFlowMessageOrder(store, draft); flow(`Order created ✅\n\n${formatFlowOrderReceipt(store, order)}`, [{ label: 'WhatsApp customer', onClick: () => sendFlowOrderToWhatsApp(order) }, { label: 'Open Orders', onClick: () => onNavigate?.('orders') }]); showToast(`Order ${order.order_number} created by Flow`, 'success'); } catch (error: any) { flow(`I couldn't create that order. **${error?.message || 'Please try again.'}**`); showToast('Flow could not create the order', 'error'); }
+  };
+
+  const handleFlowMessageOrder = (text: string): boolean => {
+    if (!isFlowMessageOrderRequest(store, text)) return false; const draft = parseFlowMessageOrder(store, text);
+    if (!draft.items.length) { flow('I heard that as a customer order, but I could not safely match any item to this store’s catalogue. Say the exact product or service names and I’ll try again.'); return true; }
+    const unavailable = draft.items.filter(item => !item.product.isService && item.quantity > Number(item.product.quantity || 0) && !store.managerSettings?.backorderSellingEnabled);
+    if (unavailable.length) { flow(`I matched the order, but I won't create it yet because there isn't enough stock for:\n${unavailable.map(item => `• ${item.product.name}: requested ${item.quantity}, available ${item.product.quantity}`).join('\n')}`); return true; }
+    const missing = [!draft.customerName && 'customer name', !draft.customerPhone && 'customer phone'].filter(Boolean);
+    if (missing.length) { flow(`I picked the items, but I still need the **${missing.join(' and ')}** before I can create a real order. Say the order again with that detail included.`); return true; }
+    const summary = draft.items.map(item => `• ${item.quantity} × ${item.label} — ${money(item.subtotal)}`).join('\n');
+    flow(`I picked this order for **${draft.customerName}**:\n${summary}\n\nTotal: **${money(draft.total)}**\n\nCreate the order and receipt?`, [{ label: 'Create order', onClick: () => void finalizeFlowMessageOrder(draft) }, { label: 'Cancel', onClick: () => flow('Order cancelled. Nothing was changed.') }]); return true;
   };
 
   const handleFinanceMutation = (raw: string): boolean => {
@@ -280,6 +407,8 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
   const ask = (raw: string) => {
     const text = clean(raw); if (!text) return; you(text);
+    if (handleFlowConversationOrder(text)) return;
+    if (handleFlowMessageOrder(text)) return;
     if (handleAppControl(text)) return;
     if (handleFinanceMutation(text)) return;
     if (/^(undo|undo that|reverse that|take that back)$/i.test(text)) { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
@@ -388,16 +517,30 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     flow(responseFor(store, plan));
   };
 
-  const newChat = () => { const brain = loadBrainMemory(store); setSessionId(id('session')); setMessages([{ id: id('greet'), from: 'flow', text: 'Fresh chat. What should we do?' }]); setLastProductId(brain.lastProductId || null); setLastIntent(brain.lastIntent as OperatingIntent | undefined); setLastUndo(null); setShowHistory(false); };
+  const startFlowVoiceInput = () => {
+    if (isListening) { try { recognitionRef.current?.stop?.(); } catch {} setIsListening(false); return; }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { flow('Voice input is not supported by this browser. You can still type the customer order here.'); return; }
+    try { const recognition = new SpeechRecognition(); recognitionRef.current = recognition; recognition.lang = 'en-NG'; recognition.continuous = false; recognition.interimResults = false; recognition.maxAlternatives = 1; recognition.onstart = () => setIsListening(true); recognition.onerror = () => { setIsListening(false); flow('I could not hear that clearly. Tap the microphone and try again.'); }; recognition.onend = () => setIsListening(false); recognition.onresult = (event: any) => { const transcript = String(event.results?.[0]?.[0]?.transcript || '').trim(); if (!transcript) return; setInput(''); ask(transcript); }; recognition.start(); } catch { setIsListening(false); flow('I could not start the microphone. Check microphone permission and try again.'); }
+  };
+
+  useEffect(() => {
+    const startFromShortcut = () => window.setTimeout(() => startFlowVoiceInput(), 0);
+    window.addEventListener('storeflow:start-flow-voice', startFromShortcut);
+    return () => window.removeEventListener('storeflow:start-flow-voice', startFromShortcut);
+  }, []);
+
+  const newChat = () => { const brain = loadBrainMemory(store); setActiveFlowOrderDraft(null); setSessionId(id('session')); setMessages([{ id: id('greet'), from: 'flow', text: 'Fresh message. Tell me what you want to do, or speak a customer order.' }]); setLastProductId(brain.lastProductId || null); setLastIntent(brain.lastIntent as OperatingIntent | undefined); setLastUndo(null); setShowHistory(false); };
   const openSession = (s: ChatSession) => { setSessionId(s.id); setMessages(s.messages); setShowHistory(false); };
   const deleteSession = (sid: string) => setSessions(prev => { const n = prev.filter(s => s.id !== sid); saveSessions(storeKey, n); return n; });
 
   return (<div className="fixed inset-0 z-50 flex flex-col bg-background">
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border"><div className="flex items-center gap-2"><div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full"><Mascot size={28} /></div><h3 className="text-base font-display font-bold">Flow</h3></div><div className="flex items-center gap-1"><button onClick={newChat} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><Plus className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => setShowHistory(true)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><History className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => lastUndo && (onUpdate(lastUndo), setLastUndo(null), flow('Undone.'))} disabled={!lastUndo} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60 disabled:opacity-30"><RotateCcw className="w-4 h-4" /></button><button onClick={() => enableDeviceCheckins()} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60" title="Enable Flow device check-ins"><Bell className="w-4 h-4 text-muted-foreground" /></button><button onClick={() => setVoiceOn(v => !v)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60">{voiceOn ? <Volume2 className="w-5 h-5 text-primary" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}</button><button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><X className="w-5 h-5" /></button></div></div>
-    {showHistory && <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setShowHistory(false)}><div className="w-full sm:max-w-sm max-h-[75vh] bg-background border border-border rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between px-4 py-3 border-b border-border"><h4 className="font-display font-bold text-sm">Chat history</h4><button onClick={() => setShowHistory(false)}><X className="w-4 h-4" /></button></div><div className="overflow-y-auto">{sessions.length === 0 ? <p className="text-xs text-muted-foreground text-center py-8">No past chats yet.</p> : sessions.map(s => <div key={s.id} className="flex items-center gap-2 px-4 py-3 border-b border-border/60 cursor-pointer hover:bg-surface-2/40" onClick={() => openSession(s)}><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{s.title}</p><p className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleString()}</p></div><button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}><Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" /></button></div>)}</div></div></div>}
+    <div className="flex items-center justify-between px-4 py-3 border-b border-border"><div className="flex items-center gap-2"><div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full"><Mascot size={28} /></div><div><h3 className="text-base font-display font-bold">Flow Messages</h3><p className="text-[10px] text-muted-foreground">Talk, take orders & message customers</p></div></div><div className="flex items-center gap-1"><button onClick={newChat} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><Plus className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => setShowHistory(true)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><History className="w-5 h-5 text-muted-foreground" /></button><button onClick={() => lastUndo && (onUpdate(lastUndo), setLastUndo(null), flow('Undone.'))} disabled={!lastUndo} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60 disabled:opacity-30"><RotateCcw className="w-4 h-4" /></button><button onClick={() => enableDeviceCheckins()} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60" title="Enable Flow device check-ins"><Bell className="w-4 h-4 text-muted-foreground" /></button><button onClick={() => setVoiceOn(v => !v)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60">{voiceOn ? <Volume2 className="w-5 h-5 text-primary" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}</button><button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-2/60"><X className="w-5 h-5" /></button></div></div>
+    {showHistory && <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setShowHistory(false)}><div className="w-full sm:max-w-sm max-h-[75vh] bg-background border border-border rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between px-4 py-3 border-b border-border"><h4 className="font-display font-bold text-sm">Message history</h4><button onClick={() => setShowHistory(false)}><X className="w-4 h-4" /></button></div><div className="overflow-y-auto">{sessions.length === 0 ? <p className="text-xs text-muted-foreground text-center py-8">No past messages yet.</p> : sessions.map(s => <div key={s.id} className="flex items-center gap-2 px-4 py-3 border-b border-border/60 cursor-pointer hover:bg-surface-2/40" onClick={() => openSession(s)}><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{s.title}</p><p className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleString()}</p></div><button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}><Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" /></button></div>)}</div></div></div>}
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">{messages.map(m => <div key={m.id} className="flex flex-col gap-1.5" style={{ alignItems: m.from === 'you' ? 'flex-end' : 'flex-start' }}><div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.from === 'flow' ? 'bg-surface-2/60 text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>{m.from === 'flow' ? renderFlowText(m.text) : m.text}</div>{m.actions && <div className="flex gap-2 flex-wrap">{m.actions.map(a => <button key={a.label} onClick={a.onClick} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">{a.label}</button>)}</div>}</div>)}{messages.length === 1 && !addDraft && (
       <div className="flex flex-wrap gap-2 pt-1 pb-2">
         {QUICK.map(q => <button key={q} onClick={() => ask(q)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 hover:bg-surface-2/60">{q}</button>)}
+        {supportsFlowMessageOrders(store) && <button onClick={() => flow('Tell me the customer name, phone number, and everything they want. You can type it or tap the microphone and say it naturally.')} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">New customer order</button>}
         <button onClick={() => setShowReceiptImport(true)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary flex items-center gap-1.5">
           <FileUp className="w-3.5 h-3.5" /> Import receipt
         </button>
@@ -432,6 +575,6 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       </div>
     </div>}
     {showReceiptImport && <ReceiptScanner store={store} onUpdate={onUpdate} onClose={() => setShowReceiptImport(false)} />}
-    <form className="flex items-center gap-2 px-4 py-3 border-t border-border" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : 'Tell Flow what to do…'} className="flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm" /><button type="submit" disabled={!input.trim()} className="w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button></form>
+    <form className="flex items-center gap-2 px-4 py-3 border-t border-border" onSubmit={e => { e.preventDefault(); const t = input.trim(); if (!t) return; setInput(''); ask(t); }}><input value={input} onChange={e => setInput(e.target.value)} placeholder={addDraft ? 'Answer Flow…' : flowOrderDraftState ? 'Edit the order or add missing details…' : supportsFlowMessageOrders(store) ? 'Type or speak a customer order…' : 'Message Flow…'} className="flex-1 rounded-full border border-border bg-surface-2/40 px-4 py-3 text-sm" /><button type="button" onClick={startFlowVoiceInput} className={`w-11 h-11 shrink-0 flex items-center justify-center rounded-full border ${isListening ? 'border-destructive bg-destructive/10 text-destructive animate-pulse' : 'border-border bg-surface-2/40 text-muted-foreground hover:text-primary'}`} aria-label={isListening ? 'Stop listening' : 'Speak to Flow'} title={isListening ? 'Listening… tap to stop' : 'Speak to Flow'}>{isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</button><button type="submit" disabled={!input.trim()} className="w-11 h-11 flex items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button></form>
   </div>);
 }

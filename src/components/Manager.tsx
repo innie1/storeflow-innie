@@ -554,6 +554,19 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   const [showNotifications, setShowNotifications] = useState(false);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+
+  useEffect(() => {
+    const openMessages = (event?: Event) => {
+      let startVoice = Boolean((event as CustomEvent<{ startVoice?: boolean }>)?.detail?.startVoice);
+      try { const pending = sessionStorage.getItem('storeflow_open_flow_messages'); if (pending) { startVoice = startVoice || pending === 'voice'; sessionStorage.removeItem('storeflow_open_flow_messages'); } } catch {}
+      setChatOpen(true);
+      if (startVoice) window.setTimeout(() => window.dispatchEvent(new CustomEvent('storeflow:start-flow-voice')), 250);
+    };
+    window.addEventListener('storeflow:open-flow-messages', openMessages);
+    let pending = false; try { pending = Boolean(sessionStorage.getItem('storeflow_open_flow_messages')); } catch {}
+    if (pending) openMessages();
+    return () => window.removeEventListener('storeflow:open-flow-messages', openMessages);
+  }, []);
   const [poListOpen, setPoListOpen] = useState(false);
   const [ratingsOpen, setRatingsOpen] = useState(false);
   const [predictionHistoryOpen, setPredictionHistoryOpen] = useState(false);
@@ -1683,7 +1696,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               <button onClick={() => setChatOpen(true)}
                 className="flex-1 py-3 rounded-xl bg-surface-2/60 border border-primary/30 text-foreground font-display font-bold text-sm flex items-center justify-center gap-2">
                 <MessageCircle className="w-4 h-4" />
-                Chat with Flow
+                Message with Flow
               </button>
             </div>
             <div className="flex gap-3 mt-2">

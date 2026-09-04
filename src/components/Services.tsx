@@ -4,6 +4,7 @@ import { addProduct, updateProduct, deleteProduct, saveStore } from '@/lib/store
 import { showToast } from '@/components/Toast';
 import { getServicePricingLabel, getServicePricingOptions, getStoredServicePricing, serviceUnitForPricing, type ServicePricing } from '@/lib/service-pricing';
 import { Plus, Pencil, Trash2, X, Clock, Power, Scale, Tag, Play, Timer, Pause, CalendarClock } from 'lucide-react';
+import LaundryPricingSetup from '@/components/laundry/LaundryPricingSetup';
 
 interface ServicesProps { store: StoreData; onUpdate: (store: StoreData) => void; currentUser?: { name?: string; role?: string }; }
 const TURNAROUND_OPTIONS = ['Same day', '24 hours', '48 hours', '3 days', '1 week'];
@@ -32,6 +33,9 @@ function syncCustomerServiceCatalog(store: StoreData): StoreData {
 function publishServiceCatalog(store: StoreData, onUpdate: (store: StoreData) => void) { const synced = syncCustomerServiceCatalog(store); if (synced === store) return store; saveStore(synced); onUpdate(synced); return synced; }
 
 export default function Services({ store, onUpdate, currentUser }: ServicesProps) {
+  if (String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry') {
+    return <LaundryPricingSetup store={store} onUpdate={onUpdate} currentUser={currentUser} />;
+  }
   const services = store.products.filter(p => p.isService); const pricingOptions = getServicePricingOptions(store); const [showForm, setShowForm] = useState(false); const [editingId, setEditingId] = useState<string | null>(null); const [draft, setDraft] = useState<ServiceDraft>(() => emptyDraft(store)); const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   useEffect(() => { publishServiceCatalog(store, onUpdate); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.products]);

@@ -3,7 +3,7 @@ import { StoreData, Product } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { saveStore } from '@/lib/store-data';
-import { prepareStoreForMarketplacePublish } from '@/lib/marketplace-publish';
+import { prepareStoreForMarketplacePublish, publishStorefrontToCloud } from '@/lib/marketplace-publish';
 import { getPushSubscriptionState, subscribeToOrderPush, unsubscribeFromOrderPush } from '@/lib/push-notifications';
 import ToggleRow from '@/components/Toggle';
 import { 
@@ -225,12 +225,24 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
     // Save locally and trigger background Supabase sync
     saveStore(updatedStore);
     onUpdate(updatedStore);
+    // STOREFLOW_AUTO_STOREFRONT_PUBLISH
+    void publishStorefrontToCloud(updatedStore, updated).catch(error =>
+      console.warn('[StoreFlow Marketplace] Background storefront publish failed:', error)
+    );
   };
 
   // Explicit Save trigger to immediately push changes to Supabase and update customer application in real time
   const handleSaveToCloud = async () => {
     setSaving(true);
     try {
+      // STOREFLOW_OWNER_STOREFRONT_PUBLISH
+      // Works for both Supabase members and the original StoreFlow owner session.
+      const ownerPublishedStore = await publishStorefrontToCloud(store, form);
+      saveStore(ownerPublishedStore, { skipCloudSync: true });
+      onUpdate(ownerPublishedStore);
+      showToast('Customer storefront updated', 'success');
+      return;
+
       const { data: session } = await supabase.auth.getSession();
       if (!session?.session) {
         showToast('Local settings updated. Sign in to synchronize changes with customer application.', 'info');

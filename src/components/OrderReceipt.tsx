@@ -34,7 +34,7 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
   const items = (order?.order_items || []).map((item: any) => {
     const product = store.products?.find((p: any) => p.id === item.product_id);
     return {
-      productName: product?.name || item.product_name || 'Item',
+      productName: item.item_name || item.product_name || product?.name || 'Item',
       quantity: Number(item.quantity) || 0,
       unitPrice: Number(item.price) || 0,
       total: Number(item.subtotal ?? (item.price * item.quantity)) || 0,

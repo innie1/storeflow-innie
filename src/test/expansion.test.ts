@@ -14,23 +14,7 @@ import {
   getSmartDiscounts
 } from "@/lib/manager-intel";
 
-// Mock localStorage for Vitest running in Node environment
-const localStorageMock = (() => {
-  let storeMock: Record<string, string> = {};
-  return {
-    getItem: (key: string) => storeMock[key] || null,
-    setItem: (key: string, value: string) => {
-      storeMock[key] = value.toString();
-    },
-    removeItem: (key: string) => {
-      delete storeMock[key];
-    },
-    clear: () => {
-      storeMock = {};
-    }
-  };
-})();
-Object.defineProperty(global, 'localStorage', { value: localStorageMock });
+// localStorage is provided by src/test/setup.ts for every test file.
 
 // Test helper — stores no longer auto-seed products (Simple Mode change), so
 // tests that need a product to exist add one explicitly.

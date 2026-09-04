@@ -14,7 +14,8 @@ import {
   setLaundryGarmentPrice,
 } from '@/lib/laundry-pricing';
 import { getStoredServicePricing, type ServicePricing } from '@/lib/service-pricing';
-import { Check, Pencil, Plus, Power, Shirt, Trash2, X } from 'lucide-react';
+import { publishStorefrontToCloud } from '@/lib/marketplace-publish';
+import { Check, ChevronDown, ChevronUp, Pencil, Plus, Power, Shirt, Trash2, X } from 'lucide-react';
 
 interface Props {
   store: StoreData;
@@ -48,6 +49,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
   const [editingGarment, setEditingGarment] = useState<string | null>(null);
   const [garmentNameDraft, setGarmentNameDraft] = useState('');
   const [draft, setDraft] = useState<ServiceDraft>(emptyDraft);
+  const [showGarmentPrices, setShowGarmentPrices] = useState(false);
 
   const selectedService = allServices.find(service => String(service.id) === selectedServiceId) || allServices[0] || null;
   const selectedPricing = selectedService ? getStoredServicePricing(selectedService) : 'per_piece';
@@ -56,12 +58,20 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
     const published = publishLaundryPricingToTemplate(next);
     saveStore(published);
     onUpdate(published);
+    // STOREFLOW_LAUNDRY_PRICE_PUBLISH
+    void publishStorefrontToCloud(published).catch(error =>
+      console.warn('[StoreFlow Laundry] Price-list publish failed:', error)
+    );
     return published;
   };
 
   useEffect(() => {
     const seeded = seedLaundryGarmentPrices(store);
     const published = publishLaundryPricingToTemplate(seeded);
+    // STOREFLOW_LAUNDRY_OPEN_PUBLISH: opening Price List repairs older local-only stores.
+    void publishStorefrontToCloud(published).catch(error =>
+      console.warn('[StoreFlow Laundry] Initial storefront publish failed:', error)
+    );
     if (JSON.stringify((published as any).laundryPricing) !== JSON.stringify((store as any).laundryPricing) ||
         JSON.stringify((published as any).businessTemplate?.laundryPricing) !== JSON.stringify((store as any).businessTemplate?.laundryPricing)) {
       saveStore(published);
@@ -87,14 +97,33 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
 
   const addGarment = () => {
     const clean = customGarment.trim();
-    if (!clean) return;
+    if (!clean) return showToast('Enter a clothing type', 'error');
+
+    const existing = config.garmentTypes.find(garment => garment.toLowerCase() === clean.toLowerCase());
+    if (existing) {
+      setShowGarmentPrices(true);
+      setCustomGarment('');
+      showToast(`${existing} is already in the price list`, 'info');
+      window.setTimeout(() => {
+        const rowId = 'laundry-garment-' + existing.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        document.getElementById(rowId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 0);
+      return;
+    }
+
     let next = addLaundryGarmentType(store, clean);
     for (const service of allServices) {
       next = setLaundryGarmentPrice(next, String(service.id), clean, Math.max(0, Number(service.sellingPrice) || 0));
     }
+    next = seedLaundryGarmentPrices(next);
     persist(next);
     setCustomGarment('');
-    showToast(`${clean} added`);
+    setShowGarmentPrices(true);
+    showToast(`${clean} added to every laundry treatment`, 'success');
+    window.setTimeout(() => {
+      const rowId = 'laundry-garment-' + clean.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      document.getElementById(rowId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
   };
 
   const beginGarmentRename = (garment: string) => {
@@ -263,7 +292,19 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
               </div>
 
               {selectedPricing === 'per_piece' ? (
-                <div className="divide-y divide-border/70">
+                <div>
+                  <div className="px-4 py-2.5 border-b border-border flex items-center justify-between gap-3 bg-surface-2/40">
+                    <span className="text-[10px] text-muted-foreground font-bold">{config.garmentTypes.length} clothing types</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowGarmentPrices(current => !current)}
+                      className="h-8 px-3 rounded-lg border border-border bg-card text-xs font-display font-black flex items-center gap-1.5"
+                    >
+                      {showGarmentPrices ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      {showGarmentPrices ? 'Hide all' : 'Show all'}
+                    </button>
+                  </div>
+                  <div className={showGarmentPrices ? 'divide-y divide-border/70' : 'hidden'}>
                   {config.garmentTypes.map(garment => {
                     const explicit = getExplicitLaundryGarmentPrice(store, String(selectedService.id), garment);
                     const value = getLaundryGarmentPrice(store, selectedService, garment);
@@ -299,6 +340,12 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
                       </div>
                     );
                   })}
+                  </div>
+                  {!showGarmentPrices && (
+                    <button type="button" onClick={() => setShowGarmentPrices(true)} className="w-full p-4 text-xs font-display font-bold text-primary hover:bg-primary/5">
+                      Show all {config.garmentTypes.length} clothing prices
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="p-4 text-xs text-muted-foreground">

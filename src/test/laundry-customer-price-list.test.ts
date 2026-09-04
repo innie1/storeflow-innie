@@ -6,7 +6,9 @@ describe('laundry customer price-list connection', () => {
   it('opens the garment price editor from the merchant Price List tab', () => {
     const index = fs.readFileSync('src/pages/Index.tsx', 'utf8');
     expect(index).toContain("import LaundryPricingSetup from '@/components/laundry/LaundryPricingSetup'");
-    expect(index).toContain("label: 'Price List'");
+    // The tab label is chosen per business type: laundry sees "Price List",
+    // every other service business sees "Services".
+    expect(index).toContain("businessType === 'laundry' ? 'Price List' : 'Services'");
     expect(index).toContain('<LaundryPricingSetup store={store} onUpdate={setStore} currentUser={currentUser} />');
   });
 

@@ -3,13 +3,6 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
-import serviceOrdersPlugin from "./vite-plugin-service-orders";
-import businessIsolationPlugin from "./vite-plugin-business-isolation";
-import flowMessagesPlugin from "./vite-plugin-flow-messages";
-import flowOrderDraftsPlugin from "./vite-plugin-flow-order-drafts";
-import orderItemSnapshotsPlugin from "./vite-plugin-order-item-snapshots";
-import floatingFlowSettingPlugin from "./vite-plugin-floating-flow-setting";
-import storefrontPublishingPlugin from "./vite-plugin-storefront-publishing";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -19,15 +12,8 @@ export default defineConfig(({ mode }) => ({
     hmr: { overlay: false },
   },
   plugins: [
-    businessIsolationPlugin(),
-    storefrontPublishingPlugin(),
-    flowMessagesPlugin(),
-    flowOrderDraftsPlugin(),
-    floatingFlowSettingPlugin(),
-    orderItemSnapshotsPlugin(),
     react(),
     mode === "development" && componentTagger(),
-    serviceOrdersPlugin(),
     VitePWA({
       strategies: "injectManifest",
       srcDir: "src",
