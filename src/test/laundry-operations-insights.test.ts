@@ -5,7 +5,11 @@ import { getCustomerActivitySignals, getEarningsPulse, getPromisedTime } from '@
 describe('laundry operations and business insights', () => {
   it('keeps address optional while recording promised time and exact methods', () => {
     const intake = fs.readFileSync('src/components/laundry/LaundryWalkInIntakeV2.tsx', 'utf8');
-    expect(intake).toContain('Address (optional but recommended)');
+    // Address and the processing methods now sit behind the collapsed
+    // "Address, processing & notes" section, since most walk-ins do not need
+    // them. They must still be captured, and address must stay optional.
+    expect(intake).toContain('Pickup or delivery address');
+    expect(intake).toContain('Address, processing');
     expect(intake).toContain('promisedFor');
     expect(intake).toContain('washMethodId');
     expect(intake).toContain('dryMethodId');

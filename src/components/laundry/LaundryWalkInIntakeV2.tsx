@@ -18,7 +18,7 @@ import {
 } from '@/lib/laundry-offline';
 import { openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
-import { CalendarClock, Check, ClipboardCopy, MessageCircle, Minus, Plus, Shirt, X } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MessageCircle, Minus, Plus, Shirt, X } from 'lucide-react';
 
 interface Props {
   store: StoreData;
@@ -73,6 +73,9 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const [dryMethodId, setDryMethodId] = useState('manual:sun-dry');
   const [created, setCreated] = useState<LocalLaundryRecord | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
+  // Address, processing methods and notes are needed on a minority of jobs, so
+  // they stay folded away and out of the counter's fastest path.
+  const [showMore, setShowMore] = useState(false);
 
   const selectedService = services.find(service => String(service.id) === selectedServiceId) || services[0] || null;
   const equipment = (store.laundryEquipment || []).filter(item => item.active);
@@ -150,6 +153,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     setCreated(null);
     setQrDataUrl('');
     setSaving(false);
+    setShowMore(false);
   };
 
   const openIntake = () => {
@@ -278,18 +282,18 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
   return (
     <>
-      <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Shirt className="w-4 h-4 text-primary" /></div>
-          <div className="text-left"><p className="font-display font-black text-sm">Walk-in Laundry</p><p className="text-[11px] text-muted-foreground">Record clothes brought to the shop.</p></div>
-        </div>
-        <button onClick={openIntake} className="shrink-0 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-display font-black text-xs">Record Laundry</button>
-      </div>
+      <button onClick={openIntake} className="w-full rounded-2xl border border-primary/25 bg-primary/5 p-3.5 flex items-center justify-between gap-3 text-left active:scale-[.99] transition-transform">
+        <span className="flex items-center gap-2.5 min-w-0">
+          <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Shirt className="w-4 h-4 text-primary" /></span>
+          <span className="font-display font-black text-sm">New walk-in bundle</span>
+        </span>
+        <span className="shrink-0 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-display font-black text-xs">Record</span>
+      </button>
 
       {open && <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center" onClick={close}>
-        <div className="w-full sm:max-w-lg max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-background border border-border p-4 sm:p-5" onClick={event => event.stopPropagation()}>
-          {created ? <div className="space-y-5 py-2">
-            <div className="flex justify-between items-start gap-3">
+        <div className="w-full sm:max-w-lg max-h-[94vh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-background border border-border overflow-hidden" onClick={event => event.stopPropagation()}>
+          {created ? <>
+            <div className="shrink-0 flex justify-between items-start gap-3 border-b border-border p-4 pb-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs text-success font-bold uppercase">Laundry recorded</p>
@@ -299,16 +303,17 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
                     <span className="px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>
                   )}
                 </div>
-                <h3 className="font-display font-black text-xl mt-1">Receipt / Tag Code</h3>
+                <h3 className="font-display font-black text-lg mt-0.5">Receipt / Tag Code</h3>
               </div>
               <button onClick={close} className="p-2 rounded-xl bg-surface-2"><X className="w-4 h-4" /></button>
             </div>
 
-            <div className="rounded-2xl border-2 border-primary/40 bg-primary/5 p-5 text-center">
-              {qrDataUrl && <img src={qrDataUrl} alt={`Laundry ${created.tagCode} QR code`} className="w-36 h-36 mx-auto rounded-xl bg-white p-2" />}
-              <p className="font-mono font-black text-4xl tracking-[0.18em] mt-4">{created.tagCode}</p>
-              <p className="text-xs text-muted-foreground mt-3">Write this same 6-character code on every cloth tag in this bundle. The QR and written code identify the same laundry record.</p>
-              <button onClick={copyTag} className="mt-3 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary/30 text-primary text-xs font-bold"><ClipboardCopy className="w-3.5 h-3.5" /> Copy code</button>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="rounded-2xl border-2 border-primary/40 bg-primary/5 p-4 text-center">
+              {qrDataUrl && <img src={qrDataUrl} alt={`Laundry ${created.tagCode} QR code`} className="w-28 h-28 mx-auto rounded-xl bg-white p-2" />}
+              <p className="font-mono font-black text-4xl tracking-[0.18em] mt-3">{created.tagCode}</p>
+              <p className="text-[11px] text-muted-foreground mt-2">Write this code on every cloth tag in this bundle.</p>
+              <button onClick={copyTag} className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary/30 text-primary text-xs font-bold"><ClipboardCopy className="w-3.5 h-3.5" /> Copy code</button>
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-left">
@@ -329,55 +334,93 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
               <p className="text-xs font-bold mt-1">{created.garmentSummary}</p>
             </div>
 
-            <button onClick={sendWhatsApp} className="w-full py-3 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> Send Receipt on WhatsApp</button>
-            {created.syncStatus !== 'synced' && <p className="text-[11px] text-primary text-center font-semibold">Safe on this device. StoreFlow will sync it automatically when Supabase is reachable.</p>}
-            <button onClick={close} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
-          </div> : <div className="space-y-5">
-            <div className="flex items-start justify-between"><div><p className="text-xs uppercase text-primary font-black">Physical store</p><h3 className="font-display font-black text-xl mt-0.5">Record Laundry</h3><p className="text-xs text-muted-foreground mt-1">Name and phone number are required for every laundry record.</p></div><button onClick={close} className="p-2 rounded-xl bg-surface-2"><X className="w-4 h-4" /></button></div>
+            {created.syncStatus !== 'synced' && <p className="text-[11px] text-primary text-center font-semibold">Safe on this device. StoreFlow syncs it automatically when Supabase is reachable.</p>}
+            </div>
 
-            <section className="space-y-2.5 text-left">
-              <p className="text-[11px] uppercase font-black text-muted-foreground">1. Customer</p>
-              {customers.length > 0 && <select value={selectedCustomerId} onChange={event => selectCustomer(event.target.value)} className="w-full p-3 rounded-xl bg-surface-2 border border-border text-sm"><option value="">New customer</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name} · {customer.phone}</option>)}</select>}
-              <div className="space-y-2">
-                <div><label className="text-[10px] uppercase font-black text-muted-foreground">Customer name *</label><input value={customerName} onChange={event => { setCustomerName(event.target.value); setSelectedCustomerId(''); }} placeholder="Customer name" className="mt-1 w-full p-3 rounded-xl bg-surface-2 border border-border text-sm" /></div>
-                <div><label className="text-[10px] uppercase font-black text-muted-foreground">Phone number *</label><input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="e.g. 08012345678" inputMode="tel" className="mt-1 w-full p-3 rounded-xl bg-surface-2 border border-border text-sm" /></div>
-                <div><label className="text-[10px] uppercase font-black text-muted-foreground">Address (optional but recommended)</label><textarea value={customerAddress} onChange={event => setCustomerAddress(event.target.value)} placeholder="Pickup or delivery address" rows={2} className="mt-1 w-full resize-none p-3 rounded-xl bg-surface-2 border border-border text-sm" /></div>
+            <div className="shrink-0 border-t border-border p-4 flex gap-2">
+              <button onClick={sendWhatsApp} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</button>
+              <button onClick={close} className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
+            </div>
+          </> : <>
+            <div className="shrink-0 flex items-center justify-between gap-3 border-b border-border p-4 pb-3">
+              <div>
+                <p className="text-[10px] uppercase text-primary font-black">Physical store</p>
+                <h3 className="font-display font-black text-lg mt-0.5">Record Laundry</h3>
               </div>
+              <button onClick={close} className="p-2 rounded-xl bg-surface-2 shrink-0"><X className="w-4 h-4" /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <section className="space-y-2 text-left">
+              <p className="text-[11px] uppercase font-black text-muted-foreground">1. Customer</p>
+              {customers.length > 0 && <select value={selectedCustomerId} onChange={event => selectCustomer(event.target.value)} className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm"><option value="">New customer</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name} · {customer.phone}</option>)}</select>}
+              <input value={customerName} onChange={event => { setCustomerName(event.target.value); setSelectedCustomerId(''); }} placeholder="Customer name *" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
+              <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number * — e.g. 08012345678" inputMode="tel" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
             </section>
 
-            <section className="space-y-2.5 text-left">
-              <div><p className="text-[11px] uppercase font-black text-muted-foreground">2. Service</p><p className="text-[10px] text-muted-foreground mt-1">Service means the treatment: Full Service, Wash & Iron, Wash Only, Iron Only, Dry Cleaning, etc.</p></div>
-              {services.length === 0 ? <div className="p-4 rounded-xl border border-primary/25 bg-primary/5 text-xs text-muted-foreground">No laundry service yet. Open Services and set your laundry treatments and clothing prices first.</div> : <div className="grid grid-cols-2 gap-2">{services.map(service => { const active = String(service.id) === String(selectedService?.id); const servicePricing = getStoredServicePricing(service); return <button key={service.id} type="button" onClick={() => { setSelectedServiceId(String(service.id)); setPriceTouched(false); }} className={`p-3 rounded-xl border text-left ${active ? 'border-primary bg-primary/10' : 'border-border bg-surface-2'}`}><p className="text-xs font-black">{service.name}</p><p className="text-[10px] text-muted-foreground mt-1">{servicePricing === 'per_piece' ? 'Price depends on clothing item' : `₦${Number(service.sellingPrice || 0).toLocaleString()} ${getServicePricingLabel(servicePricing).unitLabel}`}</p></button>; })}</div>}
+            <section className="space-y-2 text-left">
+              <p className="text-[11px] uppercase font-black text-muted-foreground">2. Service</p>
+              {services.length === 0 ? <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 text-xs text-muted-foreground">No laundry service yet. Open Price List and set your treatments and clothing prices first.</div> : <div className="grid grid-cols-2 gap-2">{services.map(service => { const active = String(service.id) === String(selectedService?.id); const servicePricing = getStoredServicePricing(service); return <button key={service.id} type="button" onClick={() => { setSelectedServiceId(String(service.id)); setPriceTouched(false); }} className={`px-3 py-2.5 rounded-xl border text-left ${active ? 'border-primary bg-primary/10' : 'border-border bg-surface-2'}`}><p className="text-xs font-black truncate">{service.name}</p><p className="text-[10px] text-muted-foreground mt-0.5 truncate">{servicePricing === 'per_piece' ? 'By clothing item' : `₦${Number(service.sellingPrice || 0).toLocaleString()} ${getServicePricingLabel(servicePricing).unitLabel}`}</p></button>; })}</div>}
             </section>
 
-            <section className="space-y-2.5 text-left">
-              <div className="flex justify-between gap-3"><div><p className="text-[11px] uppercase font-black text-muted-foreground">3. Clothes</p><p className="text-[10px] text-muted-foreground mt-1">Tap + for every item the customer brings.</p></div><span className="text-xs font-black text-primary">{pieceCount} pieces</span></div>
-              <div className="grid grid-cols-2 gap-2">{Object.keys(garmentCounts).map(garment => {
+            <section className="space-y-2 text-left">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[11px] uppercase font-black text-muted-foreground">3. Clothes</p>
+                <span className="text-xs font-black text-primary">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">{Object.keys(garmentCounts).map(garment => {
                 const quantity = garmentCounts[garment] || 0;
                 const unitPrice = selectedService && pricing === 'per_piece' ? getLaundryGarmentPrice(store, selectedService, garment) : 0;
-                return <div key={garment} className={`rounded-xl border p-3 ${quantity > 0 ? 'border-primary bg-primary/5' : 'border-border bg-surface-2'}`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-bold break-words">{garment}</p>{selectedService && pricing === 'per_piece' && <p className="text-[10px] text-primary font-bold mt-1">₦{unitPrice.toLocaleString()} each</p>}</div><span className="text-sm font-black">{quantity}</span></div><div className="flex items-center justify-between mt-3"><button type="button" onClick={() => changeCount(garment, -1)} className="w-9 h-9 rounded-full border border-border flex items-center justify-center"><Minus className="w-4 h-4" /></button><button type="button" onClick={() => changeCount(garment, 1)} className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><Plus className="w-4 h-4" /></button></div></div>; })}</div>
-              <div className="flex gap-2"><input value={customGarment} onChange={event => setCustomGarment(event.target.value)} onKeyDown={event => event.key === 'Enter' && addCustomGarment()} placeholder="Other clothing type" className="flex-1 min-w-0 p-3 rounded-xl bg-surface-2 border border-border text-sm" /><button onClick={addCustomGarment} type="button" className="px-4 rounded-xl border border-primary text-primary font-black text-xs">Add</button></div>
+                return (
+                  <div key={garment} className={`flex items-center gap-2 h-12 rounded-xl border pl-3 pr-1.5 ${quantity > 0 ? 'border-primary bg-primary/5' : 'border-border bg-surface-2'}`}>
+                    <div className="min-w-0 flex-1 leading-tight">
+                      <p className="text-xs font-bold truncate">{garment}</p>
+                      {selectedService && pricing === 'per_piece' && <p className="text-[10px] text-primary font-bold">₦{unitPrice.toLocaleString()}</p>}
+                    </div>
+                    <button type="button" onClick={() => changeCount(garment, -1)} disabled={quantity === 0} className="w-8 h-8 shrink-0 rounded-lg border border-border bg-card flex items-center justify-center disabled:opacity-30" aria-label={`Remove one ${garment}`}><Minus className="w-3.5 h-3.5" /></button>
+                    <span className="w-5 text-center text-sm font-black tabular-nums">{quantity}</span>
+                    <button type="button" onClick={() => changeCount(garment, 1)} className="w-8 h-8 shrink-0 rounded-lg bg-primary text-primary-foreground flex items-center justify-center" aria-label={`Add one ${garment}`}><Plus className="w-3.5 h-3.5" /></button>
+                  </div>
+                );
+              })}</div>
+              <div className="flex gap-2"><input value={customGarment} onChange={event => setCustomGarment(event.target.value)} onKeyDown={event => event.key === 'Enter' && addCustomGarment()} placeholder="Other clothing type" className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /><button onClick={addCustomGarment} type="button" className="px-4 h-11 rounded-xl border border-primary text-primary font-black text-xs shrink-0">Add</button></div>
             </section>
 
-            {(pricing === 'per_kg' || pricing === 'per_load') && <section className="text-left space-y-1"><label className="text-[10px] uppercase font-black text-muted-foreground">Quantity {pricingLabel.unitLabel}</label><input value={billingQuantity} onChange={event => { setBillingQuantity(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(false); }} inputMode="decimal" className="w-full p-3 rounded-xl bg-surface-2 border border-border text-sm" /></section>}
+            {(pricing === 'per_kg' || pricing === 'per_load') && <section className="text-left space-y-1"><label className="text-[10px] uppercase font-black text-muted-foreground">Quantity {pricingLabel.unitLabel}</label><input value={billingQuantity} onChange={event => { setBillingQuantity(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(false); }} inputMode="decimal" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /></section>}
 
-            <section className="space-y-2.5 text-left">
-              <div><p className="text-[11px] uppercase font-black text-muted-foreground">4. Promise & processing</p><p className="text-[10px] text-muted-foreground mt-1">The due time starts from this service’s usual turnaround. Change it for this job when needed.</p></div>
-              <div><label className="text-[10px] uppercase font-black text-muted-foreground">Promised pickup / delivery time</label><div className="mt-1 flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3"><CalendarClock className="h-4 w-4 text-primary" /><input type="datetime-local" value={promisedFor} onChange={event => { setPromisedFor(event.target.value); setPromisedTouched(true); }} className="w-full bg-transparent py-3 text-sm outline-none" /></div></div>
-              <div className="grid grid-cols-2 gap-2"><div><label className="text-[10px] uppercase font-black text-muted-foreground">Washing method</label><select value={washMethodId} onChange={event => setWashMethodId(event.target.value)} className="mt-1 w-full rounded-xl border border-border bg-surface-2 p-3 text-sm">{washOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div><div><label className="text-[10px] uppercase font-black text-muted-foreground">Drying method</label><select value={dryMethodId} onChange={event => setDryMethodId(event.target.value)} className="mt-1 w-full rounded-xl border border-border bg-surface-2 p-3 text-sm">{dryOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div></div>
-              {equipment.length === 0 && <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-[10px] text-muted-foreground">Using manual methods. Add washers and dryers from Laundry Records → Machines & methods to assign exact equipment.</p>}
+            <section className="space-y-2 text-left">
+              <p className="text-[11px] uppercase font-black text-muted-foreground">4. Due &amp; price</p>
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3"><CalendarClock className="h-4 w-4 text-primary shrink-0" /><input type="datetime-local" value={promisedFor} onChange={event => { setPromisedFor(event.target.value); setPromisedTouched(true); }} className="w-full bg-transparent py-3 text-sm outline-none" /></div>
+              {pricing === 'per_piece' && calculated.lines.length > 0 && <div className="rounded-xl border border-border bg-card divide-y divide-border/60">{calculated.lines.map(line => <div key={line.garmentType} className="flex justify-between gap-3 px-3 py-1.5 text-xs"><span className="truncate">{line.quantity} × {line.garmentType} @ ₦{line.unitPrice.toLocaleString()}</span><span className="font-black shrink-0">₦{line.subtotal.toLocaleString()}</span></div>)}</div>}
+              <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input value={totalPrice} onChange={event => { setTotalPrice(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(true); }} inputMode="decimal" className="w-full bg-transparent outline-none font-black" placeholder="Total price" /></div>
+              {priceTouched && calculated.total !== Number(totalPrice) && <p className="text-[10px] text-muted-foreground">Manually adjusted. Calculated price is ₦{calculated.total.toLocaleString()}.</p>}
             </section>
 
-            <section className="space-y-2.5 text-left">
-              <p className="text-[11px] uppercase font-black text-muted-foreground">5. Price & notes</p>
-              {pricing === 'per_piece' && calculated.lines.length > 0 && <div className="rounded-xl border border-border bg-card divide-y divide-border/60">{calculated.lines.map(line => <div key={line.garmentType} className="flex justify-between gap-3 px-3 py-2 text-xs"><span>{line.quantity} × {line.garmentType} @ ₦{line.unitPrice.toLocaleString()}</span><span className="font-black">₦{line.subtotal.toLocaleString()}</span></div>)}</div>}
-              <div><label className="text-[10px] uppercase font-black text-muted-foreground">Total price</label><div className="mt-1 flex items-center gap-2 p-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input value={totalPrice} onChange={event => { setTotalPrice(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(true); }} inputMode="decimal" className="w-full bg-transparent outline-none font-black" placeholder="0" /></div>{priceTouched && calculated.total !== Number(totalPrice) && <p className="text-[10px] text-muted-foreground mt-1">Price manually adjusted. Calculated price is ₦{calculated.total.toLocaleString()}.</p>}</div>
-              <textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Stains, damage, special instructions..." className="w-full min-h-24 p-3 rounded-xl bg-surface-2 border border-border text-sm resize-none" />
+            <section className="text-left border-t border-border/60 pt-1">
+              <button type="button" onClick={() => setShowMore(current => !current)} className="w-full flex items-center justify-between gap-3 py-2">
+                <span className="text-[11px] uppercase font-black text-muted-foreground">Address, processing &amp; notes</span>
+                {showMore ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              </button>
+              {showMore && <div className="space-y-2 pt-1">
+                <textarea value={customerAddress} onChange={event => setCustomerAddress(event.target.value)} placeholder="Pickup or delivery address" rows={2} className="w-full resize-none p-3 rounded-xl bg-surface-2 border border-border text-sm" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="text-[10px] uppercase font-black text-muted-foreground">Washing</label><select value={washMethodId} onChange={event => setWashMethodId(event.target.value)} className="mt-1 w-full h-11 rounded-xl border border-border bg-surface-2 px-3 text-sm">{washOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+                  <div><label className="text-[10px] uppercase font-black text-muted-foreground">Drying</label><select value={dryMethodId} onChange={event => setDryMethodId(event.target.value)} className="mt-1 w-full h-11 rounded-xl border border-border bg-surface-2 px-3 text-sm">{dryOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+                </div>
+                {equipment.length === 0 && <p className="text-[10px] text-muted-foreground">Add washers and dryers from Records → Machines &amp; methods to assign exact equipment.</p>}
+                <textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Stains, damage, special instructions..." rows={2} className="w-full resize-none p-3 rounded-xl bg-surface-2 border border-border text-sm" />
+              </div>}
             </section>
+            </div>
 
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">After saving, StoreFlow creates one shared 6-character tag/receipt code, shows its QR code, saves locally first, then syncs in the background.</div>
-            <button disabled={!canSave || saving} onClick={saveIntake} className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm disabled:opacity-40">{saving ? 'Saving locally…' : 'Record Laundry'}</button>
-          </div>}
+            <div className="shrink-0 border-t border-border p-4 flex items-center gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase font-black text-muted-foreground">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</p>
+                <p className="font-display font-black text-lg leading-tight">₦{(Number(totalPrice) || 0).toLocaleString()}</p>
+              </div>
+              <button disabled={!canSave || saving} onClick={saveIntake} className="flex-1 py-3.5 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm disabled:opacity-40">{saving ? 'Saving…' : 'Record Laundry'}</button>
+            </div>
+          </>}
         </div>
       </div>}
     </>
