@@ -32,3 +32,6 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# TypeScript incremental build artifacts
+*.tsbuildinfo
