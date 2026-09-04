@@ -89,7 +89,11 @@ import {
   Bell,
   QrCode,
   User,
-  UserCheck
+  UserCheck,
+  Wallet,
+  Wrench,
+  BarChart3,
+  type LucideIcon
 } from 'lucide-react';
 
 
@@ -133,7 +137,8 @@ interface MoreSubItem {
 interface MoreCategory {
   id: string;
   label: string;
-  icon: string;
+  /** Matches the lucide icons the bottom nav uses; emoji here looked unfinished beside them. */
+  Icon: LucideIcon;
   subItems: MoreSubItem[];
 }
 
@@ -141,52 +146,64 @@ const MORE_CATEGORIES: MoreCategory[] = [
   {
     id: 'marketplace',
     label: 'Marketplace',
-    icon: '🛒',
+    Icon: ShoppingCart,
     subItems: []
   },
   {
     id: 'communication',
     label: 'Communication Center',
-    icon: '💬',
+    Icon: MessageSquare,
     subItems: []
   },
   {
     id: 'goals',
     label: 'Goals',
-    icon: '🎯',
+    Icon: Target,
     subItems: []
   },
   {
     id: 'finance',
     label: 'Finance Center',
-    icon: '💰',
+    Icon: Wallet,
     subItems: [
-      { label: 'Expenses', tabId: 'expenses', icon: '🧾' },
-      { label: 'Pending Payments', tabId: 'pending', icon: '💳' },
-      { label: 'Cash Drawer', tabId: 'cash-drawer', icon: '💵' },
-      { label: 'ROI Tracker', tabId: 'roi', icon: '📈' },
+      { label: 'Expenses', tabId: 'expenses' },
+      { label: 'Pending Payments', tabId: 'pending' },
+      { label: 'Cash Drawer', tabId: 'cash-drawer' },
+      { label: 'ROI Tracker', tabId: 'roi' },
     ]
   },
   {
     id: 'business_tools',
     label: 'Business Tools',
-    icon: '🛠️',
+    Icon: Wrench,
     subItems: [
-      { label: 'Business Diary', tabId: 'diary', icon: '📓' },
-      { label: 'Document Vault', tabId: 'documents', icon: '📂' },
-      { label: 'Flow Academy', tabId: 'academy', icon: '🎓' },
-      { label: 'Achievements', tabId: 'achievements', icon: '🏆' },
-      { label: 'QR Codes', tabId: 'qr-hub', icon: '📱' },
+      { label: 'Business Diary', tabId: 'diary' },
+      { label: 'Document Vault', tabId: 'documents' },
+      { label: 'Flow Academy', tabId: 'academy' },
+      { label: 'Achievements', tabId: 'achievements' },
+      { label: 'QR Codes', tabId: 'qr-hub' },
     ]
   },
 
   {
     id: 'staff_accounts',
     label: 'Staff Accounts',
-    icon: '👥',
+    Icon: Users,
     subItems: []
   }
 ];
+
+/**
+ * Categories that open a tab directly instead of expanding a sub-list. Both
+ * the permission filter and the menu itself read this, so they cannot drift
+ * apart and show an entry that leads nowhere.
+ */
+const FLAT_CATEGORY_TABS: Record<string, TabId | undefined> = {
+  marketplace: 'marketplace',
+  communication: 'communication-center',
+  goals: 'goals',
+  staff_accounts: 'staff',
+};
 
 const GAMES_MAIN_TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'games-dashboard', label: 'Home', icon: '🎮' },
@@ -986,27 +1003,32 @@ export default function Index() {
       const allowedSubs = GAMES_MORE_ITEMS.filter(sub => isTabAllowed(sub.id, currentUser)).map(sub => ({
         label: sub.label,
         tabId: sub.id,
-        icon: '⚙️'
       }));
       return [{
         id: 'settings_section',
         label: 'Settings',
-        icon: '⚙️',
+        Icon: SettingsIcon,
         subItems: allowedSubs
       }].filter(cat => cat.subItems.length > 0);
     }
-    return MORE_CATEGORIES.map(cat => {
-      const allowedSubs = cat.subItems.filter(sub => isTabAllowed(sub.tabId, currentUser) && isBusinessTabAllowed(store, sub.tabId));
-      return {
+
+    return MORE_CATEGORIES
+      .map(cat => ({
         ...cat,
-        subItems: allowedSubs
-      };
-      if (cat.id === 'marketplace') return isTabAllowed('marketplace', currentUser);
-      if (cat.id === 'communication') return isTabAllowed('communication-center', currentUser);
-      if (cat.id === 'goals') return isTabAllowed('goals', currentUser);
-      return cat.subItems.length > 0;
-    });
-  }, [currentUser, isGames]);
+        subItems: cat.subItems.filter(sub => isTabAllowed(sub.tabId, currentUser) && isBusinessTabAllowed(store, sub.tabId)),
+      }))
+      .filter(cat => {
+        // These open a tab directly instead of expanding, so they are gated on
+        // that tab rather than on having any children. The checks used to sit
+        // after the map's return statement, where they never ran — every role
+        // saw every category. Role only, as originally intended: business type
+        // already decides which tabs exist, and gating here too would drop
+        // Marketplace for service businesses that can still reach it.
+        const directTab = FLAT_CATEGORY_TABS[cat.id];
+        if (directTab) return isTabAllowed(directTab, currentUser);
+        return cat.subItems.length > 0;
+      });
+  }, [currentUser, isGames, store]);
 
   useEffect(() => {
     const parentCat = MORE_CATEGORIES.find(cat => cat.subItems.some(sub => sub.tabId === tab));
@@ -1320,14 +1342,10 @@ export default function Index() {
           <div className="pt-4 mt-4 border-t border-border space-y-2">
             <p className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground px-3 mb-2">More Features</p>
             {allowedCategories.map(cat => {
-              const isMarketplace = cat.id === 'marketplace';
-              const isCommunication = cat.id === 'communication';
-              const isGoals = cat.id === 'goals';
-              const isStaff = cat.id === 'staff_accounts';
-              const isFlat = isMarketplace || isCommunication || isGoals || isStaff;
+              const directTab = FLAT_CATEGORY_TABS[cat.id];
+              const isFlat = Boolean(directTab);
               const isExpanded = !!expandedCategories[cat.id];
-              
-              const targetTab: TabId = isMarketplace ? 'marketplace' : isCommunication ? 'communication-center' : isGoals ? 'goals' : isStaff ? 'staff' : 'dashboard';
+              const targetTab: TabId = directTab || 'dashboard';
               const hasActiveSub = isFlat ? tab === targetTab : cat.subItems.some(sub => tab === sub.tabId);
               
               return (
@@ -1345,7 +1363,7 @@ export default function Index() {
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-base">{cat.icon}</span>
+                      <cat.Icon className="w-4 h-4" />
                       <span>{cat.label}</span>
                     </div>
                     {!isFlat && (
@@ -1365,7 +1383,7 @@ export default function Index() {
                               isSubActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
                             }`}
                           >
-                            <span className="text-xs">{sub.icon}</span>
+                            {renderTabIcon(sub.tabId, isSubActive, "w-3.5 h-3.5")}
                             <span>{sub.label}</span>
                           </button>
                         );
@@ -1383,7 +1401,7 @@ export default function Index() {
                   tab === 'history' ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
                 }`}
               >
-                <span className="text-base">📊</span>
+                <BarChart3 className="w-4 h-4" />
                 <span>Reports</span>
               </button>
             )}
@@ -1395,7 +1413,7 @@ export default function Index() {
                   tab === 'settings' ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
                 }`}
               >
-                <span className="text-base">⚙️</span>
+                <SettingsIcon className="w-4 h-4" />
                 <span>Settings</span>
               </button>
             )}
@@ -2075,14 +2093,10 @@ export default function Index() {
             
             <div className="space-y-2">
               {allowedCategories.map(cat => {
-                const isMarketplace = cat.id === 'marketplace';
-                const isCommunication = cat.id === 'communication';
-                const isGoals = cat.id === 'goals';
-                const isStaff = cat.id === 'staff_accounts';
-                const isFlat = isMarketplace || isCommunication || isGoals || isStaff;
+                const directTab = FLAT_CATEGORY_TABS[cat.id];
+                const isFlat = Boolean(directTab);
                 const isExpanded = !!expandedCategories[cat.id];
-                
-                const targetTab: TabId = isMarketplace ? 'marketplace' : isCommunication ? 'communication-center' : isGoals ? 'goals' : isStaff ? 'staff' : 'dashboard';
+                const targetTab: TabId = directTab || 'dashboard';
                 const hasActiveSub = isFlat ? tab === targetTab : cat.subItems.some(sub => tab === sub.tabId);
                 
                 return (
@@ -2101,7 +2115,7 @@ export default function Index() {
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-base">{cat.icon}</span>
+                        <cat.Icon className="w-4 h-4" />
                         <span>{cat.label}</span>
                       </div>
                       {!isFlat && (
@@ -2126,7 +2140,7 @@ export default function Index() {
                                   : 'bg-card text-muted-foreground border-border hover:text-foreground'
                               }`}
                             >
-                              <span className="text-xs">{sub.icon}</span>
+                              {renderTabIcon(sub.tabId, isSubActive, "w-3.5 h-3.5")}
                               <span className="truncate">{sub.label}</span>
                             </button>
                           );
@@ -2148,7 +2162,7 @@ export default function Index() {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-base">📊</span>
+                    <BarChart3 className="w-4 h-4" />
                     <span>Reports</span>
                   </div>
                 </button>
@@ -2165,7 +2179,7 @@ export default function Index() {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-base">⚙️</span>
+                    <SettingsIcon className="w-4 h-4" />
                     <span>Settings</span>
                   </div>
                 </button>
