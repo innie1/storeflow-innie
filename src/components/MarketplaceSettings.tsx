@@ -205,7 +205,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
     setForm(updated);
 
     // Auto-update standard managerSettings properties if they map
-    let extraMgr: any = {};
+    const extraMgr: any = {};
     if (key === 'alertSound') {
       extraMgr.orderAlertSoundsEnabled = val;
     }
@@ -313,7 +313,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
 
   // ─── Promo/Rewards Badge Text ───
   const promoBadgeText = useMemo(() => {
-    let parts = [];
+    const parts = [];
     if (form.scanBuyRewardType !== 'none') {
       const val = form.scanBuyRewardType === 'percentage' ? `${form.scanBuyRewardValue}%` : `₦${form.scanBuyRewardValue}`;
       parts.push(`Scan & Buy: ${val} ${form.scanBuyRewardType === 'points' ? 'Points' : 'Off'}`);

@@ -63,7 +63,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
     const wasCompleted = editingGoal.completed;
     const isCompletedNow = currentNum >= targetNum;
 
-    let nextStore = updateGoal(store, editingGoal.id, {
+    const nextStore = updateGoal(store, editingGoal.id, {
       category,
       label: label.trim(),
       target: targetNum,

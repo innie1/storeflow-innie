@@ -422,7 +422,7 @@ export function Typewriter({ text, speed = 50, speak = false }: { text: string; 
 
       // Clean up markdown/extra formatting symbols for cleaner voice speech
       const cleanText = text
-        .replace(/[*#_~`>\[\]()-]/g, '')
+        .replace(/[*#_~`>[\]()-]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 
@@ -516,7 +516,7 @@ export function useCountUp(target: number, durationMs = 1500) {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
-    let start = 0;
+    const start = 0;
     const end = target;
     if (start === end) {
       setCount(end);

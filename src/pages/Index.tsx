@@ -1152,7 +1152,7 @@ export default function Index() {
       targetId = parts[parts.length - 1];
     }
     const existing = store.products.find(p => p.barcode === targetId || p.id === targetId);
-    let workingStore = logScanEvent(store, {
+    const workingStore = logScanEvent(store, {
       kind: 'barcode',
       purpose: 'quick-scan',
       productId: existing?.id,
