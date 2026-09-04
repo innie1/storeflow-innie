@@ -602,7 +602,7 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMult
     ? findBestMatches(newName.trim().toLowerCase().split(/\s+/), products).filter(m => m.score < 3)
     : [];
 
-  const useSuggestion = (product: Product) => {
+  const applySuggestion = (product: Product) => {
     if (voiceMode === 'add') {
       // Already exists — nothing to add, just let them know and reset.
       reset();
@@ -861,7 +861,7 @@ export default function SimpleVoiceSell({ products, onConfirmSale, onConfirmMult
               return (
                 <button
                   key={m.product.id}
-                  onClick={() => useSuggestion(m.product)}
+                  onClick={() => applySuggestion(m.product)}
                   className="w-full flex items-center justify-between gap-2 p-3 rounded-xl border border-border bg-surface-2/40 text-left active:scale-[0.98] transition-transform"
                 >
                   <div className="min-w-0 flex-1">

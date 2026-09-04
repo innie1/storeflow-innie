@@ -36,6 +36,11 @@ export default function Services({ store, onUpdate, currentUser }: ServicesProps
   if (String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry') {
     return <LaundryPricingSetup store={store} onUpdate={onUpdate} currentUser={currentUser} />;
   }
+  return <ServiceCatalog store={store} onUpdate={onUpdate} currentUser={currentUser} />;
+}
+
+/** Service catalogue editor. Split out so the laundry branch above returns before any hook runs. */
+function ServiceCatalog({ store, onUpdate, currentUser }: ServicesProps) {
   const services = store.products.filter(p => p.isService); const pricingOptions = getServicePricingOptions(store); const [showForm, setShowForm] = useState(false); const [editingId, setEditingId] = useState<string | null>(null); const [draft, setDraft] = useState<ServiceDraft>(() => emptyDraft(store)); const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   useEffect(() => { publishServiceCatalog(store, onUpdate); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.products]);
