@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
-import { getDashboardStats, getTopSellers, getSalesTargetStatus } from '@/lib/store-data';
+import { getDashboardStats, getTopSellers, getSalesTargetStatus, sumOperatingExpenses, getAvailableBalance } from '@/lib/store-data';
 import { generatePerformanceSummary } from '@/lib/reports';
 import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
@@ -52,7 +52,7 @@ const BALANCE_PERIOD_LABELS: Record<BalancePeriod, string> = {
   yesterday: 'Yesterday',
   month: 'This Month',
   '3months': 'Last 3 Months',
-  lifetime: 'Business Balance',
+  lifetime: 'Available Balance',
 };
 
 const BALANCE_PERIOD_OPTIONS: BalancePeriod[] = ['today', 'yesterday', 'month', '3months', 'lifetime'];
@@ -136,9 +136,18 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
       return (start === null || t >= start) && (end === null || t < end);
     };
     const revenue = store.sales.filter(s => inRange(s.date)).reduce((sum, s) => sum + s.total, 0);
-    const expenses = (store.expenses || []).filter(e => inRange(e.date)).reduce((sum, e) => sum + e.amount, 0);
-    return { revenue, expenses, balance: revenue - expenses };
-  }, [store.sales, store.expenses, balancePeriod]);
+    // Running costs only. Stock is money moved into goods, not a cost of
+    // trading, and it is already taken out of the balance below.
+    const expenses = sumOperatingExpenses(store, inRange);
+
+    // Money the shop can actually spend: what it collected, less expenses,
+    // less stock bought out of the balance. Derived from the records rather
+    // than kept as a running total, so an existing shop is right the moment
+    // it opens the app.
+    const balance = getAvailableBalance(store);
+
+    return { revenue, expenses, balance };
+  }, [store, balancePeriod]);
   const selectBalancePeriod = (period: BalancePeriod) => {
     setBalancePeriod(period);
     if (typeof localStorage !== 'undefined') localStorage.setItem(`storeflow_dash_period_${store.accessCode}_balance`, period);
@@ -596,7 +605,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setBalancePeriodMenuOpen(v => !v); } }}
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground uppercase tracking-wide font-display font-semibold hover:text-foreground active:scale-95 transition cursor-pointer"
                 >
-                  {balancePeriod === 'lifetime' ? 'Business Balance' : `${BALANCE_PERIOD_LABELS[balancePeriod]} Balance`} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
+                  {'Available Balance'} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
                 </span>
                 <p className={`font-display font-bold text-lg ${balanceStats.balance >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {balanceStats.balance >= 0 ? '' : '−'}₦{Math.abs(balanceStats.balance).toLocaleString()}

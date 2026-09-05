@@ -115,16 +115,19 @@ describe('buying stock is not an operating expense', () => {
     expect(injected[0].note).toContain('new money');
   });
 
-  it('names a shortfall a shortfall, not a capital injection', () => {
-    // Paying from the balance when the balance cannot cover it means the
-    // tracked cash is behind reality — it is not the merchant funding the shop.
+  it('lets the balance go negative rather than inventing capital', () => {
+    // Buying ₦30,000 of stock against ₦10,000 leaves the shop ₦20,000 in
+    // debt. It used to floor the balance at zero and book the gap as capital
+    // the merchant never said they had put in, which is what inflated the
+    // figure nobody could account for.
     const poor = { ...tradingShop(), cashBalance: 10_000, bankBalance: 0, walletBalance: 0 };
     const after = receiveStock(poor, [{ productId: 'p1', quantity: 50, costPrice: 600 }], 'balance');
 
-    expect(after.cashBalance).toBe(0);
+    expect(after.cashBalance).toBe(-20_000);
     const injected = (after.investments || []).filter(i => !(poor.investments || []).some(b => b.id === i.id));
-    expect(injected.reduce((s, i) => s + i.amount, 0)).toBe(20_000);
-    expect(injected[0].note).toContain('short');
+    expect(injected).toHaveLength(0);
+    // The expense still says the balance could not cover it.
+    expect((after.expenses || [])[0].note).toContain('short');
   });
 
   it('lets a merchant correct a balance, and records the correction', () => {

@@ -55,6 +55,60 @@ export function sumOperatingExpenses(
 }
 
 /**
+ * Money the shop actually has to spend, derived from its own records.
+ *
+ *   collected sales − expenses − stock bought from the balance
+ *                   − money withdrawn − money set aside as savings
+ *
+ * Capital never counts. Whether it is opening stock or a restock the owner
+ * paid for out of their own pocket, that money came from outside and went
+ * straight into goods; it was never in the till. Formally it is cash in then
+ * cash out, netting to nothing, so leaving it out reaches the same answer.
+ *
+ * The figure is allowed to go negative. Buying more stock than the shop can
+ * afford is a debt, and saying so is more useful than clamping to zero and
+ * inventing capital to cover the gap, which is what used to happen.
+ *
+ * Deriving it from history rather than keeping a running total means an
+ * existing shop is corrected the moment it opens the app, without anyone
+ * having to reconcile anything by hand.
+ */
+export function getAvailableBalance(store: StoreData): number {
+  // Goods handed over on credit are not money in hand until the customer pays.
+  const collected = (store.sales || [])
+    .filter(sale => !sale.pendingPaymentId)
+    .reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
+
+  const running = sumOperatingExpenses(store);
+
+  // Which stock purchases came out of the till. A restock records the answer
+  // the merchant gave; anything older than that field, or bought before there
+  // was a balance to spend, is treated as having come from the balance.
+  // Opening stock added through addProduct has no batch and is capital.
+  const restockFunding = new Map<string, string>();
+  for (const restock of store.restocks || []) {
+    if (restock.batchId) restockFunding.set(restock.batchId, restock.funding || 'balance');
+  }
+  const stockFromBalance = (store.expenses || [])
+    .filter(expense => isStockPurchase(expense))
+    .filter(expense => {
+      if (!expense.restockBatchId) return false; // opening stock: capital, not spend
+      return restockFunding.get(expense.restockBatchId) !== 'new_money';
+    })
+    .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+
+  const withdrawn = (store.withdrawals || []).reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+  const saved = Number(store.savingsGoal?.saved) || 0;
+
+  // A merchant who counted their money and said the figure was wrong is a
+  // better authority than the records. Their corrections carry forward.
+  const corrections = (store.balanceAdjustments || [])
+    .reduce((sum, adjustment) => sum + (Number(adjustment.difference) || 0), 0);
+
+  return Math.round((collected - running - stockFromBalance - withdrawn - saved + corrections) * 100) / 100;
+}
+
+/**
  * Correct a tracked balance to what the merchant actually holds.
  *
  * StoreFlow can only ever know the money it was told about, so a shop that
@@ -906,20 +960,17 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actor
   const newInvestments = [...(store.investments || [])];
   const newExpenses = [...(store.expenses || [])];
   if (costTotal > 0) {
+    // Stock a merchant already owns is capital they put into the shop, not
+    // money the shop spent. This used to record the same cost twice — once
+    // here as an investment and again as a Restock expense — so uploading a
+    // catalogue instantly reported a loss the size of the opening stock, and
+    // every figure derived from expenses was wrong by that amount.
     newInvestments.push({
       id: generateId(),
       amount: costTotal,
       note: `Added Inventory: ${product.name}`,
       date: now,
       type: 'additional',
-    });
-    newExpenses.push({
-      id: generateId(),
-      amount: costTotal,
-      category: 'Restock',
-      date: now,
-      note: `Added Inventory: ${product.name} (${product.quantity} units)`,
-      source: 'restock',
     });
   }
   let updated = {
@@ -1428,53 +1479,35 @@ export function receiveStock(
 
       // Honour what the merchant said. The intake screens already ask "from
       // balance" or "new money", but that answer used to be filed against the
-      // restock and then ignored here: the shop's cash was drained either way,
-      // and any shortfall was quietly booked as capital the merchant never
-      // said they had put in. Those invented injections then fed back into the
-      // cash balance and inflated it.
+      // restock and then ignored: the till was drained either way, and any
+      // shortfall was booked as capital the merchant never said they had put
+      // in. Those invented injections then inflated the balance.
       if (funding === 'new_money') {
-        // Money came from outside and went straight to the supplier. It never
-        // sat in the till, so nothing is deducted from it.
+        // Came from outside and went straight to the supplier, so it never sat
+        // in the till and nothing is deducted from it.
         autoInvestedAmt = restockTotal;
-      } else if (restockTotal <= availableCash) {
+      } else {
+        // Paid from the balance. Spending past what is there is a debt, and
+        // the balance is allowed to say so — it is no longer floored at zero
+        // and no capital is invented to cover the gap.
         cashDeduction = restockTotal;
-      } else {
-        // They meant to pay from the till and it did not cover the bill, so
-        // the tracked balance is behind reality. Spend what is recorded and
-        // flag the rest instead of inventing capital.
-        cashDeduction = availableCash;
-        autoInvestedAmt = restockTotal - availableCash;
       }
-      const shortfall = funding !== 'new_money' && autoInvestedAmt > 0;
+      const shortfall = funding !== 'new_money' && restockTotal > availableCash;
 
-      // Deduct from cash balances
+      // Spend the balance, drawing on cash first, then bank, then wallet.
+      // Whatever is left over runs the cash account negative rather than being
+      // clamped away: overspending is a debt, and the shop should be told.
       let remainingDeduct = cashDeduction;
-      if (newCashBalance >= remainingDeduct) {
-        newCashBalance -= remainingDeduct;
-        remainingDeduct = 0;
-      } else {
-        remainingDeduct -= newCashBalance;
-        newCashBalance = 0;
+      for (const account of ['cash', 'bank', 'wallet'] as const) {
+        if (remainingDeduct <= 0) break;
+        const held = account === 'cash' ? newCashBalance : account === 'bank' ? newBankBalance : newWalletBalance;
+        const taken = Math.min(Math.max(held, 0), remainingDeduct);
+        if (account === 'cash') newCashBalance -= taken;
+        else if (account === 'bank') newBankBalance -= taken;
+        else newWalletBalance -= taken;
+        remainingDeduct -= taken;
       }
-
-      if (remainingDeduct > 0) {
-        if (newBankBalance >= remainingDeduct) {
-          newBankBalance -= remainingDeduct;
-          remainingDeduct = 0;
-        } else {
-          remainingDeduct -= newBankBalance;
-          newBankBalance = 0;
-        }
-      }
-
-      if (remainingDeduct > 0) {
-        if (newWalletBalance >= remainingDeduct) {
-          newWalletBalance -= remainingDeduct;
-          remainingDeduct = 0;
-        } else {
-          newWalletBalance = 0;
-        }
-      }
+      if (remainingDeduct > 0) newCashBalance -= remainingDeduct;
 
       const fundingLabel = funding === 'new_money'
         ? ' (paid with new money)'
