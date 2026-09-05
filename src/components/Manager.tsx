@@ -189,7 +189,7 @@ function MoneyOwedCard({ store, onClick }: { store: StoreData; onClick?: () => v
   const repeat = [...nameCount.entries()].sort((a, b) => b[1] - a[1])[0];
   if (repeat && repeat[1] >= 2) advices.push(`${repeat[0]} has delayed payment ${repeat[1]} times.`);
   return (
-    <div 
+    <div
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -213,7 +213,7 @@ function MoneyOwedCard({ store, onClick }: { store: StoreData; onClick?: () => v
 function MostActivePeriodsCard({ store }: { store: StoreData }) {
   const [range, setRange] = useState<ActivityRange>('today');
   const [selected, setSelected] = useState<ActivityBucket | null>(null);
-  
+
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
   const interval = settings.graphInterval || 30;
 
@@ -270,9 +270,9 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
                     return (
                       <button key={b.minute} onClick={() => setSelected(b)}
                         className={`flex-1 rounded-t-sm transition-all hover:opacity-80 bar-grow-wave-item ${isPeak ? 'bar-breathe-anim' : ''}`}
-                        style={{ 
-                          height: `${h}%`, 
-                          background: activityColor(b.revenue, maxRevenue), 
+                        style={{
+                          height: `${h}%`,
+                          background: activityColor(b.revenue, maxRevenue),
                           minWidth: barMinWidth,
                           animationDelay: `${i * 12}ms`,
                           transform: 'scaleY(0)'
@@ -430,7 +430,7 @@ export function Typewriter({ text, speed = 50, speak = false }: { text: string; 
         .trim();
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      
+
       // Get the active session and load store settings to read voiceGender
       let voiceGender = 'young-male'; // Default
       try {
@@ -448,42 +448,42 @@ export function Typewriter({ text, speed = 50, speak = false }: { text: string; 
       } catch (e) {
         // ignore
       }
-      
+
       const setVoice = () => {
         const voices = window.speechSynthesis.getVoices();
         const enVoices = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
         const maleNames = ['david', 'mark', 'george', 'daniel', 'ravi', 'male', 'google us english male', 'google uk english male'];
         const femaleNames = ['zira', 'samantha', 'hazel', 'susan', 'heera', 'female', 'google us english female', 'google uk english female'];
-        
+
         let selectedVoice = null;
         let pitch = 1.0;
         let rate = 0.95;
-        
+
         if (voiceGender === 'male') {
-          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) || 
+          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) ||
                           voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
           pitch = 0.95;
           rate = 0.92;
         } else if (voiceGender === 'female') {
-          selectedVoice = enVoices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name))) || 
+          selectedVoice = enVoices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name))) ||
                           voices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name)));
           pitch = 1.05;
           rate = 0.95;
         } else {
           // young-male (default)
-          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) || 
+          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) ||
                           voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
           pitch = 1.35; // Higher pitch for younger male voice
           rate = 0.98;
         }
-        
+
         if (!selectedVoice) {
-          selectedVoice = enVoices.find(v => 
-            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Premium')) && 
+          selectedVoice = enVoices.find(v =>
+            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Premium')) &&
             v.lang.startsWith('en')
           ) || enVoices[0] || voices[0];
         }
-        
+
         if (selectedVoice) {
           utterance.voice = selectedVoice;
         }
@@ -528,7 +528,7 @@ export function useCountUp(target: number, durationMs = 1500) {
     const totalSteps = 45;
     const stepTime = durationMs / totalSteps;
     const increment = (end - start) / totalSteps;
-    
+
     let currentStep = 0;
     const timer = setInterval(() => {
       currentStep++;
@@ -541,7 +541,7 @@ export function useCountUp(target: number, durationMs = 1500) {
         return Math.round(next);
       });
     }, stepTime);
-    
+
     return () => clearInterval(timer);
   }, [target, durationMs]);
 
@@ -629,7 +629,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     const { isNew } = recordStreak();
     if (isNew) {
       try {
-        addFlowReward(1.0, 'streak', 'Daily streak bonus'); 
+        addFlowReward(1.0, 'streak', 'Daily streak bonus');
         if (store.sales.some(s => s.date.startsWith(new Date().toISOString().split('T')[0]))) {
           addFlowReward(0.5, 'daily', 'First sale of the day bonus');
         }
@@ -668,7 +668,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   const unreadCount = (store.flowNotifications || []).filter(n => !n.read).length;
   const flowMood = useMemo(() => {
     const health = healthScore(store);
-    
+
     // Auto-sleep past 9 PM or before 6 AM
     const currentHour = new Date().getHours();
     const isSleepTime = currentHour >= 21 || currentHour < 6;
@@ -678,20 +678,20 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     const hasLowStock = activeProducts.some(p => p.quantity <= 3);
     const hasDebt = (store.pendingPayments || []).some(p => p.status === 'pending');
     const isGoalAchieved = savings && savings.saved >= savings.amount && savings.amount > 0;
-    
+
     if (isGoalAchieved) return 'celebrating';
-    
+
     // Performance checks
     if (health.overall >= 80) return 'confident';
     if (health.overall >= 65) return 'happy';
-    
+
     // Open but not performing well: resting
     if (health.overall >= 45 && health.overall < 65) return 'resting';
-    
+
     if (hasLowStock || hasDebt) return 'concerned';
     if (health.overall < 45 && health.overall >= 25) return 'worried';
     if (health.overall < 25) return 'angry';
-    
+
     return 'neutral';
   }, [store, savings]);
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -1115,7 +1115,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
           {(() => {
             const threshold = store.managerSettings?.minStockThreshold ?? getLowStockThreshold();
             const autoSuggest = !!store.managerSettings?.autoSuggestRestock;
-            
+
             // Calculate velocity
             const salesCount: Record<string, number> = {};
             store.sales.forEach(sale => {
@@ -1177,13 +1177,13 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                   <div className="flex items-center gap-2 shrink-0">
                     <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 cursor-pointer select-none">
                       <span>Smart Restock</span>
-                      <input 
+                      <input
                         type="checkbox"
                         checked={autoSuggest}
                         onChange={e => {
-                          const nextSettings = { 
-                            ...(store.managerSettings || DEFAULT_MANAGER_SETTINGS), 
-                            autoSuggestRestock: e.target.checked 
+                          const nextSettings = {
+                            ...(store.managerSettings || DEFAULT_MANAGER_SETTINGS),
+                            autoSuggestRestock: e.target.checked
                           };
                           onUpdate({
                             ...store,
@@ -1202,7 +1202,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     ₦{totalRestockCost.toLocaleString()}
                   </span>
                 </div>
-                
+
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                   {activeItems.length === 0 ? (
                     <p className="text-center text-muted-foreground py-4 text-xs">No items suggested (budget limit exceeded).</p>
@@ -1240,7 +1240,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
               </div>
               <span className="text-muted-foreground group-hover:text-primary transition-colors font-bold text-sm">›</span>
             </button>
-            
+
             <button
               onClick={() => onNavigate?.('pending')}
               className="p-3 rounded-xl bg-card border border-border hover:border-warning/30 transition-all flex items-center justify-between text-left group shadow-card"
@@ -1346,7 +1346,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             </div>
           )}
 
-          
+
         </div>
       )}
 
@@ -1592,7 +1592,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                         <div className="min-w-0">
                           <p className="font-display font-semibold text-sm truncate">{a.product.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {a.type === 'zero_margin' ? 'Selling at zero or negative margin!' : a.type === 'underpriced' ? `Margin only ${(a.currentMargin * 100).toFixed(0)}%` : `Very high margin (${(a.currentMargin * 100).toFixed(0)}%)`}
+                            {a.type === 'zero_margin' ? 'Selling at or below what you paid!' : a.type === 'underpriced' ? `Only ${(a.currentMarkup * 100).toFixed(0)}% on top of cost` : `Very high markup (${(a.currentMarkup * 100).toFixed(0)}%)`}
                             {' '}· Currently ₦{a.product.sellingPrice.toLocaleString()} → suggest ₦{a.suggestedPrice.toLocaleString()}
                           </p>
                         </div>

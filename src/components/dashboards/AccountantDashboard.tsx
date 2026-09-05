@@ -3,6 +3,7 @@ import { StoreData } from '@/types/store';
 import { getDashboardStats } from '@/lib/store-data';
 import { Wallet, Calculator, Coins, TrendingUp, AlertCircle, FileText } from 'lucide-react';
 import Mascot from '@/components/Mascot';
+import { productMarkup } from '@/lib/pricing-math';
 
 interface AccountantDashboardProps {
   store: StoreData;
@@ -13,17 +14,17 @@ export default function AccountantDashboard({ store, onNavigate }: AccountantDas
   const stats = getDashboardStats(store);
 
   // Calculate average profit margin
-  const avgMargin = useMemo(() => {
+  const avgMarkup = useMemo(() => {
     if (store.products.length === 0) return 0;
-    let sumMargins = 0;
+    let sumMarkups = 0;
     let count = 0;
     store.products.forEach(p => {
       if (p.costPrice > 0) {
-        sumMargins += ((p.sellingPrice - p.costPrice) / p.costPrice) * 100;
+        sumMarkups += productMarkup(p) * 100;
         count++;
       }
     });
-    return count > 0 ? Math.round(sumMargins / count) : 0;
+    return count > 0 ? Math.round(sumMarkups / count) : 0;
   }, [store.products]);
 
   // Outstanding Debt Summary
@@ -71,10 +72,10 @@ export default function AccountantDashboard({ store, onNavigate }: AccountantDas
         {/* Profit Margin */}
         <div className="p-4 rounded-xl bg-card border border-border/40 shadow-card">
           <div className="flex justify-between items-start text-foreground">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold">Average Margin</span>
+            <span className="text-[10px] text-muted-foreground uppercase font-bold">Average Markup</span>
             <Calculator className="w-4 h-4 text-success" />
           </div>
-          <p className="font-display font-bold text-xl mt-2 text-success">{avgMargin}%</p>
+          <p className="font-display font-bold text-xl mt-2 text-success">{avgMarkup}%</p>
           <p className="text-[10px] text-muted-foreground mt-1">Average catalog markup</p>
         </div>
 
@@ -111,20 +112,20 @@ export default function AccountantDashboard({ store, onNavigate }: AccountantDas
             ) : (
               [...store.products]
                 .sort((a, b) => {
-                  const mB = b.costPrice > 0 ? (b.sellingPrice - b.costPrice) / b.costPrice : 0;
-                  const mA = a.costPrice > 0 ? (a.sellingPrice - a.costPrice) / a.costPrice : 0;
+                  const mB = productMarkup(b);
+                  const mA = productMarkup(a);
                   return mB - mA;
                 })
                 .slice(0, 10)
                 .map(p => {
-                  const margin = p.costPrice > 0 ? Math.round(((p.sellingPrice - p.costPrice) / p.costPrice) * 100) : 0;
+                  const markup = Math.round(productMarkup(p) * 100);
                   return (
                     <div key={p.id} className="p-3 rounded-xl bg-surface-2/50 border border-border/30 flex justify-between items-center text-xs">
                       <div>
                         <p className="font-bold text-foreground truncate max-w-[180px]">{p.name}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">Cost: ₦{p.costPrice.toLocaleString()} · Sell: ₦{p.sellingPrice.toLocaleString()}</p>
                       </div>
-                      <span className="font-bold text-success font-mono">{margin}% margin</span>
+                      <span className="font-bold text-success font-mono">{markup}% markup</span>
                     </div>
                   );
                 })

@@ -9,6 +9,7 @@ import { ChevronDown, Check, Wallet, Receipt, AlertTriangle, CreditCard, Share2,
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths, subDays } from 'date-fns';
 import ScrollLock from '@/components/ScrollLock';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
+import { productMarkup } from '@/lib/pricing-math';
 
 // ---------- Metric reporting period (Revenue / Net Profit) ----------
 
@@ -204,9 +205,9 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
     const map = new Map<string, { name: string; profit: number; margin: number }>();
     store.sales.forEach(s => {
       const product = store.products.find(p => p.id === s.productId);
-      const existing = map.get(s.productId) || { name: s.productName, profit: 0, margin: 0 };
+      const existing = map.get(s.productId) || { name: s.productName, profit: 0, markup: 0 };
       existing.profit += s.profit;
-      if (product) existing.margin = Math.round(((product.sellingPrice - product.costPrice) / product.costPrice) * 100);
+      if (product) existing.markup = Math.round(productMarkup(product) * 100);
       map.set(s.productId, existing);
     });
     return Array.from(map.values()).sort((a, b) => b.profit - a.profit);
@@ -847,7 +848,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                     <div key={i} className="flex justify-between items-center p-2 rounded-lg bg-surface-2 text-sm">
                       <div>
                         <span className="text-foreground font-medium">{item.name}</span>
-                        <span className="text-muted-foreground ml-2 text-xs">{item.margin}% margin</span>
+                        <span className="text-muted-foreground ml-2 text-xs">{item.markup}% markup</span>
                       </div>
                       <span className="text-success font-bold">₦{item.profit.toLocaleString()}</span>
                     </div>

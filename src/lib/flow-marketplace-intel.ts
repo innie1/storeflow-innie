@@ -8,6 +8,7 @@ import {
   topCustomerRequests,
   stockCoverLabel,
 } from '@/lib/manager-intel';
+import { productMarkup } from '@/lib/pricing-math';
 
 /**
  * Flow Intelligence, answered from this store's own books.
@@ -174,7 +175,7 @@ function productAnswer(store: StoreData, product: StoreData['products'][number])
   const mover = sales.fastMovers.find(m => m.name === product.name);
   const stock = inventoryIntelligence(store).find(f => f.product.id === product.id);
   const margin = product.costPrice > 0
-    ? ((product.sellingPrice - product.costPrice) / product.costPrice) * 100
+    ? productMarkup(product) * 100
     : null;
 
   const points: string[] = [];

@@ -3,6 +3,7 @@ import { getLowStockThreshold } from '@/lib/settings';
 import { getPendingSummary, isStockPurchase } from '@/lib/store-data';
 import type { AutoFixSpec } from '@/lib/auto-fix';
 import type { ProductFocus } from '@/lib/product-focus';
+import { productMarkup } from '@/lib/pricing-math';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -419,7 +420,7 @@ function computeStockForecasts(store: StoreData): StockForecast[] {
       const daysLeft = p.quantity === 0 ? 0 : (hasVelocity ? Math.floor(p.quantity / perDay) : Infinity);
       // Recommend 14-day supply + 20% buffer, default to 10 if no sales history
       const restockQty = perDay > 0 ? Math.ceil(perDay * 14 * 1.2) : 10;
-      
+
       let urgency: StockForecast['urgency'] = 'ok';
       if (p.quantity === 0) {
         urgency = 'critical';
@@ -428,7 +429,7 @@ function computeStockForecasts(store: StoreData): StockForecast[] {
       } else if (daysLeft <= 7 || p.quantity <= threshold) {
         urgency = 'soon';
       }
-      
+
       return { product: p, perDay, daysLeft, hasVelocity, worthRestocking, restockQty, urgency };
     });
 }
@@ -507,21 +508,26 @@ export function rentAnalysis(store: StoreData): RentAnalysis | null {
 export interface PricingAlert {
   product: Product;
   type: 'underpriced' | 'overpriced' | 'zero_margin';
-  currentMargin: number;
+  currentMarkup: number;
   suggestedPrice: number;
   expectedLift: number;
 }
 
-export function pricingAlerts(store: StoreData, targetMargin = 0.25): PricingAlert[] {
+// This works in markup — profit over cost — not margin, and always did. Every
+// price it suggests is cost × (1 + target), which is a markup calculation, and
+// "what do I add on top of what I paid" is how a shopkeeper prices. Only the
+// naming was wrong: it reported these figures to the merchant as "margin",
+// which is profit over the selling price and a smaller number.
+export function pricingAlerts(store: StoreData, targetMarkup = 0.25): PricingAlert[] {
   return store.products
     .filter(p => p.costPrice > 0 && !p.discontinued)
     .map(p => {
-      const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
-      const suggested = Math.round((p.costPrice * (1 + targetMargin)) / 10) * 10;
+      const markup = productMarkup(p);
+      const suggested = Math.round((p.costPrice * (1 + targetMarkup)) / 10) * 10;
       const lift = suggested - p.sellingPrice;
-      if (margin <= 0) return { product: p, type: 'zero_margin' as const, currentMargin: margin, suggestedPrice: suggested, expectedLift: lift };
-      if (margin < targetMargin - 0.05) return { product: p, type: 'underpriced' as const, currentMargin: margin, suggestedPrice: suggested, expectedLift: lift };
-      if (margin > 0.8) return { product: p, type: 'overpriced' as const, currentMargin: margin, suggestedPrice: Math.round(p.costPrice * 1.4 / 10) * 10, expectedLift: 0 };
+      if (markup <= 0) return { product: p, type: 'zero_margin' as const, currentMarkup: markup, suggestedPrice: suggested, expectedLift: lift };
+      if (markup < targetMarkup - 0.05) return { product: p, type: 'underpriced' as const, currentMarkup: markup, suggestedPrice: suggested, expectedLift: lift };
+      if (markup > 0.8) return { product: p, type: 'overpriced' as const, currentMarkup: markup, suggestedPrice: Math.round(p.costPrice * 1.4 / 10) * 10, expectedLift: 0 };
       return null;
     })
     .filter(Boolean) as PricingAlert[];
@@ -1438,12 +1444,12 @@ export function generateRecommendations(store: StoreData): Recommendation[] {
   }
   store.products.filter(p => !p.discontinued).forEach(p => {
     if (!p.costPrice) return;
-    const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
+    const markup = productMarkup(p);
     const sold = store.sales.filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(6)).reduce((sum, s) => sum + s.quantity, 0);
-    if (margin > 0 && margin < 0.2 && sold >= 5) {
+    if (markup > 0 && markup < 0.2 && sold >= 5) {
       const suggested = Math.round((p.costPrice * 1.3) / 10) * 10;
       const lift = suggested - p.sellingPrice;
-      if (lift >= 10) recs.push({ id: `p-${p.id}`, icon: '📈', title: 'Price Opportunity', detail: `Increase ${p.name} by ₦${lift.toLocaleString()} for a better margin`, tone: 'info', action: 'price', productId: p.id });
+      if (lift >= 10) recs.push({ id: `p-${p.id}`, icon: '📈', title: 'Price Opportunity', detail: `Increase ${p.name} by ₦${lift.toLocaleString()} for a healthier markup`, tone: 'info', action: 'price', productId: p.id });
     }
   });
   return recs.slice(0, 6);
@@ -1777,7 +1783,7 @@ export function generateFlowReport(store: StoreData): string {
   const h = healthScore(store);
   const stock = inventoryIntelligence(store);
   const pending = getPendingSummary(store);
-  
+
   const last7 = dailySeries(store, 7);
   const prev7 = dailySeries(store, 14).slice(0, 7);
   const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
@@ -1790,13 +1796,13 @@ export function generateFlowReport(store: StoreData): string {
   const exp7 = (store.expenses || [])
     .filter(e => e.category !== 'Restock' && new Date(e.date) >= daysAgo(6))
     .reduce((s, e) => s + e.amount, 0);
-  
+
   const outOfStock = store.products.filter(p => !p.discontinued && p.quantity === 0);
   const threshold = getLowStockThreshold();
   const lowStock = store.products.filter(p => !p.discontinued && p.quantity > 0 && p.quantity <= threshold);
-  
+
   const ea = expenseAnalysis(store, ['Restock']);
-  
+
   let text = `Hi, I'm Flow, your business assistant. Here is a tailored analysis for ${store.storeName}. \n\n`;
 
   // 1. Overall Health & Performance Assessment
@@ -1827,7 +1833,7 @@ export function generateFlowReport(store: StoreData): string {
         text += `This is stable compared to last week. `;
       }
     }
-    
+
     if (margin < 15 && margin > 0) {
       text += `However, your net profit margin is thin at **${margin.toFixed(1)}%**. You might be pricing your items too close to their cost price, or facing high wholesale prices. Check the 'Analysis' tab to see which products have low margins. \n\n`;
     } else if (margin <= 0 && rev7 > 0) {
@@ -1926,7 +1932,7 @@ export interface OpportunityCard {
 
 export function getTopOpportunities(store: StoreData): OpportunityCard[] {
   const opps: OpportunityCard[] = [];
-  
+
   // 1. High request volume items
   const reqs = topCustomerRequests(store, 2);
   reqs.forEach(r => {
@@ -1983,7 +1989,7 @@ export interface ProfitLeak {
 export function getProfitLeaks(store: StoreData): ProfitLeak[] {
   const leaks: ProfitLeak[] = [];
   const now = new Date();
-  
+
   // 1. Unpaid customer debts
   const pending = getPendingSummary(store);
   if (pending.totalOwed > 0) {
@@ -2021,13 +2027,13 @@ export function getProfitLeaks(store: StoreData): ProfitLeak[] {
   // last 30 days. Products with no recent sales don't inflate the number.
   let thinMarginCount = 0;
   let thinMarginLeak = 0;
-  const targetMargin = 0.25;
+  const targetMarkup = 0.25;
   store.products.filter(p => !p.discontinued).forEach(p => {
     if (p.costPrice > 0) {
-      const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
-      if (margin < 0.15) {
+      const markup = productMarkup(p);
+      if (markup < 0.15) {
         thinMarginCount++;
-        const healthyPrice = p.costPrice * (1 + targetMargin);
+        const healthyPrice = p.costPrice * (1 + targetMarkup);
         const perUnitGap = Math.max(0, healthyPrice - p.sellingPrice);
         const sold30 = last30.filter(s => s.productId === p.id).reduce((s, sale) => s + sale.quantity, 0);
         thinMarginLeak += perUnitGap * sold30;
@@ -2117,7 +2123,7 @@ function matchStoreProducts(store: StoreData, keywords: string[], limit = 3): st
 export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
   const now = new Date();
   const currentMonth = now.getMonth(); // 0-11
-  
+
   const predictions: SeasonalPrediction[] = [];
 
   // 1. Back to School (August - September)
@@ -2235,19 +2241,20 @@ export interface DiscountRecommendation {
 export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
   const recs: DiscountRecommendation[] = [];
   const now = new Date();
-  
+
   // Find products that have been in stock for over 14 days with no sales and have quantity > 5
   const last14DaysSales = store.sales.filter(s => (now.getTime() - new Date(s.date).getTime()) < 14 * 86400000);
   const soldIds = new Set(last14DaysSales.map(s => s.productId));
-  
+
   store.products.filter(p => !p.discontinued).forEach(p => {
     if (!soldIds.has(p.id) && p.quantity > 5 && p.costPrice > 0) {
-      const margin = (p.sellingPrice - p.costPrice) / p.costPrice;
-      if (margin > 0.15) {
-        // Discount depth scales with how much margin room is actually available —
-        // never suggest cutting into cost price, and never suggest a token 10%
-        // regardless of the product. Deeper margin = room for a deeper discount.
-        const maxSafeDiscountPct = Math.floor(margin * 100 * 0.5); // use up to half the available margin
+      const markup = productMarkup(p);
+      if (markup > 0.15) {
+        // Discount depth scales with how much room is actually available — never
+        // suggest cutting into cost price, and never a token 10% regardless of
+        // the product. Half the markup, taken off the selling price, always
+        // lands above cost.
+        const maxSafeDiscountPct = Math.floor(markup * 100 * 0.5);
         const suggestedDiscountPct = Math.max(5, Math.min(25, maxSafeDiscountPct));
         const daysDeadStock = p.addedAt ? Math.floor((now.getTime() - new Date(p.addedAt).getTime()) / 86400000) : 14;
         recs.push({

@@ -12,7 +12,6 @@ import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SmartRestockEngine from '@/components/SmartRestockEngine';
 import ProductIcon from '@/components/ProductIcon';
-import Mascot, { MascotMood } from '@/components/Mascot';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import {
   Search,
@@ -26,7 +25,8 @@ import {
   Plus,
   Upload,
   Trash2,
-  FileText
+  FileText,
+  Sparkles
 } from 'lucide-react';
 import type { ProductFocus } from '@/lib/product-focus';
 
@@ -140,7 +140,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   }, [totalProfit, storeTotalProfit]);
 
   const flowInsights = useMemo(() => {
-    if (!selectedDetailProduct) return { list: [], mood: 'idle' as MascotMood, badge: 'Standard' };
+    if (!selectedDetailProduct) return { list: [], badge: 'Standard' };
     const list: string[] = [];
 
     const salesAll = store.sales.filter(s => s.productId === selectedDetailProduct.id);
@@ -215,26 +215,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       list.push(`📊 This product has stable inventory and is performing normally.`);
     }
 
-    let mood: MascotMood = 'idle';
     let badge = 'Standard';
-    if (isLowStockWarning) {
-      mood = 'concerned';
-      badge = 'Stock Warning';
-    } else if (isTopPerformer) {
-      mood = 'celebrating';
-      badge = 'Top Performer';
-    } else if (isFastMoving) {
-      mood = 'confident';
-      badge = 'Fast Moving';
-    } else if (salesAll.length === 0) {
-      mood = 'neutral';
-      badge = 'New Item';
-    } else {
-      mood = 'happy';
-      badge = 'Healthy Product';
-    }
+    if (isLowStockWarning) badge = 'Stock Warning';
+    else if (isTopPerformer) badge = 'Top Performer';
+    else if (isFastMoving) badge = 'Fast Moving';
+    else if (salesAll.length === 0) badge = 'New Item';
+    else badge = 'Healthy Product';
 
-    return { list, mood, badge };
+    return { list, badge };
   }, [selectedDetailProduct, store.sales, store.products]);
 
   const formatRelativeDate = (dateStr?: string) => {
@@ -3777,8 +3765,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     fixed dark-mode colours that ignored the merchant's theme and
                     left the text nearly unreadable on a light background. */}
                 <div className="relative overflow-hidden rounded-2xl bg-primary/5 border border-primary/25 p-3 flex items-center gap-3">
-                  <div className="flex-shrink-0 bg-surface-2 rounded-xl p-1 border border-primary/20 shadow-inner">
-                    <Mascot size={48} mood={flowInsights.mood} />
+                  <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-primary" />
                   </div>
                   <div className="flex-1 text-xs">
                     <div className="flex items-center justify-between">
