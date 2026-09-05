@@ -1,12 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
-import { getDashboardStats, getTopSellers, getSalesTargetStatus, sumOperatingExpenses, sumStockPurchases, setActualBalance, saveStore } from '@/lib/store-data';
-import { showToast } from '@/components/Toast';
+import { getDashboardStats, getTopSellers, getSalesTargetStatus } from '@/lib/store-data';
 import { generatePerformanceSummary } from '@/lib/reports';
 import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import Mascot, { MascotBadge } from '@/components/Mascot';
-import { ChevronDown, Check, Wallet, Receipt, AlertTriangle, CreditCard, Share2, MessageCircle, Trophy, TrendingDown, Pencil, X } from 'lucide-react';
+import { ChevronDown, Check, Wallet, Receipt, AlertTriangle, CreditCard, Share2, MessageCircle, Trophy, TrendingDown } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths, subDays } from 'date-fns';
 import ScrollLock from '@/components/ScrollLock';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
@@ -53,7 +52,7 @@ const BALANCE_PERIOD_LABELS: Record<BalancePeriod, string> = {
   yesterday: 'Yesterday',
   month: 'This Month',
   '3months': 'Last 3 Months',
-  lifetime: 'Available Balance',
+  lifetime: 'Business Balance',
 };
 
 const BALANCE_PERIOD_OPTIONS: BalancePeriod[] = ['today', 'yesterday', 'month', '3months', 'lifetime'];
@@ -79,13 +78,12 @@ interface OwnerDashboardProps {
   store: StoreData;
   orders?: any[];
   onNavigate: (tab: any, lowStock?: boolean) => void;
-  onUpdate?: (store: StoreData) => void;
 }
 
 type BreakdownType = 'revenue' | 'profit' | 'inventory' | 'sales' | null;
 type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 
-export default function OwnerDashboard({ store, orders = [], onNavigate, onUpdate }: OwnerDashboardProps) {
+export default function OwnerDashboard({ store, orders = [], onNavigate }: OwnerDashboardProps) {
   const stats = getDashboardStats(store);
   const topSellers = getTopSellers(store, 5);
   const target = useMemo(() => getSalesTargetStatus(store), [store]);
@@ -131,39 +129,6 @@ export default function OwnerDashboard({ store, orders = [], onNavigate, onUpdat
   // Business Balance reporting period — remembered per store
   const [balancePeriod, setBalancePeriod] = useState<BalancePeriod>(() => loadStoredBalancePeriod(store.accessCode));
   const [balancePeriodMenuOpen, setBalancePeriodMenuOpen] = useState(false);
-  const [correctBalanceOpen, setCorrectBalanceOpen] = useState(false);
-  const [correctCash, setCorrectCash] = useState('');
-  const [correctBank, setCorrectBank] = useState('');
-  const [correctWallet, setCorrectWallet] = useState('');
-  useBodyScrollLock(correctBalanceOpen);
-
-  const openCorrectBalance = () => {
-    setCorrectCash(String(store.cashBalance ?? 0));
-    setCorrectBank(String(store.bankBalance ?? 0));
-    setCorrectWallet(String(store.walletBalance ?? 0));
-    setCorrectBalanceOpen(true);
-  };
-
-  const saveCorrectedBalance = () => {
-    const parse = (raw: string) => {
-      const value = Number(String(raw).replace(/[^0-9.]/g, ''));
-      return Number.isFinite(value) ? value : undefined;
-    };
-    const next = setActualBalance(store, {
-      cash: parse(correctCash),
-      bank: parse(correctBank),
-      wallet: parse(correctWallet),
-      reason: 'Corrected from dashboard',
-    });
-    if (next === store) {
-      showToast('That already matches what is recorded');
-    } else {
-      saveStore(next);
-      onUpdate?.(next);
-      showToast('Available balance updated');
-    }
-    setCorrectBalanceOpen(false);
-  };
   const balanceStats = useMemo(() => {
     const { start, end } = balancePeriodRange(balancePeriod);
     const inRange = (dateStr: string) => {
@@ -171,27 +136,9 @@ export default function OwnerDashboard({ store, orders = [], onNavigate, onUpdat
       return (start === null || t >= start) && (end === null || t < end);
     };
     const revenue = store.sales.filter(s => inRange(s.date)).reduce((sum, s) => sum + s.total, 0);
-    const expenses = sumOperatingExpenses(store, inRange);
-    const stockPurchases = sumStockPurchases(store, inRange);
-
-    // "Business Balance" used to be revenue minus expenses, which is neither
-    // cash nor profit: it ignored every naira spent on stock, so a shop that
-    // had turned most of its takings back into goods still showed the takings
-    // as if they were sitting there. Show the money that actually exists.
-    const moneyOnHand = (store.cashBalance || 0) + (store.bankBalance || 0) + (store.walletBalance || 0);
-
-    // A balance is a snapshot, so only the lifetime view is a balance. Any
-    // narrower period reports how much that money moved instead: what was
-    // collected, less what was paid out (stock included — that is real cash).
-    const collected = store.sales
-      .filter(s => inRange(s.date) && !s.pendingPaymentId)
-      .reduce((sum, s) => sum + s.total, 0);
-    const balance = balancePeriod === 'lifetime'
-      ? moneyOnHand
-      : collected - expenses - stockPurchases;
-
-    return { revenue, expenses, stockPurchases, moneyOnHand, balance };
-  }, [store.sales, store.expenses, store.cashBalance, store.bankBalance, store.walletBalance, balancePeriod]);
+    const expenses = (store.expenses || []).filter(e => inRange(e.date)).reduce((sum, e) => sum + e.amount, 0);
+    return { revenue, expenses, balance: revenue - expenses };
+  }, [store.sales, store.expenses, balancePeriod]);
   const selectBalancePeriod = (period: BalancePeriod) => {
     setBalancePeriod(period);
     if (typeof localStorage !== 'undefined') localStorage.setItem(`storeflow_dash_period_${store.accessCode}_balance`, period);
@@ -649,25 +596,11 @@ export default function OwnerDashboard({ store, orders = [], onNavigate, onUpdat
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setBalancePeriodMenuOpen(v => !v); } }}
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground uppercase tracking-wide font-display font-semibold hover:text-foreground active:scale-95 transition cursor-pointer"
                 >
-                  {balancePeriod === 'lifetime' ? 'Available Balance' : `${BALANCE_PERIOD_LABELS[balancePeriod]} Change`} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
+                  {balancePeriod === 'lifetime' ? 'Business Balance' : `${BALANCE_PERIOD_LABELS[balancePeriod]} Balance`} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
                 </span>
                 <p className={`font-display font-bold text-lg ${balanceStats.balance >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {balanceStats.balance >= 0 ? '' : '−'}₦{Math.abs(balanceStats.balance).toLocaleString()}
                 </p>
-                {/* The app only knows the money it was told about, and older
-                    stores carry balances it inferred. Correcting that should be
-                    one tap from the figure that looks wrong, not buried. */}
-                {balancePeriod === 'lifetime' && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => { e.stopPropagation(); openCorrectBalance(); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openCorrectBalance(); } }}
-                    className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary cursor-pointer font-display font-semibold"
-                  >
-                    <Pencil className="w-2.5 h-2.5" /> Not correct? Set what you really have
-                  </span>
-                )}
                 {balancePeriodMenuOpen && (
                   <><ScrollLock />
                     <span role="presentation" className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setBalancePeriodMenuOpen(false); }} />
@@ -691,69 +624,9 @@ export default function OwnerDashboard({ store, orders = [], onNavigate, onUpdat
               <div className="text-right">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expenses</p>
                 <p className="font-display font-semibold text-sm text-destructive">₦{balanceStats.expenses.toLocaleString()}</p>
-                {/* Shown apart from expenses: this cash bought goods the shop
-                    still owns, so it is not a cost of trading. */}
-                {balanceStats.stockPurchases > 0 && (
-                  <>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-1.5">Stock bought</p>
-                    <p className="font-display font-semibold text-sm text-foreground">₦{balanceStats.stockPurchases.toLocaleString()}</p>
-                  </>
-                )}
               </div>
             </div>
           </button>
-
-          {correctBalanceOpen && (
-            <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center" onClick={() => setCorrectBalanceOpen(false)}>
-              <div className="absolute inset-0 bg-black/80" />
-              <div
-                className="relative w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl bg-background border border-border p-4 space-y-3"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] uppercase text-primary font-black">Correct your balance</p>
-                    <h3 className="font-display font-black text-lg mt-0.5">What do you really have?</h3>
-                  </div>
-                  <button onClick={() => setCorrectBalanceOpen(false)} className="p-2 rounded-xl bg-surface-2 shrink-0"><X className="w-4 h-4" /></button>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Count your money and enter it. StoreFlow only knows what it was told, so anything spent or received outside the app leaves it behind.
-                </p>
-
-                {([
-                  { label: 'Cash in hand', value: correctCash, set: setCorrectCash },
-                  { label: 'Bank', value: correctBank, set: setCorrectBank },
-                  { label: 'Wallet / transfer app', value: correctWallet, set: setCorrectWallet },
-                ] as const).map(field => (
-                  <div key={field.label}>
-                    <label className="text-[10px] uppercase font-black text-muted-foreground">{field.label}</label>
-                    <div className="mt-1 flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border">
-                      <span className="font-black">₦</span>
-                      <input
-                        value={field.value}
-                        onChange={e => field.set(e.target.value.replace(/[^0-9.]/g, ''))}
-                        inputMode="decimal"
-                        className="w-full bg-transparent outline-none font-black"
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  onClick={saveCorrectedBalance}
-                  className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm"
-                >
-                  Save actual balance
-                </button>
-                <p className="text-[10px] text-muted-foreground text-center">
-                  Recorded as a correction, so your history shows it was changed by hand.
-                </p>
-              </div>
-            </div>
-          )}
 
           {periodSheetFor !== null && (
             <div
