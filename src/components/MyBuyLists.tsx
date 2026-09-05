@@ -3,6 +3,7 @@ import { Copy, ExternalLink, PackageCheck, Search, Share2, X } from 'lucide-reac
 import { PurchaseOrderRecord, StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import ScrollLock from '@/components/ScrollLock';
+import { buyListOrigin } from '@/lib/buy-list-origin';
 
 interface MyBuyListsProps {
   store: StoreData;
@@ -81,12 +82,17 @@ export default function MyBuyLists({ store, onClose }: MyBuyListsProps) {
             </div>
           ) : lists.map(po => {
             const s = status(po);
+            const origin = buyListOrigin(po);
             return (
               <button key={po.id} onClick={() => setSelected(po)} className="w-full text-left p-3.5 rounded-xl border border-border/60 bg-surface-2/20 hover:bg-surface-2/50 transition">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono font-bold text-sm">{po.importCode}</span>
+                      {/* Who chose the quantities. Two lists side by side, one
+                          sized by Flow and one typed by hand, used to look the
+                          same. */}
+                      <span className={`text-[10px] px-2 py-1 rounded-full border font-semibold ${origin.className}`}>{origin.label}</span>
                       <span className={`text-[10px] px-2 py-1 rounded-full border font-semibold ${s.cls}`}>{s.label}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">{po.items.length} product{po.items.length === 1 ? '' : 's'} · {new Date(po.createdAt).toLocaleDateString()} · {money(po.totalCost)}</p>
@@ -107,6 +113,12 @@ export default function MyBuyLists({ store, onClose }: MyBuyListsProps) {
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-bold">Restock Code</p>
                 <h3 className="font-mono text-xl font-bold mt-1">{selected.importCode}</h3>
                 <p className="text-xs text-muted-foreground mt-1">Created {new Date(selected.createdAt).toLocaleString()}</p>
+                <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${buyListOrigin(selected).className}`}>
+                    {buyListOrigin(selected).label}
+                  </span>
+                  {buyListOrigin(selected).hint}
+                </p>
               </div>
               <button onClick={() => setSelected(null)} className="p-2 rounded-lg hover:bg-surface-2"><X className="w-4 h-4" /></button>
             </div>

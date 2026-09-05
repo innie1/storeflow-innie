@@ -700,7 +700,7 @@ export interface PurchaseOrderRecord {
   items: { productId: string; name: string; qty: number; costPrice: number }[];
   totalCost: number;
   status: 'draft' | 'ordered' | 'received' | 'cancelled';
-  source: 'manual' | 'auto_fix';
+  source: 'manual' | 'auto_fix' | 'smart_budget'; // manual = hand-picked; the other two = Flow chose the quantities
   createdAt: string;
   importCode: string;      // short code shared with self/staff to import this exact list into stock later
   imported?: boolean;      // true once the code has been redeemed — prevents duplicate imports

@@ -678,7 +678,9 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
         items: codableItems.map(it => ({ productId: it.id, name: it.name, qty: it.suggestedQty, costPrice: it.costPrice })),
         totalCost: codableItems.reduce((sum, it) => sum + it.suggestedQty * it.costPrice, 0),
         status: 'ordered',
-        source: 'manual',
+        // Which mode built this. It was always 'manual', so a list Flow had
+        // sized was indistinguishable from one the merchant typed by hand.
+        source: mode === 'smart' ? 'smart_budget' : 'manual',
       });
       importCode = storeAfterPO.purchaseOrders?.[0]?.importCode || null;
     }
@@ -870,7 +872,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
               mode === 'simple' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'
             }`}
           >
-            ✅ Simple
+            ✋ Hand-pick
           </button>
           <button
             onClick={() => setMode('smart')}
@@ -878,13 +880,16 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
               mode === 'smart' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground'
             }`}
           >
-            🪄 Smart Budget
+            ✨ Smart
           </button>
         </div>
+        {/* The two modes decide who picks the quantities, which is the whole
+            difference between them and was not what the old labels said. The
+            list keeps that answer afterwards, and shows it as a badge. */}
         <p className="text-[11px] text-muted-foreground -mt-2">
           {mode === 'simple'
-            ? 'Pick items, set your own quantities, and share the list — no auto-calculation.'
-            : 'Quantities are auto-fitted to your available Business Balance. Switch to Simple to set quantities yourself.'}
+            ? 'You choose the items and the quantities. Saved as a Hand-picked list.'
+            : `Flow sizes each order from what the product sells and fits the total to your balance. Saved as a Smart list.`}
         </p>
 
         {mode === 'smart' && (

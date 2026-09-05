@@ -4,6 +4,7 @@ import { X, Package, ChevronRight, KeyRound, Copy, CheckCircle2 } from 'lucide-r
 import { updatePurchaseOrderStatus, importPurchaseOrderByCode } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ScrollLock from '@/components/ScrollLock';
+import { buyListOrigin } from '@/lib/buy-list-origin';
 
 interface PurchaseOrdersListProps {
   store: StoreData;
@@ -114,6 +115,7 @@ export default function PurchaseOrdersList({ store, onClose, onUpdate }: Purchas
                 <p className="text-xs text-muted-foreground">{new Date(po.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })} · {po.source === 'auto_fix' ? 'Created by Flow' : 'Manual'}</p>
               </div>
               <span className={`text-[10px] font-display font-bold uppercase px-2 py-1 rounded-full ${STATUS_STYLE[po.status]}`}>{po.status}</span>
+              <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${buyListOrigin(po).className}`}>{buyListOrigin(po).label}</span>
             </div>
 
             {po.importCode && (
