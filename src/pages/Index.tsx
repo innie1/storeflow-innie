@@ -287,6 +287,45 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
   }
 };
 
+/**
+ * Tabs the main area actually renders.
+ *
+ * Each screen is mounted as <div className={tab === 'x' ? 'block' : 'hidden'}>,
+ * so a tab id with no branch does not fail — every div simply stays hidden and
+ * the page goes completely blank. No error, nothing for the error boundary to
+ * catch, and on a phone no obvious way back. This list is what the fallback
+ * below checks against, and a test keeps it in step with the markup.
+ */
+const RENDERABLE_TABS = new Set<string>([
+  'academy',
+  'achievements',
+  'cash-drawer',
+  'communication-center',
+  'customers',
+  'dashboard',
+  'diary',
+  'documents',
+  'expenses',
+  'games-analytics',
+  'games-dashboard',
+  'games-history',
+  'games-settings',
+  'goals',
+  'history',
+  'inventory',
+  'manager',
+  'marketplace',
+  'orders',
+  'pending',
+  'qr-hub',
+  'roi',
+  'sales',
+  'settings',
+  'staff',
+  'suppliers',
+  'wishlist',
+]);
+
 const isTabAllowed = (tabId: TabId, user: any) => {
   if (!user) return false;
   if (user.role === 'owner') return true;
@@ -1942,6 +1981,26 @@ export default function Index() {
                   <GamesSettings store={store} onUpdate={setStore} />
                 </div>
               </>
+            )}
+
+            {/* Nothing matched. Rather than leave the merchant on an empty
+                screen with no way out, say so and offer the way back. */}
+            {!RENDERABLE_TABS.has(tab) && (
+              <div className="py-20 flex flex-col items-center justify-center text-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-surface-2 border border-border flex items-center justify-center text-2xl">🧭</div>
+                <div>
+                  <p className="font-display font-bold text-base">That screen isn't available</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+                    Nothing is lost — your store data is safe. Head back and carry on.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTab('dashboard')}
+                  className="mt-1 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm"
+                >
+                  Go to Home
+                </button>
+              </div>
             )}
           </Suspense>
         </main>
