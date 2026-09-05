@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { loadStore } from '@/lib/store-data';
 import { addFlowReward } from '@/lib/flow-memory';
 import { StoreData } from '@/types/store';
 import { 
@@ -9,6 +8,7 @@ import {
   ShoppingCart,
   Lock
 } from 'lucide-react';
+import { readStoreSignal, signalFromStore, invalidateStoreSignal } from '@/lib/mascot-store-signal';
 
 // Flow — StoreFlow's interactive mascot.
 // Pure SVG + CSS animations, offline-friendly, highly responsive.
@@ -185,8 +185,22 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       }
     };
     checkRole();
-    const interval = setInterval(checkRole, 2000);
-    return () => clearInterval(interval);
+
+    // Was a 2-second poll. Who is signed in changes when somebody signs in,
+    // which is not worth asking about thirty times a minute — and never worth
+    // asking about while the app is off screen. The slow check covers same-tab
+    // writes, which do not raise a storage event.
+    const onStorage = (e: StorageEvent) => { if (e.key === 'storeflow_active_user') checkRole(); };
+    const onVisible = () => { if (!document.hidden) checkRole(); };
+    const interval = setInterval(() => { if (!document.hidden) checkRole(); }, 15000);
+
+    window.addEventListener('storage', onStorage);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', onStorage);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [role]);
 
   // Keep isManagerEnabled in sync with store prop updates
@@ -249,57 +263,50 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
 
   // Fetch active store hours dynamically
+  // Opening hours and whether the manager is on.
+  //
+  // This used to call loadStore() every five seconds in every mounted mascot,
+  // even when the live store had been passed in as a prop. loadStore is not a
+  // read — it re-parses the whole record, runs scheduled savings deductions,
+  // re-syncs product performance and writes the store index back. On a
+  // multi-megabyte store that stalls the main thread twelve times a minute,
+  // per mascot, and that is the same thread the animation runs on. A
+  // decorative component was the heaviest thing on the screen.
+  //
+  // When a store is passed it is live React state, always fresher than disk,
+  // so it is simply used. Only a mascot rendered without one falls back to
+  // storage, through a shared cache that parses at most once a minute however
+  // many mascots ask, and writes nothing.
   useEffect(() => {
-    const fetchHours = () => {
-      try {
-        const raw = localStorage.getItem('storeflow_session');
-        if (raw) {
-          const session = JSON.parse(raw);
-          const code = session.accessCode;
-          if (code) {
-            const activeStore = loadStore(code);
-            if (activeStore) {
-              setStoreClosingTime(activeStore.profile?.closingTime || null);
-              setStoreOpeningTime(activeStore.profile?.openingTime || null);
-              setIsManagerEnabled(activeStore.managerSettings?.enabled !== false);
-              
-              // Local storage fallback for detecting sales if store prop is not provided
-              if (activeStore.managerSettings?.enabled !== false && !store && activeStore.sales) {
-                const newSalesCount = activeStore.sales.length;
-                if (lastSalesCountRef.current !== null && newSalesCount > lastSalesCountRef.current) {
-                  const saleDiff = newSalesCount - lastSalesCountRef.current;
-                  const latestSales = activeStore.sales.slice(-saleDiff);
-                  const totalAmount = latestSales.reduce((sum, s) => sum + s.total, 0);
-                  
-                  const celebrationPhrases = [
-                    `Awesome! We just sold items for ₦${totalAmount.toLocaleString()}! 💵🎉`,
-                    `Ka-ching! A new sale of ₦${totalAmount.toLocaleString()} recorded! 🚀💰`,
-                    `Nice job! ₦${totalAmount.toLocaleString()} added to revenue! Keep it up! 🛒✨`,
-                    `Another customer served! ₦${totalAmount.toLocaleString()} sale completed! 🥳📦`
-                  ];
-                  triggerSpeech(celebrationPhrases[Math.floor(Math.random() * celebrationPhrases.length)], 'celebrating', 5000);
-                  triggerConfetti();
-                  setActivity('counting-cash');
-                  setTimeout(() => setActivity(null), 1800);
-                }
-                lastSalesCountRef.current = newSalesCount;
-              }
-              return;
-            }
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
-      setStoreClosingTime(null);
-      setStoreOpeningTime(null);
-      setIsManagerEnabled(true);
+    if (store) {
+      const signal = signalFromStore(store);
+      setStoreClosingTime(signal.closingTime);
+      setStoreOpeningTime(signal.openingTime);
+      setIsManagerEnabled(signal.managerEnabled);
+      return;
+    }
+
+    const apply = () => {
+      const signal = readStoreSignal();
+      setStoreClosingTime(signal.closingTime);
+      setStoreOpeningTime(signal.openingTime);
+      setIsManagerEnabled(signal.managerEnabled);
     };
-    
-    fetchHours();
-    const interval = setInterval(fetchHours, 5000);
-    return () => clearInterval(interval);
-  }, [store]);
+
+    apply();
+    const interval = setInterval(() => { if (!document.hidden) apply(); }, 30000);
+    const onVisible = () => {
+      if (document.hidden) return;
+      // Hours may have been edited while the app was away.
+      invalidateStoreSignal();
+      apply();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [store, store?.profile?.openingTime, store?.profile?.closingTime, store?.managerSettings?.enabled]);
 
   // Real-time sale awareness when store is passed as prop
   useEffect(() => {
@@ -495,6 +502,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   useEffect(() => {
     if (isSleepingState || !animate) return;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       if (Math.random() < 0.3) {
         setIsBreathingAir(true);
         setTimeout(() => setIsBreathingAir(false), 3000);
@@ -507,6 +515,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   useEffect(() => {
     if (isSleepingState || !animate) return;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       if (Math.random() < 0.25 && !isWearingGlasses) {
         setIsWearingGlasses(true);
         setTimeout(() => setIsWearingGlasses(false), 8000);
@@ -522,6 +531,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       return;
     }
     const interval = setInterval(() => {
+      if (document.hidden) return;
       const postures: ('normal' | 'look-left' | 'look-right' | 'tilt-left' | 'tilt-right')[] = [
         'normal', 'normal', 'look-left', 'look-right', 'tilt-left', 'tilt-right'
       ];
@@ -536,6 +546,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     if (!animate || isSleepingState || isMorningBathing || boxStage > 0) return;
 
     const interval = setInterval(() => {
+      if (document.hidden) return;
       if (overrideMood || message || tapCount > 0) return;
 
       // 45% chance to trigger a random activity
