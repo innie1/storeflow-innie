@@ -633,6 +633,14 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
           note: stockCoverLabel(f, { short: true }) + (f.hasVelocity ? ` · order ${f.restockQty}` : '')
         })),
         goTo: 'inventory',
+        // Group advice could not name a single product, so Open used to drop
+        // the merchant on the whole inventory to work out which ones.
+        focus: {
+          productId: criticalStock[0].product.id,
+          productIds: criticalStock.map(f => f.product.id),
+          groupLabel: `${criticalStock.length} products need restocking now`,
+          intent: 'restock',
+        },
         autoFix: {
           type: 'generate_purchase_order',
           summary: `Create a draft purchase order covering all ${criticalStock.length} critical products`,
@@ -727,6 +735,12 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
           note: f.product.quantity <= 0 ? 'Sold out · never sold' : `${f.product.quantity} left · no recent sales`,
         })),
         goTo: 'inventory',
+        focus: {
+          productId: deadStock[0].product.id,
+          productIds: deadStock.map(f => f.product.id),
+          groupLabel: deadStock.length === 1 ? `${deadStock[0].product.name} is not selling` : `${deadStock.length} products are not selling`,
+          intent: 'view',
+        },
       });
     }
 
@@ -753,6 +767,12 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         priority: 'medium',
         items: soonStock.map(f => ({ name: f.product.name, note: stockCoverLabel(f, { short: true }) + (f.hasVelocity ? ` · order ${f.restockQty}` : '') })),
         goTo: 'inventory',
+        focus: {
+          productId: soonStock[0].product.id,
+          productIds: soonStock.map(f => f.product.id),
+          groupLabel: `${soonStock.length} products to order this week`,
+          intent: 'restock',
+        },
         autoFix: {
           type: 'generate_purchase_order',
           summary: `Create a draft purchase order covering all ${soonStock.length} products`,
@@ -1144,8 +1164,11 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
       read: false,
       title: 'Restock Alert (Critical)',
       description: `${f.product.name}: ${stockCoverLabel(f)}.`,
-      actionLabel: 'Go to Inventory',
-      actionTab: 'inventory'
+      // Carries the product, so the alert opens that product rather than
+      // dropping the merchant on the inventory list to find it themselves.
+      actionLabel: `Open ${f.product.name}`,
+      actionTab: 'inventory',
+      actionParam: `product:${f.product.id}`
     });
   });
   stock.filter(f => f.urgency === 'soon').slice(0, 3).forEach(f => {
@@ -1158,8 +1181,9 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
       read: false,
       title: 'Restock Suggestion',
       description: `${f.product.name}: ${stockCoverLabel(f)}.`,
-      actionLabel: 'Go to Inventory',
-      actionTab: 'inventory'
+      actionLabel: `Open ${f.product.name}`,
+      actionTab: 'inventory',
+      actionParam: `product:${f.product.id}`
     });
   });
   if (ea.trendPct > 25) {

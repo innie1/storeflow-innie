@@ -3,6 +3,7 @@ import { StoreData, Product, CustomerRequest, PlannedRestock } from '@/types/sto
 import { receiveStock, addPurchaseOrder, sumOperatingExpenses } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
+import ScrollLock from '@/components/ScrollLock';
 import {
   TrendingUp, AlertTriangle, Coins, Sparkles, CheckCircle,
   Trash2, Plus, Info, Lightbulb, CheckSquare, Square
@@ -63,6 +64,13 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   // merchants who specifically want quantities auto-fitted to their available balance.
   const [mode, setMode] = useState<'simple' | 'smart'>('simple');
   const [showAddNewForm, setShowAddNewForm] = useState(false);
+  /** Set once a list is approved, so the result can be shown rather than toasted away. */
+  const [approved, setApproved] = useState<{
+    importCode: string | null;
+    itemCount: number;
+    plannedCount: number;
+    total: number;
+  } | null>(null);
   const [newProductName, setNewProductName] = useState('');
   const [newProductCost, setNewProductCost] = useState('');
   const [newProductPrice, setNewProductPrice] = useState('');
@@ -753,13 +761,16 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       plannedRestocks: [...newPlannedRestocks, ...(store.plannedRestocks || [])]
     });
 
-    if (importCode) {
-      showToast(`Purchase Import Code: ${importCode} — also saved under Purchase Orders history.`, 'success');
-    } else if (newPlannedRestocks.length > 0) {
-      showToast(`✓ ${newPlannedRestocks.length} item(s) added to Planned Restocks — receive them from Inventory once they arrive.`, 'success');
-    }
-
-    onClose();
+    // Approving used to fire a toast naming two places the list had gone and
+    // then close, leaving the merchant on the inventory grid with no way to see
+    // what they had just made. It now says what was created and where it lives,
+    // and stays until they choose.
+    setApproved({
+      importCode,
+      itemCount: selectedItems.length,
+      plannedCount: newPlannedRestocks.length,
+      total: totals.totalCost,
+    });
   };
 
   // Live Suggestions pane
@@ -790,8 +801,55 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     return list.slice(0, 4);
   }, [itemsList, totals, availableBudget]);
 
+  // What was created, and where to find it. Approving used to close the modal
+  // behind a toast, so the list the merchant had just built vanished with no
+  // trail — the single most common "where did it go?" moment in the app.
+  if (approved) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={onClose}>
+        <ScrollLock />
+        <div className="w-full max-w-sm bg-card border border-border/50 rounded-2xl p-5 shadow-2xl space-y-4 animate-scale-in text-center" onClick={e => e.stopPropagation()}>
+          <div className="w-12 h-12 rounded-2xl bg-success/15 text-success flex items-center justify-center mx-auto">
+            <CheckCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-base">Buy list saved</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {approved.itemCount} item{approved.itemCount === 1 ? '' : 's'} · ₦{Math.round(approved.total).toLocaleString()}
+            </p>
+          </div>
+
+          {approved.importCode && (
+            <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Purchase import code</p>
+              <p className="font-mono font-bold text-primary text-base tracking-wider mt-0.5">{approved.importCode}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Enter this in Stock → Import once the goods arrive and everything is added back for you.
+              </p>
+            </div>
+          )}
+
+          <div className="text-left text-[11px] text-muted-foreground space-y-1">
+            <p>• Find it any time under <b className="text-foreground">Stock → My Buy Lists</b>.</p>
+            {approved.plannedCount > 0 && (
+              <p>• {approved.plannedCount} item{approved.plannedCount === 1 ? '' : 's'} also queued under <b className="text-foreground">Planned Restocks</b>.</p>
+            )}
+          </div>
+
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={onClose}>
+      <ScrollLock />
       <div className="w-full max-w-5xl bg-card border border-border/50 rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto space-y-4 animate-scale-in text-left flex flex-col no-scrollbar" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex justify-between items-start border-b border-border pb-3">

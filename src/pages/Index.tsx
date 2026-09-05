@@ -2297,6 +2297,11 @@ export default function Index() {
           onNavigate={(targetTab, param) => {
             setTab(targetTab as TabId);
             if (param === 'openRestock') setAutoOpenRestock(true);
+            // A restock alert names one product; open that product instead of
+            // leaving the merchant on the inventory list wondering which.
+            else if (param?.startsWith('product:')) {
+              setFocusProduct({ productId: param.slice('product:'.length), intent: 'view' });
+            }
             setShowNotifications(false);
           }}
         />

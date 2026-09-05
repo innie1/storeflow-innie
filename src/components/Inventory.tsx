@@ -11,6 +11,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SmartRestockEngine from '@/components/SmartRestockEngine';
+import MyBuyLists from '@/components/MyBuyLists';
 import ProductIcon from '@/components/ProductIcon';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import {
@@ -26,7 +27,8 @@ import {
   Upload,
   Trash2,
   FileText,
-  Sparkles
+  Sparkles,
+  ClipboardList
 } from 'lucide-react';
 import type { ProductFocus } from '@/lib/product-focus';
 
@@ -88,6 +90,8 @@ export interface MassEditItem {
 
 export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter, currentUser, autoOpenRestock, onAutoOpenRestockHandled, focusProduct, onFocusProductHandled }: InventoryProps) {
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
+  /** A set of products Flow sent the merchant here to look at, and why. */
+  const [focusGroup, setFocusGroup] = useState<{ ids: string[]; label: string } | null>(null);
   const [search, setSearch] = useState('');
   const [performancePeriod, setPerformancePeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [detailTab, setDetailTab] = useState<'overview' | 'performance' | 'history'>('overview');
@@ -606,6 +610,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
+  const [showBuyLists, setShowBuyLists] = useState(false);
 
   useEffect(() => {
     if (autoOpenRestock) {
@@ -659,6 +664,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   }
   if (filterLowStock) products = products.filter(p => p.quantity <= lowThreshold);
   if (search) products = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  // Advice that named several products filters the list to exactly those, so
+  // "2 products need restocking" lands on those two rather than on everything.
+  if (focusGroup) products = products.filter(p => focusGroup.ids.includes(p.id));
 
   // Opening a product's editor, in one place. The row's pencil button and the
   // "Open" on a piece of advice must land on the same form in the same state;
@@ -705,6 +713,18 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     setShowDiscontinued(!!target.discontinued);
     if (filterLowStock) onClearFilter?.();
 
+    // Several products: show just those, named, rather than opening one of
+    // them and leaving the rest for the merchant to hunt down.
+    if (focusProduct.productIds && focusProduct.productIds.length > 1) {
+      setFocusGroup({
+        ids: focusProduct.productIds,
+        label: focusProduct.groupLabel || `${focusProduct.productIds.length} products from Flow`,
+      });
+      onFocusProductHandled?.();
+      return;
+    }
+
+    setFocusGroup(null);
     if (focusProduct.intent === 'edit') {
       openEditFor(target);
     } else {
@@ -1581,6 +1601,27 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         </button>
       </div>
 
+      {/* Every buy list the shop has made, next to where restocking happens.
+          MyBuyLists was already built — search, import code, share — and
+          nothing in the app opened it, so a list created by Auto Fix or by
+          approving a buy list could only be found by going to Flow, opening
+          Advice and scrolling to a link at the very bottom. */}
+      {(store.purchaseOrders || []).length > 0 && (
+        <button
+          onClick={() => setShowBuyLists(true)}
+          className="w-full mb-4 flex items-center justify-between gap-2 py-3 px-4 rounded-xl bg-surface-2 border border-border/80 hover:bg-surface-3 active:scale-[0.99] transition-all cursor-pointer"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <ClipboardList className="w-4 h-4 text-primary shrink-0" />
+            <span className="font-display font-bold text-xs text-foreground">My Buy Lists</span>
+            <span className="text-[11px] text-muted-foreground truncate">codes, sharing and history</span>
+          </span>
+          <span className="shrink-0 px-2 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-bold">
+            {(store.purchaseOrders || []).length}
+          </span>
+        </button>
+      )}
+
       {countMode && (
         <div className="p-4 rounded-xl bg-warning/10 border border-warning/20 mb-4 flex flex-wrap items-center justify-between gap-3 text-left">
           <div>
@@ -1634,6 +1675,23 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         <div className="mb-3 flex items-center gap-2">
           <span className="text-warning text-sm">⚠ Showing low stock items only</span>
           <button onClick={onClearFilter} className="text-primary text-sm underline">Show all</button>
+        </div>
+      )}
+
+      {/* Says why the list is short. A filter with nothing explaining it is
+          how a screen starts feeling broken. */}
+      {focusGroup && (
+        <div className="mb-3 flex items-center justify-between gap-2 p-3 rounded-xl bg-primary/5 border border-primary/25">
+          <div className="min-w-0">
+            <p className="text-xs font-display font-bold text-primary truncate">{focusGroup.label}</p>
+            <p className="text-[11px] text-muted-foreground">Showing just these {focusGroup.ids.length}, sent from Flow's advice.</p>
+          </div>
+          <button
+            onClick={() => setFocusGroup(null)}
+            className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-display font-bold border border-border bg-surface-2 hover:bg-surface-3"
+          >
+            Show all
+          </button>
         </div>
       )}
 
@@ -3375,6 +3433,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
 
       {/* Shopping List Modal */}
+      {showBuyLists && (
+        <MyBuyLists store={store} onClose={() => setShowBuyLists(false)} />
+      )}
+
       {showShoppingList && (
         <SmartRestockEngine
           store={store}

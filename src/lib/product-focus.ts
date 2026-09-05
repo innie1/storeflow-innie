@@ -25,4 +25,14 @@ export interface ProductFocus {
   intent: ProductFocusIntent;
   /** Kept only so a screen can say which product it could not find. */
   productName?: string;
+  /**
+   * Every product the advice was about, when it named more than one.
+   *
+   * "2 products need restocking" could not carry a single product, so Open
+   * dropped the merchant on the full inventory list to work out which two.
+   * With this the destination can show just those, and say why it is filtered.
+   */
+  productIds?: string[];
+  /** What to call the group on screen, e.g. "2 products need restocking". */
+  groupLabel?: string;
 }
