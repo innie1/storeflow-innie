@@ -12,9 +12,10 @@ interface DashboardProps {
   orders?: any[];
   onNavigate: (tab: any, lowStock?: boolean) => void;
   currentUser?: any;
+  onUpdate?: (store: StoreData) => void;
 }
 
-export default function Dashboard({ store, orders = [], onNavigate, currentUser }: DashboardProps) {
+export default function Dashboard({ store, orders = [], onNavigate, currentUser, onUpdate }: DashboardProps) {
   const role = currentUser?.role;
   const isBusinessTemplateStore = [
     'laundry',
@@ -48,7 +49,7 @@ export default function Dashboard({ store, orders = [], onNavigate, currentUser 
       return <SupervisorDashboard store={store} onNavigate={onNavigate} />;
     case 'custom':
       if (currentUser?.permissions?.reports) {
-        return <OwnerDashboard store={store} orders={orders} onNavigate={onNavigate} />;
+        return <OwnerDashboard store={store} orders={orders} onNavigate={onNavigate} onUpdate={onUpdate} />;
       }
       if (currentUser?.permissions?.sales) {
         return <CashierDashboard store={store} onNavigate={onNavigate} />;
@@ -59,6 +60,6 @@ export default function Dashboard({ store, orders = [], onNavigate, currentUser 
       return <CashierDashboard store={store} onNavigate={onNavigate} />;
     case 'owner':
     default:
-      return <OwnerDashboard store={store} orders={orders} onNavigate={onNavigate} />;
+      return <OwnerDashboard store={store} orders={orders} onNavigate={onNavigate} onUpdate={onUpdate} />;
   }
 }
