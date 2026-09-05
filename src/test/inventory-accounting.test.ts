@@ -147,6 +147,21 @@ describe('buying stock is not an operating expense', () => {
     expect(same).toBe(store);
   });
 
+  it('still records a restock as an expense, so Business Balance drops', () => {
+    // Business Balance on the dashboard is revenue minus every expense in the
+    // period, stock included. Restocking must therefore always write the
+    // expense, whichever way it was funded, or the card would stop moving.
+    const before = tradingShop();
+    const balance = (s: StoreData) =>
+      s.sales.reduce((sum, x) => sum + x.total, 0) - (s.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+
+    const fromBalance = receiveStock(before, [{ productId: 'p1', quantity: 50, costPrice: 600 }], 'balance');
+    expect(balance(before) - balance(fromBalance)).toBe(30_000);
+
+    const newMoney = receiveStock(before, [{ productId: 'p1', quantity: 50, costPrice: 600 }], 'new_money');
+    expect(balance(before) - balance(newMoney)).toBe(30_000);
+  });
+
   it('can narrow either figure to a period', () => {
     const old = new Date(Date.now() - 60 * 86_400_000).toISOString();
     const now = new Date().toISOString();
