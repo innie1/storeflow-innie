@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 import ConfirmModal from '@/components/ConfirmModal';
+import ScrollLock from '@/components/ScrollLock';
 
 interface StaffManagementProps {
   store: StoreData;
@@ -341,7 +342,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
 
       {/* Account Creation Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}><ScrollLock />
           <form 
             onSubmit={editingStaff ? handleEditStaff : handleAddStaff}
             className="w-full max-w-md bg-card border border-border rounded-2xl p-6 animate-slide-up space-y-4"

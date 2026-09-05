@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface ConfirmAccessCodeProps {
   expectedCode: string;
@@ -17,6 +18,8 @@ export default function ConfirmAccessCode({
   onConfirm,
   onCancel,
 }: ConfirmAccessCodeProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);

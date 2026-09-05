@@ -5,6 +5,7 @@ import { showToast } from '@/components/Toast';
 import { FlowIcon } from './FlowIcon';
 import { askFlowMarketplace, flowMarketplaceSuggestions, flowTopRecommendation, type FlowAnswer } from '@/lib/flow-marketplace-intel';
 import { topCustomerRequests } from '@/lib/manager-intel';
+import ScrollLock from '@/components/ScrollLock';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface MarketplaceProps {
@@ -1191,7 +1192,7 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
            MODAL: REWARDS FLOW REDEMPTION
          ═══════════════════════════════════════════════════════════ */}
       {showRewardsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowRewardsModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowRewardsModal(false)}><ScrollLock />
           <div className="w-full max-w-md bg-[#16181D] border border-gold/30 rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
@@ -1252,7 +1253,7 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
            MODAL: SUPPLIER PRODUCT CATALOGUE
          ═══════════════════════════════════════════════════════════ */}
       {activeSupplierCatalog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setActiveSupplierCatalog(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setActiveSupplierCatalog(null)}><ScrollLock />
           <div className="w-full max-w-lg bg-[#16181D] border border-border rounded-2xl p-5 animate-slide-up flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
             
             <div className="flex justify-between items-start pb-3 border-b border-border">

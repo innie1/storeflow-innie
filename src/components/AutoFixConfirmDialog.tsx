@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AutoFixSpec, AutoFixType } from '@/lib/auto-fix';
 import { X, Zap, Check } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface AutoFixConfirmDialogProps {
   spec: AutoFixSpec;
@@ -23,6 +24,8 @@ const STEPS: Record<AutoFixType, string[]> = {
 };
 
 export default function AutoFixConfirmDialog({ spec, onCancel, onConfirm, busy }: AutoFixConfirmDialogProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const steps = STEPS[spec.type] || ['Applying…'];
   const [stepIndex, setStepIndex] = useState(0);
 

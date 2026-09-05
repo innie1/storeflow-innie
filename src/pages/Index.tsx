@@ -95,6 +95,7 @@ import {
   BarChart3,
   type LucideIcon
 } from 'lucide-react';
+import ScrollLock from '@/components/ScrollLock';
 
 
 
@@ -1499,7 +1500,7 @@ export default function Index() {
               </button>
 
               {showProfileMenu && (
-                <>
+                <><ScrollLock />
                   {/* Backdrop to close dropdown when tapping outside */}
                   <div 
                     className="fixed inset-0 z-40" 
@@ -1557,7 +1558,7 @@ export default function Index() {
         </header>
 
         {showLockConfirm && (
-          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowLockConfirm(false)}>
+          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowLockConfirm(false)}><ScrollLock />
             <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
               <div className="text-center space-y-2">
                 <div className="text-3xl">🔒</div>
@@ -1594,7 +1595,7 @@ export default function Index() {
 
         {/* Switch User Modal */}
         {showSwitchUser && (
-          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => { setShowSwitchUser(false); setSwitchTargetUser(null); }}>
+          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => { setShowSwitchUser(false); setSwitchTargetUser(null); }}><ScrollLock />
             <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-4 text-left" onClick={e => e.stopPropagation()}>
               {!switchTargetUser ? (
                 <>
@@ -2023,7 +2024,7 @@ export default function Index() {
       )}
 
       {newProductPrompt && (
-        <div className="fixed inset-0 z-[70] bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNewProductPrompt(null)}>
+        <div className="fixed inset-0 z-[70] bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNewProductPrompt(null)}><ScrollLock />
           <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-3" onClick={e => e.stopPropagation()}>
             <div>
               <h3 className="font-display font-bold text-lg">New Product</h3>
@@ -2077,7 +2078,7 @@ export default function Index() {
 
       {/* Mobile More Menu Bottom Sheet */}
       {showMoreMenu && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end animate-fade-in" onClick={() => setShowMoreMenu(false)}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end animate-fade-in" onClick={() => setShowMoreMenu(false)}><ScrollLock />
           <div 
             className="w-full bg-card border-t border-border rounded-t-3xl shadow-2xl p-5 max-h-[75vh] overflow-y-auto space-y-4 animate-slide-up flex flex-col no-scrollbar"
             style={{ maxWidth: '480px', margin: '0 auto' }}
@@ -2230,7 +2231,7 @@ export default function Index() {
         />
       )}
       {showVerifySuccess && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"><ScrollLock />
           <div className="bg-card border border-border/80 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl animate-scale-up select-none">
             <div className="w-16 h-16 bg-success/15 border border-success/30 rounded-2xl flex items-center justify-center text-3xl mx-auto animate-bounce">
               ✓

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface BarcodeScannerProps {
   onDetected: (code: string) => void;
@@ -13,6 +14,8 @@ interface BarcodeScannerProps {
 const REGION_ID = 'barcode-scanner-region';
 
 export default function BarcodeScanner({ onDetected, onClose, title = 'Scan Barcode', subtitle, greenFlash = true }: BarcodeScannerProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);

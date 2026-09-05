@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Product, StoreData } from '@/types/store';
 import { Check, X, ChevronDown, ChevronUp, Package, Plus } from 'lucide-react';
+import ScrollLock from '@/components/ScrollLock';
 
 interface QuickSellGridProps {
   store: StoreData;
@@ -125,7 +126,7 @@ export default function QuickSellGrid({ store, onSell, onNavigate }: QuickSellGr
       )}
 
       {active && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 animate-fade-in"><ScrollLock />
           <div className="w-full max-w-sm bg-background rounded-t-2xl sm:rounded-2xl p-5 pb-6">
             <p className="font-display font-bold text-base text-foreground text-center">{active.name}</p>
 

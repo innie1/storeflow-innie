@@ -5,6 +5,7 @@ import {
   Coins, Plus, Calendar, DollarSign, ArrowRight, ShieldAlert, Sparkles, Scale, FileText
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import ScrollLock from '@/components/ScrollLock';
 
 interface CashDrawerProps {
   store: StoreData;
@@ -176,7 +177,7 @@ export default function CashDrawer({ store, onUpdate }: CashDrawerProps) {
 
       {/* Balance Modal uploader */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}><ScrollLock />
           <form 
             onSubmit={handleRecordSession} 
             className="w-full max-w-md bg-card border border-border rounded-2xl p-6 animate-slide-up space-y-4"

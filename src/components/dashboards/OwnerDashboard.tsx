@@ -7,6 +7,8 @@ import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Ca
 import Mascot, { MascotBadge } from '@/components/Mascot';
 import { ChevronDown, Check, Wallet, Receipt, AlertTriangle, CreditCard, Share2, MessageCircle, Trophy, TrendingDown } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths, subDays } from 'date-fns';
+import ScrollLock from '@/components/ScrollLock';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 // ---------- Metric reporting period (Revenue / Net Profit) ----------
 
@@ -106,16 +108,11 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
   // Scroll lock for the period picker sheet below. Deliberately not using
   // Radix's built-in scroll lock here (react-remove-scroll) — on mobile it
   // was occasionally failing to release its touchmove blocker on close,
-  // freezing page scroll app-wide while taps still worked. A plain
-  // useEffect cleanup is guaranteed to run on close/unmount, so it can't
-  // leak the same way.
-  useEffect(() => {
-    if (periodSheetFor === null) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [periodSheetFor]);
+  // freezing page scroll app-wide while taps still worked. useBodyScrollLock
+  // keeps that guarantee (a plain useEffect cleanup, which always runs on
+  // close/unmount) and reference counts, so closing this sheet no longer
+  // hands scrolling back while another overlay is still covering the page.
+  useBodyScrollLock(periodSheetFor !== null);
 
   const getPeriodTotals = (period: MetricPeriod) => {
     const start = periodStart(period);
@@ -605,7 +602,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                   {balanceStats.balance >= 0 ? '' : '−'}₦{Math.abs(balanceStats.balance).toLocaleString()}
                 </p>
                 {balancePeriodMenuOpen && (
-                  <>
+                  <><ScrollLock />
                     <span role="presentation" className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setBalancePeriodMenuOpen(false); }} />
                     <div className="absolute left-0 bottom-full mb-1 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[140px]" onClick={e => e.stopPropagation()}>
                       {BALANCE_PERIOD_OPTIONS.map(p => (

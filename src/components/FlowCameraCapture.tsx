@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, X, RotateCcw } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface Props { onCapture: (file: File) => void; onClose: () => void; }
 
 export default function FlowCameraCapture({ onCapture, onClose }: Props) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const [error, setError] = useState(''); const [facing, setFacing] = useState<'environment' | 'user'>('environment');
   useEffect(() => { let active = true; const start = async () => { try { const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } }, audio: false }); if (!active) { stream.getTracks().forEach(t => t.stop()); return; } streamRef.current = stream; if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); } } catch { setError('Camera permission was denied or the camera is unavailable.'); } }; start(); return () => { active = false; streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null; }; }, [facing]);
   const close = () => { streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null; onClose(); };

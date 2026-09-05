@@ -5,6 +5,7 @@ import {
   Star, Plus, Trash2, Calendar, CircleDollarSign, HelpCircle, Sparkles, ShoppingBag
 } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
+import ScrollLock from '@/components/ScrollLock';
 
 interface WishlistProps {
   store: StoreData;
@@ -162,7 +163,7 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
 
       {/* Modal uploader */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}><ScrollLock />
           <form 
             onSubmit={handleAddWish} 
             className="w-full max-w-md bg-card border border-border rounded-2xl p-6 animate-slide-up space-y-4"

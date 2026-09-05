@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Copy, ExternalLink, PackageCheck, Search, Share2, X } from 'lucide-react';
 import { PurchaseOrderRecord, StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
+import ScrollLock from '@/components/ScrollLock';
 
 interface MyBuyListsProps {
   store: StoreData;
@@ -99,7 +100,7 @@ export default function MyBuyLists({ store, onClose }: MyBuyListsProps) {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 z-[70] bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={() => setSelected(null)}>
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={() => setSelected(null)}><ScrollLock />
           <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-5 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>

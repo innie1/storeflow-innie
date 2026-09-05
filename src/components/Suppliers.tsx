@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 import ConfirmModal from '@/components/ConfirmModal';
+import ScrollLock from '@/components/ScrollLock';
 
 interface SuppliersProps {
   store: StoreData;
@@ -255,7 +256,7 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
 
       {/* Add / Edit Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}><ScrollLock />
           <form 
             onSubmit={editingSupplier ? handleEditSupplier : handleAddSupplier} 
             className="w-full max-w-md bg-card border border-border rounded-2xl p-6 animate-slide-up space-y-4"

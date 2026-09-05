@@ -16,6 +16,53 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Restock', 'Rent', 'Utilit
 
 export const STORE_PREFIX = 'storeflow_';
 
+/**
+ * Buying stock is not an operating expense.
+ *
+ * Paying a supplier turns cash into inventory: the shop is no poorer for it,
+ * it just holds goods instead of money. The cost reaches the books when the
+ * goods are *sold* — every sale already records `(unitPrice - costPrice) *
+ * quantity` as its profit. Counting the supplier payment as an expense too
+ * charges the same stock twice, which pushed profit negative the moment a
+ * merchant restocked and triggered "your expenses are too high" while they
+ * were doing the healthiest thing a shop can do.
+ *
+ * So: restock still reduces cash (the money really did leave), but it is
+ * excluded from profit, balance and overspending figures.
+ */
+export function isStockPurchase(expense: Pick<Expense, 'category' | 'source'>): boolean {
+  return expense.source === 'restock' || expense.category === 'Restock';
+}
+
+/** Expenses that are genuinely the cost of running the shop. */
+export function getOperatingExpenses(store: Pick<StoreData, 'expenses'>): Expense[] {
+  return (store.expenses || []).filter(expense => !isStockPurchase(expense));
+}
+
+/**
+ * Total running cost, optionally within a period. Use this anywhere a figure
+ * represents profit, balance or spending — never a raw sum over `expenses`,
+ * which silently includes stock purchases.
+ */
+export function sumOperatingExpenses(
+  store: Pick<StoreData, 'expenses'>,
+  inRange?: (date: string) => boolean,
+): number {
+  return getOperatingExpenses(store)
+    .filter(expense => !inRange || inRange(expense.date))
+    .reduce((sum, expense) => sum + expense.amount, 0);
+}
+
+/** What the shop paid suppliers for stock — cash out, but not a cost of trading. */
+export function sumStockPurchases(
+  store: Pick<StoreData, 'expenses'>,
+  inRange?: (date: string) => boolean,
+): number {
+  return (store.expenses || [])
+    .filter(expense => isStockPurchase(expense) && (!inRange || inRange(expense.date)))
+    .reduce((sum, expense) => sum + expense.amount, 0);
+}
+
 export function recordInventoryMovement(
   store: StoreData,
   productId: string,
@@ -417,6 +464,8 @@ export function syncStoreData(store: StoreData): StoreData {
   if (store.cashBalance === undefined) {
     const totalSalesCash = store.sales.filter(s => s.paymentMethod === 'cash' || !s.paymentMethod).reduce((sum, s) => sum + s.total, 0);
     const totalSalesBank = store.sales.filter(s => s.paymentMethod && s.paymentMethod !== 'cash').reduce((sum, s) => sum + s.total, 0);
+    // Reconstructing an older store's cash balance, so this one DOES include
+    // stock purchases: that money genuinely left the account.
     const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
     const totalInvest = (store.investments || []).reduce((sum, i) => sum + i.amount, 0);
     const totalWithdrawn = (store.withdrawals || []).reduce((sum, w) => sum + w.amount, 0);
@@ -529,7 +578,8 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
       if (hasTarget && currentSaved >= goal.amount) return; // target already hit — stop depositing
 
       const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
-      const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+      // Restocking should not shrink what a merchant sets aside for a goal.
+      const totalExpenses = sumOperatingExpenses(store);
       const netIncomeBefore = totalRevenue - totalExpenses;
 
       let deductionAmount = 0;
@@ -1530,10 +1580,11 @@ export function getDashboardStats(store: StoreData) {
   const lowStockProducts = activeProducts.filter(p => p.quantity <= threshold);
   const totalSales = store.sales.length;
   const inventoryValue = activeProducts.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
-  const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+  const totalExpenses = sumOperatingExpenses(store);
+  const stockPurchases = sumStockPurchases(store);
   const savingsSaved = store.savingsGoal?.saved || 0;
   const netIncome = totalRevenue - totalExpenses - savingsSaved;
-  return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue, totalExpenses, netIncome };
+  return { totalRevenue, totalProfit, totalProducts, lowStockProducts, totalSales, inventoryValue, totalExpenses, stockPurchases, netIncome };
 }
 
 // ---------- Investments ----------

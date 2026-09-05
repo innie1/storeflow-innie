@@ -3,6 +3,7 @@ import { StoreData } from '@/types/store';
 import { printReceipt } from '@/lib/print-engine';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface OrderReceiptProps {
   store: StoreData;
@@ -15,6 +16,8 @@ interface OrderReceiptProps {
 // branding/print settings from managerSettings so both receipt types stay
 // visually consistent without duplicating the template editor.
 export default function OrderReceipt({ store, order, onClose }: OrderReceiptProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const profile = store.profile;
   const settings = store.managerSettings || {};
   const date = new Date(order?.created_at || Date.now());

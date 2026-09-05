@@ -8,6 +8,7 @@ import SaleReceipt from '@/components/SaleReceipt';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
 import { Search, Trash2, FileText, FileSpreadsheet, Wallet, Package, Receipt, ListFilter, X, ChevronDown } from 'lucide-react';
+import ScrollLock from '@/components/ScrollLock';
 
 interface SalesHistoryProps {
   store: StoreData;
@@ -350,7 +351,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
               {DATE_RANGE_LABELS[dateRange]} <ChevronDown className={`w-3 h-3 transition-transform ${dateMenuOpen ? 'rotate-180' : ''}`} />
             </span>
             {dateMenuOpen && (
-              <>
+              <><ScrollLock />
                 <span role="presentation" className="fixed inset-0 z-10" onClick={() => setDateMenuOpen(false)} />
                 <div className="absolute left-0 top-full mt-1 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[150px]">
                   {DATE_RANGE_OPTIONS.map(r => (
@@ -554,7 +555,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 animate-fade-in"
           onClick={() => setViewBatch(null)}
-        >
+        ><ScrollLock />
           <div
             className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}

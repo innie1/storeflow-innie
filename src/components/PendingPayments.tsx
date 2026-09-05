@@ -4,6 +4,7 @@ import { addPaymentToPending, markPendingPaid, deletePendingPayment, getPendingS
 import { getRepaymentInsights, CustomerRepaymentInsight } from '@/lib/manager-intel';
 import { showToast } from '@/components/Toast';
 import ConfirmModal from '@/components/ConfirmModal';
+import ScrollLock from '@/components/ScrollLock';
 
 interface Props { store: StoreData; onUpdate: (s: StoreData) => void; }
 
@@ -240,7 +241,7 @@ export default function PendingPayments({ store, onUpdate }: Props) {
 
       {/* Partial payment modal */}
       {partialFor && (
-        <div className="fixed inset-0 z-50 bg-background/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setPartialFor(null)}>
+        <div className="fixed inset-0 z-50 bg-background/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setPartialFor(null)}><ScrollLock />
           <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
             <div>
               <p className="text-xs text-muted-foreground">Partial payment from</p>

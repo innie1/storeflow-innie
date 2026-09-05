@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Product, StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface CostPricePromptProps {
   store: StoreData;
@@ -10,6 +11,8 @@ interface CostPricePromptProps {
 }
 
 export default function CostPricePrompt({ store, setStore, product, onDone }: CostPricePromptProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const [value, setValue] = useState('');
 
   const save = (skip: boolean, dontAskAgain?: boolean) => {

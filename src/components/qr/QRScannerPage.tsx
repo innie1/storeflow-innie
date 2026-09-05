@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera, Image, Key, Zap, ZapOff, Check, X, ShieldAlert } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { showToast } from '@/components/Toast';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface QRScannerPageProps {
   onScanSuccess: (decodedText: string) => void;
@@ -9,6 +10,8 @@ interface QRScannerPageProps {
 }
 
 export default function QRScannerPage({ onScanSuccess, onClose }: QRScannerPageProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [flashOn, setFlashOn] = useState(false);

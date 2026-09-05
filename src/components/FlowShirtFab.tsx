@@ -8,6 +8,7 @@ import { createFlowShirtCode, parseFlowShirtText, type FlowShirtDraftItem } from
 import { showToast } from '@/components/Toast';
 import SimpleVoiceSell from '@/components/simple/SimpleVoiceSell';
 import { markSaleQueuedIfOffline } from '@/components/simple/OfflineQueueBanner';
+import ScrollLock from '@/components/ScrollLock';
 
 interface Props {
   store: StoreData;
@@ -187,7 +188,7 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
       </button>
 
       {open && canSellProducts && (
-        <div className="fixed inset-0 z-[90] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[90] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setOpen(false)}><ScrollLock />
           <div className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-background border border-border p-5 space-y-4" onClick={event => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center"><Shirt className="w-5 h-5" /></div><div><p className="font-display font-black text-lg">Flow Shirt</p><p className="text-xs text-muted-foreground">Type it or say it. Review the list before saving.</p></div></div><button onClick={() => setOpen(false)} className="w-9 h-9 rounded-xl bg-surface-2 border border-border flex items-center justify-center"><X className="w-4 h-4" /></button></div>
             <section className="rounded-2xl border border-border bg-card p-3.5 space-y-3"><label className="text-[10px] uppercase font-black text-muted-foreground">Type a sale</label><textarea value={text} onChange={event => { setText(event.target.value); setDraft([]); }} rows={3} placeholder="Example: 2 Indomie, 1 Garri, Milo for 800" className="w-full resize-none rounded-xl border border-border bg-surface-2 px-3.5 py-3 text-sm outline-none focus:border-primary" /><button onClick={prepareTypedSale} className="w-full h-10 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black flex items-center justify-center gap-2"><Send className="w-4 h-4" /> Build Sale List</button></section>

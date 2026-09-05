@@ -4,6 +4,7 @@ import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFun
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import { Banknote, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon } from 'lucide-react';
+import ScrollLock from '@/components/ScrollLock';
 
 interface ExpensesProps {
   store: StoreData;
@@ -312,7 +313,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
       </div>
 
       {confirmDelBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setConfirmDelBill(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setConfirmDelBill(null)}><ScrollLock />
           <div className="w-full max-w-sm bg-card border border-border rounded-xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <p className="font-display font-bold text-sm">Remove "{confirmDelBill.label}"?</p>
             <p className="text-xs text-muted-foreground">You won't get reminders for this bill anymore.</p>
@@ -403,7 +404,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
 
       {/* Add Modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setShowAdd(false)}><ScrollLock />
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-5 animate-slide-up" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-display font-bold text-lg">New Expense</h3>
@@ -483,7 +484,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
 
       {/* Restock Modal */}
       {showRestock && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setShowRestock(false)}>
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setShowRestock(false)}><ScrollLock />
           <div className="w-full max-w-lg bg-card border border-border rounded-xl p-5 animate-slide-up max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-display font-bold text-lg"><Package className="w-4 h-4 inline-block -mt-0.5 mr-1.5" />Restock Items</h3>
@@ -585,7 +586,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
       )}
 
       {selectedRestockBatch && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setSelectedRestockBatch(null)}>
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setSelectedRestockBatch(null)}><ScrollLock />
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-5 animate-slide-up max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-display font-bold text-base flex items-center gap-2 text-success">

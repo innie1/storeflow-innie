@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 import ConfirmModal from '@/components/ConfirmModal';
+import ScrollLock from '@/components/ScrollLock';
 
 interface DocumentsProps {
   store: StoreData;
@@ -263,7 +264,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
         <div 
           className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setViewingDoc(null)}
-        >
+        ><ScrollLock />
           <div 
             className="w-full max-w-2xl bg-card border border-border rounded-2xl p-5 animate-slide-up flex flex-col gap-4 max-h-[90vh]"
             onClick={e => e.stopPropagation()}

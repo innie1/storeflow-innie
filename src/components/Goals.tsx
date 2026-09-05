@@ -8,6 +8,7 @@ import { showToast } from '@/components/Toast';
 import { getFlowMemory, claimReferral } from '@/lib/flow-memory';
 import { FlowIcon } from '@/components/FlowIcon';
 import ConfirmModal from '@/components/ConfirmModal';
+import ScrollLock from '@/components/ScrollLock';
 
 interface GoalsProps {
   store: StoreData;
@@ -265,7 +266,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
 
       {/* Goals Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}><ScrollLock />
           <form 
             onSubmit={editingGoal ? handleEditGoal : handleAddGoal} 
             className="w-full max-w-md bg-card border border-border rounded-2xl p-6 animate-slide-up space-y-4"

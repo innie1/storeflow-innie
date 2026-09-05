@@ -4,6 +4,7 @@ import type { Product, StoreData } from '@/types/store';
 import { getBusinessTemplate } from '@/lib/business-templates';
 import { getServicePricingLabel, getStoredServicePricing } from '@/lib/service-pricing';
 import { placeStorefrontOrder } from '@/lib/public-storefront';
+import ScrollLock from '@/components/ScrollLock';
 
 interface BusinessStorefrontProps {
   store: StoreData;
@@ -175,7 +176,7 @@ export default function BusinessStorefront({ store }: BusinessStorefrontProps) {
       )}
 
       {showCheckout && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={() => !submitting && setShowCheckout(false)}>
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={() => !submitting && setShowCheckout(false)}><ScrollLock />
           <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl bg-background p-5 space-y-4" onClick={event => event.stopPropagation()}>
             <div><h3 className="font-display font-bold text-lg">Complete your order</h3><p className="text-xs text-muted-foreground">No account is required.</p></div>
             <input value={customerName} onChange={event => setCustomerName(event.target.value)} placeholder="Your name" className="w-full p-3 rounded-xl border border-border bg-card" />

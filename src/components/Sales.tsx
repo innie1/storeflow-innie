@@ -29,6 +29,7 @@ import {
   Flame
 } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
+import ScrollLock from '@/components/ScrollLock';
 
 type SalesCardPeriod = 'today' | 'week' | 'month' | 'year' | 'lifetime';
 
@@ -528,7 +529,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                 <ChevronDown className={`w-3 h-3 transition-transform ${salesCardPeriodMenuOpen ? 'rotate-180' : ''}`} />
               </button>
               {salesCardPeriodMenuOpen && (
-                <>
+                <><ScrollLock />
                   <div className="fixed inset-0 z-10" onClick={() => setSalesCardPeriodMenuOpen(false)} />
                   <div className="absolute left-0 top-full mt-1 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[150px]">
                     {SALES_CARD_PERIODS.map(p => (
@@ -845,7 +846,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
 
       {/* Custom qty popover */}
       {customQtyFor && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setCustomQtyFor(null)}>
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setCustomQtyFor(null)}><ScrollLock />
           <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
             <p className="font-display font-bold text-sm">{store.products.find(p => p.id === customQtyFor)?.name}</p>
             <input autoFocus type="number" min="0.01" step="any" value={customQty} onChange={e => setCustomQty(e.target.value)}
@@ -868,7 +869,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
 
       {/* CHECKOUT */}
       {checkoutOpen && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setCheckoutOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setCheckoutOpen(false)}><ScrollLock />
           <div className="w-full max-w-md bg-card border-t sm:border border-border rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-card border-b border-border p-3 flex items-center justify-between">
               <div>
@@ -1071,7 +1072,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       )}
 
       {variantPickerProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setVariantPickerProduct(null)}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setVariantPickerProduct(null)}><ScrollLock />
           <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-up space-y-4 text-left" onClick={e => e.stopPropagation()}>
             <div>
               <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-wider">Multiple Variants Found</span>
@@ -1124,7 +1125,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       )}
 
       {notFoundBarcode && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNotFoundBarcode(null)}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNotFoundBarcode(null)}><ScrollLock />
           <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-up space-y-4 text-center" onClick={e => e.stopPropagation()}>
             <Search className="w-10 h-10 text-muted-foreground" />
             <div>
@@ -1154,7 +1155,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
 
 
       {showLostSaleModal && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowLostSaleModal(false)}>
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowLostSaleModal(false)}><ScrollLock />
           <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-3 text-left animate-slide-up" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-1">
               <h3 className="font-display font-bold text-base">Record Lost Sale</h3>

@@ -72,6 +72,7 @@ import {
   Cloud,
   MoreHorizontal
 } from 'lucide-react';
+import ScrollLock from '@/components/ScrollLock';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
 
@@ -2124,7 +2125,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
         {/* View All Modal */}
         {showAllProductsQR && (
-          <div className="fixed inset-0 z-[80] bg-background/95 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowAllProductsQR(false)}>
+          <div className="fixed inset-0 z-[80] bg-background/95 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowAllProductsQR(false)}><ScrollLock />
             <div className="w-full max-w-md bg-card border border-border rounded-3xl p-5 animate-slide-up space-y-4 max-h-[85vh] flex flex-col shadow-[0_0_30px_rgba(0,0,0,0.3)]" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <div>
@@ -2187,7 +2188,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
         {/* Scanned Product Details Modal */}
         {scannedProduct && (
-          <div className="fixed inset-0 z-[90] bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setScannedProduct(null)}>
+          <div className="fixed inset-0 z-[90] bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setScannedProduct(null)}><ScrollLock />
             <div className="w-full max-w-sm bg-card border border-border rounded-3xl p-5 animate-scale-up space-y-4 text-left" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-1.5">
@@ -3568,7 +3569,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           setDelCodeInput('');
           setDelConfirmTextInput('');
           setDelError('');
-        }}>
+        }}><ScrollLock />
           <div className="w-full max-w-sm bg-card border border-destructive/30 rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
             <div className="text-center space-y-1.5">
               <div className="text-3xl">⚠️</div>
@@ -3761,7 +3762,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
         {/* Restore Confirmation Modal */}
         {restoreConfirm && (
-          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[80] bg-background/85 backdrop-blur-sm flex items-center justify-center p-4"><ScrollLock />
             <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-5 space-y-4">
               <div className="text-center space-y-2">
                 <div className="text-3xl">⚠️</div>

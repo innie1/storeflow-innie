@@ -29,6 +29,8 @@ import {
   Calendar, Rocket, AlertTriangle, ClipboardList, Banknote, Hourglass, Clock, PiggyBank, ShoppingCart,
   Info, Flame, Moon, Receipt, Home, Bot, Undo2, BarChart3, Sparkles, Archive, Bell, Zap, PartyPopper, X,
 } from 'lucide-react';
+import ScrollLock from '@/components/ScrollLock';
+import FlowAdviceReport from '@/components/FlowAdviceReport';
 
 interface ManagerProps {
   store: StoreData;
@@ -731,11 +733,15 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     try {
       addFlowReward(0.5, 'event', 'Requested business advice report');
     } catch {}
-    setTimeout(() => {
-      setAdviceLoading(false);
+    // generateFlowReport is synchronous — it reads the store that is already in
+    // memory. The delay here was only ever for show, and it sat in front of a
+    // report that then took another 45 seconds to type itself out. One frame is
+    // enough to let the button paint its loading state.
+    requestAnimationFrame(() => {
       setAdviceReport(generateFlowReport(store));
       setAdviceReportVisible(true);
-    }, 1500);
+      setAdviceLoading(false);
+    });
   };
 
   const handleAutoFixConfirmed = async () => {
@@ -1736,7 +1742,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
           {/* Notification Archive Modal */}
           {showArchive && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setShowArchive(false)}>
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setShowArchive(false)}><ScrollLock />
               <div className="w-full max-w-md bg-card border border-border/60 rounded-2xl p-5 shadow-2xl max-h-[80vh] overflow-y-auto space-y-4 animate-scale-in text-left flex flex-col no-scrollbar" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-start border-b border-border pb-3">
                   <div>
@@ -1783,14 +1789,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
           {/* Advice Report Card (Typewriter Analysis) */}
           {adviceReportVisible && adviceReport && (
-            <div className="p-4 rounded-2xl bg-card border border-primary/25 shadow-card space-y-2 animate-fade-in relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-[#9b5de5] to-success" />
-              <div className="flex items-center gap-2">
-                <Bot className="w-3.5 h-3.5 text-primary" />
-                <h4 className="font-display font-bold text-xs uppercase tracking-wider text-primary">Flow's Analysis Breakdown</h4>
-              </div>
-              <Typewriter text={adviceReport} speed={30} speak={true} />
-            </div>
+            <FlowAdviceReport report={adviceReport} onDismiss={() => setAdviceReportVisible(false)} />
           )}
 
           {/* Advice cards */}

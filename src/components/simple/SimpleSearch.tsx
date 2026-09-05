@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { StoreData, TabId } from '@/types/store';
 import { Search, X, Package, Users, Receipt } from 'lucide-react';
 import Mascot from '../Mascot';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface SimpleSearchProps {
   store: StoreData;
@@ -12,6 +13,8 @@ interface SimpleSearchProps {
 const MAX_PER_GROUP = 6;
 
 export default function SimpleSearch({ store, onNavigate, onClose }: SimpleSearchProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
 

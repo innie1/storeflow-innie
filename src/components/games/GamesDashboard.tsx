@@ -4,6 +4,7 @@ import { ensureDefaultGames, getEnabledGames, getDailyStats, recordGameSession, 
 import { showToast } from '@/components/Toast';
 import { Gamepad2, Users, Clock3, Receipt, Settings2, Play, History, TrendingUp } from 'lucide-react';
 import ServiceOrders from '@/components/games/ServiceOrders';
+import ScrollLock from '@/components/ScrollLock';
 
 interface Props {
   store: StoreData;
@@ -164,7 +165,7 @@ export default function GamesDashboard({ store, onUpdate, onGoToSettings }: Prop
       </div>
 
       {detailGame && (
-        <div className="fixed inset-0 z-[70] bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDetailGame(null)}>
+        <div className="fixed inset-0 z-[70] bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDetailGame(null)}><ScrollLock />
           <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 animate-slide-up space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <div className="text-3xl">{detailGame.icon}</div>

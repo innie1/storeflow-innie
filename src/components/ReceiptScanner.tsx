@@ -4,6 +4,7 @@ import { recordSale, saveStore, recordInventoryMovement } from '@/lib/store-data
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { interpretProductName, lookupStoreMemory } from '@/lib/import-intel';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface ScannedItem {
   name: string;
@@ -41,6 +42,8 @@ interface GroupInfo {
 }
 
 export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, initialFile }: ReceiptScannerProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const [scanning, setScanning] = useState(false);
   const [items, setItems] = useState<ScannedItem[]>([]);
   const [preview, setPreview] = useState<string | null>(null);

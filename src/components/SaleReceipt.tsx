@@ -4,6 +4,7 @@ import { printReceipt } from '@/lib/print-engine';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
 import { drawQRCode, encodeQRData } from '@/lib/qr-code';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface SaleReceiptProps {
   store: StoreData;
@@ -13,6 +14,8 @@ interface SaleReceiptProps {
 }
 
 export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: SaleReceiptProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const profile = store.profile;
   const salesList = Array.isArray(sale) ? sale : [sale];
   const date = new Date(salesList[0]?.date || Date.now());

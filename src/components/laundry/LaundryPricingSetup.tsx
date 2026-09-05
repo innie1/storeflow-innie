@@ -16,6 +16,7 @@ import {
 import { getStoredServicePricing, type ServicePricing } from '@/lib/service-pricing';
 import { publishStorefrontToCloud } from '@/lib/marketplace-publish';
 import { Check, ChevronDown, ChevronUp, Pencil, Plus, Power, Shirt, Trash2, X } from 'lucide-react';
+import ScrollLock from '@/components/ScrollLock';
 
 interface Props {
   store: StoreData;
@@ -367,7 +368,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
       )}
 
       {showServiceForm && (
-        <div className="fixed inset-0 z-[80] bg-black/60 flex items-end sm:items-center justify-center" onClick={() => setShowServiceForm(false)}>
+        <div className="fixed inset-0 z-[80] bg-black/60 flex items-end sm:items-center justify-center" onClick={() => setShowServiceForm(false)}><ScrollLock />
           <div className="w-full max-w-sm rounded-t-3xl sm:rounded-3xl bg-background border border-border p-5" onClick={event => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>

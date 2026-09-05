@@ -18,6 +18,7 @@ import ReceiptScanner from '@/components/ReceiptScanner';
 import FlowAttachmentMenu from '@/components/FlowAttachmentMenu';
 import FlowComposer, { makeFlowAttachment, type FlowAttachment } from '@/components/FlowComposer';
 import FlowCameraCapture from '@/components/FlowCameraCapture';
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 interface FlowChatProps { store: StoreData; orders?: any[]; onClose: () => void; onNavigate?: (tab: TabId) => void; onUpdate: (s: StoreData) => void; }
 interface ChatAction { label: string; onClick: () => void; }
@@ -60,6 +61,8 @@ function parseNewProduct(text: string): AddDraft | null {
 }
 
 export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowChatProps) {
+  // Overlay: hold the page behind it still while this is open.
+  useBodyScrollLock();
   const storeKey = store.id || store.storeId || store.accessCode || 'default';
   const savedBrain = loadBrainMemory(store);
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: id('greet'), from: 'flow', text: "Hey 👋 I'm Flow. Message me what you need. If this store takes orders, you can type or speak the customer's full order and I'll build the receipt." }]);
