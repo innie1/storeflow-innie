@@ -3,7 +3,8 @@ import {
   Investment, StoreCategory, StoreType, GameService, GameSession,
   Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift, 
   CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
-  DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent, PurchaseOrderRecord
+  DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent, PurchaseOrderRecord,
+  BalanceAdjustment
 } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
@@ -51,6 +52,52 @@ export function sumOperatingExpenses(
   return getOperatingExpenses(store)
     .filter(expense => !inRange || inRange(expense.date))
     .reduce((sum, expense) => sum + expense.amount, 0);
+}
+
+/**
+ * Correct a tracked balance to what the merchant actually holds.
+ *
+ * StoreFlow can only ever know the money it was told about, so a shop that
+ * takes cash outside the app, starts with a float, or miscounts will drift.
+ * Nothing let a merchant say what was really in the till, so the drift was
+ * permanent. Each correction is written to balanceAdjustments with the old
+ * and new figure, rather than quietly overwriting the balance.
+ */
+export function setActualBalance(
+  store: StoreData,
+  input: { cash?: number; bank?: number; wallet?: number; reason?: string; actorName?: string },
+): StoreData {
+  const now = new Date().toISOString();
+  const adjustments: BalanceAdjustment[] = [];
+
+  const accounts: { key: 'cash' | 'bank' | 'wallet'; field: 'cashBalance' | 'bankBalance' | 'walletBalance'; next?: number }[] = [
+    { key: 'cash', field: 'cashBalance', next: input.cash },
+    { key: 'bank', field: 'bankBalance', next: input.bank },
+    { key: 'wallet', field: 'walletBalance', next: input.wallet },
+  ];
+
+  const updated: StoreData = { ...store };
+  for (const account of accounts) {
+    if (account.next === undefined || !Number.isFinite(account.next)) continue;
+    const to = Math.round(Math.max(0, account.next) * 100) / 100;
+    const from = Math.round((store[account.field] ?? 0) * 100) / 100;
+    if (to === from) continue;
+
+    adjustments.push({
+      id: generateId(),
+      date: now,
+      account: account.key,
+      from,
+      to,
+      difference: Math.round((to - from) * 100) / 100,
+      reason: input.reason?.trim() || undefined,
+      actorName: input.actorName,
+    });
+    updated[account.field] = to;
+  }
+
+  if (adjustments.length === 0) return store;
+  return { ...updated, balanceAdjustments: [...adjustments, ...(store.balanceAdjustments || [])] };
 }
 
 /** What the shop paid suppliers for stock — cash out, but not a cost of trading. */
@@ -1379,12 +1426,26 @@ export function receiveStock(
       let autoInvestedAmt = 0;
       let cashDeduction = 0;
 
-      if (restockTotal <= availableCash) {
+      // Honour what the merchant said. The intake screens already ask "from
+      // balance" or "new money", but that answer used to be filed against the
+      // restock and then ignored here: the shop's cash was drained either way,
+      // and any shortfall was quietly booked as capital the merchant never
+      // said they had put in. Those invented injections then fed back into the
+      // cash balance and inflated it.
+      if (funding === 'new_money') {
+        // Money came from outside and went straight to the supplier. It never
+        // sat in the till, so nothing is deducted from it.
+        autoInvestedAmt = restockTotal;
+      } else if (restockTotal <= availableCash) {
         cashDeduction = restockTotal;
       } else {
+        // They meant to pay from the till and it did not cover the bill, so
+        // the tracked balance is behind reality. Spend what is recorded and
+        // flag the rest instead of inventing capital.
         cashDeduction = availableCash;
         autoInvestedAmt = restockTotal - availableCash;
       }
+      const shortfall = funding !== 'new_money' && autoInvestedAmt > 0;
 
       // Deduct from cash balances
       let remainingDeduct = cashDeduction;
@@ -1415,7 +1476,11 @@ export function receiveStock(
         }
       }
 
-      const fundingLabel = autoInvestedAmt > 0 ? ' (automatic investment)' : ' (from cash balance)';
+      const fundingLabel = funding === 'new_money'
+        ? ' (paid with new money)'
+        : shortfall
+          ? ' (balance was short — check your cash)'
+          : ' (from available balance)';
       newExpenses.push({
         id: generateId(),
         amount: Math.round(restockTotal * 100) / 100,
@@ -1430,7 +1495,12 @@ export function receiveStock(
         newInvestments.push({
           id: generateId(),
           amount: Math.round(autoInvestedAmt * 100) / 100,
-          note: `Inventory Capital Injection`,
+          // Say which of the two this was. A shortfall is not the merchant
+          // telling us they injected capital — it is the books disagreeing
+          // with the till, and it should read that way in the ledger.
+          note: shortfall
+            ? `Unfunded restock — available balance was short by this much`
+            : `Stock bought with new money`,
           source: 'Inventory Restock',
           date: now,
           type: 'additional',

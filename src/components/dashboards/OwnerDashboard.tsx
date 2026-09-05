@@ -52,7 +52,7 @@ const BALANCE_PERIOD_LABELS: Record<BalancePeriod, string> = {
   yesterday: 'Yesterday',
   month: 'This Month',
   '3months': 'Last 3 Months',
-  lifetime: 'Business Balance',
+  lifetime: 'Available Balance',
 };
 
 const BALANCE_PERIOD_OPTIONS: BalancePeriod[] = ['today', 'yesterday', 'month', '3months', 'lifetime'];
@@ -614,7 +614,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setBalancePeriodMenuOpen(v => !v); } }}
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground uppercase tracking-wide font-display font-semibold hover:text-foreground active:scale-95 transition cursor-pointer"
                 >
-                  {balancePeriod === 'lifetime' ? 'Business Balance' : `${BALANCE_PERIOD_LABELS[balancePeriod]} Change`} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
+                  {balancePeriod === 'lifetime' ? 'Available Balance' : `${BALANCE_PERIOD_LABELS[balancePeriod]} Change`} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
                 </span>
                 <p className={`font-display font-bold text-lg ${balanceStats.balance >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {balanceStats.balance >= 0 ? '' : '−'}₦{Math.abs(balanceStats.balance).toLocaleString()}

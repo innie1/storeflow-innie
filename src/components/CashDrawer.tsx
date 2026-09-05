@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StoreData, CashSession } from '@/types/store';
-import { recordCashSession } from '@/lib/store-data';
+import { recordCashSession, setActualBalance } from '@/lib/store-data';
 import { 
   Coins, Plus, Calendar, DollarSign, ArrowRight, ShieldAlert, Sparkles, Scale, FileText
 } from 'lucide-react';
@@ -47,7 +47,7 @@ export default function CashDrawer({ store, onUpdate }: CashDrawerProps) {
     const actual = Number(actualCash);
     const expected = open + expectedSalesCash - expectedExpenses;
 
-    const nextStore = recordCashSession(store, {
+    const logged = recordCashSession(store, {
       date: new Date().toISOString(),
       openingCash: open,
       salesCash: expectedSalesCash,
@@ -57,8 +57,23 @@ export default function CashDrawer({ store, onUpdate }: CashDrawerProps) {
       notes: notes.trim() || undefined
     });
 
+    // A physical count beats anything the app inferred, so it becomes the
+    // balance. This used to be recorded and then ignored: the merchant counted
+    // their till, the app noted the variance, and went on showing its own
+    // figure forever.
+    const tracked = store.cashBalance ?? 0;
+    const nextStore = setActualBalance(logged, {
+      cash: actual,
+      reason: 'Physical cash count',
+    });
+
     onUpdate(nextStore);
-    showToast('Daily drawer balance logged!');
+    const difference = Math.round((actual - tracked) * 100) / 100;
+    showToast(
+      difference === 0
+        ? 'Drawer logged — your cash balance already matched'
+        : `Drawer logged — cash balance corrected by ${difference > 0 ? '+' : '−'}₦${Math.abs(difference).toLocaleString()}`,
+    );
     resetForm();
   };
 

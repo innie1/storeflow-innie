@@ -111,6 +111,22 @@ export interface PendingPayment {
 
 export type ExpenseCategory = 'Restock' | 'Rent' | 'Utilities' | 'Salaries' | 'Transport' | 'Other';
 
+/**
+ * A merchant correcting a tracked balance against what they actually hold.
+ * Recorded rather than applied silently, so the books show that the figure was
+ * corrected by hand, when, and by how much.
+ */
+export interface BalanceAdjustment {
+  id: string;
+  date: string; // ISO
+  account: 'cash' | 'bank' | 'wallet';
+  from: number;
+  to: number;
+  difference: number;
+  reason?: string;
+  actorName?: string;
+}
+
 export interface Expense {
   id: string;
   amount: number;
@@ -770,6 +786,7 @@ export interface StoreData {
   communicationHistory?: CommunicationMessage[];
   loans?: Loan[];
   withdrawals?: Withdrawal[];
+  balanceAdjustments?: BalanceAdjustment[];
   cashBalance?: number;
   bankBalance?: number;
   walletBalance?: number;

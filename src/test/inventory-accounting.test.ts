@@ -6,6 +6,7 @@ import {
   isStockPurchase,
   receiveStock,
   recordCheckout,
+  setActualBalance,
   sumOperatingExpenses,
   sumStockPurchases,
 } from '@/lib/store-data';
@@ -110,6 +111,50 @@ describe('buying stock is not an operating expense', () => {
     const source = readSource('src/components/dashboards/OwnerDashboard.tsx');
     expect(source).toContain('const moneyOnHand = (store.cashBalance || 0) + (store.bankBalance || 0) + (store.walletBalance || 0);');
     expect(source).not.toContain('balance: revenue - expenses');
+  });
+
+  it('honours "new money" instead of draining the till', () => {
+    const before = tradingShop();
+    const after = receiveStock(before, [{ productId: 'p1', quantity: 50, costPrice: 600 }], 'new_money');
+
+    // The merchant said the money came from outside, so the balance is
+    // untouched and the 30,000 is recorded as capital.
+    expect(after.cashBalance).toBe(before.cashBalance);
+    const injected = (after.investments || []).filter(i => !(before.investments || []).some(b => b.id === i.id));
+    expect(injected.reduce((s, i) => s + i.amount, 0)).toBe(30_000);
+    expect(injected[0].note).toContain('new money');
+  });
+
+  it('names a shortfall a shortfall, not a capital injection', () => {
+    // Paying from the balance when the balance cannot cover it means the
+    // tracked cash is behind reality — it is not the merchant funding the shop.
+    const poor = { ...tradingShop(), cashBalance: 10_000, bankBalance: 0, walletBalance: 0 };
+    const after = receiveStock(poor, [{ productId: 'p1', quantity: 50, costPrice: 600 }], 'balance');
+
+    expect(after.cashBalance).toBe(0);
+    const injected = (after.investments || []).filter(i => !(poor.investments || []).some(b => b.id === i.id));
+    expect(injected.reduce((s, i) => s + i.amount, 0)).toBe(20_000);
+    expect(injected[0].note).toContain('short');
+  });
+
+  it('lets a merchant correct a balance, and records the correction', () => {
+    const store = { ...tradingShop(), cashBalance: 120_000 };
+    const corrected = setActualBalance(store, { cash: 45_000, reason: 'Physical cash count' });
+
+    expect(corrected.cashBalance).toBe(45_000);
+    const [adjustment] = corrected.balanceAdjustments || [];
+    expect(adjustment.account).toBe('cash');
+    expect(adjustment.from).toBe(120_000);
+    expect(adjustment.to).toBe(45_000);
+    expect(adjustment.difference).toBe(-75_000);
+    expect(adjustment.reason).toBe('Physical cash count');
+  });
+
+  it('records nothing when the count already matches', () => {
+    const store = { ...tradingShop(), cashBalance: 45_000 };
+    const same = setActualBalance(store, { cash: 45_000 });
+    expect(same.balanceAdjustments).toBeUndefined();
+    expect(same).toBe(store);
   });
 
   it('can narrow either figure to a period', () => {
