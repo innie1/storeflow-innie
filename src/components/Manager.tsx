@@ -698,6 +698,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
   // Forecasts for Predictions tab
   const horizons = [1, 7, 14, 30, 90, 180, 365];
+  const [forecastHorizonDays, setForecastHorizonDays] = useState(7);
 
   useEffect(() => {
     if (tab !== 'predictions') return;
@@ -811,7 +812,13 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     showToast(`Auto-applied ${toApply.length} price update${toApply.length > 1 ? 's' : ''} (within your ₦${maxChange} limit)`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.autoApplyPrices, settings.defaultMargin, settings.autoApplyMaxChangeAmount, store.products]);
-  const advicePriorityColor: Record<string, string> = { critical: 'border-destructive/40 bg-destructive/5', high: 'border-warning/40 bg-warning/5', medium: 'border-primary/20 bg-surface-2', low: 'border-border bg-surface-2' };
+  /** Horizon names, shared by the picker and the forecast itself. */
+const FORECAST_LABELS: Record<number, string> = {
+  1: 'Tomorrow', 7: '7 days', 14: '14 days', 30: '1 month',
+  90: '3 months', 180: '6 months', 365: '1 year',
+};
+
+const advicePriorityColor: Record<string, string> = { critical: 'border-destructive/40 bg-destructive/5', high: 'border-warning/40 bg-warning/5', medium: 'border-primary/20 bg-surface-2', low: 'border-border bg-surface-2' };
   const adviceIconBg: Record<string, string> = { critical: 'bg-destructive/10', high: 'bg-warning/10', medium: 'bg-primary/10', low: 'bg-surface-3' };
 
   if (!settings.enabled) {
@@ -1363,42 +1370,89 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                 History
               </button>
             </div>
-            <p className="text-xs text-muted-foreground mb-4">Based on your last 30 days of sales using linear trend analysis.</p>
+            <p className="text-xs text-muted-foreground mb-4">A trend line through your recent daily sales. Pick how far ahead to look.</p>
             {!settings.revenueForecasts && !settings.profitForecasts ? (
               <p className="text-xs text-muted-foreground p-3 rounded-lg bg-surface-2 border border-border">Revenue and Profit Forecasts are both turned off in Settings.</p>
             ) : (
             <div className="space-y-3">
-              {horizons.map(h => {
-                const f = forecastHorizon(store, h);
+              {/* Seven horizons, each a full card with its own figures,
+                  confidence bar, range, caveat and pair of feedback buttons —
+                  a very long page to answer one question. The horizon is a
+                  choice now, and only the chosen one is drawn. */}
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+                {horizons.map(h => {
+                  const label = FORECAST_LABELS[h] ?? `${h}d`;
+                  const active = forecastHorizonDays === h;
+                  return (
+                    <button
+                      key={h}
+                      onClick={() => setForecastHorizonDays(h)}
+                      className={`shrink-0 px-3 py-1.5 rounded-full border text-xs font-display font-bold whitespace-nowrap transition-all ${
+                        active
+                          ? 'border-primary text-primary bg-primary/5'
+                          : 'border-border/60 text-muted-foreground bg-surface-2 hover:text-foreground'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {(() => {
+                const f = forecastHorizon(store, forecastHorizonDays);
                 const confColor = f.confidence === 'High' ? 'text-success' : f.confidence === 'Medium' ? 'text-warning' : 'text-muted-foreground';
-                const feedbackGiven = forecastFeedback[h];
+                const feedbackGiven = forecastFeedback[forecastHorizonDays];
                 return (
-                  <div key={h} className="p-3 rounded-xl bg-surface-2 border border-border">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="font-display font-semibold text-sm">{f.label}</p>
-                      <span className={`text-[10px] font-display font-bold ${confColor}`}>{f.confidencePct}% confidence</span>
+                  <div className="p-4 rounded-xl bg-surface-2 border border-border space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      {settings.revenueForecasts && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold">Expected revenue</p>
+                          <p className="font-display font-black text-lg text-primary">₦{Math.round(f.expectedRevenue).toLocaleString()}</p>
+                          {/* Range now widens as confidence falls; it used to be
+                              a flat ±20% whatever the estimate was built on. */}
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            ₦{Math.round(f.revenueLow).toLocaleString()} – ₦{Math.round(f.revenueHigh).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                      {settings.profitForecasts && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold">Expected profit</p>
+                          <p className="font-display font-black text-lg text-success">₦{Math.round(f.expectedProfit).toLocaleString()}</p>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {settings.revenueForecasts && <div><p className="text-[10px] text-muted-foreground">Expected Revenue</p><p className="font-display font-bold text-yellow-500">₦{Math.round(f.expectedRevenue).toLocaleString()}</p></div>}
-                      {settings.profitForecasts && <div><p className="text-[10px] text-muted-foreground">Expected Profit</p><p className="font-display font-bold text-success">₦{Math.round(f.expectedProfit).toLocaleString()}</p></div>}
+
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-muted-foreground">
+                          Confidence · built on {f.daysObserved} day{f.daysObserved === 1 ? '' : 's'} of sales
+                        </span>
+                        <span className={`font-display font-bold ${confColor}`}>{f.confidencePct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
+                        <div className="h-full bg-primary transition-all" style={{ width: `${f.confidencePct}%` }} />
+                      </div>
                     </div>
-                    <div className="mt-2 h-1.5 rounded-full bg-surface-3 overflow-hidden">
-                      <div className="h-full bg-primary transition-all" style={{ width: `${f.confidencePct}%` }} />
-                    </div>
-                    {settings.revenueForecasts && <p className="text-[10px] text-muted-foreground mt-1">Range: ₦{Math.round(f.expectedRevenue * 0.8).toLocaleString()} – ₦{Math.round(f.expectedRevenue * 1.2).toLocaleString()}</p>}
+
                     {f.caveat && (
-                      <p className="text-[10px] text-muted-foreground mt-1.5 italic bg-surface-3/50 p-1.5 rounded flex items-center gap-1"><Info className="w-3 h-3 shrink-0" /> {f.caveat}</p>
+                      <p className="text-[10px] text-muted-foreground italic bg-surface-3/50 p-2 rounded flex items-start gap-1.5">
+                        <Info className="w-3 h-3 shrink-0 mt-0.5" /> {f.caveat}
+                      </p>
                     )}
-                    <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-border/40">
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-border/40">
                       <span className="text-[10px] text-muted-foreground mr-auto">Was this accurate?</span>
                       <button
-                        onClick={() => handleForecastFeedback(h, 'correct')}
+                        onClick={() => handleForecastFeedback(forecastHorizonDays, 'correct')}
                         className={`text-xs px-2 py-1 rounded-lg transition flex items-center gap-1 ${feedbackGiven === 'correct' ? 'bg-success/20 text-success' : 'text-muted-foreground hover:text-foreground'}`}
                       >
                         <ThumbsUp className="w-3.5 h-3.5" /> Correct
                       </button>
                       <button
-                        onClick={() => handleForecastFeedback(h, 'incorrect')}
+                        onClick={() => handleForecastFeedback(forecastHorizonDays, 'incorrect')}
                         className={`text-xs px-2 py-1 rounded-lg transition flex items-center gap-1 ${feedbackGiven === 'incorrect' ? 'bg-destructive/20 text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
                       >
                         <ThumbsDown className="w-3.5 h-3.5" /> Incorrect
@@ -1406,7 +1460,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     </div>
                   </div>
                 );
-              })}
+              })()}
             </div>
             )}
             {store.sales.length < 10 && (
@@ -1422,6 +1476,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
       {/* ─── ANALYSIS ─────────────────────────────────────────────────────── */}
       {tab === 'analysis' && (
         <div className="space-y-4 animate-fade-in">
+          <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider pt-1">What is selling</h3>
           {/* Activity graph */}
           <MostActivePeriodsCard store={store} />
 
@@ -1472,6 +1527,8 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             );
           })()}
 
+          <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider pt-1">What it costs</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           {/* Expense analysis */}
           {settings.expenseAnalysis && (() => {
             const ea = expenseAnalysis(store);
@@ -1527,6 +1584,10 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             );
           })()}
 
+          </div>
+
+          <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider pt-1">Pricing</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           {/* Auto-Applied Price History */}
           {settings.autoApplyPrices && (() => {
             const recentEvents = (store.autoPriceLog || []).filter(e => !e.undone).slice(0, 5);
@@ -1633,9 +1694,11 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             );
           })()}
 
+          </div>
+
           {/* Insights */}
           <div className="space-y-2">
-            <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider">Insights</h3>
+            <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider pt-1">Insights</h3>
             {insights.length === 0 ? <p className="text-sm text-muted-foreground p-4 text-center">Record more sales to unlock insights.</p> : null}
             {insights.map(i => {
               const tones: Record<string, string> = { success: 'bg-success/10 border-success/30 text-success', warning: 'bg-warning/10 border-warning/30 text-warning', info: 'bg-primary/10 border-primary/30 text-primary', danger: 'bg-destructive/10 border-destructive/30 text-destructive' };

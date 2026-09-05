@@ -88,11 +88,28 @@ export interface Forecast {
   expectedExpenses: number;
   confidencePct: number;
   confidence: 'High' | 'Medium' | 'Low';
+  /** Low and high ends of the estimate, widened when confidence is low. */
+  revenueLow: number;
+  revenueHigh: number;
+  /** Days of trading the estimate was built from, capped at the 30-day window. */
+  daysObserved: number;
   caveat?: string; // shown for long horizons where the estimate is necessarily rougher
 }
 
 export function forecastHorizon(store: StoreData, horizonDays: number): Forecast {
-  const series = dailySeries(store, 30);
+  // Only look back as far as the shop has existed.
+  //
+  // dailySeries always built 30 buckets, so a store open a week was regressed
+  // over 23 empty days. Those zeros dragged the daily average down to roughly a
+  // quarter of the truth, and — because they all sit at the start of the window
+  // — tilted the line upward, producing a confident-looking forecast of growth
+  // that was really just the shop opening.
+  const openedAt = store.createdAt ? new Date(store.createdAt).getTime() : 0;
+  const daysOpen = openedAt
+    ? Math.floor((Date.now() - openedAt) / 86400000) + 1
+    : 30;
+  const window = Math.max(2, Math.min(30, daysOpen));
+  const series = dailySeries(store, window);
   const rev = linReg(series.map(s => s.revenue));
   const prof = linReg(series.map(s => s.profit));
   const exp = linReg(series.map(s => s.expenses));
@@ -109,8 +126,8 @@ export function forecastHorizon(store: StoreData, horizonDays: number): Forecast
   const avgExpPerDay = series.reduce((s, d) => s + d.expenses, 0) / series.length;
 
   let expectedRevenue = 0, expectedProfit = 0, expectedExpenses = 0;
-  for (let i = 30; i < 30 + horizonDays; i++) {
-    const daysPastWindow = i - 29;
+  for (let i = window; i < window + horizonDays; i++) {
+    const daysPastWindow = i - (window - 1);
     const damp = Math.exp(-daysPastWindow / DAMPING_DAYS);
     const rawRev = rev.slope * i + rev.intercept;
     const rawProf = prof.slope * i + prof.intercept;
@@ -126,22 +143,45 @@ export function forecastHorizon(store: StoreData, horizonDays: number): Forecast
   let confidencePct = 55;
   if (totalSales >= 30 && avgR2 > 0.5) { confidence = 'High'; confidencePct = 80 + Math.round(avgR2 * 15); }
   else if (totalSales >= 10 && avgR2 > 0.25) { confidence = 'Medium'; confidencePct = 65 + Math.round(avgR2 * 20); }
+
+  // A handful of sales cannot support a number in the fifties. The floor of 55%
+  // was shown to a shop with two sales on record exactly as it was to one with
+  // twenty-nine.
+  if (totalSales < 10) confidencePct = Math.min(confidencePct, 25 + totalSales * 3);
+  // A few days of trading cannot either, however tidy the line through them.
+  if (window < 14) confidencePct = Math.min(confidencePct, 40 + window * 2);
   // Long horizons are inherently less certain, however the trend looks —
   // reflect that honestly rather than showing 80%+ confidence for a 1-year call.
   if (horizonDays >= 180) confidencePct = Math.min(confidencePct, 60);
   else if (horizonDays >= 90) confidencePct = Math.min(confidencePct, 70);
   if (horizonDays >= 180 && confidence === 'High') confidence = 'Medium';
 
+  // How wide the range around the estimate should be. It was hardcoded in the
+  // UI as a flat ±20%, so a guess from three sales was drawn exactly as tightly
+  // as one from a year of steady trading. Low confidence means a wide range —
+  // that is what the word is for.
+  const spread = Math.min(0.6, Math.max(0.1, (100 - confidencePct) / 100));
+
   const horizonLabel: Record<number, string> = { 1: 'Tomorrow', 7: '7 Days', 14: '14 Days', 30: '1 Month', 90: '3 Months', 180: '6 Months', 365: '1 Year' };
+  // Say how much history it is actually built on, rather than always claiming
+  // thirty days.
+  const basis = `your last ${window} day${window === 1 ? '' : 's'} of activity`;
   const caveat = horizonDays >= 90
-    ? `Based on your last 30 days of activity. Long-range estimates like this settle toward your recent average rather than assuming today's trend continues in a straight line — treat this as a rough planning number, not a guarantee.`
-    : undefined;
+    ? `Based on ${basis}. Long-range estimates settle toward your recent average rather than assuming today's trend continues in a straight line — treat this as a rough planning number, not a guarantee.`
+    : window < 14
+      ? `Based on ${basis} only. It will sharpen as you record more days.`
+      : undefined;
+
+  const finalPct = Math.min(95, Math.max(5, confidencePct));
   return {
     horizonDays,
     label: horizonLabel[horizonDays] ?? `${horizonDays}d`,
     expectedRevenue, expectedProfit, expectedExpenses,
-    confidencePct: Math.min(95, confidencePct),
+    confidencePct: finalPct,
     confidence,
+    revenueLow: Math.max(0, expectedRevenue * (1 - spread)),
+    revenueHigh: expectedRevenue * (1 + spread),
+    daysObserved: window,
     caveat,
   };
 }
