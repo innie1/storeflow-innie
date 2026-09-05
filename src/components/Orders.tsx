@@ -152,6 +152,16 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
     return res;
   }, [orders, getNormalizedStatus]);
 
+  // "All" first, then whatever the shop actually has orders in, then the empty
+  // statuses. A merchant with two live orders should not have to scroll past
+  // Rejected and Cancelled to reach Pending.
+  const orderedTabs = useMemo(() => {
+    const ALL_TABS = ['All', 'Pending', 'Accepted', 'Preparing', 'Ready', 'Completed', 'Rejected', 'Cancelled'] as const;
+    const populated = ALL_TABS.filter(t => t !== 'All' && (counts[t as keyof typeof counts] ?? 0) > 0);
+    const empty = ALL_TABS.filter(t => t !== 'All' && (counts[t as keyof typeof counts] ?? 0) === 0);
+    return ['All', ...populated, ...empty] as typeof ALL_TABS[number][];
+  }, [counts]);
+
   const hasActiveDateFilter = datePreset !== 'all' || startDate !== '' || endDate !== '' || startTime !== '' || endTime !== '';
 
   const resetDateFilter = () => {
@@ -338,29 +348,49 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
         </div>
       )}
 
-      {/* Tabs list with counts — pill style matching the reference design */}
+      {/*
+        Status filters.
+        
+        Eight pills, each carrying a count badge, in a wrapping row: on a phone
+        that was three stacked lines of chips before a single order, and most of
+        the counts read "0" — a shop with two live orders still had Rejected 0,
+        Cancelled 0 and Completed 0 taking up a row each. The fade on the right
+        edge was written for a row that scrolls, which this one never did.
+        
+        It scrolls on one line now, statuses that have orders come first so the
+        ones worth tapping are reachable without scrolling, and a count only
+        appears when there is something to count.
+      */}
       <div className="relative">
-        <div className="flex flex-wrap gap-2">
-          {(['All', 'Pending', 'Accepted', 'Preparing', 'Ready', 'Completed', 'Rejected', 'Cancelled'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-display font-bold transition-all whitespace-nowrap cursor-pointer ${
-                activeTab === tab
-                  ? 'border-primary text-primary bg-primary/5'
-                  : 'border-border/60 text-muted-foreground bg-surface-2 hover:text-foreground'
-              }`}
-            >
-              {tab}
-              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
-                activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-surface-3 text-muted-foreground'
-              }`}>
-                {counts[tab as keyof typeof counts] ?? 0}
-              </span>
-            </button>
-          ))}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mb-1">
+          {orderedTabs.map(tab => {
+            const count = counts[tab as keyof typeof counts] ?? 0;
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-display font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'border-primary text-primary bg-primary/5'
+                    : count > 0
+                    ? 'border-border/60 text-muted-foreground bg-surface-2 hover:text-foreground'
+                    : 'border-border/40 text-muted-foreground/60 bg-surface-2/50 hover:text-foreground'
+                }`}
+              >
+                {tab}
+                {count > 0 && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
+                    isActive ? 'bg-primary/15 text-primary' : 'bg-surface-3 text-muted-foreground'
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
-        <div className="absolute right-4 md:right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none" />
       </div>
 
       {/* Search Input + Filter button */}
