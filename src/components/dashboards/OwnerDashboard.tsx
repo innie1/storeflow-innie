@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
-import { getDashboardStats, getTopSellers, getSalesTargetStatus } from '@/lib/store-data';
+import { getDashboardStats, getTopSellers, getSalesTargetStatus, sumOperatingExpenses, sumStockPurchases } from '@/lib/store-data';
 import { generatePerformanceSummary } from '@/lib/reports';
 import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
@@ -136,8 +136,9 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
       return (start === null || t >= start) && (end === null || t < end);
     };
     const revenue = store.sales.filter(s => inRange(s.date)).reduce((sum, s) => sum + s.total, 0);
-    const expenses = (store.expenses || []).filter(e => inRange(e.date)).reduce((sum, e) => sum + e.amount, 0);
-    return { revenue, expenses, balance: revenue - expenses };
+    const expenses = sumOperatingExpenses(store, inRange);
+    const stockPurchases = sumStockPurchases(store, inRange);
+    return { revenue, expenses, stockPurchases, balance: revenue - expenses };
   }, [store.sales, store.expenses, balancePeriod]);
   const selectBalancePeriod = (period: BalancePeriod) => {
     setBalancePeriod(period);
@@ -624,6 +625,14 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
               <div className="text-right">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Expenses</p>
                 <p className="font-display font-semibold text-sm text-destructive">₦{balanceStats.expenses.toLocaleString()}</p>
+                {/* Shown apart from expenses: this cash bought goods the shop
+                    still owns, so it is not a cost of trading. */}
+                {balanceStats.stockPurchases > 0 && (
+                  <>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-1.5">Stock bought</p>
+                    <p className="font-display font-semibold text-sm text-foreground">₦{balanceStats.stockPurchases.toLocaleString()}</p>
+                  </>
+                )}
               </div>
             </div>
           </button>

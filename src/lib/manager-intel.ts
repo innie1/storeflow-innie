@@ -1,6 +1,6 @@
 import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
-import { getPendingSummary } from '@/lib/store-data';
+import { getPendingSummary, isStockPurchase } from '@/lib/store-data';
 import type { AutoFixSpec } from '@/lib/auto-fix';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -21,7 +21,8 @@ export function isStoreOnboarding(store: StoreData): boolean {
 // ─── Daily series ─────────────────────────────────────────────────────────────
 export interface DailyPoint {
   ts: number; label: string;
-  revenue: number; profit: number; expenses: number; salesCount: number;
+  /** Running costs only — stock purchases are tracked separately below. */
+  revenue: number; profit: number; expenses: number; stockPurchases: number; salesCount: number;
 }
 
 export function dailySeries(store: StoreData, days: number): DailyPoint[] {
@@ -29,7 +30,7 @@ export function dailySeries(store: StoreData, days: number): DailyPoint[] {
   const buckets: DailyPoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today); d.setDate(today.getDate() - i);
-    buckets.push({ ts: d.getTime(), label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), revenue: 0, profit: 0, expenses: 0, salesCount: 0 });
+    buckets.push({ ts: d.getTime(), label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), revenue: 0, profit: 0, expenses: 0, stockPurchases: 0, salesCount: 0 });
   }
   const minTs = buckets[0].ts;
   store.sales.forEach(s => {
@@ -42,7 +43,12 @@ export function dailySeries(store: StoreData, days: number): DailyPoint[] {
     const d = startOfDay(new Date(e.date)).getTime();
     if (d < minTs) return;
     const b = buckets.find(x => x.ts === d);
-    if (b) b.expenses += e.amount;
+    // Paying a supplier is not overhead. Keeping it out of `expenses` is what
+    // stops "your expenses are outstripping your sales" firing on a restock.
+    if (b) {
+      if (isStockPurchase(e)) b.stockPurchases += e.amount;
+      else b.expenses += e.amount;
+    }
   });
   return buckets;
 }

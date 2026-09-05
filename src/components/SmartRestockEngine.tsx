@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product, CustomerRequest, PlannedRestock } from '@/types/store';
-import { receiveStock, addPurchaseOrder } from '@/lib/store-data';
+import { receiveStock, addPurchaseOrder, sumOperatingExpenses } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { 
   TrendingUp, AlertTriangle, Coins, Sparkles, CheckCircle, 
@@ -34,7 +34,7 @@ interface BuyListItem {
 export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRestockEngineProps) {
   // Available budget = Net Income (exact dashboard stats)
   const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
-  const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+  const totalExpenses = sumOperatingExpenses(store);
   const savingsSaved = store.savingsGoal?.saved || 0;
   const netIncome = totalRevenue - totalExpenses - savingsSaved;
   const availableBudget = Math.max(0, netIncome);

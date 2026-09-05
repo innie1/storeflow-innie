@@ -1,4 +1,5 @@
 import { StoreData } from '@/types/store';
+import { isStockPurchase } from '@/lib/store-data';
 
 /**
  * Read-only finance intelligence. This intentionally does not mutate StoreData
@@ -34,7 +35,8 @@ export function getFlowFinanceSnapshot(store: StoreData): FlowFinanceSnapshot {
 
   const revenue = sales.reduce((sum, sale) => sum + n(sale.total), 0);
   const grossProfit = sales.reduce((sum, sale) => sum + n(sale.profit), 0);
-  const operatingExpenses = expenses.reduce((sum, expense) => sum + n(expense.amount), 0);
+  // Stock purchases are excluded: gross profit already carries cost of goods.
+  const operatingExpenses = expenses.filter(expense => !isStockPurchase(expense)).reduce((sum, expense) => sum + n(expense.amount), 0);
   const restockSpend = restocks.reduce((sum, restock) => sum + n(restock.total), 0);
   const pendingBalance = pending
     .filter(payment => payment.status === 'pending')

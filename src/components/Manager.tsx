@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId, AutoPriceEvent } from '@/types/store';
-import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId } from '@/lib/store-data';
+import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId, sumOperatingExpenses } from '@/lib/store-data';
 import PerformanceCalendar from '@/components/PerformanceCalendar';
 import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
@@ -134,7 +134,7 @@ function StoreHealthCard({ store, onOpenBreakdown, animate = true }: { store: St
   const last7Sales = store.sales.filter(s => new Date(s.date).getTime() >= Date.now() - 7 * 86400000);
   const revenue = last7Sales.reduce((s, x) => s + x.total, 0);
   const profit = last7Sales.reduce((s, x) => s + x.profit, 0);
-  const expenses = (store.expenses || []).filter(e => new Date(e.date).getTime() >= Date.now() - 7 * 86400000).reduce((s, e) => s + e.amount, 0);
+  const expenses = sumOperatingExpenses(store, date => new Date(date).getTime() >= Date.now() - 7 * 86400000);
 
   const animatedHealth = useCountUp(animate ? health.overall : 0, 1500);
   const displayHealth = animate ? animatedHealth : health.overall;

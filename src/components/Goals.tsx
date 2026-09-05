@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { StoreData, BusinessGoal } from '@/types/store';
-import { addGoal, updateGoal, deleteGoal, saveStore } from '@/lib/store-data';
+import { addGoal, updateGoal, deleteGoal, saveStore, getOperatingExpenses } from '@/lib/store-data';
 import { 
   Target, Plus, Calendar, Coins, TrendingUp, Sparkles, Award, Trash2, Edit3, ArrowRight
 } from 'lucide-react';
@@ -367,7 +367,7 @@ function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: S
 
   const weeklyChallenges = useMemo(() => {
     const last7Days = store.sales.filter(s => (Date.now() - new Date(s.date).getTime()) < 7 * 86400000);
-    const last7Expenses = (store.expenses || []).filter(e => (Date.now() - new Date(e.date).getTime()) < 7 * 86400000);
+    const last7Expenses = getOperatingExpenses(store).filter(e => (Date.now() - new Date(e.date).getTime()) < 7 * 86400000);
     
     let debtRecovered = 0;
     (store.pendingPayments || []).forEach(p => {

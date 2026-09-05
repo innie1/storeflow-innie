@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product, SimilarProductReview } from '@/types/store';
-import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore, saveStore, syncBackorder, clearBackorder, importPurchaseOrderByCode } from '@/lib/store-data';
+import { addProduct, updateProduct, deleteProduct, importProducts, receiveStock, RestockFunding, clearInventory, recordStockCountAudit, transferStock, getStoreIndex, loadStore, saveStore, syncBackorder, clearBackorder, importPurchaseOrderByCode, sumOperatingExpenses } from '@/lib/store-data';
 import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
 import { playProductAddedSound } from '@/lib/sound-effects';
@@ -783,7 +783,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
     // Calculate Net Income budget to allocate
     const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
-    const totalExpenses = (store.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+    const totalExpenses = sumOperatingExpenses(store);
     const savingsSaved = store.savingsGoal?.saved || 0;
     const netIncome = totalRevenue - totalExpenses - savingsSaved;
     const availableBudget = Math.max(25000, netIncome); // Baseline minimum budget of 25k to suggest items

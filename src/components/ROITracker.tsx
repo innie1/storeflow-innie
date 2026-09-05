@@ -4,7 +4,7 @@ import {
   addManualInvestment, deleteManualInvestment, 
   addLoan, deleteLoan, repayLoan, 
   addWithdrawal, deleteWithdrawal,
-  saveStore 
+  saveStore, isStockPurchase
 } from '@/lib/store-data';
 import { exportROICSV, exportROIPDF } from '@/lib/export-data';
 import { cashBalanceBreakdown } from '@/lib/manager-intel';
@@ -110,7 +110,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
   const expenses = store.expenses || [];
   const totalRevenue = useMemo(() => sales.reduce((sum, s) => sum + s.total, 0), [sales]);
   const grossProfit = useMemo(() => sales.reduce((sum, s) => sum + s.profit, 0), [sales]);
-  const totalExpenses = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
+  const totalExpenses = useMemo(() => expenses.filter(e => !isStockPurchase(e)).reduce((sum, e) => sum + e.amount, 0), [expenses]);
   const netIncome = totalRevenue - totalExpenses;
 
   // Capital Added This Month

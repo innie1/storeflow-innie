@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { StoreData } from '@/types/store';
+import { isStockPurchase } from '@/lib/store-data';
 import { ArrowRight, CreditCard, Receipt, ShoppingCart, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
 interface FinanceCenterProps {
@@ -16,7 +17,8 @@ export default function FinanceCenter({ store, onNavigate }: FinanceCenterProps)
     const pending = store.pendingPayments || [];
     const revenue = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
     const grossProfit = sales.reduce((sum, s) => sum + (Number(s.profit) || 0), 0);
-    const operatingExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    // Stock purchases are excluded: gross profit already carries cost of goods.
+    const operatingExpenses = expenses.filter(e => !isStockPurchase(e)).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const restockSpend = (store.restocks || []).reduce((sum, r) => sum + (Number(r.total) || 0), 0);
     const pendingBalance = pending.filter(p => p.status === 'pending').reduce((sum, p) => sum + (Number(p.balance) || 0), 0);
     const netProfit = grossProfit - operatingExpenses;
