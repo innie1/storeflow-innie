@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Search, SlidersHorizontal, Calendar, User, Phone, MapPin, Package, ArrowLeftRight, Wallet, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, SlidersHorizontal, Calendar, User, Phone, MapPin, Package, ArrowLeftRight, Wallet, ChevronUp, ChevronDown, Bell, AlertTriangle, Receipt, CheckCircle2, XCircle } from 'lucide-react';
 import { StoreData } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import OrderReceipt from '@/components/OrderReceipt';
@@ -278,7 +278,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
       {showPushBanner && (
         <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs text-foreground animate-in fade-in">
           <div className="flex items-center gap-2.5">
-            <span className="text-lg">🔔</span>
+            <Bell className="w-4 h-4 text-primary" />
             <div>
               <span className="font-semibold block">Enable Background Order &amp; Streak Alerts</span>
               <span className="text-muted-foreground">Get phone alerts for new orders &amp; Flow streak reminders even when StoreFlow is closed.</span>
@@ -321,7 +321,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
           }`}>
             <span>Capacity:</span>
             <span className="font-mono font-bold">{todayOrders.length} / {maxDailyOrders}</span>
-            {isLimitReached && <span className="animate-pulse">⚠️ Full</span>}
+            {isLimitReached && <span className="animate-pulse flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Full</span>}
           </div>
         </div>
       )}
@@ -330,7 +330,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
       {isLimitReached && (
         <div className="p-3 bg-red-500/10 border border-red-500/25 rounded-xl text-red-500 text-xs font-medium space-y-1 text-left">
           <p className="font-bold flex items-center gap-1.5">
-            <span>⚠️ Daily Limit Exceeded</span>
+            <span className="flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" />Daily Limit Exceeded</span>
           </p>
           <p className="text-[11px] text-red-500/80 leading-normal">
             You have received {todayOrders.length} orders today, meeting your capacity of {maxDailyOrders}. Consider disabling new online orders in Settings if you cannot fulfill more.
@@ -522,7 +522,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
                       className="shrink-0 px-2.5 py-1 rounded-full bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-bold flex items-center gap-1 transition active:scale-95 cursor-pointer"
                       title="View receipt"
                     >
-                      🧾 Receipt
+                      <Receipt className="w-3.5 h-3.5" /> Receipt
                     </button>
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium">
                       <span>{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -551,10 +551,10 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
                         className={`flex items-center gap-1.5 text-[10px] font-semibold ${isRisky ? 'text-red-500' : 'text-muted-foreground'}`}
                         title="This customer's order history with your store"
                       >
-                        <span>✅ {hist.completed} completed</span>
+                        <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />{hist.completed} completed</span>
                         <span>·</span>
-                        <span>❌ {hist.cancelled} cancelled</span>
-                        {isRisky && <span className="ml-1">⚠️ Frequent canceller</span>}
+                        <span className="flex items-center gap-1"><XCircle className="w-3 h-3" />{hist.cancelled} cancelled</span>
+                        {isRisky && <span className="ml-1 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Frequent canceller</span>}
                       </div>
                     );
                   })()}

@@ -3,20 +3,26 @@ import { StoreData, ExpenseCategory, Expense, Restock, RecurringBill } from '@/t
 import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
+import { Banknote, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon } from 'lucide-react';
 
 interface ExpensesProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
 }
 
-const CATEGORY_ICON: Record<ExpenseCategory, string> = {
-  Restock: '📦',
-  Rent: '🏠',
-  Utilities: '💡',
-  Salaries: '👥',
-  Transport: '🚚',
-  Other: '🧾',
+const CATEGORY_ICON: Record<ExpenseCategory, LucideIcon> = {
+  Restock: Package,
+  Rent: Home,
+  Utilities: Lightbulb,
+  Salaries: Users,
+  Transport: Truck,
+  Other: Receipt,
 };
+
+function CategoryIcon({ category, className = 'w-3 h-3 inline-block -mt-0.5 mr-1' }: { category: ExpenseCategory; className?: string }) {
+  const Icon = CATEGORY_ICON[category];
+  return <Icon className={className} />;
+}
 
 export default function Expenses({ store, onUpdate }: ExpensesProps) {
   const [showAdd, setShowAdd] = useState(false);
@@ -166,7 +172,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
             const v = byCategory.get(cat) || 0;
             return (
               <div key={cat} className="p-1.5 rounded-lg bg-surface-2 text-center">
-                <p className="text-[10px] text-muted-foreground truncate">{CATEGORY_ICON[cat]} {cat}</p>
+                <p className="text-[10px] text-muted-foreground truncate"><CategoryIcon category={cat} />{cat}</p>
                 <p className="text-xs font-display font-semibold text-foreground">₦{v.toLocaleString()}</p>
               </div>
             );
@@ -186,7 +192,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
           onClick={() => setShowRestock(true)}
           className="p-3 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90"
         >
-          📦 Restock Items
+          <Package className="w-3.5 h-3.5" /> Restock Items
         </button>
       </div>
 
@@ -197,7 +203,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
           className="w-full p-3.5 flex items-center justify-between text-left cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <span className="text-lg">🔁</span>
+            <RefreshCw className="w-4 h-4 text-muted-foreground" />
             <div>
               <p className="font-display font-bold text-sm">Recurring Bills</p>
               <p className="text-[10px] text-muted-foreground">
@@ -220,7 +226,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                 <div key={bill.id} className={`p-2.5 rounded-lg border ${bill.active ? 'bg-surface-2 border-border' : 'bg-surface-2/40 border-border/40 opacity-60'}`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-display font-semibold text-sm truncate">{CATEGORY_ICON[bill.category]} {bill.label}</p>
+                      <p className="font-display font-semibold text-sm truncate"><CategoryIcon category={bill.category} />{bill.label}</p>
                       <p className="text-[10px] text-muted-foreground">
                         ₦{bill.amount.toLocaleString()} · {bill.frequency} ·{' '}
                         {bill.active ? (
@@ -339,7 +345,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                 filter === cat ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
               }`}
             >
-              {CATEGORY_ICON[cat]} {cat} ({count})
+              <CategoryIcon category={cat} />{cat} ({count})
             </button>
           );
         })}
@@ -367,7 +373,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                   isRestock ? 'cursor-pointer hover:bg-surface-2/30 hover:border-success/30' : ''
                 }`}
               >
-                <div className="text-2xl">{CATEGORY_ICON[e.category]}</div>
+                <div><CategoryIcon category={e.category} className="w-6 h-6 text-muted-foreground" /></div>
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-display font-semibold text-sm">{e.category}</span>
@@ -428,7 +434,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                         category === cat ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border hover:border-primary/30'
                       }`}
                     >
-                      {CATEGORY_ICON[cat]} {cat}
+                      <CategoryIcon category={cat} />{cat}
                     </button>
                   ))}
                 </div>
@@ -480,7 +486,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setShowRestock(false)}>
           <div className="w-full max-w-lg bg-card border border-border rounded-xl p-5 animate-slide-up max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3">
-              <h3 className="font-display font-bold text-lg">📦 Restock Items</h3>
+              <h3 className="font-display font-bold text-lg"><Package className="w-4 h-4 inline-block -mt-0.5 mr-1.5" />Restock Items</h3>
               <button onClick={() => setShowRestock(false)} className="text-muted-foreground hover:text-foreground text-xl">×</button>
             </div>
             <p className="text-xs text-muted-foreground mb-2">
@@ -555,7 +561,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                     restockFunding === 'balance' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
                   }`}
                 >
-                  💰 From Balance
+                  <Wallet className="w-3.5 h-3.5 inline-block -mt-0.5 mr-1" />From Balance
                 </button>
                 <button
                   onClick={() => setRestockFunding('new_money')}
@@ -563,7 +569,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                     restockFunding === 'new_money' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
                   }`}
                 >
-                  💵 New Money
+                  <Banknote className="w-3.5 h-3.5 inline-block -mt-0.5 mr-1" />New Money
                 </button>
               </div>
               <button
@@ -583,7 +589,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-5 animate-slide-up max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-display font-bold text-base flex items-center gap-2 text-success">
-                <span>📦 Restock Batch Details</span>
+                <span className="flex items-center gap-1.5"><Package className="w-3.5 h-3.5" /> Restock Batch Details</span>
               </h3>
               <button onClick={() => setSelectedRestockBatch(null)} className="text-muted-foreground hover:text-foreground text-xl">×</button>
             </div>
@@ -600,7 +606,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Funding Source:</span>
                   <span className="font-semibold text-primary">
-                    {selectedRestockBatch.items[0]?.funding === 'new_money' ? '💵 New Money Capital' : '💰 Store Cash Balance'}
+                    {selectedRestockBatch.items[0]?.funding === 'new_money' ? 'New Money Capital' : 'Store Cash Balance'}
                   </span>
                 </div>
                 <div className="flex justify-between pt-1.5 border-t border-border/60">

@@ -19,7 +19,14 @@ import {
   BarChart3,
   QrCode,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  Package,
+  Box,
+  NotebookPen,
+  ShoppingCart,
+  Lock,
+  Star,
+  Flame
 } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
 
@@ -581,7 +588,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          <span>📦</span> Wholesale Mode (Carton)
+          <Package className="w-3.5 h-3.5" /> Wholesale Mode (Carton)
         </button>
         <button
           onClick={() => {
@@ -595,14 +602,14 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          <span>🧩</span> Retail Mode (Piece)
+          <Box className="w-3.5 h-3.5" /> Retail Mode (Piece)
         </button>
       </div>
 
       {pendingSaleMode && (
         <div className="p-3 rounded-xl bg-warning/5 border border-warning/30 space-y-2">
           <p className="text-xs font-display font-bold">
-            ⚠️ Switch to {pendingSaleMode === 'wholesale' ? 'Wholesale (carton pricing)' : 'Retail (piece pricing)'}?
+            <AlertTriangle className="w-3.5 h-3.5 inline-block -mt-0.5 mr-1" />Switch to {pendingSaleMode === 'wholesale' ? 'Wholesale (carton pricing)' : 'Retail (piece pricing)'}?
           </p>
           <p className="text-[11px] text-muted-foreground">
             This changes what price everyone selling here charges by default. Enter your store code to confirm.
@@ -681,7 +688,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       </div>
       {/* Log Lost Sale quick link */}
       <div className="flex justify-between items-center text-left">
-        <p className="text-xs text-muted-foreground">Tap ⚡ to sell, + to add to cart</p>
+        <p className="text-xs text-muted-foreground">Tap Sell to sell, + to add to cart</p>
         <button
           onClick={() => {
             setLostSaleName('');
@@ -690,7 +697,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           }}
           className="px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-[10px] text-muted-foreground hover:text-foreground font-display font-bold transition-colors flex items-center gap-1 shrink-0"
         >
-          📝 Log Lost Sale
+          <NotebookPen className="w-3.5 h-3.5" /> Log Lost Sale
         </button>
       </div>
 
@@ -708,7 +715,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             }}
             className="px-4 py-2 rounded-xl bg-destructive text-white text-xs font-display font-bold hover:bg-destructive/90 active:scale-95 transition-transform shadow-md"
           >
-            📝 Record Lost Sale for "{search}"
+            <NotebookPen className="w-3.5 h-3.5 inline-block -mt-0.5 mr-1" />Record Lost Sale for "{search}"
           </button>
         </div>
       )}
@@ -748,7 +755,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
               <div key={p.id} className="relative rounded-2xl bg-card border border-border/40 p-3.5 flex flex-col justify-between min-h-[195px]">
                 {isTop && (
                   <span className="absolute top-3 right-3 text-[9px] px-1.5 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary font-display font-bold">
-                    ★ TOP
+                    <Star className="w-2.5 h-2.5 inline-block -mt-0.5 mr-0.5" />TOP
                   </span>
                 )}
                 <div 
@@ -758,10 +765,10 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                   <p className="text-sm font-display font-bold text-foreground line-clamp-1 pr-12">{p.name}</p>
                   <p className="text-xs text-muted-foreground mt-1">{getStockDisplay(p)}</p>
                   <div className="flex gap-1.5 mt-1 flex-wrap">
-                    {isFast && <span className="text-[9px] text-primary bg-primary/5 px-1.5 py-0.5 rounded-md border border-primary/20">🔥 Fast</span>}
+                    {isFast && <span className="text-[9px] text-primary bg-primary/5 px-1.5 py-0.5 rounded-md border border-primary/20"><Flame className="w-2.5 h-2.5 inline-block -mt-0.5 mr-0.5" />Fast</span>}
                     {isLow && (
                       <span className="text-[10px] text-rose-400 flex items-center gap-1 font-display font-bold mt-0.5">
-                        ⚠️ Low stock
+                        <AlertTriangle className="w-2.5 h-2.5 inline-block -mt-0.5 mr-0.5" />Low stock
                       </span>
                     )}
                   </div>
@@ -774,14 +781,14 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                         onClick={() => setSelectedSaleTypes(prev => ({ ...prev, [p.id]: 'carton' }))}
                         className={`py-1 rounded-md transition-colors text-center ${currentSaleType === 'carton' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                       >
-                        📦 Carton
+                        <Package className="w-2.5 h-2.5 inline-block -mt-0.5 mr-0.5" />Carton
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedSaleTypes(prev => ({ ...prev, [p.id]: 'single' }))}
                         className={`py-1 rounded-md transition-colors text-center ${currentSaleType === 'single' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                       >
-                        🥛 Single
+                        <Box className="w-2.5 h-2.5 inline-block -mt-0.5 mr-0.5" />Single
                       </button>
                     </div>
                   )}
@@ -805,7 +812,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                       className="flex-1 h-9 rounded-xl bg-[hsl(var(--quick-sell-bg))] text-[hsl(var(--quick-sell-foreground))] text-xs font-display font-black hover:bg-[hsl(var(--quick-sell-hover))] disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center gap-1 shadow-sm transition-colors duration-200"
                       aria-label="Instant sell"
                     >
-                      ⚡ Sell
+                      <Zap className="w-3 h-3" /> Sell
                     </button>
                     <button
                       onClick={() => handleQuickAdd(p.id)}
@@ -855,7 +862,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       {cart.length > 0 && !checkoutOpen && (
         <button onClick={() => openCheckout()}
           className="fixed left-1/2 -translate-x-1/2 bottom-24 z-40 px-5 py-3 rounded-full bg-primary text-primary-foreground font-display font-bold text-sm shadow-lg flex items-center gap-2 active:scale-95">
-          🛒 {cartCount} · ₦{cartSubtotal.toLocaleString()} →
+          <ShoppingCart className="w-4 h-4" /> {cartCount} · ₦{cartSubtotal.toLocaleString()} →
         </button>
       )}
 
@@ -897,11 +904,11 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                               className="text-[8px] bg-primary/10 hover:bg-primary/20 text-primary px-1 py-0.5 rounded font-bold cursor-pointer transition-colors"
                               title="Click to toggle Carton/Single"
                             >
-                              {item.saleType === 'carton' ? '📦 Carton' : '🥛 Single'}
+                              {item.saleType === 'carton' ? 'Carton' : 'Single'}
                             </button>
                           ) : (
                             <span className="text-[8px] bg-muted/20 text-muted-foreground px-1 py-0.5 rounded font-bold select-none">
-                              📦 Carton
+                              <Package className="w-2.5 h-2.5 inline-block -mt-0.5 mr-0.5" />Carton
                             </span>
                           )}
                         </p>
@@ -1021,7 +1028,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
               {(saveAs === 'pending' || customerOpen) && (
                 <div className="space-y-1.5 rounded-lg border border-border p-2 bg-surface-2/40">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-display font-bold text-muted-foreground uppercase">👤 Customer {saveAs === 'pending' ? '(required)' : '(optional)'}</span>
+                    <span className="text-[10px] font-display font-bold text-muted-foreground uppercase"><User className="w-3 h-3 inline-block -mt-0.5 mr-1" />Customer {saveAs === 'pending' ? '(required)' : '(optional)'}</span>
                     {saveAs !== 'pending' && (
                       <button onClick={() => setCustomerOpen(false)} className="text-destructive text-[10px] font-semibold hover:underline">
                         Remove
@@ -1044,14 +1051,14 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
               )}
               {saveAs !== 'pending' && !customerOpen && (
                 <button onClick={() => setCustomerOpen(true)} className="w-full py-1.5 px-3 rounded-lg bg-surface-2 border border-border text-left text-[11px] flex items-center justify-between text-muted-foreground hover:bg-surface-2/80 transition-colors">
-                  <span>👤 Add Customer Details (Optional)</span>
+                  <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Add Customer Details (Optional)</span>
                   <span>+</span>
                 </button>
               )}
 
               <button onClick={handleConfirm}
                 className="w-full py-2.5 rounded-xl bg-success text-white font-display font-bold text-sm active:scale-[0.98]">
-                🔒 Save Sale
+                <Lock className="w-3.5 h-3.5" /> Save Sale
               </button>
             </div>
           </div>
@@ -1082,7 +1089,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                 className="w-full p-3.5 rounded-2xl bg-surface-2 border border-border hover:border-yellow-500/40 text-left flex items-center justify-between transition cursor-pointer active:scale-95"
               >
                 <div>
-                  <p className="text-xs font-bold text-foreground">📦 Carton Package</p>
+                  <p className="text-xs font-bold text-foreground"><Package className="w-3 h-3 inline-block -mt-0.5 mr-1" />Carton Package</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Price per Carton</p>
                 </div>
                 <span className="text-xs font-display font-bold text-yellow-500">₦{(variantPickerProduct.sellingPrice || 0).toLocaleString()}</span>
@@ -1097,7 +1104,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                 className="w-full p-3.5 rounded-2xl bg-surface-2 border border-border hover:border-yellow-500/40 text-left flex items-center justify-between transition cursor-pointer active:scale-95"
               >
                 <div>
-                  <p className="text-xs font-bold text-foreground">🥤 Single Unit</p>
+                  <p className="text-xs font-bold text-foreground"><Box className="w-3 h-3 inline-block -mt-0.5 mr-1" />Single Unit</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Price per Single</p>
                 </div>
                 <span className="text-xs font-display font-bold text-yellow-500">
@@ -1119,7 +1126,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       {notFoundBarcode && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setNotFoundBarcode(null)}>
           <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-up space-y-4 text-center" onClick={e => e.stopPropagation()}>
-            <span className="text-4xl">🔍</span>
+            <Search className="w-10 h-10 text-muted-foreground" />
             <div>
               <h3 className="font-display font-bold text-base text-foreground">Barcode Not Found</h3>
               <p className="text-xs text-muted-foreground mt-1">No product matches barcode: <span className="font-mono text-yellow-500 font-bold">{notFoundBarcode}</span></p>
@@ -1213,7 +1220,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-2xl animate-pulse">
-                    📦
+                    <Package className="w-8 h-8 text-muted-foreground" />
                   </div>
                   <div>
                     <h3 className="font-display font-bold text-base text-foreground leading-tight">{p.name}</h3>

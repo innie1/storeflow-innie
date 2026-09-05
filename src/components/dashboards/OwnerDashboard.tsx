@@ -5,7 +5,7 @@ import { generatePerformanceSummary } from '@/lib/reports';
 import { healthScore, generateInsights, generateRecommendations, restockScore } from '@/lib/manager-intel';
 import { XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import Mascot, { MascotBadge } from '@/components/Mascot';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Wallet, Receipt, AlertTriangle, CreditCard, Share2, MessageCircle, Trophy, TrendingDown } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths, subDays } from 'date-fns';
 
 // ---------- Metric reporting period (Revenue / Net Profit) ----------
@@ -544,13 +544,13 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                 onClick={() => onNavigate('sales')}
                 className="py-2.5 px-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                💰 Record Sale
+                <Wallet className="w-4 h-4" /> Record Sale
               </button>
               <button
                 onClick={() => onNavigate('expenses')}
                 className="py-2.5 px-3 rounded-xl bg-destructive/10 text-destructive border border-destructive/20 font-display font-bold text-xs hover:bg-destructive/20 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                🧾 Log Expense
+                <Receipt className="w-4 h-4" /> Log Expense
               </button>
             </div>
           </div>
@@ -723,7 +723,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
               className="w-full p-3 rounded-xl bg-warning/10 border border-warning/30 text-left hover:bg-warning/20 transition-colors flex items-center justify-between cursor-pointer"
             >
               <span className="text-sm font-display font-semibold text-warning">
-                ⚠ {stats.lowStockProducts.length} low-stock product{stats.lowStockProducts.length === 1 ? '' : 's'}
+                <AlertTriangle className="w-3 h-3 inline-block -mt-0.5 mr-1" />{stats.lowStockProducts.length} low-stock product{stats.lowStockProducts.length === 1 ? '' : 's'}
               </span>
               <span className="text-warning text-xs">View →</span>
             </button>
@@ -777,7 +777,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground font-display">💳 Pending Payments</p>
+                  <p className="text-xs text-muted-foreground font-display"><CreditCard className="w-3 h-3 inline-block -mt-0.5 mr-1" />Pending Payments</p>
                   <p className="font-display font-bold text-2xl text-warning mt-1">₦{pendingSummary.totalOwed.toLocaleString()}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {pendingSummary.customerCount} customer{pendingSummary.customerCount === 1 ? '' : 's'}
@@ -793,14 +793,14 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
               onClick={handleShareReport}
               className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-surface-2 border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors text-xs font-display font-semibold cursor-pointer"
             >
-              📤 Share Performance Report
+              <Share2 className="w-4 h-4" /> Share Performance Report
             </button>
             <button
               onClick={handleWhatsAppReport}
               className="p-2.5 rounded-xl bg-success/10 border border-success/20 text-success hover:bg-success/20 transition-colors text-sm cursor-pointer"
               title="Share on WhatsApp"
             >
-              💬
+              <MessageCircle className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -996,7 +996,9 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                           >
                             <div>
                               <span className="text-foreground font-medium">
-                                {day.date} {isBest && '🏆'} {isWorst && '📉'}
+                                {day.date}
+                                {isBest && <Trophy className="w-3 h-3 inline-block ml-1 -mt-0.5 text-primary" />}
+                                {isWorst && <TrendingDown className="w-3 h-3 inline-block ml-1 -mt-0.5 text-muted-foreground" />}
                               </span>
                               <span className="text-muted-foreground ml-2 text-xs">{day.count} transactions</span>
                             </div>
