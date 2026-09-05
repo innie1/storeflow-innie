@@ -138,8 +138,25 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
     const revenue = store.sales.filter(s => inRange(s.date)).reduce((sum, s) => sum + s.total, 0);
     const expenses = sumOperatingExpenses(store, inRange);
     const stockPurchases = sumStockPurchases(store, inRange);
-    return { revenue, expenses, stockPurchases, balance: revenue - expenses };
-  }, [store.sales, store.expenses, balancePeriod]);
+
+    // "Business Balance" used to be revenue minus expenses, which is neither
+    // cash nor profit: it ignored every naira spent on stock, so a shop that
+    // had turned most of its takings back into goods still showed the takings
+    // as if they were sitting there. Show the money that actually exists.
+    const moneyOnHand = (store.cashBalance || 0) + (store.bankBalance || 0) + (store.walletBalance || 0);
+
+    // A balance is a snapshot, so only the lifetime view is a balance. Any
+    // narrower period reports how much that money moved instead: what was
+    // collected, less what was paid out (stock included — that is real cash).
+    const collected = store.sales
+      .filter(s => inRange(s.date) && !s.pendingPaymentId)
+      .reduce((sum, s) => sum + s.total, 0);
+    const balance = balancePeriod === 'lifetime'
+      ? moneyOnHand
+      : collected - expenses - stockPurchases;
+
+    return { revenue, expenses, stockPurchases, moneyOnHand, balance };
+  }, [store.sales, store.expenses, store.cashBalance, store.bankBalance, store.walletBalance, balancePeriod]);
   const selectBalancePeriod = (period: BalancePeriod) => {
     setBalancePeriod(period);
     if (typeof localStorage !== 'undefined') localStorage.setItem(`storeflow_dash_period_${store.accessCode}_balance`, period);
@@ -597,7 +614,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setBalancePeriodMenuOpen(v => !v); } }}
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground uppercase tracking-wide font-display font-semibold hover:text-foreground active:scale-95 transition cursor-pointer"
                 >
-                  {balancePeriod === 'lifetime' ? 'Business Balance' : `${BALANCE_PERIOD_LABELS[balancePeriod]} Balance`} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
+                  {balancePeriod === 'lifetime' ? 'Business Balance' : `${BALANCE_PERIOD_LABELS[balancePeriod]} Change`} <ChevronDown className={`w-3 h-3 transition-transform ${balancePeriodMenuOpen ? 'rotate-180' : ''}`} />
                 </span>
                 <p className={`font-display font-bold text-lg ${balanceStats.balance >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {balanceStats.balance >= 0 ? '' : '−'}₦{Math.abs(balanceStats.balance).toLocaleString()}

@@ -10,6 +10,7 @@ import {
   sumStockPurchases,
 } from '@/lib/store-data';
 import type { Product, StoreData } from '@/types/store';
+import { readSource } from './helpers/source';
 
 function newShop(): StoreData {
   const store = createStore('Accounting Test', 'retail');
@@ -90,6 +91,25 @@ describe('buying stock is not an operating expense', () => {
     expect(sumOperatingExpenses(store)).toBe(15_000);
     expect(getOperatingExpenses(store).map(e => e.category)).toEqual(['Rent']);
     expect(getDashboardStats(store).netIncome).toBe(35_000);
+  });
+
+  it('reports the balance as money on hand, not as takings', () => {
+    // Trading shop: 60,000 opening stock, one 50,000 cash sale, then a 30,000
+    // reorder. Money on hand is what is left, not what came through the till.
+    const store = receiveStock(tradingShop(), [{ productId: 'p1', quantity: 50, costPrice: 600 }]);
+    const moneyOnHand = (store.cashBalance || 0) + (store.bankBalance || 0) + (store.walletBalance || 0);
+
+    // 100,000 opening cash + 50,000 collected - 30,000 to the supplier.
+    expect(moneyOnHand).toBe(120_000);
+    // The old formula was revenue - expenses, which ignored the reorder
+    // entirely and would have reported the full 50,000 of takings as balance.
+    expect(moneyOnHand).not.toBe(getDashboardStats(store).totalRevenue);
+  });
+
+  it('keeps the dashboard balance wired to real money, not revenue minus expenses', () => {
+    const source = readSource('src/components/dashboards/OwnerDashboard.tsx');
+    expect(source).toContain('const moneyOnHand = (store.cashBalance || 0) + (store.bankBalance || 0) + (store.walletBalance || 0);');
+    expect(source).not.toContain('balance: revenue - expenses');
   });
 
   it('can narrow either figure to a period', () => {
