@@ -341,17 +341,18 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
    */
   const handleAskFlow = (query: string) => {
     setAiAssistantQuery(query);
-    setAiAssistantLoading(true);
-    // Yield a frame so the thinking state paints before the (synchronous)
-    // analysis runs over the store's records.
-    requestAnimationFrame(() => {
-      const answer = askFlowMarketplace(store, query);
-      setAiAssistantAnswer(answer ?? {
-        text: "I can't answer that one yet.",
-        points: ['Try asking about restocking, what is selling, your prices, expenses, customer requests, or next month.'],
-      });
-      setAiAssistantLoading(false);
+    // askFlowMarketplace is synchronous — it reads records already in memory.
+    //
+    // This used to yield a frame first so a "thinking" state could paint.
+    // requestAnimationFrame does not fire while the page is hidden, so that
+    // callback could never run and the assistant would sit on "thinking"
+    // forever with no way out.
+    const answer = askFlowMarketplace(store, query);
+    setAiAssistantAnswer(answer ?? {
+      text: "I can't answer that one yet.",
+      points: ['Try asking about restocking, what is selling, your prices, expenses, customer requests, or next month.'],
     });
+    setAiAssistantLoading(false);
   };
 
   const flowSuggestions = useMemo(() => flowMarketplaceSuggestions(store), [store]);

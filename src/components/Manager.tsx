@@ -728,21 +728,20 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   const [showMoreInsights, setShowMoreInsights] = useState(false);
 
   const handleGetAdvice = () => {
-    setAdviceLoading(true);
-    setAdviceReport(null);
-    setAdviceReportVisible(false);
     try {
       addFlowReward(0.5, 'event', 'Requested business advice report');
     } catch {}
-    // buildFlowReport is synchronous — it reads the store that is already in
-    // memory. The delay here was only ever for show, and it sat in front of a
-    // report that then took another 45 seconds to type itself out. One frame is
-    // enough to let the button paint its loading state.
-    requestAnimationFrame(() => {
-      setAdviceReport(buildFlowReport(store));
-      setAdviceReportVisible(true);
-      setAdviceLoading(false);
-    });
+    // buildFlowReport reads the store that is already in memory, so there is
+    // nothing to wait for and nothing to defer to.
+    //
+    // This briefly went through requestAnimationFrame, to let the button paint
+    // a loading state first. rAF does not fire while the page is hidden — a
+    // backgrounded tab, the PWA behind the launcher, the screen off — so the
+    // callback could simply never run and the button did nothing at all.
+    // Deferring work that is already synchronous only ever added ways to fail.
+    setAdviceLoading(false);
+    setAdviceReport(buildFlowReport(store));
+    setAdviceReportVisible(true);
   };
 
   const handleAutoFixConfirmed = async () => {
@@ -1781,38 +1780,46 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                           ))}
                         </div>
                       )}
-                      {(a.goTo || a.autoFix) && (
-                        <div className="flex gap-2 mt-2.5">
-                          {a.goTo && (
-                            <button
-                              onClick={() => onNavigate?.(a.goTo!)}
-                              className="flex-1 py-2 rounded-lg text-xs font-display font-bold border border-current/25 active:scale-[0.97] transition"
-                            >
-                              Go to Action
-                            </button>
-                          )}
-                          {a.autoFix && (
-                            <button
-                              onClick={() => setAutoFixTarget(a.autoFix!)}
-                              className="flex-1 py-2 rounded-lg text-xs font-display font-bold bg-foreground/90 text-background active:scale-[0.97] transition flex items-center justify-center gap-1"
-                            >
-                              <Zap className="w-3.5 h-3.5" /> Auto Fix
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-current/10">
+                      {/* One row instead of three. Each card used to stack two
+                          full-width buttons and then a bordered "Helpful / Not
+                          relevant" strip, so the same chrome repeated down the
+                          whole screen and buried the advice between it. Auto
+                          Fix stays the one prominent control; going to the
+                          screen is a text link, and the feedback is a pair of
+                          icons pushed to the end. */}
+                      <div className="flex items-center gap-2 mt-2.5">
+                        {a.autoFix && (
+                          <button
+                            onClick={() => setAutoFixTarget(a.autoFix!)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-display font-bold bg-foreground/90 text-background active:scale-[0.97] transition flex items-center gap-1 shrink-0"
+                          >
+                            <Zap className="w-3.5 h-3.5" /> Auto Fix
+                          </button>
+                        )}
+                        {a.goTo && (
+                          <button
+                            onClick={() => onNavigate?.(a.goTo!)}
+                            className="px-2 py-1.5 rounded-lg text-xs font-display font-bold text-current/80 hover:text-current active:scale-[0.97] transition shrink-0"
+                          >
+                            {a.autoFix ? 'Open' : 'Go to Action'}
+                          </button>
+                        )}
+                        <span className="flex-1" />
                         <button
                           onClick={() => handleHelpfulAdvice(a.id)}
-                          className="text-xs text-muted-foreground hover:text-foreground transition flex items-center gap-1"
+                          aria-label="This advice was helpful"
+                          title="Helpful"
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-success hover:bg-success/10 transition shrink-0"
                         >
-                          <ThumbsUp className="w-3.5 h-3.5" /> Helpful
+                          <ThumbsUp className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDismissAdvice(a.id)}
-                          className="text-xs text-muted-foreground hover:text-foreground transition flex items-center gap-1"
+                          aria-label="Not relevant, hide this"
+                          title="Not relevant"
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition shrink-0"
                         >
-                          <ThumbsDown className="w-3.5 h-3.5" /> Not relevant
+                          <ThumbsDown className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>

@@ -159,6 +159,25 @@ describe('the advice screen itself', () => {
     expect(handler).not.toMatch(/setTimeout\([\s\S]*?,\s*1500\s*\)/);
   });
 
+  it('builds the report without waiting for a frame that may never come', () => {
+    // requestAnimationFrame does not fire while the page is hidden — a
+    // backgrounded tab, the PWA behind the launcher, the screen off. Deferring
+    // a synchronous computation through it meant Get Advice could do nothing
+    // at all, with no error to show for it.
+    const handler = (() => {
+      const s = source();
+      return s.slice(s.indexOf('const handleGetAdvice'), s.indexOf('const handleAutoFixConfirmed'));
+    })();
+    // Matches a call, not the word — the comment explaining this trap names it.
+    expect(handler).not.toMatch(/requestAnimationFrame\s*\(/);
+
+    // Same trap, same fix, in the Marketplace assistant.
+    const marketplace = readSource('src/components/Marketplace.tsx');
+    const ask = marketplace.slice(marketplace.indexOf('const handleAskFlow'), marketplace.indexOf('const flowSuggestions'));
+    expect(ask).toContain('askFlowMarketplace(store, query)');
+    expect(ask).not.toMatch(/requestAnimationFrame\s*\(/);
+  });
+
   it('keeps the notification archive at the bottom, not the top', () => {
     const s = source();
     const advice = s.slice(s.indexOf("{tab === 'advice' &&"));
