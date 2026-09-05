@@ -14,19 +14,19 @@ import SmartRestockEngine from '@/components/SmartRestockEngine';
 import ProductIcon from '@/components/ProductIcon';
 import Mascot, { MascotMood } from '@/components/Mascot';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
-import { 
-  Search, 
-  Camera, 
-  BarChart3, 
-  ShoppingCart, 
-  ArrowUp, 
-  Truck, 
-  Pencil, 
-  X, 
-  Plus, 
-  Upload, 
-  Trash2, 
-  FileText 
+import {
+  Search,
+  Camera,
+  BarChart3,
+  ShoppingCart,
+  ArrowUp,
+  Truck,
+  Pencil,
+  X,
+  Plus,
+  Upload,
+  Trash2,
+  FileText
 } from 'lucide-react';
 import type { ProductFocus } from '@/lib/product-focus';
 
@@ -93,183 +93,81 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [detailTab, setDetailTab] = useState<'overview' | 'performance' | 'history'>('overview');
   const [pendingBackorderClear, setPendingBackorderClear] = useState<Product | null>(null);
   const [pendingMassEditDelete, setPendingMassEditDelete] = useState<MassEditItem | null>(null);
-  
+
   // ---------- Product Performance Calculations ----------
+  //
+  // The same ten-line if/else chain deciding where the period starts was
+  // written out four separate times, once per statistic. Four copies of a date
+  // boundary is four chances for them to disagree about what "this week" means.
+  const periodStart = useMemo(() => {
+    const now = new Date();
+    if (performancePeriod === 'today') {
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    }
+    if (performancePeriod === 'week') {
+      // Back to Sunday, by calendar date rather than by subtracting fixed
+      // 24-hour blocks, so the boundary lands on local midnight.
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+      return start.getTime();
+    }
+    if (performancePeriod === 'month') {
+      return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    }
+    return 0;
+  }, [performancePeriod]);
+
   const filteredSales = useMemo(() => {
     if (!selectedDetailProduct) return [];
-    const sales = store.sales.filter(s => s.productId === selectedDetailProduct.id);
-    const now = new Date();
-    
-    if (performancePeriod === 'today') {
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      return sales.filter(s => new Date(s.date).getTime() >= todayStart);
-    } else if (performancePeriod === 'week') {
-      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getDay() * 24 * 60 * 60 * 1000;
-      return sales.filter(s => new Date(s.date).getTime() >= weekStart);
-    } else if (performancePeriod === 'month') {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      return sales.filter(s => new Date(s.date).getTime() >= monthStart);
-    }
-    return sales;
-  }, [store.sales, selectedDetailProduct, performancePeriod]);
+    return store.sales.filter(s =>
+      s.productId === selectedDetailProduct.id && new Date(s.date).getTime() >= periodStart
+    );
+  }, [store.sales, selectedDetailProduct, periodStart]);
 
-  const storeTotalProfit = useMemo(() => {
-    const sales = store.sales || [];
-    const now = new Date();
-    let periodSales = sales;
-    if (performancePeriod === 'today') {
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      periodSales = sales.filter(s => new Date(s.date).getTime() >= todayStart);
-    } else if (performancePeriod === 'week') {
-      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getDay() * 24 * 60 * 60 * 1000;
-      periodSales = sales.filter(s => new Date(s.date).getTime() >= weekStart);
-    } else if (performancePeriod === 'month') {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      periodSales = sales.filter(s => new Date(s.date).getTime() >= monthStart);
-    }
-    return periodSales.reduce((sum, s) => sum + s.profit, 0);
-  }, [store.sales, performancePeriod]);
-
-  const productRankInfo = useMemo(() => {
-    if (!selectedDetailProduct) return { rank: 0, total: 0, pct: 100, hasSales: false };
-    const sales = store.sales || [];
-    const now = new Date();
-    let periodSales = sales;
-    if (performancePeriod === 'today') {
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      periodSales = sales.filter(s => new Date(s.date).getTime() >= todayStart);
-    } else if (performancePeriod === 'week') {
-      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getDay() * 24 * 60 * 60 * 1000;
-      periodSales = sales.filter(s => new Date(s.date).getTime() >= weekStart);
-    } else if (performancePeriod === 'month') {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      periodSales = sales.filter(s => new Date(s.date).getTime() >= monthStart);
-    }
-
-    const productSalesMap: Record<string, number> = {};
-    store.products.forEach(p => { productSalesMap[p.id] = 0; });
-    periodSales.forEach(s => {
-      if (productSalesMap[s.productId] !== undefined) {
-        productSalesMap[s.productId] += s.quantity;
-      }
-    });
-
-    const sorted = Object.entries(productSalesMap)
-      .map(([id, qty]) => ({ id, qty }))
-      .sort((a, b) => b.qty - a.qty);
-
-    const rankIdx = sorted.findIndex(item => item.id === selectedDetailProduct.id);
-    const rank = rankIdx + 1;
-    const total = store.products.length;
-    const pct = total > 0 ? (rank / total) * 100 : 100;
-    const hasSales = (productSalesMap[selectedDetailProduct.id] || 0) > 0;
-
-    return { rank, total, pct, hasSales };
-  }, [store.products, store.sales, selectedDetailProduct, performancePeriod]);
-
-  const filteredRestocksCount = useMemo(() => {
-    if (!selectedDetailProduct) return 0;
-    const movements = store.inventoryMovements || [];
-    const now = new Date();
-    let periodMovements = movements.filter(m => m.productId === selectedDetailProduct.id && m.movementType === 'Restock');
-    
-    if (performancePeriod === 'today') {
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      periodMovements = periodMovements.filter(m => new Date(m.date).getTime() >= todayStart);
-    } else if (performancePeriod === 'week') {
-      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - now.getDay() * 24 * 60 * 60 * 1000;
-      periodMovements = periodMovements.filter(m => new Date(m.date).getTime() >= weekStart);
-    } else if (performancePeriod === 'month') {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      periodMovements = periodMovements.filter(m => new Date(m.date).getTime() >= monthStart);
-    }
-    
-    if (performancePeriod === 'all') {
-      return selectedDetailProduct.restock_count || periodMovements.length || 0;
-    }
-    return periodMovements.length;
-  }, [store.inventoryMovements, selectedDetailProduct, performancePeriod]);
+  const storeTotalProfit = useMemo(
+    () => (store.sales || [])
+      .filter(s => new Date(s.date).getTime() >= periodStart)
+      .reduce((sum, s) => sum + s.profit, 0),
+    [store.sales, periodStart],
+  );
 
   const unitsSold = useMemo(() => filteredSales.reduce((sum, s) => sum + s.quantity, 0), [filteredSales]);
   const totalRevenue = useMemo(() => filteredSales.reduce((sum, s) => sum + s.total, 0), [filteredSales]);
   const totalProfit = useMemo(() => filteredSales.reduce((sum, s) => sum + s.profit, 0), [filteredSales]);
-
-  const avgSalesSpeed = useMemo(() => {
-    if (!selectedDetailProduct || !selectedDetailProduct.first_sale_at) return 0;
-    const now = new Date();
-    let divisor = 1;
-
-    if (performancePeriod === 'today') {
-      divisor = 1;
-    } else if (performancePeriod === 'week') {
-      const daysSinceFirst = (now.getTime() - new Date(selectedDetailProduct.first_sale_at).getTime()) / (1000 * 60 * 60 * 24);
-      divisor = Math.max(1, Math.min(7, Math.ceil(daysSinceFirst)));
-    } else if (performancePeriod === 'month') {
-      const daysSinceFirst = (now.getTime() - new Date(selectedDetailProduct.first_sale_at).getTime()) / (1000 * 60 * 60 * 24);
-      divisor = Math.max(1, Math.min(30, Math.ceil(daysSinceFirst)));
-    } else {
-      const daysSinceFirst = (now.getTime() - new Date(selectedDetailProduct.first_sale_at).getTime()) / (1000 * 60 * 60 * 24);
-      divisor = Math.max(1, Math.ceil(daysSinceFirst));
-    }
-    
-    return Math.round((unitsSold / divisor) * 10) / 10;
-  }, [selectedDetailProduct, unitsSold, performancePeriod]);
 
   const contributionPct = useMemo(() => {
     if (storeTotalProfit <= 0) return 0;
     return Math.round((totalProfit / storeTotalProfit) * 1000) / 10;
   }, [totalProfit, storeTotalProfit]);
 
-  const salesSummary = useMemo(() => {
-    if (!selectedDetailProduct) return { today: 0, week: 0, month: 0, all: 0 };
-    const sales = store.sales.filter(s => s.productId === selectedDetailProduct.id);
-    const now = new Date();
-    
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const weekStart = todayStart - now.getDay() * 24 * 60 * 60 * 1000;
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    
-    let today = 0, week = 0, month = 0, all = 0;
-    sales.forEach(s => {
-      const t = new Date(s.date).getTime();
-      if (t >= todayStart) today += s.quantity;
-      if (t >= weekStart) week += s.quantity;
-      if (t >= monthStart) month += s.quantity;
-      all += s.quantity;
-    });
-    
-    return { today, week, month, all };
-  }, [store.sales, selectedDetailProduct]);
-
   const flowInsights = useMemo(() => {
     if (!selectedDetailProduct) return { list: [], mood: 'idle' as MascotMood, badge: 'Standard' };
     const list: string[] = [];
-    
+
     const salesAll = store.sales.filter(s => s.productId === selectedDetailProduct.id);
     const profitAll = salesAll.reduce((sum, s) => sum + s.profit, 0);
     const storeProfitAll = store.sales.reduce((sum, s) => sum + s.profit, 0);
     const contribAll = storeProfitAll > 0 ? (profitAll / storeProfitAll) * 100 : 0;
-    
+
     let isTopPerformer = false;
     if (contribAll >= 10) {
       list.push(`🔥 This product generated ${contribAll.toFixed(0)}% of your total store profit.`);
       isTopPerformer = true;
     }
-    
+
     const now = new Date();
     const last30Start = now.getTime() - 30 * 24 * 60 * 60 * 1000;
     const prev30Start = now.getTime() - 60 * 24 * 60 * 60 * 1000;
-    
+
     const last30Sales = salesAll.filter(s => {
       const t = new Date(s.date).getTime();
       return t >= last30Start;
     }).reduce((sum, s) => sum + s.quantity, 0);
-    
+
     const prev30Sales = salesAll.filter(s => {
       const t = new Date(s.date).getTime();
       return t >= prev30Start && t < last30Start;
     }).reduce((sum, s) => sum + s.quantity, 0);
-    
+
     if (last30Sales > prev30Sales && prev30Sales > 0) {
       const inc = ((last30Sales - prev30Sales) / prev30Sales) * 100;
       list.push(`📈 Sales increased ${inc.toFixed(0)}% compared to last month.`);
@@ -280,11 +178,11 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       list.push(`🐢 Sales have slowed compared to previous weeks.`);
     }
 
-    const daysSinceFirst = selectedDetailProduct.first_sale_at 
+    const daysSinceFirst = selectedDetailProduct.first_sale_at
       ? (now.getTime() - new Date(selectedDetailProduct.first_sale_at).getTime()) / (1000 * 60 * 60 * 24)
       : 0;
     const speed = daysSinceFirst > 0 ? (salesAll.reduce((sum, s) => sum + s.quantity, 0) / daysSinceFirst) : 0;
-    
+
     let isLowStockWarning = false;
     if (selectedDetailProduct.quantity <= 0) {
       list.push(`⚠️ Out of stock! Customers cannot purchase this item.`);
@@ -303,10 +201,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       const days = firstSale ? (now.getTime() - new Date(firstSale).getTime()) / (1000 * 60 * 60 * 24) : 0;
       return days > 0 ? (pSales.reduce((sum, s) => sum + s.quantity, 0) / days) : 0;
     }).sort((a, b) => b - a);
-    
+
     const pSpeedIdx = allSpeeds.indexOf(speed);
     const speedRankPct = allSpeeds.length > 0 ? (pSpeedIdx / allSpeeds.length) * 100 : 100;
-    
+
     let isFastMoving = false;
     if (speed > 0.5 && speedRankPct <= 15) {
       list.push(`💡 This is one of your fastest-moving products. Consider restocking soon.`);
@@ -345,11 +243,11 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
+
     if (diffMs < 0) return 'Just now';
-    
+
     const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
+
     if (diffDays === 0) {
       if (date.getDate() === now.getDate()) {
         return `Today ${timeString}`;
@@ -544,8 +442,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         const nameKey = `name:${sortedNames[0]}~${sortedNames[1]}`;
 
         if (
-          reviewedKeys.includes(key1) || 
-          reviewedKeys.includes(key2) || 
+          reviewedKeys.includes(key1) ||
+          reviewedKeys.includes(key2) ||
           reviewedKeys.includes(nameKey)
         ) continue;
 
@@ -629,7 +527,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       const nameKey = `name:${sortedNames[0]}~${sortedNames[1]}`;
 
       setLocalReviewedPairs(prev => [...prev, key, nameKey]);
-      
+
       const dismissed = updatedStore.dismissedSimilarPairs || [];
       updatedStore = {
         ...updatedStore,
@@ -691,7 +589,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     const n = name.toLowerCase();
     const cartonWords = ['carton', 'ctn', 'pack', 'box', 'case', 'crate', 'bundle', 'dozen', 'roll', 'rolls'];
     const matchesCarton = cartonWords.some(w => n.includes(w));
-    
+
     if (matchesCarton) {
       const rx = /(?:x|qty|size|of|pack|ctn|carton|roll|\b)\s*(\d+)\b/i;
       const matches = n.match(rx);
@@ -831,7 +729,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   const smartSuggestions = useMemo(() => {
     const threshold = store.managerSettings?.minStockThreshold ?? lowThreshold;
-    
+
     // Calculate velocity
     const salesCount: Record<string, number> = {};
     store.sales.forEach(sale => {
@@ -856,7 +754,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       const velocity = salesCount[p.id] || 0;
       const scarcity = Math.max(0, threshold - p.quantity);
       // Score combined based on performance (sales) and stock scarcity
-      const score = velocity * 1.5 + scarcity + 1; 
+      const score = velocity * 1.5 + scarcity + 1;
       return { product: p, velocity, score };
     });
 
@@ -873,10 +771,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       topNeedy.forEach(item => {
         const share = item.score / totalScore;
         const allocatedBudget = availableBudget * share;
-        
+
         let suggestedQty = Math.floor(allocatedBudget / (item.product.costPrice || 1));
         const defaultQty = store.managerSettings?.defaultRestockQty ?? 50;
-        
+
         // Clamp quantity between 1 and defaultQty
         suggestedQty = Math.min(defaultQty, Math.max(1, suggestedQty));
         const totalCost = suggestedQty * item.product.costPrice;
@@ -915,7 +813,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const handleActualAdd = () => {
     const singlesPerCartonVal = newProduct.isCartonSingleEnabled ? Number(newProduct.singlesPerCarton) : undefined;
     const singlePriceVal = (newProduct.isCartonSingleEnabled && newProduct.singleSellingPrice) ? Number(newProduct.singleSellingPrice) : undefined;
-    
+
     const updated = addProduct(store, {
       name: newProduct.name,
       costPrice: Number(newProduct.costPrice),
@@ -959,27 +857,27 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const parseReceiptText = (rawText: string) => {
     const lines = rawText.split('\n');
     const itemsList: { name: string; costPrice: string; sellingPrice: string; quantity: string; category: string }[] = [];
-    
+
     for (let line of lines) {
       line = line.trim();
       if (!line) continue;
-      
+
       const lower = line.toLowerCase();
       if (lower.includes('total') || lower.includes('subtotal') || lower.includes('payment') || lower.includes('receipt') || lower.includes('date') || lower.includes('tel') || lower.includes('welcome') || lower.includes('customer') || lower.includes('cashier')) {
         continue;
       }
-      
+
       const numberMatches = line.match(/\d+([.,]\d+)?/g);
       if (!numberMatches || numberMatches.length === 0) continue;
-      
+
       const wordsOnly = line.replace(/[\d.,x₦\-=*#]/g, ' ').trim().replace(/\s+/g, ' ');
       if (wordsOnly.length < 3) continue;
-      
+
       let qty = 1;
       let price = 0;
-      
+
       const parsedNumbers = numberMatches.map(n => Number(n.replace(',', '')));
-      
+
       if (parsedNumbers.length === 1) {
         price = parsedNumbers[0];
       } else if (parsedNumbers.length >= 2) {
@@ -991,7 +889,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           price = sorted[1];
         }
       }
-      
+
       if (price > 0) {
         const costPrice = Math.round(price * 0.75);
         itemsList.push({
@@ -1003,17 +901,17 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         });
       }
     }
-    
+
     return itemsList;
   };
 
   const handleOcrScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setIsOcrLoading(true);
     setOcrError(null);
-    
+
     try {
       const reader = new FileReader();
       reader.onload = async (ev) => {
@@ -1167,7 +1065,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     if (!restockProduct || !restockQty) return;
     const qty = Number(restockQty);
     if (qty <= 0) return showToast('Enter a quantity', 'error');
-    
+
     const plannedItem = {
       id: Math.random().toString(36).substring(2, 9),
       productId: restockProduct.id,
@@ -1177,12 +1075,12 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       funding: singleRestockFunding,
       date: new Date().toISOString()
     };
-    
+
     const updated = {
       ...store,
       plannedRestocks: [plannedItem, ...(store.plannedRestocks || [])]
     };
-    
+
     onUpdate(updated);
     setRestockProduct(null);
     setRestockQty('');
@@ -1198,11 +1096,11 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       for (const line of lines) {
         const parts = line.split(',').map(s => s.trim());
         if (parts.length < 4) continue;
-        
+
         const interpreted = interpretProductName(parts[0]);
         const qtyVal = Number(parts[3]) || 0;
         const finalQty = String(qtyVal * interpreted.qtyMultiplier);
-        
+
         parsed.push({
           name: interpreted.officialName,
           costPrice: parts[1] || '0',
@@ -1263,13 +1161,13 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
   const handleSaveMassEdit = () => {
     if (!massEditItems) return;
-    
+
     const updatedProducts: Product[] = store.products.map(p => {
       const edit = massEditItems.find(item => item.id === p.id);
       if (edit) {
         const isCtn = edit.unitsPerPurchase > 1;
         const cp = isCtn ? (edit.purchasePrice / edit.unitsPerPurchase) : edit.purchasePrice;
-        
+
         return {
           ...p,
           name: edit.name.trim(),
@@ -1288,7 +1186,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     const deletedIds = store.products
       .filter(p => !massEditItems.some(edit => edit.id === p.id))
       .map(p => p.id);
-      
+
     const finalProducts = updatedProducts.filter(p => !deletedIds.includes(p.id));
 
     // Save configurations to learned memory
@@ -1442,10 +1340,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const handlePrintBarcode = (product: Product) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return showToast('Popup blocker is active', 'error');
-    
+
     const svgElement = document.getElementById(`barcode-svg-${product.id}`);
     if (!svgElement) return showToast('Barcode element not found', 'error');
-    
+
     const svgHtml = svgElement.outerHTML;
     printWindow.document.write(`
       <html>
@@ -1555,8 +1453,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           type="button"
           onClick={() => setShowDiscontinued(!showDiscontinued)}
           className={`px-4 py-2.5 rounded-xl text-sm font-display font-bold border transition-all cursor-pointer whitespace-nowrap ${
-            showDiscontinued 
-              ? 'bg-destructive/10 border-destructive/30 text-destructive shadow-sm' 
+            showDiscontinued
+              ? 'bg-destructive/10 border-destructive/30 text-destructive shadow-sm'
               : 'bg-surface-2 border-border text-foreground hover:bg-surface-3'
           }`}
         >
@@ -1566,14 +1464,14 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
 
       {/* Row 2: 5 Action Buttons */}
       <div className="grid grid-cols-5 gap-1.5 mb-4">
-        <button 
-          onClick={() => { 
-            setShowAddModal(true); 
-            setShowAddConfirm(false); 
-            setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries', isCartonSingleEnabled: false, singlesPerCarton: '12', singleSellingPrice: '', sellAsSinglesByDefault: false }); 
-            setCustomCategoryActive(false); 
-            setCustomCategoryVal(''); 
-          }} 
+        <button
+          onClick={() => {
+            setShowAddModal(true);
+            setShowAddConfirm(false);
+            setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries', isCartonSingleEnabled: false, singlesPerCarton: '12', singleSellingPrice: '', sellAsSinglesByDefault: false });
+            setCustomCategoryActive(false);
+            setCustomCategoryVal('');
+          }}
           className="flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl bg-surface-2 border border-border/80 text-center cursor-pointer transition-all hover:bg-surface-3 active:scale-95"
         >
           <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-yellow-500 text-black flex items-center justify-center mb-1 sm:mb-1.5 shadow-sm">
@@ -1582,8 +1480,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           <span className="text-[9px] sm:text-[10px] font-bold text-foreground font-display leading-tight">Add</span>
         </button>
 
-        <button 
-          onClick={openImportModal} 
+        <button
+          onClick={openImportModal}
           className="flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl bg-surface-2 border border-border/80 text-center cursor-pointer transition-all hover:bg-surface-3 active:scale-95"
         >
           <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-surface-3 border border-border flex items-center justify-center mb-1 sm:mb-1.5">
@@ -1804,8 +1702,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   ? 'opacity-60 border-dashed border-destructive/40 bg-surface-1/40'
                   : isSelected
                   ? 'border-emerald-500 ring-1 ring-emerald-500/30 bg-emerald-500/5'
-                  : p.barcode 
-                  ? 'border-success/40 ring-1 ring-success/20 hover:border-success/60' 
+                  : p.barcode
+                  ? 'border-success/40 ring-1 ring-success/20 hover:border-success/60'
                   : 'border-border hover:border-primary/20'
               }`}
             >
@@ -1886,10 +1784,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               {/* Stock Column */}
               <div className="w-10 shrink-0 text-center flex flex-col items-center justify-center select-none">
                 <span className={`text-lg font-display font-black leading-none ${
-                  p.quantity <= 2 
-                    ? 'text-red-500' 
-                    : p.quantity <= 5 
-                    ? 'text-yellow-500' 
+                  p.quantity <= 2
+                    ? 'text-red-500'
+                    : p.quantity <= 5
+                    ? 'text-yellow-500'
                     : 'text-emerald-500'
                 }`}>
                   {p.quantity}
@@ -1946,8 +1844,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       onClick={() => setScanForProduct(p)}
                       title={p.barcode ? 'Re-scan barcode' : 'Scan barcode to save'}
                       className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
-                        p.barcode 
-                          ? 'bg-success/10 border-success/30 text-success hover:bg-success/20' 
+                        p.barcode
+                          ? 'bg-success/10 border-success/30 text-success hover:bg-success/20'
                           : 'bg-surface-2 border-border/80 text-muted-foreground hover:text-foreground hover:bg-surface-3'
                       }`}
                     >
@@ -1957,8 +1855,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       onClick={() => setSelectedBarcodeProduct(p)}
                       title="View / Generate barcode labels"
                       className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
-                        p.barcode 
-                          ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20' 
+                        p.barcode
+                          ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
                           : 'bg-surface-2 border-border/80 text-muted-foreground hover:text-foreground hover:bg-surface-3'
                       }`}
                     >
@@ -1968,8 +1866,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       onClick={() => addToShoppingList(p)}
                       title="Add to shopping list"
                       className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all relative ${
-                        inList 
-                          ? 'bg-primary/20 border-primary/30 text-primary hover:bg-primary/30' 
+                        inList
+                          ? 'bg-primary/20 border-primary/30 text-primary hover:bg-primary/30'
                           : 'bg-surface-2 border-border/80 text-muted-foreground hover:text-foreground hover:bg-surface-3'
                       }`}
                     >
@@ -1982,30 +1880,30 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     </button>
                   </div>
                   <div className="flex gap-1.5">
-                    <button 
-                      onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); setShowRestockConfirm(false); }} 
-                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all" 
+                    <button
+                      onClick={() => { setRestockProduct(p); setRestockQty(''); setSingleRestockFunding('balance'); setShowRestockConfirm(false); }}
+                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all"
                       title="Restock"
                     >
                       <ArrowUp className="w-4 h-4" />
                     </button>
-                    <button 
-                      onClick={() => { setSelectedTransferProduct(p); setTransferQty(''); setTransferDestCode(''); }} 
-                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-yellow-500 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all" 
+                    <button
+                      onClick={() => { setSelectedTransferProduct(p); setTransferQty(''); setTransferDestCode(''); }}
+                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-yellow-500 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all"
                       title="Transfer stock to sister store"
                     >
                       <Truck className="w-4 h-4" />
                     </button>
-                    <button 
-                      onClick={() => openEditFor(p)} 
-                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-yellow-500 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all" 
+                    <button
+                      onClick={() => openEditFor(p)}
+                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-yellow-500 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all"
                       title="Edit"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button 
-                      onClick={() => handleDelete(p)} 
-                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-red-500 hover:bg-red-500/10 hover:border-red-500/30 transition-all" 
+                    <button
+                      onClick={() => handleDelete(p)}
+                      className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-red-500 hover:bg-red-500/10 hover:border-red-500/30 transition-all"
                       title="Delete"
                     >
                       <X className="w-4 h-4" />
@@ -2087,7 +1985,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   </>
                 )}
               </div>
-              
+
               <div className="space-y-2">
                 <button
                   type="button"
@@ -2344,8 +2242,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         return (
         <Modal title="Edit Product" onClose={() => { setEditProduct(null); setEditDraft(null); }}>
           <div className="space-y-3">
-            <input 
-              value={editDraft.name} 
+            <input
+              value={editDraft.name}
               onChange={e => {
                 const name = e.target.value;
                 const autoCtn = autoDetectCartonSingle(name, Number(editDraft.sellingPrice) || 0);
@@ -2357,8 +2255,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   singleSellingPrice: autoCtn.isCartonSingleEnabled ? String(autoCtn.singleSellingPrice) : prev.singleSellingPrice,
                   sellAsSinglesByDefault: autoCtn.isCartonSingleEnabled ? autoCtn.sellAsSinglesByDefault : prev.sellAsSinglesByDefault
                 }) : null);
-              }} 
-              className={inputClass} 
+              }}
+              className={inputClass}
             />
             <div className="grid grid-cols-2 gap-3">
               <input value={editDraft.costPrice} onChange={e => setEditDraft({ ...editDraft, costPrice: e.target.value })} type="number" placeholder="Cost (₦)" className={inputClass} />
@@ -2610,7 +2508,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 <p><span className="text-muted-foreground">Restock Qty:</span> <strong className="text-foreground">{restockQty} units</strong></p>
                 <p><span className="text-muted-foreground">Funding:</span> <strong className="text-foreground">{singleRestockFunding === 'new_money' ? '💵 New Money' : '🏦 From Balance'}</strong></p>
               </div>
-              
+
               <div className="space-y-2">
                 <button
                   type="button"
@@ -2678,7 +2576,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             <p className="text-xs text-muted-foreground">
               These are planned inventory restocks. Once you have received the items, click "Receive Now" to add them to your active inventory.
             </p>
-            
+
             {(!store.plannedRestocks || store.plannedRestocks.length === 0) ? (
               <p className="text-center py-6 text-xs text-muted-foreground">No planned restocks saved yet.</p>
             ) : (
@@ -2734,7 +2632,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 ))}
               </div>
             )}
-            
+
             <button
               onClick={() => setShowPlannedRestocks(false)}
               className="w-full p-2.5 rounded-lg bg-surface-2 border border-border font-display font-semibold text-xs text-foreground"
@@ -2817,7 +2715,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   <p className="text-xs text-muted-foreground text-center">
                     Upload or snap a receipt image. Our offline scanner will extract products, prices, and quantities automatically.
                   </p>
-                  
+
                   {isOcrLoading ? (
                     <div className="p-8 text-center bg-surface-2 border border-border rounded-xl space-y-3">
                       <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin mx-auto" />
@@ -2834,7 +2732,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       <p className="text-xs text-muted-foreground">Supports JPG, PNG, HEIC</p>
                     </div>
                   )}
-                  
+
                   <input
                     ref={ocrFileRef}
                     type="file"
@@ -2843,7 +2741,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     onChange={handleOcrScan}
                     className="hidden"
                   />
-                  
+
                   {ocrError && (
                     <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs text-center leading-normal">
                       {ocrError}
@@ -3022,7 +2920,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                               <div className="flex items-center gap-1.5 text-[11px]">
                                 <span>{isRoll ? '🌀 Roll' : '📦 Carton'} Product detected: will auto-split into <strong>{singlesCount}</strong> units.</span>
                               </div>
-                              
+
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mr-1">Split count:</span>
                                 {splitOptions.map(val => (
@@ -3043,7 +2941,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                                     {val}
                                   </button>
                                 ))}
-                                
+
                                 <div className="flex items-center gap-1 bg-surface-3 rounded border border-border px-1.5 py-0.5">
                                   <span className="text-[9px] text-muted-foreground uppercase font-bold">Edit:</span>
                                   <input
@@ -3191,17 +3089,17 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
               {massEditItems.map((it, i) => {
                 const isAuto = it.pricingMode === 'auto';
-                
+
                 // Profit margin calculations
                 const profitAmount = it.purchaseSellingPrice - it.purchasePrice;
                 const marginPercent = it.purchasePrice > 0 ? (profitAmount / it.purchasePrice) * 100 : 0;
-                
+
                 // Quick Profit Handler
                 const applyProfit = (percent: number) => {
                   const next = [...massEditItems];
                   let sp = it.sellingPrice;
                   let psp = it.purchaseSellingPrice;
-                  
+
                   if (isAuto) {
                     psp = Math.round(it.purchasePrice * (1 + percent / 100));
                     sp = it.unitsPerPurchase > 0 ? Math.round(psp / it.unitsPerPurchase) : psp;
@@ -3209,7 +3107,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     sp = Math.round(it.unitCostPrice * (1 + percent / 100));
                     psp = sp * it.unitsPerPurchase;
                   }
-                  
+
                   next[i] = {
                     ...it,
                     sellingPrice: sp,
@@ -3243,7 +3141,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                         placeholder="Product Name"
                         className="flex-1 text-xs font-display font-bold bg-surface-3 border border-border rounded-lg p-2 focus:outline-none focus:border-primary text-white"
                       />
-                      
+
                       <button
                         type="button"
                         onClick={() => {
@@ -3435,7 +3333,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                             <p className="text-muted-foreground">Expected Profit: <strong className="text-success">₦{profitAmount.toLocaleString()}</strong></p>
                             <p className="text-muted-foreground">Profit Margin: <strong className="text-primary">{marginPercent.toFixed(1)}%</strong></p>
                           </div>
-                          
+
                           {/* Markup helper tags */}
                           <div className="flex gap-1">
                             {[10, 15, 20, 25, 30].map(pct => (
@@ -3532,7 +3430,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             <p className="text-xs text-muted-foreground text-left">
               Visual representation of the product's barcode for label scanning.
             </p>
-            
+
             {selectedBarcodeProduct.barcode ? (
               <div className="space-y-4">
                 <div className="flex justify-center p-4 bg-white rounded-lg border border-border" id={`barcode-container-${selectedBarcodeProduct.id}`}>
@@ -3544,20 +3442,20 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     const wideWidth = narrowWidth * 3;
                     const interSpace = narrowWidth;
                     const height = 60;
-                    
+
                     let currentX = 0;
                     const bars: JSX.Element[] = [];
-                    
+
                     for (let i = 0; i < fullText.length; i++) {
                       const char = fullText[i];
                       const pattern = CODE39_MAP[char];
                       if (!pattern) continue;
-                      
+
                       for (let j = 0; j < 9; j++) {
                         const isBar = j % 2 === 0;
                         const isWide = pattern[j] === '1';
                         const width = isWide ? wideWidth : narrowWidth;
-                        
+
                         if (isBar) {
                           bars.push(
                             <rect
@@ -3574,7 +3472,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       }
                       currentX += interSpace;
                     }
-                    
+
                     return (
                       <div className="flex flex-col items-center">
                         <svg
@@ -3590,7 +3488,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     );
                   })()}
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handlePrintBarcode(selectedBarcodeProduct)}
@@ -3631,12 +3529,12 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             <p className="text-xs text-muted-foreground">
               Move stock directly to another store. This adjusts quantities in both stores immediately.
             </p>
-            
+
             <div className="p-3 rounded-lg bg-surface-2 border border-border flex justify-between items-center text-xs">
               <span>Current Stock:</span>
               <span className="font-bold text-primary">{selectedTransferProduct.quantity} units</span>
             </div>
-            
+
             <div className="space-y-1">
               <label className="text-[10px] text-muted-foreground uppercase">Destination Store</label>
               {(() => {
@@ -3656,7 +3554,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                         <option value="MANUAL">Enter Code Manually...</option>
                       </select>
                     ) : null}
-                    
+
                     {(sisterStores.length === 0 || transferDestCode === 'MANUAL') && (
                       <input
                         value={transferDestCode === 'MANUAL' ? '' : transferDestCode}
@@ -3669,7 +3567,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 );
               })()}
             </div>
-            
+
             <div className="space-y-1">
               <label className="text-[10px] text-muted-foreground uppercase">Transfer Quantity</label>
               <input
@@ -3682,7 +3580,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 className={inputClass}
               />
             </div>
-            
+
             <button
               onClick={() => {
                 const qty = Number(transferQty);
@@ -3696,12 +3594,12 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 if (destCode === store.accessCode) {
                   return showToast('Cannot transfer to current store', 'error');
                 }
-                
+
                 const targetStore = loadStore(destCode);
                 if (!targetStore) {
                   return showToast(`Store code "${destCode}" not found in system`, 'error');
                 }
-                
+
                 const updated = transferStock(store, selectedTransferProduct.id, qty, destCode);
                 onUpdate(updated);
                 setSelectedTransferProduct(null);
@@ -3750,7 +3648,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
             {/* Segmented Sub-Tab Switcher */}
             <div className="flex p-1 rounded-xl bg-surface-2 border border-border">
               {[
-                { id: 'overview' as const, label: 'Overview & Pricing', icon: '🏷️' },
+                { id: 'overview' as const, label: 'Overview', icon: '🏷️' },
                 { id: 'performance' as const, label: 'Performance', icon: '📊' },
                 { id: 'history' as const, label: 'Cost History', icon: '📈' }
               ].map(t => (
@@ -3783,12 +3681,24 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     <p className="text-base font-display font-bold text-foreground">₦{selectedDetailProduct.costPrice.toLocaleString()}</p>
                   </div>
                   <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Profit Margin</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Profit / unit</p>
                     {(() => {
-                      const margin = selectedDetailProduct.sellingPrice - selectedDetailProduct.costPrice;
-                      const pct = selectedDetailProduct.costPrice > 0 ? (margin / selectedDetailProduct.costPrice) * 100 : 0;
-                      const cls = margin > 0 ? 'text-success' : margin < 0 ? 'text-destructive' : 'text-muted-foreground';
-                      return <p className={`text-base font-display font-bold ${cls}`}>₦{margin.toLocaleString()} ({pct.toFixed(0)}%)</p>;
+                      const profit = selectedDetailProduct.sellingPrice - selectedDetailProduct.costPrice;
+                      // This percentage is profit over COST, which is markup,
+                      // not margin — it was labelled "Profit Margin". Margin is
+                      // profit over the selling price, and is the smaller of the
+                      // two: at ₦100 cost and ₦150 selling, markup is 50% and
+                      // margin is 33%. Both are shown, each under its own name,
+                      // rather than one number under the wrong one.
+                      const markupPct = selectedDetailProduct.costPrice > 0 ? (profit / selectedDetailProduct.costPrice) * 100 : 0;
+                      const marginPct = selectedDetailProduct.sellingPrice > 0 ? (profit / selectedDetailProduct.sellingPrice) * 100 : 0;
+                      const cls = profit > 0 ? 'text-success' : profit < 0 ? 'text-destructive' : 'text-muted-foreground';
+                      return (
+                        <>
+                          <p className={`text-base font-display font-bold ${cls}`}>₦{profit.toLocaleString()}</p>
+                          <p className="text-[10px] text-muted-foreground">{marginPct.toFixed(0)}% margin · {markupPct.toFixed(0)}% markup</p>
+                        </>
+                      );
                     })()}
                   </div>
                   <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
@@ -3829,8 +3739,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   </h4>
                   <div className="flex items-center gap-1 bg-surface-2 px-2.5 py-1 rounded-lg border border-border text-[10px]">
                     <span className="text-muted-foreground">📅 Filter:</span>
-                    <select 
-                      value={performancePeriod} 
+                    <select
+                      value={performancePeriod}
                       onChange={(e) => setPerformancePeriod(e.target.value as any)}
                       className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer"
                     >
@@ -3853,29 +3763,33 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   </div>
                   <div className="bg-card border border-border p-3 rounded-xl">
                     <span className="text-[9px] uppercase font-bold text-muted-foreground">Total Profit</span>
-                    <p className="text-base font-black text-emerald-500 mt-0.5">₦{Math.round(totalProfit).toLocaleString()}</p>
+                    <p className="text-base font-black text-success mt-0.5">₦{Math.round(totalProfit).toLocaleString()}</p>
                   </div>
                   <div className="bg-card border border-border p-3 rounded-xl">
                     <span className="text-[9px] uppercase font-bold text-muted-foreground">Contribution</span>
-                    <p className="text-base font-black text-purple-400 mt-0.5">{contributionPct}%</p>
+                    <p className="text-base font-black text-primary mt-0.5">{contributionPct}%</p>
                   </div>
                 </div>
 
                 {/* Flow AI Insight Card */}
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-500/30 p-3 flex items-center gap-3">
-                  <div className="flex-shrink-0 bg-[#0f1117]/80 rounded-xl p-1 border border-purple-500/20 shadow-inner">
+                {/* Themed like the rest of the app. This card was hardcoded to
+                    a purple/indigo gradient with #0f1117 and slate-200 text —
+                    fixed dark-mode colours that ignored the merchant's theme and
+                    left the text nearly unreadable on a light background. */}
+                <div className="relative overflow-hidden rounded-2xl bg-primary/5 border border-primary/25 p-3 flex items-center gap-3">
+                  <div className="flex-shrink-0 bg-surface-2 rounded-xl p-1 border border-primary/20 shadow-inner">
                     <Mascot size={48} mood={flowInsights.mood} />
                   </div>
                   <div className="flex-1 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="font-display font-black text-purple-300 text-[10px] uppercase tracking-wider">
+                      <span className="font-display font-black text-primary text-[10px] uppercase tracking-wider">
                         ✨ Flow Insight
                       </span>
-                      <span className="px-1.5 py-0.5 text-[8px] rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                      <span className="px-1.5 py-0.5 text-[8px] rounded-full bg-primary/15 text-primary font-bold border border-primary/25">
                         {flowInsights.badge}
                       </span>
                     </div>
-                    <div className="mt-1 space-y-0.5 text-[10px] text-slate-200 leading-normal font-medium">
+                    <div className="mt-1 space-y-0.5 text-[10px] text-foreground leading-normal font-medium">
                       {flowInsights.list.map((ins, i) => (
                         <p key={i}>{ins}</p>
                       ))}
@@ -3961,8 +3875,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   showToast(isDiscontinued ? 'Product reactivated' : 'Product discontinued');
                 }}
                 className={`p-2.5 rounded-xl font-display font-bold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer active:scale-95 transition-all ${
-                  selectedDetailProduct.discontinued 
-                    ? 'bg-success/20 text-success border border-success/30' 
+                  selectedDetailProduct.discontinued
+                    ? 'bg-success/20 text-success border border-success/30'
                     : 'bg-destructive/20 text-destructive border border-destructive/30'
                 }`}
               >
