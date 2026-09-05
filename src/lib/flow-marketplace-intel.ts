@@ -6,6 +6,7 @@ import {
   forecastHorizon,
   expenseAnalysis,
   topCustomerRequests,
+  stockCoverLabel,
 } from '@/lib/manager-intel';
 
 /**
@@ -51,7 +52,7 @@ function restockAnswer(store: StoreData): FlowAnswer {
       ? `${critical.length} ${critical.length === 1 ? 'product runs' : 'products run'} out within days.`
       : `${low.length} ${low.length === 1 ? 'product needs' : 'products need'} restocking soon.`,
     points: low.slice(0, 5).map(f =>
-      `${f.product.name} — ${f.daysLeft <= 0 ? 'out of stock' : `about ${f.daysLeft} ${f.daysLeft === 1 ? 'day' : 'days'} left`}` +
+      `${f.product.name} — ${stockCoverLabel(f).toLowerCase()}` +
       (f.restockQty > 0 ? `, reorder around ${f.restockQty}` : '')
     ),
     action: 'Add these to your buy list before your next supplier run.',
@@ -180,7 +181,7 @@ function productAnswer(store: StoreData, product: StoreData['products'][number])
   points.push(mover ? `Sold ${mover.qty} in the last 30 days, ${naira(mover.revenue)}` : 'No sales in the last 30 days');
   points.push(`In stock: ${product.quantity}`);
   if (stock && stock.urgency !== 'ok') {
-    points.push(stock.daysLeft <= 0 ? 'Out of stock now' : `About ${stock.daysLeft} ${stock.daysLeft === 1 ? 'day' : 'days'} of cover left`);
+    points.push(stockCoverLabel(stock));
   }
   if (margin !== null) {
     points.push(`Costs ${naira(product.costPrice)}, sells at ${naira(product.sellingPrice)} — ${Math.round(margin)}% margin`);
@@ -277,9 +278,9 @@ export function flowTopRecommendation(store: StoreData): FlowRecommendation {
       .sort((a, b) => b.sold - a.sold);
     const { f, sold } = ranked[0];
     return {
-      headline: f.daysLeft <= 0
+      headline: f.product.quantity <= 0
         ? `${f.product.name} is out of stock.`
-        : `${f.product.name} runs out in about ${f.daysLeft} ${f.daysLeft === 1 ? 'day' : 'days'}.`,
+        : `${f.product.name}: ${stockCoverLabel(f).toLowerCase()}.`,
       detail: sold > 0
         ? `You sold ${sold} in the last 30 days. Reorder around ${f.restockQty} to keep cover.`
         : `Reorder around ${f.restockQty} to keep it on the shelf.`,

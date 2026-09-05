@@ -350,9 +350,52 @@ export function analyzeSales(store: StoreData): SalesAnalysis {
 export interface StockForecast {
   product: Product;
   perDay: number;
+  /**
+   * Days of cover at the recent sales rate. Infinity when nothing has sold in
+   * the window — there is no rate to divide by. Check `hasVelocity` before
+   * showing this to anyone; formatting it directly is what produced
+   * "Infinityd left · order 10" on the advice cards.
+   */
   daysLeft: number;
+  /** False when the product has not sold at all in the last 14 days. */
+  hasVelocity: boolean;
+  /**
+   * Whether reordering is justified by demand.
+   *
+   * A product sitting on the shelf with no sales for a fortnight is not short
+   * of stock, it is short of buyers; reordering converts cash into more dead
+   * stock. One that sold out is the exception — it shows no recent sales
+   * precisely because there was nothing left to sell, so its own history
+   * decides.
+   */
+  worthRestocking: boolean;
   restockQty: number;
   urgency: 'critical' | 'soon' | 'ok';
+}
+
+/**
+ * How much cover is left, in words, for anywhere this is shown to a merchant.
+ *
+ * A product can be low on stock and still have no demand behind it. Saying
+ * "Infinity days left" was the visible bug; the quieter one was implying a
+ * restock quantity for something that has not sold in a fortnight.
+ */
+export function stockCoverLabel(f: StockForecast, opts?: { short?: boolean }): string {
+  const short = opts?.short === true;
+  if (f.product.quantity <= 0) {
+    return f.worthRestocking ? 'Sold out' : (short ? 'Sold out · never sold' : 'Sold out, and it has never sold');
+  }
+  if (!f.hasVelocity) return short ? 'Not selling' : 'Low stock, but nothing sold in the last 14 days';
+  const days = Math.max(0, Math.floor(f.daysLeft));
+  if (days === 0) return short ? 'Runs out today' : 'Running out today';
+  return short ? `${days}d left` : `About ${days} day${days === 1 ? '' : 's'} of stock left`;
+}
+
+/** Sorts soonest-to-run-out first. Infinity - Infinity is NaN, which makes a
+ *  comparator inconsistent, so equal values are compared, not subtracted. */
+function byDaysLeft(a: StockForecast, b: StockForecast) {
+  if (a.daysLeft === b.daysLeft) return 0;
+  return a.daysLeft < b.daysLeft ? -1 : 1;
 }
 
 // Shared by inventoryIntelligence() (restock suggestions) AND healthScore()
@@ -369,7 +412,10 @@ function computeStockForecasts(store: StoreData): StockForecast[] {
         .filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(13))
         .reduce((sum, s) => sum + s.quantity, 0);
       const perDay = sold14 / 14;
-      const daysLeft = p.quantity === 0 ? 0 : (perDay > 0 ? Math.floor(p.quantity / perDay) : Infinity);
+      const hasVelocity = perDay > 0;
+      const everSold = store.sales.some(sale => sale.productId === p.id);
+      const worthRestocking = hasVelocity || (p.quantity <= 0 && everSold);
+      const daysLeft = p.quantity === 0 ? 0 : (hasVelocity ? Math.floor(p.quantity / perDay) : Infinity);
       // Recommend 14-day supply + 20% buffer, default to 10 if no sales history
       const restockQty = perDay > 0 ? Math.ceil(perDay * 14 * 1.2) : 10;
       
@@ -382,14 +428,14 @@ function computeStockForecasts(store: StoreData): StockForecast[] {
         urgency = 'soon';
       }
       
-      return { product: p, perDay, daysLeft, restockQty, urgency };
+      return { product: p, perDay, daysLeft, hasVelocity, worthRestocking, restockQty, urgency };
     });
 }
 
 export function inventoryIntelligence(store: StoreData): StockForecast[] {
   return computeStockForecasts(store)
     .filter(f => f.urgency !== 'ok')
-    .sort((a, b) => a.daysLeft - b.daysLeft);
+    .sort(byDaysLeft);
 }
 
 // ─── Expense Analysis ─────────────────────────────────────────────────────────
@@ -542,7 +588,9 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
 
   // Critical: running out of fast sellers or completely out of stock
   if (!isStoreOnboarding(store)) {
-    const criticalStock = stock.filter(f => f.urgency === 'critical').slice(0, 5);
+    // Only what demand justifies gets a reorder recommendation and an Auto Fix
+    // purchase order; the rest is reported without a quantity, below.
+    const criticalStock = stock.filter(f => f.urgency === 'critical' && f.worthRestocking).slice(0, 5);
     if (criticalStock.length === 1) {
       const f = criticalStock[0];
       const isOut = f.product.quantity === 0;
@@ -552,7 +600,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         title: isOut ? `Restock ${f.product.name} (Sold Out)` : `Restock ${f.product.name} NOW`,
         detail: isOut
           ? `Out of Stock: ${f.product.name} is completely sold out. Restock at least ${f.restockQty} units immediately to recover lost revenue.`
-          : `Only ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} of stock left. Order at least ${f.restockQty} units.`,
+          : `${stockCoverLabel(f)}. Order at least ${f.restockQty} units.`,
         priority: 'critical',
         goTo: 'inventory',
         autoFix: {
@@ -570,7 +618,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         priority: 'critical',
         items: criticalStock.map(f => ({
           name: f.product.name,
-          note: f.product.quantity === 0 ? 'Sold out' : `${f.daysLeft}d left · order ${f.restockQty}`
+          note: stockCoverLabel(f, { short: true }) + (f.hasVelocity ? ` · order ${f.restockQty}` : '')
         })),
         goTo: 'inventory',
         autoFix: {
@@ -644,12 +692,36 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
 
   // Medium: restock soon
   if (!isStoreOnboarding(store)) {
-    const soonStock = stock.filter(f => f.urgency === 'soon').slice(0, 5);
+    const soonAll = stock.filter(f => f.urgency === 'soon');
+    const soonStock = soonAll.filter(f => f.worthRestocking).slice(0, 5);
+
+    // Everything low or gone that demand does not justify reordering, in one
+    // place. These were listed as "order 10" each and bundled into the Auto Fix
+    // purchase order — the exact move that turns working capital into stock
+    // nobody is buying.
+    const deadStock = stock.filter(f => !f.worthRestocking).slice(0, 6);
+    if (deadStock.length > 0) {
+      advice.push({
+        id: 'stock-no-demand',
+        icon: '🗃️',
+        title: deadStock.length === 1
+          ? `${deadStock[0].product.name} is low, but not selling`
+          : `${deadStock.length} products are low, but not selling`,
+        detail: 'Low or sold out with no sales in the last 14 days. Reordering these ties up cash — decide case by case, or clear what you already have.',
+        priority: 'low',
+        items: deadStock.map(f => ({
+          name: f.product.name,
+          note: f.product.quantity <= 0 ? 'Sold out · never sold' : `${f.product.quantity} left · no recent sales`,
+        })),
+        goTo: 'inventory',
+      });
+    }
+
     if (soonStock.length === 1) {
       const f = soonStock[0];
       advice.push({
         id: `soon-${f.product.id}`, icon: '📦', title: `Order ${f.product.name} this week`,
-        detail: `About ${f.daysLeft} days of stock left. Restock ${f.restockQty} units to avoid a gap.`,
+        detail: `${stockCoverLabel(f)}. Restock ${f.restockQty} units to avoid a gap.`,
         priority: 'medium',
         goTo: 'inventory',
         autoFix: {
@@ -665,7 +737,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         title: `${soonStock.length} products to order this week`,
         detail: 'Running low but not urgent yet — plan a restock order soon.',
         priority: 'medium',
-        items: soonStock.map(f => ({ name: f.product.name, note: `${f.daysLeft}d left · order ${f.restockQty}` })),
+        items: soonStock.map(f => ({ name: f.product.name, note: stockCoverLabel(f, { short: true }) + (f.hasVelocity ? ` · order ${f.restockQty}` : '') })),
         goTo: 'inventory',
         autoFix: {
           type: 'generate_purchase_order',
@@ -1051,12 +1123,12 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
     notes.push({
       id: `low-${f.product.id}`,
       icon: '🚨',
-      text: `${f.product.name} runs out in ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'}.`,
+      text: `${f.product.name}: ${stockCoverLabel(f)}.`,
       tone: 'danger',
       date: now,
       read: false,
       title: 'Restock Alert (Critical)',
-      description: `${f.product.name} runs out in ${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'}.`,
+      description: `${f.product.name}: ${stockCoverLabel(f)}.`,
       actionLabel: 'Go to Inventory',
       actionTab: 'inventory'
     });
@@ -1065,12 +1137,12 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
     notes.push({
       id: `soon-${f.product.id}`,
       icon: '📦',
-      text: `${f.product.name} will need restocking in ${f.daysLeft} days.`,
+      text: `${f.product.name}: ${stockCoverLabel(f)}.`,
       tone: 'warning',
       date: now,
       read: false,
       title: 'Restock Suggestion',
-      description: `${f.product.name} will need restocking in ${f.daysLeft} days.`,
+      description: `${f.product.name}: ${stockCoverLabel(f)}.`,
       actionLabel: 'Go to Inventory',
       actionTab: 'inventory'
     });
@@ -1862,7 +1934,7 @@ export function getTopOpportunities(store: StoreData): OpportunityCard[] {
     const item = criticalRestocks[0];
     opps.push({
       title: `Restock Fast Mover: ${item.product.name}`,
-      description: `Only ${item.daysLeft === Infinity ? 0 : item.daysLeft} days of stock remaining based on recent sales. Restock ${item.restockQty} units.`,
+      description: `${stockCoverLabel(item)}. Restock ${item.restockQty} units.`,
       impact: `₦${(item.product.sellingPrice * item.restockQty).toLocaleString()} Revenue`,
       actionLabel: "Order Stock"
     });
@@ -2605,7 +2677,7 @@ export function getProductIntelligence(store: StoreData, productId: string): Pro
   if (stockEntry) {
     recommendations.push(stockEntry.product.quantity === 0
       ? 'Out of stock — restock to recover lost sales.'
-      : `${stockEntry.daysLeft} days of stock left — order ${stockEntry.restockQty} units.`);
+      : `${stockCoverLabel(stockEntry)} — order ${stockEntry.restockQty} units.`);
   }
   if (product.reorderLevel != null && product.quantity <= product.reorderLevel) {
     recommendations.push(`At or below its reorder level (${product.reorderLevel}).`);

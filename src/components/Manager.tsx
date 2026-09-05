@@ -7,7 +7,7 @@ import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
-  generateNotifications, ActivityRange, ActivityBucket, buildFlowReport, type FlowReport,
+  generateNotifications, ActivityRange, ActivityBucket, buildFlowReport, stockCoverLabel, type FlowReport,
   getTopOpportunities, getProfitLeaks, getRepaymentInsights, getSeasonalPredictions, getWeatherInsights, generateWeeklyRecap,
   getProductInsightBadges, filterDismissedAdvice, dismissAdvice, markAdviceHelpful
 } from '@/lib/manager-intel';
@@ -1294,7 +1294,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                     <div key={f.product.id} className={`flex items-center justify-between p-2.5 rounded-xl border ${f.urgency === 'critical' ? 'bg-destructive/5 border-destructive/30' : 'bg-warning/5 border-warning/30'}`}>
                       <div>
                         <p className="text-sm font-display font-semibold">{f.product.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{f.daysLeft === 0 ? 'Running out today' : `${f.daysLeft} day${f.daysLeft === 1 ? '' : 's'} left`} · Order {f.restockQty} units</p>
+                        <p className="text-[11px] text-muted-foreground">{stockCoverLabel(f)}{f.hasVelocity ? ` · Order ${f.restockQty} units` : ''}</p>
                       </div>
                       <span className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 ${f.urgency === 'critical' ? 'bg-destructive/15 text-destructive' : 'bg-warning/15 text-warning'}`}><AlertTriangle className="w-3 h-3" /> {f.urgency === 'critical' ? 'Critical' : 'Soon'}</span>
                     </div>
