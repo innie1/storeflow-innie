@@ -4,11 +4,12 @@ import Mascot from '@/components/Mascot';
 import type { FlowReport, FlowReportSection, FlowReportTone } from '@/lib/manager-intel';
 import type { AutoFixSpec } from '@/lib/auto-fix';
 import type { TabId } from '@/types/store';
+import type { ProductFocus } from '@/lib/product-focus';
 
 interface Props {
   report: FlowReport;
   onDismiss: () => void;
-  onNavigate?: (tab: TabId) => void;
+  onNavigate?: (tab: TabId, focus?: ProductFocus) => void;
   onAutoFix: (spec: AutoFixSpec) => void;
 }
 
@@ -157,7 +158,7 @@ function IconButton({ label, onClick, active, children }: {
 function SectionCard({ section, lead, onNavigate, onAutoFix, style }: {
   section: FlowReportSection;
   lead?: boolean;
-  onNavigate?: (tab: TabId) => void;
+  onNavigate?: (tab: TabId, focus?: ProductFocus) => void;
   onAutoFix: (spec: AutoFixSpec) => void;
   style?: React.CSSProperties;
 }) {
@@ -201,7 +202,7 @@ function SectionCard({ section, lead, onNavigate, onAutoFix, style }: {
               {section.actions.map(a => (
                 <button
                   key={a.label}
-                  onClick={() => a.autoFix ? onAutoFix(a.autoFix) : a.goTo && onNavigate?.(a.goTo)}
+                  onClick={() => a.autoFix ? onAutoFix(a.autoFix) : a.goTo && onNavigate?.(a.goTo, a.focus)}
                   className={`flex-1 py-2 rounded-lg text-xs font-display font-bold active:scale-[0.97] transition flex items-center justify-center gap-1 ${
                     a.autoFix ? 'bg-foreground/90 text-background' : 'border border-current/25'
                   }`}

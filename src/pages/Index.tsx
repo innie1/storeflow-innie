@@ -96,6 +96,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
+import type { ProductFocus } from '@/lib/product-focus';
 
 
 
@@ -321,6 +322,7 @@ export default function Index() {
   const [orders, setOrders] = useState<any[]>([]);
   // Set when a push notification deep-links to one order; Orders consumes it.
   const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
+  const [focusProduct, setFocusProduct] = useState<ProductFocus | null>(null);
 
   // Resolve the real Supabase row id for this store. StoreData (local/cached)
   // has no "id" field — only storeId (short code) and accessCode — but every
@@ -1184,9 +1186,17 @@ export default function Index() {
     saveSession(s.accessCode);
   }, []);
 
-  const handleNavigate = useCallback((targetTab: TabId, lowStock?: boolean) => {
+  const handleNavigate = useCallback((targetTab: TabId, lowStockOrFocus?: boolean | ProductFocus) => {
     setTab(targetTab);
-    if (lowStock) setFilterLowStock(true);
+    if (lowStockOrFocus === true) {
+      setFilterLowStock(true);
+      return;
+    }
+    // Advice that named a single product sends it along, so the destination
+    // can open that product instead of a list to search through.
+    if (lowStockOrFocus && typeof lowStockOrFocus === 'object') {
+      setFocusProduct(lowStockOrFocus);
+    }
   }, []);
 
   const handleLock = () => {
@@ -1849,6 +1859,8 @@ export default function Index() {
                   onUpdate={setStore}
                   filterLowStock={filterLowStock}
                   onClearFilter={() => setFilterLowStock(false)}
+                  focusProduct={focusProduct}
+                  onFocusProductHandled={() => setFocusProduct(null)}
                   currentUser={currentUser}
                   autoOpenRestock={autoOpenRestock}
                   onAutoOpenRestockHandled={() => setAutoOpenRestock(false)}

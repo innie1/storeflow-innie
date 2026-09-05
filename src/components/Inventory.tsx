@@ -28,6 +28,7 @@ import {
   Trash2, 
   FileText 
 } from 'lucide-react';
+import type { ProductFocus } from '@/lib/product-focus';
 
 const CODE39_MAP: Record<string, string> = {
   '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000',
@@ -53,6 +54,13 @@ interface InventoryProps {
   currentUser?: any;
   autoOpenRestock?: boolean;
   onAutoOpenRestockHandled?: () => void;
+  /**
+   * A single product to open on arrival, sent by whatever advice named it.
+   * Without this, "Open" on advice about one product dropped the merchant onto
+   * a list of everything they sell.
+   */
+  focusProduct?: ProductFocus | null;
+  onFocusProductHandled?: () => void;
 }
 
 interface ShoppingListItem {
@@ -78,7 +86,7 @@ export interface MassEditItem {
   showMore?: boolean;
 }
 
-export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter, currentUser, autoOpenRestock, onAutoOpenRestockHandled }: InventoryProps) {
+export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter, currentUser, autoOpenRestock, onAutoOpenRestockHandled, focusProduct, onFocusProductHandled }: InventoryProps) {
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
   const [performancePeriod, setPerformancePeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -765,6 +773,61 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   }
   if (filterLowStock) products = products.filter(p => p.quantity <= lowThreshold);
   if (search) products = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  // Opening a product's editor, in one place. The row's pencil button and the
+  // "Open" on a piece of advice must land on the same form in the same state;
+  // duplicating these four assignments is how they drift apart.
+  const KNOWN_CATEGORIES = ['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'];
+  const openEditFor = (p: Product) => {
+    setEditProduct({ ...p });
+    // The whole draft, including the carton/singles fields. The inline version
+    // this replaces supplied only the first five, so those four were left at
+    // whatever the previous edit had put there.
+    setEditDraft({
+      name: p.name,
+      costPrice: String(p.costPrice),
+      sellingPrice: String(p.sellingPrice),
+      quantity: String(p.quantity),
+      category: p.category,
+      isCartonSingleEnabled: p.isCartonSingleEnabled === true,
+      singlesPerCarton: p.singlesPerCarton != null ? String(p.singlesPerCarton) : '',
+      singleSellingPrice: p.singleSellingPrice != null ? String(p.singleSellingPrice) : '',
+      sellAsSinglesByDefault: p.sellAsSinglesByDefault === true,
+    });
+    setEditCustomCategoryActive(!KNOWN_CATEGORIES.includes(p.category));
+    setEditCustomCategoryVal(p.category);
+  };
+
+  // Advice that named one product opens that product.
+  //
+  // "Raise price on Mineral" used to send the merchant to the Inventory tab
+  // and leave them there: scroll or search for Mineral, find the edit control,
+  // then find the price field — all of it already known when the advice was
+  // written. Filters are cleared first, because a product is easy to send
+  // someone to and then hide behind a search term or a low-stock filter they
+  // had left switched on.
+  useEffect(() => {
+    if (!focusProduct) return;
+    const target = store.products.find(p => p.id === focusProduct.productId);
+    if (!target) {
+      showToast(`${focusProduct.productName || 'That product'} is no longer in your inventory`, 'error');
+      onFocusProductHandled?.();
+      return;
+    }
+
+    setSearch('');
+    setShowDiscontinued(!!target.discontinued);
+    if (filterLowStock) onClearFilter?.();
+
+    if (focusProduct.intent === 'edit') {
+      openEditFor(target);
+    } else {
+      setSelectedDetailProduct(target);
+    }
+
+    onFocusProductHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusProduct, store.products]);
 
   const smartSuggestions = useMemo(() => {
     const threshold = store.managerSettings?.minStockThreshold ?? lowThreshold;
@@ -1934,12 +1997,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                       <Truck className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => { 
-                        setEditProduct({ ...p }); 
-                        setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category }); 
-                        setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category)); 
-                        setEditCustomCategoryVal(p.category); 
-                      }} 
+                      onClick={() => openEditFor(p)} 
                       className="w-9 h-9 rounded-xl bg-surface-2 border border-border/80 flex items-center justify-center text-yellow-500 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all" 
                       title="Edit"
                     >
@@ -3886,11 +3944,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
               <button
                 type="button"
                 onClick={() => {
-                  const p = selectedDetailProduct;
-                  setEditProduct({ ...p });
-                  setEditDraft({ name: p.name, costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), quantity: String(p.quantity), category: p.category });
-                  setEditCustomCategoryActive(p.category !== 'Groceries' && p.category !== 'Beverages' && p.category !== 'Detergents' && p.category !== 'Soap' && p.category !== 'Others' && !['Groceries', 'Beverages', 'Detergents', 'Soap', 'Others'].includes(p.category));
-                  setEditCustomCategoryVal(p.category);
+                  openEditFor(selectedDetailProduct);
                   setSelectedDetailProduct(null);
                 }}
                 className="p-2.5 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer active:scale-95 transition-all"

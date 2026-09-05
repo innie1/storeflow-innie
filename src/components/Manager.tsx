@@ -31,13 +31,14 @@ import {
 } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import FlowAdviceReport from '@/components/FlowAdviceReport';
+import type { ProductFocus } from '@/lib/product-focus';
 
 interface ManagerProps {
   store: StoreData;
   orders?: any[];
   onUpdate: (s: StoreData) => void;
   onEnable?: () => void;
-  onNavigate?: (tab: TabId) => void;
+  onNavigate?: (tab: TabId, focus?: ProductFocus) => void;
 }
 
 type ManagerTab = 'overview' | 'predictions' | 'analysis' | 'advice';
@@ -1798,7 +1799,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
                         )}
                         {a.goTo && (
                           <button
-                            onClick={() => onNavigate?.(a.goTo!)}
+                            onClick={() => onNavigate?.(a.goTo!, a.focus)}
                             className="px-2 py-1.5 rounded-lg text-xs font-display font-bold text-current/80 hover:text-current active:scale-[0.97] transition shrink-0"
                           >
                             {a.autoFix ? 'Open' : 'Go to Action'}

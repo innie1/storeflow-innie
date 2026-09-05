@@ -2,6 +2,7 @@ import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { getPendingSummary, isStockPurchase } from '@/lib/store-data';
 import type { AutoFixSpec } from '@/lib/auto-fix';
+import type { ProductFocus } from '@/lib/product-focus';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -553,6 +554,10 @@ export interface AdviceCard {
   items?: { name: string; note: string }[];
   // "Go to Action" — which tab opens the screen needed to act on this advice.
   goTo?: TabId;
+  // Which product on that screen, and what the merchant is going there to do.
+  // Set whenever the advice names a single product, so the destination can
+  // open that product's editor rather than a list to search through.
+  focus?: ProductFocus;
   // "Auto Fix" — when present, the UI offers a button that (after the
   // store-code confirmation gate) applies this exact change via
   // lib/auto-fix.ts. Omitted for advice that has no safe automatic fix.
@@ -603,6 +608,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
           : `${stockCoverLabel(f)}. Order at least ${f.restockQty} units.`,
         priority: 'critical',
         goTo: 'inventory',
+        focus: { productId: f.product.id, productName: f.product.name, intent: 'restock' },
         autoFix: {
           type: 'generate_purchase_order',
           summary: `Create a draft purchase order for ${f.restockQty} units of ${f.product.name}`,
@@ -682,6 +688,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
       detail: `Current margin: ${(a.currentMargin * 100).toFixed(0)}%. Suggest ₦${a.suggestedPrice.toLocaleString()} — adds ₦${a.expectedLift.toLocaleString()} per unit.`,
       priority: 'high',
       goTo: 'inventory',
+      focus: { productId: a.product.id, productName: a.product.name, intent: 'edit' },
       autoFix: {
         type: 'update_price',
         summary: `Set ${a.product.name}'s price to ₦${a.suggestedPrice.toLocaleString()} (from ₦${a.product.sellingPrice.toLocaleString()})`,
@@ -724,6 +731,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         detail: `${stockCoverLabel(f)}. Restock ${f.restockQty} units to avoid a gap.`,
         priority: 'medium',
         goTo: 'inventory',
+        focus: { productId: f.product.id, productName: f.product.name, intent: 'restock' },
         autoFix: {
           type: 'generate_purchase_order',
           summary: `Create a draft purchase order for ${f.restockQty} units of ${f.product.name}`,
@@ -808,6 +816,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
     dormantLong.forEach(b => {
       advice.push({
         id: `archive-${b.productId}`,
+        focus: { productId: b.productId, productName: b.productName, intent: 'edit' },
         icon: '🗄️',
         title: `Consider archiving ${b.productName}`,
         detail: `${b.explain} Archiving hides it from active inventory without deleting its sales history.`,
@@ -1517,6 +1526,8 @@ export interface FlowReportAction {
   label: string;
   goTo?: TabId;
   autoFix?: AutoFixSpec;
+  /** Set when the action concerns exactly one product — see ProductFocus. */
+  focus?: ProductFocus;
 }
 
 export interface FlowReportSection {
