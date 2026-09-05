@@ -1431,6 +1431,262 @@ export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d',
   return { buckets, peakWindow, totalSales };
 }
 
+// ─── Structured Get Advice report ─────────────────────────────────────────────
+//
+// The report used to be a fixed run of five markdown sections in a fixed order,
+// so a sold-out product was reported below a paragraph saying expenses were
+// fine. Sections now carry what they found and how bad it is, and the caller
+// sorts on that — a store with nothing wrong reads completely differently to a
+// store that is losing sales today.
+
+export type FlowReportTone = 'critical' | 'warning' | 'good' | 'neutral';
+
+export interface FlowReportAction {
+  label: string;
+  goTo?: TabId;
+  autoFix?: AutoFixSpec;
+}
+
+export interface FlowReportSection {
+  id: string;
+  emoji: string;
+  heading: string;
+  tone: FlowReportTone;
+  /** Sorted on, high to low. Derived from the finding, never from the wording. */
+  rank: number;
+  /** One line saying what this section found, before any detail. */
+  summary: string;
+  detail: string[];
+  items?: { name: string; note: string }[];
+  actions?: FlowReportAction[];
+}
+
+export interface FlowReport {
+  intro: string;
+  /** The single most urgent finding, or null when nothing needs attention. */
+  headline: FlowReportSection | null;
+  sections: FlowReportSection[];
+  onboarding?: string;
+}
+
+export function buildFlowReport(store: StoreData): FlowReport {
+  if (isStoreOnboarding(store)) {
+    return {
+      intro: '',
+      headline: null,
+      sections: [],
+      onboarding: 'Get your store ready for business. We are helping you set everything up before monitoring performance.',
+    };
+  }
+
+  const h = healthScore(store);
+  const pending = getPendingSummary(store);
+  const forecasts = inventoryIntelligence(store);
+
+  const last7 = dailySeries(store, 7);
+  const prev7 = dailySeries(store, 14).slice(0, 7);
+  const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
+  const revPrev = prev7.reduce((s, d) => s + d.revenue, 0);
+  const profit7 = last7.reduce((s, d) => s + d.profit, 0);
+
+  // Restock spend is money turned into resellable stock, not a cost leak, so it
+  // stays out of the expense ratio.
+  const exp7 = (store.expenses || [])
+    .filter(e => e.category !== 'Restock' && new Date(e.date) >= daysAgo(6))
+    .reduce((s, e) => s + e.amount, 0);
+  const ea = expenseAnalysis(store, ['Restock']);
+
+  const threshold = getLowStockThreshold();
+  const live = store.products.filter(p => !p.discontinued);
+  const outOfStock = live.filter(p => p.quantity === 0);
+  const lowStock = live.filter(p => p.quantity > 0 && p.quantity <= threshold);
+  const margin = rev7 > 0 ? (profit7 / rev7) * 100 : 0;
+  const money = (n: number) => `₦${Math.round(n).toLocaleString()}`;
+
+  const sections: FlowReportSection[] = [];
+
+  // ── Sales ──
+  {
+    const detail: string[] = [];
+    let tone: FlowReportTone = 'neutral';
+    let rank = 20;
+    let summary: string;
+
+    if (rev7 === 0) {
+      summary = 'No sales recorded this week.';
+      detail.push('If you have been opening the shop, record every sale so I can track your revenue. If foot traffic is genuinely low, a weekend promotion is worth trying.');
+      tone = 'warning';
+      rank = 72;
+    } else {
+      summary = `${money(rev7)} in revenue this week.`;
+      if (revPrev > 0) {
+        const growth = ((rev7 - revPrev) / revPrev) * 100;
+        if (growth < -10) {
+          detail.push(`Down ${Math.abs(growth).toFixed(1)}% on last week (${money(revPrev)}).`);
+          tone = 'warning';
+          rank = Math.max(rank, 68);
+        } else if (growth > 10) {
+          detail.push(`Up ${growth.toFixed(1)}% on last week.`);
+          tone = 'good';
+        } else {
+          detail.push('Level with last week.');
+        }
+      }
+      if (margin <= 0) {
+        detail.push(`You are selling at a negative margin — ${money(profit7)} profit on ${money(rev7)} of sales. Check your cost prices before you sell any more.`);
+        tone = 'critical';
+        rank = 96;
+      } else if (margin < 15) {
+        detail.push(`Net margin is thin at ${margin.toFixed(1)}%. You may be pricing too close to cost, or paying too much wholesale.`);
+        tone = 'warning';
+        rank = Math.max(rank, 66);
+      } else {
+        detail.push(`Margin is healthy at ${margin.toFixed(1)}% (${money(profit7)} profit).`);
+        if (tone !== 'warning') tone = 'good';
+      }
+    }
+
+    // Point at whatever the finding actually calls for, rather than one
+    // generic link: nothing sold means record a sale, a bad margin means look
+    // at prices.
+    const salesAction: FlowReportAction = rev7 === 0
+      ? { label: 'Record a sale', goTo: 'sales' as TabId }
+      : margin < 15
+        ? { label: 'Review prices', goTo: 'inventory' as TabId }
+        : { label: 'Sales history', goTo: 'history' as TabId };
+
+    sections.push({
+      id: 'sales', emoji: '📊', heading: 'Sales & margin', tone, rank, summary, detail,
+      actions: [salesAction],
+    });
+  }
+
+  // ── Inventory ──
+  {
+    const critical = forecasts.filter(f => f.urgency === 'critical' || f.product.quantity === 0);
+    const detail: string[] = [];
+    const actions: FlowReportAction[] = [];
+    let tone: FlowReportTone = 'good';
+    let rank = 15;
+    let summary: string;
+
+    if (live.length === 0) {
+      summary = 'No products in your inventory yet.';
+      detail.push('Add your products so I can track stock levels and tell you what to reorder.');
+      tone = 'warning'; rank = 74;
+      actions.push({ label: 'Add products', goTo: 'inventory' as TabId });
+    } else if (outOfStock.length > 0) {
+      summary = `${outOfStock.length} product${outOfStock.length === 1 ? '' : 's'} sold out — you are losing sales right now.`;
+      tone = 'critical'; rank = 100;
+      if (lowStock.length > 0) detail.push(`${lowStock.length} more ${lowStock.length === 1 ? 'is' : 'are'} below ${threshold} units.`);
+    } else if (lowStock.length > 0) {
+      summary = `${lowStock.length} product${lowStock.length === 1 ? '' : 's'} running low.`;
+      tone = 'warning'; rank = 70;
+    } else {
+      summary = `All stocked above ${threshold} units.`;
+    }
+
+    const listed = [...outOfStock, ...lowStock].slice(0, 6);
+    const items = listed.map(p => ({
+      name: p.name,
+      note: p.quantity === 0 ? 'Sold out' : `${p.quantity} left`,
+    }));
+
+    if (critical.length > 0) {
+      actions.push({ label: 'Go to Inventory', goTo: 'inventory' as TabId });
+      actions.push({
+        label: 'Auto Fix',
+        autoFix: {
+          type: 'generate_purchase_order',
+          summary: critical.length === 1
+            ? `Create a draft purchase order for ${critical[0].restockQty} units of ${critical[0].product.name}`
+            : `Create a draft purchase order covering all ${critical.length} critical products`,
+          payload: { items: critical.map(f => ({ productId: f.product.id, name: f.product.name, qty: f.restockQty, costPrice: f.product.costPrice })) },
+        },
+      });
+    } else if (lowStock.length > 0) {
+      actions.push({ label: 'Go to Inventory', goTo: 'inventory' as TabId });
+    }
+
+    sections.push({
+      id: 'inventory', emoji: '📦', heading: 'Stock', tone, rank, summary, detail,
+      items: items.length ? items : undefined,
+      actions: actions.length ? actions : undefined,
+    });
+  }
+
+  // ── Expenses ──
+  {
+    const detail: string[] = [];
+    let tone: FlowReportTone = 'neutral';
+    let rank = 18;
+    let summary: string;
+
+    if (exp7 <= 0) {
+      summary = 'No expenses recorded this week.';
+      detail.push('Without expenses logged, the profit above only subtracts cost of goods, so it flatters the real number.');
+      tone = 'neutral'; rank = 40;
+    } else {
+      const ratio = rev7 > 0 ? (exp7 / rev7) * 100 : 0;
+      summary = `${money(exp7)} spent this week` + (rev7 > 0 ? `, ${ratio.toFixed(0)}% of revenue.` : '.');
+      if (rev7 > 0 && ratio > 100) {
+        detail.push('You are spending more than you are selling. Freeze anything non-essential.');
+        tone = 'critical'; rank = 92;
+      } else if (rev7 > 0 && ratio > 40) {
+        detail.push('That is a high share of revenue.');
+        if (ea.trendPct > 10) detail.push(`The rise is driven by ${ea.largestCategory}.`);
+        tone = 'warning'; rank = 62;
+      } else if (rev7 > 0) {
+        detail.push('Well controlled.');
+        tone = 'good';
+      }
+    }
+
+    sections.push({
+      id: 'expenses', emoji: '🧾', heading: 'Expenses', tone, rank, summary, detail,
+      actions: [{ label: 'Open Expenses', goTo: 'expenses' as TabId }],
+    });
+  }
+
+  // ── Money owed ──
+  {
+    const detail: string[] = [];
+    let tone: FlowReportTone = 'good';
+    let rank = 12;
+    let summary: string;
+
+    if (pending.totalOwed > 0) {
+      summary = `Customers owe you ${money(pending.totalOwed)} across ${pending.list.length} payment${pending.list.length === 1 ? '' : 's'}.`;
+      if (pending.overdue.length > 0) {
+        const overdueAmount = pending.overdue.reduce((s, p) => s + p.balance, 0);
+        detail.push(`${pending.overdue.length} ${pending.overdue.length === 1 ? 'is' : 'are'} overdue, worth ${money(overdueAmount)}. That is working capital you cannot restock with.`);
+        tone = 'warning'; rank = 76;
+      } else {
+        detail.push('None overdue yet. Collect on the due dates to keep cash moving.');
+        tone = 'neutral'; rank = 25;
+      }
+    } else {
+      summary = 'Nobody owes you anything.';
+    }
+
+    sections.push({
+      id: 'debts', emoji: '💳', heading: 'Money owed to you', tone, rank, summary, detail,
+      actions: pending.totalOwed > 0 ? [{ label: 'Chase payments', goTo: 'pending' as TabId }] : undefined,
+    });
+  }
+
+  sections.sort((a, b) => b.rank - a.rank);
+
+  const worst = sections[0];
+  const headline = worst && (worst.tone === 'critical' || worst.tone === 'warning') ? worst : null;
+
+  const intro = headline
+    ? `Health score ${h.overall}/100. The thing worth your attention first:`
+    : `Health score ${h.overall}/100. Nothing is going wrong right now — here is where things stand.`;
+
+  return { intro, headline, sections };
+}
+
 export function generateFlowReport(store: StoreData): string {
   if (isStoreOnboarding(store)) {
     return "Get your store ready for business. We are helping you set everything up before monitoring performance.";

@@ -1,47 +1,45 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, Check, Copy, Volume2, VolumeX, X } from 'lucide-react';
+import { Check, ChevronDown, Copy, Volume2, VolumeX, X, Zap } from 'lucide-react';
+import Mascot from '@/components/Mascot';
+import type { FlowReport, FlowReportSection, FlowReportTone } from '@/lib/manager-intel';
+import type { AutoFixSpec } from '@/lib/auto-fix';
+import type { TabId } from '@/types/store';
 
 interface Props {
-  report: string;
+  report: FlowReport;
   onDismiss: () => void;
-}
-
-interface Section {
-  heading: string;
-  emoji: string;
-  paragraphs: string[];
-  items: string[];
-  tone: 'critical' | 'warning' | 'neutral';
+  onNavigate?: (tab: TabId) => void;
+  onAutoFix: (spec: AutoFixSpec) => void;
 }
 
 /**
- * Renders the Get Advice report.
+ * The Get Advice report.
  *
- * The report is written as markdown — `### 📊 Store Performance Summary`,
- * `**₦167,000**` — but it was being fed to the greeting Typewriter, which puts
- * raw characters into a <span>. So the merchant read the markup: literal hashes
- * and asterisks, and every paragraph break collapsed into one wall of text.
+ * It used to be markdown fed to the greeting Typewriter, which puts raw
+ * characters into a <span> — so the merchant read the markup itself ("###",
+ * "**41/100**") one character every 30ms, about 45 seconds for a full report,
+ * unskippable, re-rendering the manager screen on every character.
  *
- * The typing made it worse. At one character per 30ms a ~1,500 character report
- * took roughly 45 seconds to finish, could not be skipped, and re-rendered the
- * whole manager screen on every character. A report is for scanning, so this
- * shows it at once and fades the sections in.
+ * It also printed the same five sections in the same order every time, so a
+ * sold-out product sat below a paragraph saying expenses were fine. Sections
+ * now arrive ranked by what they found: the worst one is pulled out as a
+ * headline with its actions attached, and the rest collapse.
  */
-export default function FlowAdviceReport({ report, onDismiss }: Props) {
+export default function FlowAdviceReport({ report, onDismiss, onNavigate, onAutoFix }: Props) {
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
-  const { intro, sections } = useMemo(() => parseReport(report), [report]);
+  const spoken = useMemo(() => reportToText(report), [report]);
 
-  // Reading the report aloud is now something you ask for. It used to start by
-  // itself on every report, with no way to stop it short of leaving the screen.
   useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch {} }, []);
 
+  // Reading aloud is now something you ask for. It used to start by itself on
+  // every report, with no way to stop it short of leaving the screen.
   const toggleSpeech = () => {
     const synth = window.speechSynthesis;
     if (!synth) return;
     if (speaking) { synth.cancel(); setSpeaking(false); return; }
-    const spoken = report.replace(/[*#_`>[\]]/g, '').replace(/\s+/g, ' ').trim();
     const utterance = new SpeechSynthesisUtterance(spoken);
     utterance.rate = 0.98;
     utterance.onend = () => setSpeaking(false);
@@ -53,135 +51,187 @@ export default function FlowAdviceReport({ report, onDismiss }: Props) {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(report.replace(/\*\*/g, '').replace(/^### /gm, ''));
+      await navigator.clipboard.writeText(spoken);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {}
   };
 
+  if (report.onboarding) {
+    return (
+      <div className="rounded-2xl border border-border bg-surface-2/40 p-4 flex items-start gap-3 animate-fade-in">
+        <span className="h-8 w-8 shrink-0 overflow-hidden rounded-full"><Mascot size={30} mood="happy" /></span>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">{report.onboarding}</p>
+      </div>
+    );
+  }
+
+  const rest = report.headline
+    ? report.sections.filter(s => s.id !== report.headline!.id)
+    : report.sections;
+
   return (
     <div className="rounded-2xl bg-card border border-primary/25 shadow-card overflow-hidden animate-fade-in">
       <div className="h-[3px] bg-gradient-to-r from-primary via-[#9b5de5] to-success" />
 
-      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-        <Bot className="w-3.5 h-3.5 text-primary shrink-0" />
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-2">
+        <span className="h-6 w-6 shrink-0 overflow-hidden rounded-full"><Mascot size={24} mood="thinking" /></span>
         <h4 className="flex-1 min-w-0 font-display font-bold text-xs uppercase tracking-wider text-primary truncate">
           Flow's Analysis
         </h4>
-        <button
-          onClick={toggleSpeech}
-          aria-label={speaking ? 'Stop reading aloud' : 'Read this aloud'}
-          className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center transition-colors ${
-            speaking ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-primary hover:bg-surface-2/60'
-          }`}
-        >
+        <IconButton label={speaking ? 'Stop reading aloud' : 'Read this aloud'} onClick={toggleSpeech} active={speaking}>
           {speaking ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-        </button>
-        <button
-          onClick={copy}
-          aria-label="Copy report"
-          className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-surface-2/60 transition-colors"
-        >
+        </IconButton>
+        <IconButton label="Copy report" onClick={copy}>
           {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-        </button>
-        <button
-          onClick={onDismiss}
-          aria-label="Dismiss report"
-          className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-surface-2/60 transition-colors"
-        >
+        </IconButton>
+        <IconButton label="Dismiss report" onClick={onDismiss}>
           <X className="w-4 h-4" />
-        </button>
+        </IconButton>
       </div>
 
-      <div className="px-4 pb-4 space-y-2.5">
-        {intro && <p className="text-[13px] leading-relaxed text-muted-foreground">{inline(intro)}</p>}
+      <div className="px-3 pb-3 space-y-2">
+        <p className="text-[12px] leading-relaxed text-muted-foreground">{report.intro}</p>
 
-        {/* Every section is in the DOM from the first render — the stagger is
-            only the fade, so nothing is hidden from a screen reader (or a test)
-            behind a timer. */}
-        {sections.map((s, i) => (
-          <section
-            key={s.heading + i}
-            className={`rounded-xl border p-3 animate-fade-in ${toneClass(s.tone)}`}
-            style={{ animationDelay: `${i * 70}ms`, animationFillMode: 'backwards' }}
-          >
-            <h5 className="flex items-center gap-1.5 font-display font-bold text-xs mb-1.5">
-              {s.emoji && <span aria-hidden="true">{s.emoji}</span>}
-              <span>{s.heading}</span>
-            </h5>
-            {s.paragraphs.map((p, n) => (
-              <p key={n} className="text-[13px] leading-relaxed text-foreground/90 [&+p]:mt-1.5">{inline(p)}</p>
-            ))}
-            {s.items.length > 0 && (
-              <ol className="mt-1.5 space-y-1.5">
-                {s.items.map((item, n) => (
-                  <li key={n} className="flex gap-2 text-[13px] leading-relaxed">
-                    <span className="w-4 h-4 mt-0.5 shrink-0 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center">
-                      {n + 1}
-                    </span>
-                    <span>{inline(item)}</span>
-                  </li>
+        {report.headline && (
+          <SectionCard section={report.headline} lead onNavigate={onNavigate} onAutoFix={onAutoFix} />
+        )}
+
+        {rest.length > 0 && (
+          <>
+            {/* The other sections are most of why this screen felt heavy: four
+                more blocks of prose whether or not any of them had anything to
+                say. They stay one tap away instead. */}
+            <button
+              onClick={() => setExpanded(v => !v)}
+              aria-expanded={expanded}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-border bg-surface-2/30 text-left hover:bg-surface-2/60 transition-colors"
+            >
+              <span className="min-w-0">
+                <span className="block text-xs font-display font-bold">
+                  {expanded ? 'Hide the rest' : 'See the full picture'}
+                </span>
+                <span className="block text-[11px] text-muted-foreground truncate">
+                  {rest.map(s => s.heading).join(' · ')}
+                </span>
+              </span>
+              <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            </button>
+
+            {expanded && (
+              <div className="space-y-2">
+                {rest.map((s, i) => (
+                  <SectionCard
+                    key={s.id}
+                    section={s}
+                    onNavigate={onNavigate}
+                    onAutoFix={onAutoFix}
+                    style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' }}
+                  />
                 ))}
-              </ol>
+              </div>
             )}
-          </section>
-        ))}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function toneClass(tone: Section['tone']) {
-  if (tone === 'critical') return 'border-destructive/30 bg-destructive/5';
-  if (tone === 'warning') return 'border-warning/30 bg-warning/5';
-  return 'border-border bg-surface-2/30';
-}
-
-/** `**bold**` → <strong>, everything else as-is. */
-function inline(text: string) {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-    part.startsWith('**') && part.endsWith('**')
-      ? <strong key={i} className="font-bold text-foreground">{part.slice(2, -2)}</strong>
-      : <span key={i}>{part}</span>
+function IconButton({ label, onClick, active, children }: {
+  label: string; onClick: () => void; active?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center transition-colors ${
+        active ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-primary hover:bg-surface-2/60'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
-function parseReport(report: string): { intro: string; sections: Section[] } {
-  const lines = report.split('\n');
-  const sections: Section[] = [];
-  const introParts: string[] = [];
-  let current: Section | null = null;
+function SectionCard({ section, lead, onNavigate, onAutoFix, style }: {
+  section: FlowReportSection;
+  lead?: boolean;
+  onNavigate?: (tab: TabId) => void;
+  onAutoFix: (spec: AutoFixSpec) => void;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <section className={`rounded-xl border p-3 animate-fade-in ${toneClass(section.tone)}`} style={style}>
+      <div className="flex items-start gap-2">
+        <span aria-hidden="true" className="text-sm leading-5 shrink-0">{section.emoji}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h5 className="font-display font-bold text-xs text-foreground/70">{section.heading}</h5>
+            {lead && (section.tone === 'critical' || section.tone === 'warning') && (
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-display font-bold shrink-0 ${
+                section.tone === 'critical' ? 'bg-destructive text-white' : 'bg-warning text-white'
+              }`}>
+                {section.tone === 'critical' ? 'URGENT' : 'WATCH'}
+              </span>
+            )}
+          </div>
 
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) continue;
+          <p className={`mt-0.5 leading-snug ${lead ? 'text-sm font-display font-bold text-foreground' : 'text-[13px] text-foreground'}`}>
+            {section.summary}
+          </p>
 
-    const heading = line.match(/^#{1,6}\s+(.*)$/);
-    if (heading) {
-      const title = heading[1].trim();
-      // Headings lead with an emoji ("📦 Inventory Diagnostics"); pull it out so
-      // it can sit as an icon rather than inside the text.
-      const withEmoji = title.match(/^([^\w\s])\s*(.*)$/u);
-      current = {
-        emoji: withEmoji ? withEmoji[1] : '',
-        heading: withEmoji ? withEmoji[2] : title,
-        paragraphs: [],
-        items: [],
-        tone: 'neutral',
-      };
-      sections.push(current);
-      continue;
-    }
+          {section.detail.map((d, i) => (
+            <p key={i} className="text-[12px] leading-relaxed text-muted-foreground mt-1">{d}</p>
+          ))}
 
-    if (!current) { introParts.push(line); continue; }
+          {section.items && section.items.length > 0 && (
+            <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
+              {section.items.map((it, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-[12px]">
+                  <span className="truncate">{it.name}</span>
+                  <span className="text-muted-foreground shrink-0">{it.note}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
-    const numbered = line.match(/^\d+\.\s+(.*)$/);
-    if (numbered) current.items.push(numbered[1]);
-    else current.paragraphs.push(line);
+          {section.actions && section.actions.length > 0 && (
+            <div className="flex gap-2 mt-2.5">
+              {section.actions.map(a => (
+                <button
+                  key={a.label}
+                  onClick={() => a.autoFix ? onAutoFix(a.autoFix) : a.goTo && onNavigate?.(a.goTo)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-display font-bold active:scale-[0.97] transition flex items-center justify-center gap-1 ${
+                    a.autoFix ? 'bg-foreground/90 text-background' : 'border border-current/25'
+                  }`}
+                >
+                  {a.autoFix && <Zap className="w-3.5 h-3.5" />}
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
 
-    if (/🚨|Critical|Critically|dangerously high|negative profit/i.test(line)) current.tone = 'critical';
-    else if (current.tone !== 'critical' && /⚠️|⚠|decline of|running low|thin at|overdue/i.test(line)) current.tone = 'warning';
+function toneClass(tone: FlowReportTone) {
+  if (tone === 'critical') return 'border-destructive/30 bg-destructive/5';
+  if (tone === 'warning') return 'border-warning/30 bg-warning/5';
+  if (tone === 'good') return 'border-success/25 bg-success/5';
+  return 'border-border bg-surface-2/30';
+}
+
+/** Plain text for the clipboard and for reading aloud. */
+function reportToText(report: FlowReport): string {
+  if (report.onboarding) return report.onboarding;
+  const lines = [report.intro];
+  for (const s of report.sections) {
+    lines.push('', `${s.heading}: ${s.summary}`, ...s.detail);
+    if (s.items) lines.push(...s.items.map(i => `- ${i.name}: ${i.note}`));
   }
-
-  return { intro: introParts.join(' '), sections };
+  return lines.join('\n').trim();
 }

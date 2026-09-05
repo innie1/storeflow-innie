@@ -7,7 +7,7 @@ import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
-  generateNotifications, ActivityRange, ActivityBucket, generateFlowReport,
+  generateNotifications, ActivityRange, ActivityBucket, buildFlowReport, type FlowReport,
   getTopOpportunities, getProfitLeaks, getRepaymentInsights, getSeasonalPredictions, getWeatherInsights, generateWeeklyRecap,
   getProductInsightBadges, filterDismissedAdvice, dismissAdvice, markAdviceHelpful
 } from '@/lib/manager-intel';
@@ -27,7 +27,7 @@ import PredictionHistory from '@/components/PredictionHistory';
 import {
   MessageCircle, Package, Star, CreditCard, TrendingUp, Factory, MapPin, ThumbsUp, ThumbsDown,
   Calendar, Rocket, AlertTriangle, ClipboardList, Banknote, Hourglass, Clock, PiggyBank, ShoppingCart,
-  Info, Flame, Moon, Receipt, Home, Bot, Undo2, BarChart3, Sparkles, Archive, Bell, Zap, PartyPopper, X,
+  Info, Flame, Moon, Receipt, Home, Undo2, BarChart3, Sparkles, Archive, Bell, Zap, PartyPopper, X, ChevronDown,
 } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import FlowAdviceReport from '@/components/FlowAdviceReport';
@@ -723,22 +723,23 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     } catch {}
   };
 
-  const [adviceReport, setAdviceReport] = useState('');
+  const [adviceReport, setAdviceReport] = useState<FlowReport | null>(null);
   const [adviceReportVisible, setAdviceReportVisible] = useState(false);
+  const [showMoreInsights, setShowMoreInsights] = useState(false);
 
   const handleGetAdvice = () => {
     setAdviceLoading(true);
-    setAdviceReport('');
+    setAdviceReport(null);
     setAdviceReportVisible(false);
     try {
       addFlowReward(0.5, 'event', 'Requested business advice report');
     } catch {}
-    // generateFlowReport is synchronous — it reads the store that is already in
+    // buildFlowReport is synchronous — it reads the store that is already in
     // memory. The delay here was only ever for show, and it sat in front of a
     // report that then took another 45 seconds to type itself out. One frame is
     // enough to let the button paint its loading state.
     requestAnimationFrame(() => {
-      setAdviceReport(generateFlowReport(store));
+      setAdviceReport(buildFlowReport(store));
       setAdviceReportVisible(true);
       setAdviceLoading(false);
     });
@@ -1532,7 +1533,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             if (recentEvents.length === 0) return null;
             return (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-                <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Bot className="w-4 h-4" /> Auto-Applied Prices</h3>
+                <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><span className="h-4 w-4 shrink-0 overflow-hidden rounded-full"><Mascot size={16} /></span> Auto-Applied Prices</h3>
                 <p className="text-[11px] text-muted-foreground -mt-1">Changes your Auto-Apply setting made on its own. Undo any of them any time.</p>
                 <div className="space-y-2">
                   {recentEvents.map(e => {
@@ -1685,58 +1686,18 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
       {/* ─── ADVICE ───────────────────────────────────────────────────────── */}
       {tab === 'advice' && (
         <div className="space-y-4 animate-fade-in">
-          {/* Get fresh advice button */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border border-primary/20">
-            <div className="flex items-center gap-3 mb-3">
-              <Sparkles className="w-7 h-7 text-primary shrink-0" />
-              <div>
-                <h3 className="font-display font-bold text-base">Flow Advice Engine</h3>
-                <p className="text-xs text-muted-foreground">Analysing your sales, inventory, expenses &amp; debts</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={handleGetAdvice} disabled={adviceLoading}
-                className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-70">
-                {adviceLoading ? <><Hourglass className="w-4 h-4" /> Analysing...</> : <><Sparkles className="w-4 h-4" /> Get Advice</>}
-              </button>
-              <button onClick={() => setChatOpen(true)}
-                className="flex-1 py-3 rounded-xl bg-surface-2/60 border border-primary/30 text-foreground font-display font-bold text-sm flex items-center justify-center gap-2">
-                <MessageCircle className="w-4 h-4" />
-                Message with Flow
-              </button>
-            </div>
-            <div className="flex gap-3 mt-2">
-              <button
-                onClick={() => setPoListOpen(true)}
-                className="flex-1 py-2 rounded-lg text-xs font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center justify-center gap-1.5"
-              >
-                <Package className="w-3.5 h-3.5" />
-                Purchase Orders
-              </button>
-              <button
-                onClick={() => setRatingsOpen(true)}
-                className="flex-1 py-2 rounded-lg text-xs font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center justify-center gap-1.5"
-              >
-                <Star className="w-3.5 h-3.5" />
-                Ratings
-              </button>
-            </div>
-          </div>
-
-          {/* Past Notifications Archive Button */}
-          <div className="p-4 rounded-2xl bg-surface-2 border border-border/80 flex items-center justify-between shadow-xs">
-            <div className="flex items-center gap-3">
-              <Archive className="w-5 h-5 text-muted-foreground shrink-0" />
-              <div className="text-left">
-                <p className="font-display font-bold text-xs text-foreground">Past Notifications Archive</p>
-                <p className="text-[10px] text-muted-foreground">View all read and closed Flow alerts ({store.flowNotifications?.length || 0})</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowArchive(true)}
-              className="px-3.5 py-1.5 bg-surface-3 hover:bg-surface-2 text-[11px] font-display font-bold border border-border rounded-xl transition cursor-pointer text-foreground"
-            >
-              View Archive
+          {/* The two things you came here to do. Purchase Orders, Ratings and
+              the notification archive used to sit up here too, pushing the
+              actual advice below the fold. */}
+          <div className="flex gap-2">
+            <button onClick={handleGetAdvice} disabled={adviceLoading}
+              className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-70">
+              {adviceLoading ? <><Hourglass className="w-4 h-4" /> Analysing...</> : <><Sparkles className="w-4 h-4" /> Get Advice</>}
+            </button>
+            <button onClick={() => setChatOpen(true)}
+              className="flex-1 py-3 rounded-xl bg-surface-2/60 border border-primary/30 text-foreground font-display font-bold text-sm flex items-center justify-center gap-2">
+              <MessageCircle className="w-4 h-4" />
+              Message with Flow
             </button>
           </div>
 
@@ -1789,7 +1750,12 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
           {/* Advice Report Card (Typewriter Analysis) */}
           {adviceReportVisible && adviceReport && (
-            <FlowAdviceReport report={adviceReport} onDismiss={() => setAdviceReportVisible(false)} />
+            <FlowAdviceReport
+              report={adviceReport}
+              onDismiss={() => setAdviceReportVisible(false)}
+              onNavigate={onNavigate}
+              onAutoFix={setAutoFixTarget}
+            />
           )}
 
           {/* Advice cards */}
@@ -1862,45 +1828,88 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
             </div>
           )}
 
-          {/* Recommendations */}
-          {recs.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-display font-bold text-sm px-1 flex items-center gap-1.5"><ClipboardList className="w-4 h-4" /> Recommendations</h3>
-              {recs.map(r => (
-                <div key={r.id} className="p-3 rounded-xl bg-card shadow-card flex items-start gap-3">
-                  <span className="text-xl">{r.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-display font-semibold text-sm">{r.title}</p>
-                    <p className="text-xs text-muted-foreground">{r.detail}</p>
+          {/* Recommendations, suppliers and customer requests are background
+              reading. They used to sit open below the advice, so the page kept
+              going long after it had said anything actionable. */}
+          <div className="pt-1">
+            <button
+              onClick={() => setShowMoreInsights(v => !v)}
+              aria-expanded={showMoreInsights}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-border bg-surface-2/30 text-left hover:bg-surface-2/60 transition-colors"
+            >
+              <span className="text-xs font-display font-bold">
+                {showMoreInsights ? 'Hide extras' : 'Recommendations, suppliers & requests'}
+              </span>
+              <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${showMoreInsights ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+
+          {showMoreInsights && (
+            <div className="space-y-4 animate-fade-in">
+              {/* Recommendations */}
+              {recs.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-display font-bold text-sm px-1 flex items-center gap-1.5"><ClipboardList className="w-4 h-4" /> Recommendations</h3>
+                  {recs.map(r => (
+                    <div key={r.id} className="p-3 rounded-xl bg-card shadow-card flex items-start gap-3">
+                      <span className="text-xl">{r.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-display font-semibold text-sm">{r.title}</p>
+                        <p className="text-xs text-muted-foreground">{r.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Supplier management */}
+              <SupplierPanel />
+
+              {/* Customer requests */}
+              {settings.customerRequests && requests.length > 0 && (
+                <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
+                  <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><ShoppingCart className="w-4 h-4" /> Top Customer Requests</h3>
+                  <div className="space-y-1.5">
+                    {requests.map((r, i) => (
+                      <div key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-surface-2 border border-border text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                          <span className="capitalize truncate">{r.text}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs text-primary font-display font-bold">{r.count}×</span>
+                          {r.count >= 5 && <span className="text-[9px] bg-success/15 text-success px-1.5 py-0.5 rounded-full font-bold">Stock it</span>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
-          {/* Supplier management */}
-          <SupplierPanel />
-
-          {/* Customer requests */}
-          {settings.customerRequests && requests.length > 0 && (
-            <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-              <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><ShoppingCart className="w-4 h-4" /> Top Customer Requests</h3>
-              <div className="space-y-1.5">
-                {requests.map((r, i) => (
-                  <div key={i} className="flex items-center justify-between p-2.5 rounded-xl bg-surface-2 border border-border text-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
-                      <span className="capitalize truncate">{r.text}</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-primary font-display font-bold">{r.count}×</span>
-                      {r.count >= 5 && <span className="text-[9px] bg-success/15 text-success px-1.5 py-0.5 rounded-full font-bold">Stock it</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Secondary destinations, out of the way at the end. The archive in
+              particular was the second thing on the page. */}
+          <div className="pt-2 mt-2 border-t border-border/60 flex flex-wrap gap-x-4 gap-y-2 justify-center">
+            <button
+              onClick={() => setPoListOpen(true)}
+              className="py-1.5 text-[11px] font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
+            >
+              <Package className="w-3.5 h-3.5" /> Purchase Orders
+            </button>
+            <button
+              onClick={() => setRatingsOpen(true)}
+              className="py-1.5 text-[11px] font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
+            >
+              <Star className="w-3.5 h-3.5" /> Ratings
+            </button>
+            <button
+              onClick={() => setShowArchive(true)}
+              className="py-1.5 text-[11px] font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
+            >
+              <Archive className="w-3.5 h-3.5" /> Archive ({store.flowNotifications?.length || 0})
+            </button>
+          </div>
         </div>
       )}
 
