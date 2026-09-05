@@ -5,6 +5,7 @@ import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
 import { drawQRCode, encodeQRData } from '@/lib/qr-code';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
+import { downscaleImageToDataUrl } from '@/lib/downscale-image';
 
 interface SaleReceiptProps {
   store: StoreData;
@@ -113,18 +114,21 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
       });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'qr') => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'qr') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 100 * 1024) {
-      showToast('Image must be under 100KB to save offline', 'error');
+    // The 100 KB limit existed because the file was stored byte for byte and a
+    // large one would not fit alongside everything else offline. It is shrunk
+    // to fit now, so a photo straight off a phone camera is accepted and
+    // arrives at a few tens of kilobytes.
+    if (file.size > 8 * 1024 * 1024) {
+      showToast('Image must be under 8 MB', 'error');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
+    try {
+      const base64 = await downscaleImageToDataUrl(file);
       if (type === 'logo') {
         const nextProfile = { ...(store.profile || {}), photo: base64 };
         const nextSettings = { ...(store.managerSettings || {}), receiptLogoEnabled: true };
@@ -132,8 +136,9 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
         onUpdateStore?.(updated);
         showToast('✓ Store logo updated');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      showToast('That image could not be read', 'error');
+    }
   };
 
   const handleGenerateBrandedQR = async () => {

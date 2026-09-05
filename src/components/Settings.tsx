@@ -73,6 +73,7 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
+import { downscaleImageToDataUrl } from '@/lib/downscale-image';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
 
@@ -1439,18 +1440,23 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     if (meta) showToast(meta.quote);
   };
 
-  const handlePhotoPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) return showToast('Image must be under 2 MB', 'error');
-    const reader = new FileReader();
-    reader.onload = () => {
-      const next: StoreProfile = { ...profile, photo: reader.result as string };
+    if (file.size > 8 * 1024 * 1024) return showToast('Image must be under 8 MB', 'error');
+    // The picked file used to be stored as-is: a 2 MB photo became 2.7 MB of
+    // base64 inside the store record, which is sent to every customer who
+    // opens the marketplace. It is shown at 96px here and 48px on receipts, so
+    // it is shrunk to fit before it is saved.
+    try {
+      const photo = await downscaleImageToDataUrl(file);
+      const next: StoreProfile = { ...profile, photo };
       setProfile(next);
       persistProfile(next);
       showToast('Store photo updated');
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      showToast('That image could not be read', 'error');
+    }
   };
 
   const removePhoto = () => {
