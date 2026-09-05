@@ -1,11 +1,26 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { StoreData, Product, CustomerRequest, PlannedRestock } from '@/types/store';
 import { receiveStock, addPurchaseOrder, sumOperatingExpenses } from '@/lib/store-data';
+import { getLowStockThreshold } from '@/lib/settings';
 import { showToast } from '@/components/Toast';
-import { 
-  TrendingUp, AlertTriangle, Coins, Sparkles, CheckCircle, 
-  Trash2, Plus, Info, Lightbulb, CheckSquare, Square 
+import {
+  TrendingUp, AlertTriangle, Coins, Sparkles, CheckCircle,
+  Trash2, Plus, Info, Lightbulb, CheckSquare, Square
 } from 'lucide-react';
+
+/**
+ * Does this customer request mention this product by name?
+ *
+ * Matched on word boundaries. text.includes(name) counted "Ginger" as a
+ * request for "Gin", inflating the request score of any product whose name
+ * is a fragment of a longer word.
+ */
+function matchesProductName(requestText: string, productName: string): boolean {
+  const name = productName.trim().toLowerCase();
+  if (!name) return false;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(requestText.toLowerCase());
+}
 
 interface SmartRestockEngineProps {
   store: StoreData;
@@ -61,6 +76,17 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
   const restockHistory = useMemo(() => store.restocks || [], [store.restocks]);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const lowStockThreshold = getLowStockThreshold();
+
+  // How many days of history this store actually has, capped at the 30-day
+  // window, so a young store is not reported as selling a fraction of what it
+  // does.
+  const observedDays = useMemo(() => {
+    const opened = store.createdAt ? new Date(store.createdAt).getTime() : Date.now();
+    const days = (Date.now() - opened) / (24 * 60 * 60 * 1000);
+    return Math.min(30, Math.max(1, Math.round(days)));
+  }, [store.createdAt]);
+
   // 1. Run the Restock recommendation engine
   const generatedRecommendations = useMemo(() => {
     const list: BuyListItem[] = [];
@@ -68,22 +94,31 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     // Map existing products
     store.products.filter(p => !p.discontinued).forEach(p => {
       const isOutOfStock = p.quantity <= 0;
-      const minStock = p.minimumStock || 5;
-      const isBelowMin = p.quantity < minStock;
-      
-      // Calculate sales velocity (last 30 days)
+
+      // The restock point. This used to read p.minimumStock, which does not
+      // exist on Product and never has — so it was `undefined || 5` for every
+      // product in every store, and the "minimum stock level" the UI talks
+      // about was a hardcoded 5 no merchant could change. reorderLevel is the
+      // real field: the owner sets it, and Flow's "set a reorder level" Auto
+      // Fix sets it to roughly a week of stock.
+      const reorderPoint = p.reorderLevel ?? lowStockThreshold;
+      const isBelowMin = p.quantity < reorderPoint;
+
+      // Sales velocity. Dividing by a flat 30 understated every product in a
+      // store younger than a month — a shop open a week looked like it sold a
+      // quarter of what it does.
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
       const pSales = sales.filter(s => s.productId === p.id);
       const recentSales = pSales.filter(s => new Date(s.date).getTime() >= thirtyDaysAgo);
       const totalQtySold = recentSales.reduce((sum, s) => sum + s.quantity, 0);
-      const avgDailySales = totalQtySold / 30;
+      const avgDailySales = totalQtySold / observedDays;
 
       // 1. Stock urgency (up to 40%)
       let stockScore = 0;
       if (isOutOfStock) {
         stockScore = 40;
       } else {
-        stockScore = Math.max(0, 40 * (1 - p.quantity / minStock));
+        stockScore = Math.max(0, 40 * (1 - p.quantity / Math.max(1, reorderPoint)));
       }
 
       // 2. Sales velocity (up to 30%)
@@ -106,7 +141,9 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       else if (marginPct >= 0.2) scoreMargin = 5;
 
       // 5. Customer Requests (up to 10%)
-      const reqCount = requests.filter(r => r.text.toLowerCase().includes(p.name.toLowerCase())).length;
+      // Whole-word match. A plain substring counted every request for
+      // "Ginger" as a request for a product called "Gin".
+      const reqCount = requests.filter(r => matchesProductName(r.text, p.name)).length;
       let scoreRequests = 0;
       if (reqCount >= 5) scoreRequests = 10;
       else if (reqCount >= 1) scoreRequests = 5;
@@ -118,12 +155,26 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       let priorityLabel: '🔴 High' | '🟡 Medium' | '🟢 Low' = '🟢 Low';
       if (isOutOfStock || isBelowMin) {
         priorityLabel = '🔴 High';
-      } else if (p.quantity <= minStock * 1.5) {
+      } else if (p.quantity <= reorderPoint * 1.5) {
         priorityLabel = '🟡 Medium';
       }
 
-      // Determine Suggested Qty
-      const targetStock = buyOnlyToMin ? minStock : (p.maximumStock || minStock * 2);
+      // How much to buy.
+      //
+      // This was `p.maximumStock || minStock * 2`. Neither field exists on
+      // Product, so every product in every store resolved to the same target of
+      // 10 units — one selling fifty a day and one that has never sold got the
+      // same suggestion. The five-factor priority score above only ever
+      // affected the ordering and the colour of the label; it never reached the
+      // quantity. That is what made Smart Restock not smart.
+      //
+      // The target is now what the product actually sells over the coverage
+      // window, floored at its reorder point so a slow mover is still brought
+      // back to a sensible shelf level and never below it.
+      const demandTarget = Math.ceil(avgDailySales * coverageDays);
+      const targetStock = buyOnlyToMin
+        ? reorderPoint
+        : Math.max(reorderPoint, demandTarget);
 
       // Never suggest buying products already at or above target stock
       if (p.quantity >= targetStock) {
@@ -148,11 +199,13 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
         : suggestedQty;
 
       // Explanation reason
-      let reason = 'Restock suggested to maintain minimum stock level.';
+      let reason = `Brings stock back to its reorder level of ${reorderPoint}.`;
       if (p.quantity <= 0) reason = 'Product is completely out of stock.';
       else if (reqCount >= 5) reason = `Frequently requested by ${reqCount} customers this month.`;
-      else if (avgDailySales >= 2) reason = `High sales velocity (${avgDailySales.toFixed(1)} sold daily).`;
-      else if (isBelowMin) reason = 'Current quantity is below minimum stock threshold.';
+      else if (demandTarget > reorderPoint && avgDailySales > 0) {
+        reason = `Sells about ${avgDailySales.toFixed(1)} a day — ${coverageDays} days of cover is ${demandTarget}.`;
+      }
+      else if (isBelowMin) reason = `Below its reorder level of ${reorderPoint}.`;
       if (usualOrderQty) reason += ` You've typically ordered ~${usualOrderQty} at a time.`;
 
       list.push({
@@ -211,7 +264,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
 
     // Sort by Priority Score descending
     return list.sort((a, b) => b.priorityScore - a.priorityScore);
-  }, [store.products, sales, requests, suppliers, buyOnlyToMin, restockHistory]);
+  }, [store.products, sales, requests, suppliers, buyOnlyToMin, restockHistory, coverageDays, lowStockThreshold, observedDays]);
 
   // Intelligent Proportionate Budget Distribution (AI Optimizer - Step 5 & 6)
   const allocateBudgetProportionally = (list: BuyListItem[], budget: number): BuyListItem[] => {
@@ -254,7 +307,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
 
     // 1. Allocate High Priority Pool (60%)
     let highRemaining = highPool;
-    
+
     // Assign baseline of 1 unit to each high item first
     highItems.forEach(item => {
       const costForOne = Math.min(item.idealQty || 1, 1) * item.costPrice;
@@ -275,7 +328,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
         const maxAdditional = (item.idealQty || 1) - item.suggestedQty;
         let additionalQty = Math.floor(share / item.costPrice);
         additionalQty = Math.max(0, Math.min(maxAdditional, additionalQty));
-        
+
         item.suggestedQty += additionalQty;
         highRemaining -= additionalQty * item.costPrice;
       });
@@ -303,7 +356,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
     if (growableMedium.length > 0 && mediumRemaining > 0) {
       let activeGrowable = [...growableMedium];
       let cashToDistribute = mediumRemaining;
-      
+
       // Loop to distribute equally, capping at idealQty
       let progress = true;
       while (cashToDistribute > 0 && activeGrowable.length > 0 && progress) {
@@ -362,7 +415,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           reason: item.reason + ' (Pending until funds become available)'
         };
       }
-      
+
       const scaledDiff = (item.idealQty || 1) - item.suggestedQty;
       if (scaledDiff > 0) {
         return {
@@ -370,7 +423,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           reason: item.reason + ` (Scaled to fit budget split: 60% High / 40% Med)`
         };
       }
-      
+
       return item;
     });
 
@@ -630,7 +683,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
       text += `   (After buying, enter this code in Inventory > Import to add these items to stock)\n`;
     }
     text += `==========================\n\n`;
-    
+
     selectedItems.forEach((it, idx) => {
       text += `${idx + 1}. ${it.name}\n`;
       text += `   • Qty to Buy: ${it.suggestedQty}\n`;
@@ -802,8 +855,23 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                 >
                   🪄 Optimize Buy List
                 </button>
-                <div className="text-muted-foreground">
-                  Current Target Stock: <span className="font-bold text-white">{buyOnlyToMin ? 'Minimum Stock Level' : 'Maximum Stock Level'}</span>
+                {/* The window the suggested quantities are sized for. This
+                    setting existed in state from the beginning but was never
+                    read by the engine and never shown, so "how long should this
+                    order last" had no answer and no control. */}
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <span>Cover for</span>
+                  <select
+                    value={coverageDays}
+                    onChange={e => setCoverageDays(Number(e.target.value))}
+                    aria-label="Days of stock each order should cover"
+                    className="bg-surface-2 border border-border rounded-lg px-2 py-1 text-xs font-bold text-foreground"
+                  >
+                    {[7, 14, 21, 30].map(d => <option key={d} value={d}>{d} days</option>)}
+                  </select>
+                  <span className="hidden sm:inline">
+                    · {buyOnlyToMin ? 'topping up to reorder level only' : 'sized to what each item sells'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -854,7 +922,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
             <span className="font-mono font-bold text-foreground">{totals.budgetUsedPct.toFixed(0)}%</span>
           </div>
           <div className="w-full h-2 bg-surface-3 rounded-full overflow-hidden border border-border/20">
-            <div 
+            <div
               className={`h-full transition-all duration-300 ${
                 totals.totalCost > availableBudget ? 'bg-destructive' : 'bg-primary'
               }`}
@@ -868,7 +936,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 Selected items exceed available purchasing budget by ₦{(totals.totalCost - availableBudget).toLocaleString()}.
               </span>
-              <button 
+              <button
                 onClick={handleOptimizeBudget}
                 className="px-3 py-1.5 bg-destructive text-white hover:bg-destructive-hover font-display font-bold text-[11px] rounded-lg transition-all cursor-pointer"
               >
@@ -950,7 +1018,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           {/* Add custom item manually */}
           <div className="bg-surface-2/40 border border-border/40 rounded-xl p-3.5 flex flex-col justify-center">
             {!showAddNewForm ? (
-              <button 
+              <button
                 onClick={() => setShowAddNewForm(true)}
                 className="w-full p-2.5 rounded-lg bg-surface-3 border border-border/50 text-xs font-display font-bold hover:bg-surface-2 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
@@ -958,7 +1026,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
               </button>
             ) : (
               <form onSubmit={handleAddManualProduct} className="space-y-2 text-xs">
-                <input 
+                <input
                   type="text"
                   required
                   placeholder="Product Name"
@@ -967,7 +1035,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                   className="w-full p-2 rounded bg-card border border-border focus:outline-none"
                 />
                 <div className="grid grid-cols-3 gap-1">
-                  <input 
+                  <input
                     type="number"
                     required
                     placeholder="Cost ₦"
@@ -975,7 +1043,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                     onChange={e => setNewProductCost(e.target.value)}
                     className="p-2 rounded bg-card border border-border focus:outline-none"
                   />
-                  <input 
+                  <input
                     type="number"
                     required
                     placeholder="Sell ₦"
@@ -983,7 +1051,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                     onChange={e => setNewProductPrice(e.target.value)}
                     className="p-2 rounded bg-card border border-border focus:outline-none"
                   />
-                  <input 
+                  <input
                     type="number"
                     required
                     placeholder="Qty"
@@ -1039,6 +1107,13 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                   <div className="text-[11px] text-muted-foreground mt-0.5">
                     In stock: {it.currentStock} · ₦{it.costPrice.toLocaleString()} each
                   </div>
+                  {/* Why this quantity. Simple mode showed a number with no
+                      reasoning behind it — the explanation existed but was
+                      rendered only in the Smart Budget table, which is not the
+                      default view. */}
+                  {it.reason && (
+                    <div className="text-[11px] text-muted-foreground/80 mt-0.5 leading-snug">{it.reason}</div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
@@ -1086,8 +1161,8 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
             </thead>
             <tbody className="divide-y divide-border/60">
               {filteredItemsList.map(it => (
-                <tr 
-                  key={it.id} 
+                <tr
+                  key={it.id}
                   className={`hover:bg-surface-2/40 transition-colors ${
                     it.selected ? 'bg-primary/5' : 'opacity-60'
                   } ${
@@ -1095,7 +1170,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                   }`}
                 >
                   <td className="p-3 text-center">
-                    <button 
+                    <button
                       onClick={() => toggleSelectItem(it.id)}
                       className="text-primary hover:scale-105"
                     >
@@ -1113,7 +1188,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                     {it.name}
                   </td>
                   <td className="p-3">
-                    <select 
+                    <select
                       value={it.supplier}
                       onChange={e => handleUpdateSupplier(it.id, e.target.value)}
                       className="p-1 rounded bg-surface-2 border border-border text-[11px] focus:outline-none"
@@ -1127,7 +1202,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                   </td>
                   <td className="p-3 text-center font-mono font-bold">{it.currentStock}</td>
                   <td className="p-3 text-center">
-                    <input 
+                    <input
                       type="number"
                       value={it.suggestedQty}
                       onChange={e => handleUpdateQty(it.id, parseFloat(e.target.value) || 1)}
@@ -1135,7 +1210,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                     />
                   </td>
                   <td className="p-3 text-right font-mono">
-                    <input 
+                    <input
                       type="number"
                       value={it.costPrice}
                       onChange={e => handleUpdateCost(it.id, parseFloat(e.target.value) || 0)}
@@ -1186,15 +1261,15 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
               <span>{totals.count} item{totals.count === 1 ? '' : 's'} · {totals.qty} unit{totals.qty === 1 ? '' : 's'} total</span>
             )}
           </div>
-          
+
           <div className="flex gap-2 w-full sm:w-auto">
-            <button 
+            <button
               onClick={onClose}
               className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-semibold hover:bg-surface-3 transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <button 
+            <button
               onClick={handleShareBuyList}
               disabled={totals.count === 0}
               className="flex-1 sm:flex-none px-5 py-2.5 bg-primary text-primary-foreground disabled:opacity-40 font-display font-bold text-xs rounded-xl shadow-md cursor-pointer hover:opacity-95"
