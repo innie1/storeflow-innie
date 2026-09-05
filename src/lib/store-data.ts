@@ -4,8 +4,7 @@ import {
   Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift, 
   CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
   DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent, PurchaseOrderRecord,
-  BalanceAdjustment
-} from '@/types/store';
+  BalanceAdjustment, SavingsGoal } from '@/types/store';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
 import { generateStoreUrl } from '@/lib/qr-code';

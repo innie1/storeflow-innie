@@ -82,12 +82,19 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
     resetForm();
   };
 
-  const handleDeleteGoal = (id: string) => {
-    if (confirm('Delete this goal?')) {
-      const nextStore = deleteGoal(store, id);
-      onUpdate(nextStore);
-      showToast('Goal deleted.');
-    }
+  // Goals kept pendingDeleteId in state but never used it: deletion went
+  // through a native confirm(), while the ConfirmModal meant to replace it had
+  // been pasted into FlowWalletCard further down this file, where none of its
+  // identifiers exist. That crashed the Flow Wallet on render. The modal is
+  // back where its state lives, and the half-finished swap is completed.
+  const handleDeleteGoal = (id: string) => setPendingDeleteId(id);
+
+  const confirmDeleteGoal = () => {
+    if (!pendingDeleteId) return;
+    const nextStore = deleteGoal(store, pendingDeleteId);
+    onUpdate(nextStore);
+    setPendingDeleteId(null);
+    showToast('Goal deleted.');
   };
 
   const resetForm = () => {
@@ -352,6 +359,18 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(pendingDeleteId)}
+        title="Delete Goal?"
+        description="Are you sure you want to delete this business goal?"
+        confirmText="Delete Goal"
+        cancelText="Cancel"
+        variant="danger"
+        icon="🎯"
+        onConfirm={confirmDeleteGoal}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }
@@ -633,17 +652,6 @@ function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: S
         </div>
       )}
 
-      <ConfirmModal
-        isOpen={Boolean(pendingDeleteId)}
-        title="Delete Goal?"
-        description="Are you sure you want to delete this business goal?"
-        confirmText="Delete Goal"
-        cancelText="Cancel"
-        variant="danger"
-        icon="🎯"
-        onConfirm={confirmDeleteGoal}
-        onCancel={() => setPendingDeleteId(null)}
-      />
     </div>
   );
 }

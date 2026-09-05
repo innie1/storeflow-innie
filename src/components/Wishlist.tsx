@@ -5,6 +5,7 @@ import {
   Star, Plus, Trash2, Calendar, CircleDollarSign, HelpCircle, Sparkles, ShoppingBag
 } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
+import { showToast } from '@/components/Toast';
 import ScrollLock from '@/components/ScrollLock';
 
 interface WishlistProps {

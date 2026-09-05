@@ -202,7 +202,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
   };
 
   const getProfitBreakdown = () => {
-    const map = new Map<string, { name: string; profit: number; margin: number }>();
+    const map = new Map<string, { name: string; profit: number; markup: number }>();
     store.sales.forEach(s => {
       const product = store.products.find(p => p.id === s.productId);
       const existing = map.get(s.productId) || { name: s.productName, profit: 0, markup: 0 };

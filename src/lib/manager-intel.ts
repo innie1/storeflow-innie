@@ -691,7 +691,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
   underpriced.forEach(a => {
     advice.push({
       id: `price-${a.product.id}`, icon: '📈', title: `Raise price on ${a.product.name}`,
-      detail: `Current margin: ${(a.currentMargin * 100).toFixed(0)}%. Suggest ₦${a.suggestedPrice.toLocaleString()} — adds ₦${a.expectedLift.toLocaleString()} per unit.`,
+      detail: `Currently ${(a.currentMarkup * 100).toFixed(0)}% on top of cost. Suggest ₦${a.suggestedPrice.toLocaleString()} — adds ₦${a.expectedLift.toLocaleString()} per unit.`,
       priority: 'high',
       goTo: 'inventory',
       focus: { productId: a.product.id, productName: a.product.name, intent: 'edit' },
@@ -2265,7 +2265,7 @@ export function getSmartDiscounts(store: StoreData): DiscountRecommendation[] {
           sellingPrice: p.sellingPrice,
           suggestedDiscountPct,
           daysDeadStock,
-          marginImpact: `Reduces markup margin from ${Math.round(margin * 100)}% to ${Math.round((margin * 100) - suggestedDiscountPct)}%, while staying above cost price.`
+          marginImpact: `Reduces markup from ${Math.round(markup * 100)}% to ${Math.round((markup * 100) - suggestedDiscountPct)}%, while staying above cost price.`
         });
       }
     }
@@ -2689,7 +2689,7 @@ export function getProductIntelligence(store: StoreData, productId: string): Pro
   const recommendations: string[] = [];
   const priceAlert = pricingAlerts(store).find(a => a.product.id === productId);
   if (priceAlert) {
-    recommendations.push(`Underpriced — margin is ${(priceAlert.currentMargin * 100).toFixed(0)}%. Try ₦${priceAlert.suggestedPrice.toLocaleString()}.`);
+    recommendations.push(`Underpriced — only ${(priceAlert.currentMarkup * 100).toFixed(0)}% on top of cost. Try ₦${priceAlert.suggestedPrice.toLocaleString()}.`);
   }
   const stockEntry = inventoryIntelligence(store).find(f => f.product.id === productId);
   if (stockEntry) {
