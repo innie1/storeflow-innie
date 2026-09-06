@@ -13,6 +13,36 @@ export interface OrderDeepLink {
   orderNumber?: string;
 }
 
+/**
+ * What the merchant pressed on the notification itself.
+ *
+ * Notification buttons used to be decoration: every one was 'open', and the
+ * handler ignored which had been pressed, so the app opened at a list and the
+ * merchant had to find the thing again before they could act on it. The
+ * service worker now passes the action through, and the typed text with it
+ * where the browser offers a reply field.
+ */
+export interface NotificationAct {
+  /** 'order-ready', 'reply', 'acknowledge', … */
+  action: string;
+  /** What was typed into the notification, when it was a reply. */
+  reply?: string;
+}
+
+/** Actions the app will act on. Anything else is ignored rather than trusted. */
+const KNOWN_ACTIONS = ['order-ready', 'reply', 'acknowledge'];
+
+export function readNotificationAct(search: string): NotificationAct | null {
+  const params = new URLSearchParams(search || '');
+  const action = (params.get('notif_action') || '').trim();
+  if (!KNOWN_ACTIONS.includes(action)) return null;
+
+  // A reply is text the merchant typed on their own device, but it arrives
+  // through a URL, so it is length-capped like any other untrusted input.
+  const reply = (params.get('notif_reply') || '').trim().slice(0, 500);
+  return reply ? { action, reply } : { action };
+}
+
 /** Tabs a notification is allowed to jump to, so a crafted URL can't drive the app anywhere. */
 const LINKABLE_TABS: TabId[] = ['orders', 'dashboard', 'sales', 'inventory', 'customers'];
 
@@ -37,7 +67,7 @@ export function readLinkedTab(search: string): TabId | null {
  */
 export function stripOrderDeepLink(search: string): string {
   const params = new URLSearchParams(search || '');
-  for (const key of ['tab', 'order_id', 'order_number']) params.delete(key);
+  for (const key of ['tab', 'order_id', 'order_number', 'notif_action', 'notif_reply']) params.delete(key);
   const rest = params.toString();
   return rest ? `?${rest}` : '';
 }

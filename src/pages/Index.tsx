@@ -2,7 +2,9 @@ import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react
 import { StoreData, TabId, Product } from '@/types/store';
 import FlowShirtFab from '@/components/FlowShirtFab';
 import { getBusinessTemplate, isBusinessTabAllowed, isServiceFirstBusiness, resolveBusinessType, shouldRunRetailRestockEngine } from '@/lib/business-runtime';
-import { readLinkedTab, readOrderDeepLink, stripOrderDeepLink } from '@/lib/order-deep-link';
+import { readLinkedTab, readNotificationAct, readOrderDeepLink, stripOrderDeepLink } from '@/lib/order-deep-link';
+import { acknowledgeStockLoss, getStockLossNotice, markStockLossRaised } from '@/lib/stock-loss-notice';
+import type { NotificationAct } from '@/lib/order-deep-link';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
@@ -361,6 +363,9 @@ export default function Index() {
   const [orders, setOrders] = useState<any[]>([]);
   // Set when a push notification deep-links to one order; Orders consumes it.
   const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
+  // What the merchant pressed on a push notification, carried into the screen
+  // that opens so it can act rather than just land there.
+  const [notificationAct, setNotificationAct] = useState<NotificationAct | null>(null);
   const [focusProduct, setFocusProduct] = useState<ProductFocus | null>(null);
 
   // Resolve the real Supabase row id for this store. StoreData (local/cached)
@@ -483,10 +488,10 @@ export default function Index() {
         osc.start(time);
         osc.stop(time + duration);
       };
-      
+
       const soundType = store?.marketplaceSettings?.notificationSoundType || 'chime';
       const now = audioCtx.currentTime;
-      
+
       if (soundType === 'beep') {
         playTone(now, 1000, 0.15, 'sine');
       } else if (soundType === 'bell') {
@@ -535,7 +540,7 @@ export default function Index() {
           .eq('store_id', store.id)
           .eq('is_read', false)
           .order('created_at', { ascending: false });
-        
+
         if (!notifsError && dbNotifs && dbNotifs.length > 0 && active) {
           const newItems = dbNotifs.map(n => ({
             id: n.id,
@@ -609,6 +614,13 @@ export default function Index() {
 
     // Listen for foreground push messages from SW (shown as in-app toast instead of system notification)
     const handleSWMessage = (event: MessageEvent) => {
+      // "I understand" pressed on the notification itself. The service worker
+      // deliberately does not open a window for it; this only records that the
+      // subject is closed so it stops being raised.
+      if (event.data?.type === 'STOREFLOW_NOTIFICATION_ACK') {
+        if (event.data.category === 'stock_loss') acknowledgeStockLoss();
+        return;
+      }
       if (event.data?.type === 'STOREFLOW_PUSH_RECEIVED') {
         const { title, body } = event.data;
         showToast(`${title}: ${body}`, 'info');
@@ -769,9 +781,9 @@ export default function Index() {
           }
           return p;
         });
-        
+
         updatedStore = { ...store, products: updatedProducts };
-        
+
         // Update stores table in cloud DB -- only the products field changed,
         // so only send that, not the entire store record (sales, customers,
         // expenses, settings, history all stay exactly as they already are
@@ -779,7 +791,7 @@ export default function Index() {
         const { error: storeErr } = await supabase
           .rpc('merge_store_data', { p_store_id: store.id, p_patch: { products: updatedProducts } });
         if (storeErr) throw storeErr;
-        
+
         setStore(updatedStore);
         saveStore(updatedStore, { skipCloudSync: true }); // Local persistence only -- cloud already synced above
       }
@@ -804,7 +816,7 @@ export default function Index() {
         const { error: storeErr } = await supabase
           .rpc('merge_store_data', { p_store_id: store.id, p_patch: { products: updatedProducts } });
         if (storeErr) throw storeErr;
-        
+
         setStore(updatedStore);
         saveStore(updatedStore, { skipCloudSync: true }); // Local persistence only -- cloud already synced above
       }
@@ -924,13 +936,13 @@ export default function Index() {
 
       const { error } = await supabase
         .from('orders')
-        .update({ 
-          status: newStatus, 
+        .update({
+          status: newStatus,
           notes: JSON.stringify(parsedNotes),
-          updated_at: new Date().toISOString() 
+          updated_at: new Date().toISOString()
         })
         .eq('id', orderId);
-        
+
       if (error) throw error;
       showToast(`Order status updated to ${newStatus}`);
 
@@ -1183,13 +1195,13 @@ export default function Index() {
   useEffect(() => {
     const hash = window.location.hash;
     const searchParams = new URLSearchParams(window.location.search);
-    
+
     // Check if redirect is from email verification signup
-    const isSignupVerify = hash.includes('type=signup') || 
-                           hash.includes('type=invite') || 
+    const isSignupVerify = hash.includes('type=signup') ||
+                           hash.includes('type=invite') ||
                            searchParams.get('type') === 'signup' ||
                            searchParams.get('type') === 'invite';
-                           
+
     if (isSignupVerify) {
       setShowVerifySuccess(true);
       // Clean up the URL hash so it looks nice
@@ -1203,18 +1215,61 @@ export default function Index() {
     const search = window.location.search;
     const deepLink = readOrderDeepLink(search);
     const linkedTab = readLinkedTab(search);
+    const act = readNotificationAct(search);
+
+    // "I understand" is an acknowledgement, not a request to go anywhere. The
+    // service worker does not open a window for it, but a already-open app
+    // still receives the navigation, so it must not yank the merchant away
+    // from whatever they were doing.
+    if (act?.action === 'acknowledge') {
+      window.history.replaceState(null, '', window.location.pathname + stripOrderDeepLink(search) + window.location.hash);
+      return;
+    }
     if (!deepLink && !linkedTab) return;
 
     // Drop the parameters before setTab runs, since setTab owns the history
     // entry from here on and a refresh must not re-focus a stale order.
     window.history.replaceState(null, '', window.location.pathname + stripOrderDeepLink(search) + window.location.hash);
     if (deepLink) setFocusOrderId(deepLink.orderId);
+    if (act) setNotificationAct(act);
     setTab(deepLink ? 'orders' : (linkedTab as TabId));
   }, [setTab]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [tab]);
+
+  // Shrinkage is worth mentioning on its own rather than only as a line inside
+  // the leak detector. getStockLossNotice decides whether there is anything
+  // worth an interruption and how recently one was made, so this can run on
+  // every store change without becoming noise.
+  useEffect(() => {
+    if (!store) return;
+    const notice = getStockLossNotice(store);
+    if (!notice) return;
+
+    setStore(prev => {
+      if (!prev) return prev;
+      const existing = prev.flowNotifications || [];
+      if (existing.some(n => n.id === notice.id)) return prev;
+      markStockLossRaised(prev);
+      return {
+        ...prev,
+        flowNotifications: [{
+          id: notice.id,
+          text: notice.body,
+          icon: '\u26a0\ufe0f',
+          tone: 'warning',
+          date: new Date().toISOString(),
+          read: false,
+          title: notice.title,
+          description: notice.body,
+          actionLabel: 'Open stock count',
+          actionTab: 'inventory',
+        } as any, ...existing],
+      };
+    });
+  }, [store?.stockCountAudits?.length]);
 
   const handleStoreLoaded = useCallback((s: StoreData) => {
     const activeUser = localStorage.getItem('storeflow_active_user');
@@ -1397,7 +1452,7 @@ export default function Index() {
               const isExpanded = !!expandedCategories[cat.id];
               const targetTab: TabId = directTab || 'dashboard';
               const hasActiveSub = isFlat ? tab === targetTab : cat.subItems.some(sub => tab === sub.tabId);
-              
+
               return (
                 <div key={cat.id} className="space-y-1">
                   <button
@@ -1420,7 +1475,7 @@ export default function Index() {
                       <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-primary' : 'text-muted-foreground'}`} />
                     )}
                   </button>
-                  
+
                   {!isFlat && isExpanded && (
                     <div className="pl-4 space-y-1 border-l border-border ml-5 animate-slide-down">
                       {cat.subItems.map(sub => {
@@ -1501,7 +1556,7 @@ export default function Index() {
         <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-3 md:px-6 py-1.5 flex items-center justify-between" style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingTop: 'max(0.4rem, env(safe-area-inset-top))', paddingBottom: '0.35rem' }}>
           <div className="flex flex-col text-left">
             <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
-            <button 
+            <button
               onClick={() => setShowSwitcher(true)}
               className="w-fit self-start inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors font-semibold mt-0.5 px-1 py-0.5 rounded hover:bg-surface-2/60 cursor-pointer active:scale-95"
               title="Switch Store"
@@ -1539,8 +1594,8 @@ export default function Index() {
               <button
                 onClick={() => setShowProfileMenu(prev => !prev)}
                 className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
-                  showProfileMenu 
-                    ? 'bg-primary/10 border-primary text-primary shadow-sm' 
+                  showProfileMenu
+                    ? 'bg-primary/10 border-primary text-primary shadow-sm'
                     : 'bg-surface-2 hover:bg-surface-3 border-border text-foreground'
                 }`}
                 title="Account & Security"
@@ -1551,13 +1606,13 @@ export default function Index() {
               {showProfileMenu && (
                 <><ScrollLock />
                   {/* Backdrop to close dropdown when tapping outside */}
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setShowProfileMenu(false)} 
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowProfileMenu(false)}
                   />
 
                   {/* Profile Dropdown */}
-                  <div 
+                  <div
                     className="absolute right-0 mt-2 w-52 bg-card/95 backdrop-blur-xl border border-border/80 rounded-2xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right space-y-1"
                     onClick={e => e.stopPropagation()}
                   >
@@ -1614,13 +1669,13 @@ export default function Index() {
                 <h3 className="font-display font-bold text-lg">Lock your store?</h3>
                 <p className="text-sm text-muted-foreground">You'll need to re-enter your access code to get back in.</p>
               </div>
-              
+
               <div className="bg-surface-2 border border-border rounded-xl p-3 flex items-center justify-between gap-3">
                 <div className="text-left">
                   <span className="text-[10px] text-muted-foreground uppercase font-sans font-bold tracking-wider block mb-0.5">Store Access Code</span>
                   <span className="text-sm font-mono font-bold text-primary tracking-wider">{store.accessCode}</span>
                 </div>
-                <button 
+                <button
                   onClick={() => {
                     navigator.clipboard.writeText(store.accessCode);
                     showToast('✓ Access code copied');
@@ -1882,7 +1937,7 @@ export default function Index() {
               )}
             </div>
             <div className={tab === 'orders' ? 'block' : 'hidden'}>
-              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} focusOrderId={focusOrderId} onFocusHandled={() => setFocusOrderId(null)} />
+              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} focusOrderId={focusOrderId} onFocusHandled={() => setFocusOrderId(null)} notificationAct={notificationAct} onNotificationActHandled={() => setNotificationAct(null)} />
             </div>
             <div className={String(tab) === 'laundry-records' ? 'block' : 'hidden'}>
               {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (
@@ -2150,19 +2205,19 @@ export default function Index() {
       {/* Mobile More Menu Bottom Sheet */}
       {showMoreMenu && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end animate-fade-in" onClick={() => setShowMoreMenu(false)}><ScrollLock />
-          <div 
+          <div
             className="w-full bg-card border-t border-border rounded-t-3xl shadow-2xl p-5 max-h-[75vh] overflow-y-auto space-y-4 animate-slide-up flex flex-col no-scrollbar"
             style={{ maxWidth: '480px', margin: '0 auto' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Drawer Handle */}
             <div className="flex justify-center -mt-2"><div className="w-10 h-1.5 rounded-full bg-border" /></div>
-            
+
             <div className="flex items-center justify-between pb-2 border-b border-border">
               <h3 className="font-display font-bold text-base">More Tools & Features</h3>
               <button onClick={() => setShowMoreMenu(false)} className="text-muted-foreground text-sm font-semibold hover:underline">Done</button>
             </div>
-            
+
             <div className="space-y-2">
               {allowedCategories.map(cat => {
                 const directTab = FLAT_CATEGORY_TABS[cat.id];
@@ -2170,7 +2225,7 @@ export default function Index() {
                 const isExpanded = !!expandedCategories[cat.id];
                 const targetTab: TabId = directTab || 'dashboard';
                 const hasActiveSub = isFlat ? tab === targetTab : cat.subItems.some(sub => tab === sub.tabId);
-                
+
                 return (
                   <div key={cat.id} className="border border-border/80 rounded-xl overflow-hidden bg-surface-2/40">
                     <button
@@ -2194,7 +2249,7 @@ export default function Index() {
                         <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-primary' : 'text-muted-foreground'}`} />
                       )}
                     </button>
-                    
+
                     {!isFlat && isExpanded && (
                       <div className="px-3.5 pb-3 pt-1 grid grid-cols-2 gap-2 bg-background/40 border-t border-border/50 animate-slide-down">
                         {cat.subItems.map(sub => {
@@ -2207,8 +2262,8 @@ export default function Index() {
                                 setShowMoreMenu(false);
                               }}
                               className={`flex items-center gap-2 p-2.5 rounded-lg text-[11px] font-display font-semibold text-left transition-colors border ${
-                                isSubActive 
-                                  ? 'bg-primary/10 text-primary border-primary/20' 
+                                isSubActive
+                                  ? 'bg-primary/10 text-primary border-primary/20'
                                   : 'bg-card text-muted-foreground border-border hover:text-foreground'
                               }`}
                             >

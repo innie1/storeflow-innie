@@ -26,13 +26,44 @@ function versionedAsset(path:string) {
   return entry?.revision ? `${path}?v=${encodeURIComponent(entry.revision)}` : path;
 }
 
-function buildActions(data: PushPayload) {
-  if (data.actions?.length) return data.actions;
-  const tag = (data.tag || '').toLowerCase(), title = (data.title || '').toLowerCase();
-  if (tag.includes('order') || title.includes('order')) return [{ action:'open', title:'🛍️ View Order' }];
-  if (tag.includes('streak') || title.includes('streak')) return [{ action:'open', title:'🔥 Open StoreFlow' }];
-  if (tag.includes('sales') || title.includes('sales') || title.includes('check-in')) return [{ action:'open', title:'📈 View Sales' }];
-  if (tag.includes('debt') || tag.includes('bill') || title.includes('repayment')) return [{ action:'open', title:'💰 View Pending' }];
+/**
+ * Buttons on the notification itself.
+ *
+ * Every notification used to carry one button, 'open', whatever it was about —
+ * so the buttons were decoration and the merchant had to open the app and find
+ * the thing before they could do anything about it.
+ *
+ * A reply action with `type: 'text'` puts a text field in the notification
+ * shade; whatever is typed arrives as `event.reply` on notificationclick.
+ * Browsers that do not support it drop the action rather than failing, so the
+ * plain buttons beside it still work.
+ */
+function buildActions(data: PushPayload): NotificationAction[] {
+  if (data.actions?.length) return data.actions as NotificationAction[];
+  const category = categoryOf(data);
+
+  if (category === 'order') {
+    return [
+      { action:'order-ready', title:'✅ Mark ready' },
+      { action:'reply', type:'text', title:'💬 Message customer',
+        placeholder:'Message to the customer…' } as NotificationAction,
+    ];
+  }
+  if (category === 'debt') {
+    return [
+      { action:'reply', type:'text', title:'💬 Send reminder',
+        placeholder:'Reminder to send…' } as NotificationAction,
+      { action:'open', title:'💰 Open' },
+    ];
+  }
+  // Savings and stock warnings are things to know, not things to answer. The
+  // merchant should be able to end them from the shade in one tap.
+  if (category === 'savings' || category === 'stock_loss') {
+    return [
+      { action:'acknowledge', title:'👍 I understand' },
+      { action:'open', title:'Open' },
+    ];
+  }
   return [{ action:'open', title:'⚡ Open StoreFlow' }];
 }
 function notificationUrl(data: PushPayload) {
@@ -44,9 +75,11 @@ function notificationUrl(data: PushPayload) {
   }
   return '/?tab=dashboard';
 }
-function categoryOf(data: PushPayload): 'order'|'flow'|'insight'|'debt'|'other' {
+function categoryOf(data: PushPayload): 'order'|'flow'|'insight'|'debt'|'savings'|'stock_loss'|'other' {
   const raw = `${data.type || ''} ${data.category || ''} ${data.tag || ''} ${data.title || ''}`.toLowerCase();
   if (data.orderId || raw.includes('order')) return 'order';
+  if (raw.includes('saving') || raw.includes('auto-saved')) return 'savings';
+  if (raw.includes('shrink') || raw.includes('stock loss') || raw.includes('missing')) return 'stock_loss';
   if (raw.includes('flow') || raw.includes('check-in') || raw.includes('checkin')) return 'flow';
   if (raw.includes('debt') || raw.includes('repayment') || raw.includes('pending')) return 'debt';
   if (raw.includes('insight') || raw.includes('stock') || raw.includes('sales') || raw.includes('recommend')) return 'insight';
@@ -85,6 +118,14 @@ function allowed(data:PushPayload,prefs:NotificationPreferences) {
   return true;
 }
 
+/** Tells every open window something happened, if any are open. */
+async function postToClients(message: unknown) {
+  const clients = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
+  for (const client of clients) {
+    try { client.postMessage(message); } catch { /* window went away */ }
+  }
+}
+
 self.addEventListener('push', event => {
   let data: PushPayload = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { title:'StoreFlow', body:event.data?.text() || 'New notification received' }; }
@@ -115,10 +156,28 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const data = event.notification.data || {};
+  const action = event.action || '';
+  // Whatever was typed into the notification's reply field, where the browser
+  // supports one.
+  const reply = (event as any).reply as string | undefined;
+
+  // "I understand" is the whole point of the button: the merchant has seen it
+  // and does not want the app opened over it.
+  if (action === 'acknowledge') {
+    event.waitUntil((async () => {
+      await postToClients({ type:'STOREFLOW_NOTIFICATION_ACK', tag:data.tag || null, category:data.category || null });
+      if ('clearAppBadge' in navigator) { try { await (navigator as any).clearAppBadge(); } catch {} }
+    })());
+    return;
+  }
+  // A pressed action carries its intent into the app, so the right screen
+  // opens already doing the thing rather than dumping the merchant on a list.
+  const actionParam = action && action !== 'open' ? `&notif_action=${encodeURIComponent(action)}` : '';
+  const replyParam = reply ? `&notif_reply=${encodeURIComponent(reply)}` : '';
   const rawUrl = data.url || (data.orderId
     ? `/?tab=orders&order_id=${encodeURIComponent(data.orderId)}${data.orderNumber ? `&order_number=${encodeURIComponent(data.orderNumber)}` : ''}`
     : '/?tab=dashboard');
-  const targetUrl = new URL(rawUrl, self.location.origin).href;
+  const targetUrl = new URL(`${rawUrl}${rawUrl.includes('?') ? '' : '?'}${actionParam}${replyParam}`, self.location.origin).href;
   event.waitUntil((async () => {
     if ('clearAppBadge' in navigator) { try { await (navigator as any).clearAppBadge(); } catch {} }
 

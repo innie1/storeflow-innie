@@ -321,6 +321,11 @@ export function describeBluetoothFailure(err: any): { cancelled: boolean; messag
   // Chrome throws NotFoundError both when the chooser is dismissed and when it
   // finds nothing; the message distinguishes them.
   const raw = String(err?.message || '');
+  // A device with no Bluetooth at all explains every failure on it, so this
+  // is settled before anything is read from the error itself.
+  if (!navigator.bluetooth) {
+    return { cancelled: false, message: 'This device cannot print over Bluetooth. Use System / Wi-Fi printing instead.' };
+  }
   if (err?.name === 'NotFoundError' && /cancel/i.test(raw)) {
     return { cancelled: true, message: '' };
   }
@@ -329,9 +334,6 @@ export function describeBluetoothFailure(err: any): { cancelled: boolean; messag
   }
   if (err?.name === 'SecurityError' || err?.name === 'NotAllowedError') {
     return { cancelled: false, message: 'This page is not allowed to use Bluetooth. Open StoreFlow over https and try again.' };
-  }
-  if (!navigator.bluetooth) {
-    return { cancelled: false, message: 'This device cannot print over Bluetooth. Use System / Wi-Fi printing instead.' };
   }
   return { cancelled: false, message: raw || 'The printer could not be reached.' };
 }

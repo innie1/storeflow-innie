@@ -15,6 +15,17 @@ interface OrdersProps {
   /** Order to open and scroll to, set when a push notification is tapped. */
   focusOrderId?: string | null;
   onFocusHandled?: () => void;
+  /**
+   * The button the merchant pressed on the notification, if any.
+   *
+   * Notification buttons used to be decoration — every one said 'open' and the
+   * handler ignored which had been pressed, so acting on an order still meant
+   * finding it in a list first. 'order-ready' marks it ready without opening
+   * anything; 'reply' carries text typed into the notification shade straight
+   * into WhatsApp.
+   */
+  notificationAct?: { action: string; reply?: string } | null;
+  onNotificationActHandled?: () => void;
 }
 
 // Converts a locally-formatted number (e.g. "0803 123 4567") into the
@@ -72,7 +83,7 @@ function openOrderWhatsApp(order: any, store: StoreData, status: string) {
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
 }
 
-export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, focusOrderId, onFocusHandled }: OrdersProps) {
+export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, focusOrderId, onFocusHandled, notificationAct, onNotificationActHandled }: OrdersProps) {
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'Accepted' | 'Preparing' | 'Ready' | 'Completed' | 'Rejected' | 'Cancelled'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -133,13 +144,13 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
 
   // Get order count for each tab using normalized statuses
   const counts = useMemo(() => {
-    const res = { 
-      All: orders.length, 
-      Pending: 0, 
+    const res = {
+      All: orders.length,
+      Pending: 0,
       Accepted: 0,
-      Preparing: 0, 
-      Ready: 0, 
-      Completed: 0, 
+      Preparing: 0,
+      Ready: 0,
+      Completed: 0,
       Rejected: 0,
       Cancelled: 0
     };
@@ -220,6 +231,32 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
     return () => window.cancelAnimationFrame(frame);
   }, [focusOrderId, orders, onFocusHandled]);
 
+  // Carry out what was pressed on the notification, once the order it refers
+  // to has actually arrived.
+  const handledActRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!notificationAct || !focusOrderId) return;
+    const key = `${focusOrderId}:${notificationAct.action}`;
+    if (handledActRef.current === key) return;
+
+    const order = orders.find(o => String(o.id) === String(focusOrderId));
+    if (!order) return;
+    handledActRef.current = key;
+
+    if (notificationAct.action === 'order-ready') {
+      onUpdateOrderStatus(String(order.id), 'Ready');
+      showToast(`${order.customer_name || 'Order'} marked ready`);
+    } else if (notificationAct.action === 'reply' && notificationAct.reply) {
+      if (order.customer_phone) {
+        const phone = sanitizePhoneForWhatsApp(order.customer_phone);
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(notificationAct.reply)}`, '_blank');
+      } else {
+        showToast('That customer has no phone number saved', 'error');
+      }
+    }
+    onNotificationActHandled?.();
+  }, [notificationAct, focusOrderId, orders, onUpdateOrderStatus, onNotificationActHandled]);
+
   const filteredOrders = useMemo(() => {
     const now = Date.now();
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -229,7 +266,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
     return orders
       .filter(o => {
         const normStatus = getNormalizedStatus(o.status);
-        const matchesSearch = 
+        const matchesSearch =
           !searchQuery ||
           o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -350,13 +387,13 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
 
       {/*
         Status filters.
-        
+
         Eight pills, each carrying a count badge, in a wrapping row: on a phone
         that was three stacked lines of chips before a single order, and most of
         the counts read "0" — a shop with two live orders still had Rejected 0,
         Cancelled 0 and Completed 0 taking up a row each. The fade on the right
         edge was written for a row that scrolls, which this one never did.
-        
+
         It scrolls on one line now, statuses that have orders come first so the
         ones worth tapping are reachable without scrolling, and a count only
         appears when there is something to count.
