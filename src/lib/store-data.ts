@@ -1,7 +1,7 @@
-import { 
-  Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind, 
+import {
+  Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind,
   Investment, StoreCategory, StoreType, GameService, GameSession,
-  Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift, 
+  Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift,
   CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
   DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent, PurchaseOrderRecord,
   BalanceAdjustment, SavingsGoal } from '@/types/store';
@@ -192,7 +192,7 @@ export function syncProductPerformance(store: StoreData): StoreData {
 
   const sales = store.sales || [];
   const restocks = store.restocks || [];
-  
+
   const restockCounts: Record<string, number> = {};
   restocks.forEach(r => {
     if (r.productId) {
@@ -624,12 +624,31 @@ export function deleteSavingsGoalById(store: StoreData, id: string): StoreData {
 // net-income base — they're parallel budget envelopes (e.g. "10% to rent
 // fund" + "5% to equipment fund"), not a sequential stack that eats into
 // each other's share.
+/** Above this many missed deposits in one run, report the total instead. */
+const CATCH_UP_NOTIFICATION_LIMIT = 3;
+
 export function runScheduledSavingsDeduction(store: StoreData): StoreData {
   const goals = getSavingsGoals(store);
   const dueGoals = goals.filter(g => g.autoSaveEnabled);
   if (dueGoals.length === 0) return store;
 
   const nowTime = new Date();
+
+  // A goal that has never run starts counting from now, not from the day the
+  // shop opened. Nothing stamped this when auto-save was switched on, so the
+  // first run back-filled every scheduled date since createdAt: switching on
+  // "save daily" in a shop open 100 days made 100 deposits at once, with 100
+  // notifications behind them.
+  const unstarted = goals.filter(g => g.autoSaveEnabled && !g.lastDeductionTime);
+  if (unstarted.length > 0) {
+    const started = goals.map(g =>
+      g.autoSaveEnabled && !g.lastDeductionTime
+        ? { ...g, lastDeductionTime: nowTime.toISOString() }
+        : g,
+    );
+    // Nothing is due yet by definition, so record the start and stop here.
+    return withSyncedGoals(store, started);
+  }
   let flowNotifications = store.flowNotifications || [];
   let memoryTimeline = store.memoryTimeline || [];
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -672,23 +691,47 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
     if (occurrences.length === 0) return goal;
 
     let currentSaved = goal.saved || 0;
+    // Each deposit covers the stretch since the one before it, starting at the
+    // last recorded deduction.
+    let windowStart = lastTime.getTime();
+    let depositedThisRun = 0;
+    let depositsThisRun = 0;
 
     occurrences.forEach(occurrence => {
       const hasTarget = goal.amount && goal.amount > 0;
       if (hasTarget && currentSaved >= goal.amount) return; // target already hit — stop depositing
 
-      const totalRevenue = store.sales.reduce((sum, s) => sum + s.total, 0);
-      // Restocking should not shrink what a merchant sets aside for a goal.
-      const totalExpenses = sumOperatingExpenses(store);
-      const netIncomeBefore = totalRevenue - totalExpenses;
+      const windowEnd = occurrence.getTime();
 
       let deductionAmount = 0;
       if (goal.autoSaveAmount && goal.autoSaveAmount > 0) {
         deductionAmount = goal.autoSaveAmount;
       } else if (goal.percentage && goal.percentage > 0) {
-        deductionAmount = (goal.percentage / 100) * netIncomeBefore;
+        // Against what the shop earned in THIS period, not across its whole
+        // life. Reading the lifetime figure every time meant a daily 10% goal
+        // set aside 10% of everything the shop had ever earned, every day —
+        // ₦995m on a shop that had taken ₦100m.
+        let revenue = 0;
+        let profit = 0;
+        for (const sale of store.sales) {
+          const t = new Date(sale.date).getTime();
+          if (t > windowStart && t <= windowEnd) {
+            revenue += Number(sale.total) || 0;
+            profit += Number(sale.profit) || 0;
+          }
+        }
+        // Restocking should not shrink what a merchant sets aside for a goal.
+        const expenses = sumOperatingExpenses(store, date => {
+          const t = new Date(date).getTime();
+          return t > windowStart && t <= windowEnd;
+        });
+        // The goal says which figure it saves out of; the auto-save path used
+        // to ignore it and always use net income.
+        const base = (goal.source || 'profit') === 'revenue' ? revenue : profit - expenses;
+        deductionAmount = (goal.percentage / 100) * base;
       }
 
+      windowStart = windowEnd;
       deductionAmount = Math.round(Math.max(0, deductionAmount) * 100) / 100;
       if (hasTarget) {
         // don't overshoot the target on the final deposit
@@ -696,7 +739,14 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
       }
       if (deductionAmount > 0) {
         currentSaved += deductionAmount;
+        depositedThisRun += deductionAmount;
+        depositsThisRun++;
         const deductionMsg = `Auto-saved ₦${deductionAmount.toLocaleString()} to ${goal.label || 'Savings'}`;
+
+        // A phone left closed for a month catches up on reopening. One line
+        // per missed day buries every other notification, so those are
+        // summarised into a single entry below instead.
+        if (occurrences.length > CATCH_UP_NOTIFICATION_LIMIT) return;
 
         flowNotifications = [{
           id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
@@ -721,6 +771,29 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
       }
     });
 
+    if (depositsThisRun > 0 && occurrences.length > CATCH_UP_NOTIFICATION_LIMIT) {
+      const summary = `Auto-saved ₦${depositedThisRun.toLocaleString()} to ${goal.label || 'Savings'} across ${depositsThisRun} missed deposits`;
+      flowNotifications = [{
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        text: summary,
+        icon: '🏦',
+        tone: 'success',
+        date: nowTime.toISOString(),
+        read: false,
+        title: 'Automated Savings',
+        description: summary,
+        actionLabel: 'View Savings',
+        actionTab: 'dashboard'
+      }, ...flowNotifications];
+      memoryTimeline = [{
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        type: 'milestone',
+        title: 'Automated Savings',
+        date: nowTime.toISOString(),
+        description: summary
+      }, ...memoryTimeline];
+    }
+
     return { ...goal, saved: currentSaved, lastDeductionTime: occurrences[occurrences.length - 1].toISOString() };
   });
 
@@ -737,12 +810,12 @@ export function loadStore(code: string): StoreData | null {
   const data = localStorage.getItem(STORE_PREFIX + code.toUpperCase());
   if (!data) return null;
   let store = JSON.parse(data);
-  
+
   store = ensureStoreId(store);
   store = runScheduledSavingsDeduction(store);
   store = syncStoreData(store);
   store = syncProductPerformance(store);
-  
+
   upsertStoreIndex(store);
   return store;
 }
@@ -762,7 +835,7 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean 
   if (store.managerSettings?.autoBackupsEnabled !== false) {
     createAutoBackupSnapshot().catch(() => {});
   }
-  
+
   // Always sync to cloud if the store has a storeId (QR code) — customers need the row
   // to exist in Supabase when they scan. Also sync if multiDeviceSync is explicitly on.
   // Skipped when the caller already pushed a smaller, targeted patch to the
@@ -974,10 +1047,10 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actor
   }
   let updated = {
     ...store,
-    products: [...store.products, { 
-      ...product, 
-      id, 
-      initialQuantity: product.quantity, 
+    products: [...store.products, {
+      ...product,
+      id,
+      initialQuantity: product.quantity,
       addedAt: now,
       priceHistory: product.costPrice > 0 ? [{ costPrice: product.costPrice, date: now }] : [],
       restock_count: 0,
@@ -1044,7 +1117,7 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
 export function deleteProduct(store: StoreData, id: string, actorName?: string, actorRole?: string): StoreData {
   const product = store.products.find(p => p.id === id);
   if (!product) return store;
-  
+
   // Wipe all associated sales, planned restocks, learned mappings, and product entry
   let updated = {
     ...store,
@@ -1054,7 +1127,7 @@ export function deleteProduct(store: StoreData, id: string, actorName?: string, 
     learnedProducts: (store.learnedProducts || []).filter(lp => lp.id !== id),
     trash: pushTrash(store, 'product', product),
   };
-  
+
   if (actorName) {
     updated = recordActivityLog(updated, actorName, actorRole, `Deleted product: ${product.name} (wiped financial and sales history)`);
   }
@@ -1103,7 +1176,7 @@ export function clearInventory(store: StoreData): StoreData {
 export function deleteSale(store: StoreData, id: string): StoreData {
   const salesToDelete = store.sales.filter(s => s.id === id || (s.transactionId && s.transactionId === id));
   if (salesToDelete.length === 0) return store;
-  
+
   let nextTrash = store.trash || [];
   for (const sale of salesToDelete) {
     const item: TrashItem = {
@@ -1114,7 +1187,7 @@ export function deleteSale(store: StoreData, id: string): StoreData {
     };
     nextTrash = [item, ...nextTrash];
   }
-  
+
   let cashDeduct = 0;
   let bankDeduct = 0;
   for (const sale of salesToDelete) {
@@ -1128,7 +1201,7 @@ export function deleteSale(store: StoreData, id: string): StoreData {
 
   const nextProducts = [...store.products];
   let nextMovements = store.inventoryMovements || [];
-  
+
   for (const sale of salesToDelete) {
     const pIndex = nextProducts.findIndex(p => p.id === sale.productId);
     if (pIndex >= 0) {
@@ -1136,11 +1209,11 @@ export function deleteSale(store: StoreData, id: string): StoreData {
       const isSingle = sale.productName.endsWith(' (Single)');
       const singles = p.singlesPerCarton || 1;
       const qtyToRestore = isSingle ? (sale.quantity / singles) : sale.quantity;
-      
+
       const unitsSold = Math.max(0, (p.units_sold || 0) - sale.quantity);
       const totalRevenue = Math.max(0, (p.total_revenue || 0) - sale.total);
       const totalProfit = (p.total_profit || 0) - sale.profit;
-      
+
       nextProducts[pIndex] = {
         ...p,
         quantity: Math.round((p.quantity + qtyToRestore) * 100) / 100,
@@ -1148,7 +1221,7 @@ export function deleteSale(store: StoreData, id: string): StoreData {
         total_revenue: Math.round(totalRevenue * 100) / 100,
         total_profit: Math.round(totalProfit * 100) / 100,
       };
-      
+
       nextMovements = [
         {
           id: generateId(),
@@ -1163,7 +1236,7 @@ export function deleteSale(store: StoreData, id: string): StoreData {
       ];
     }
   }
-  
+
   const remainingSales = store.sales.filter(s => s.id !== id && (!s.transactionId || s.transactionId !== id));
   const affectedProductIds = Array.from(new Set(salesToDelete.map(s => s.productId)));
   for (const pid of affectedProductIds) {
@@ -1245,8 +1318,8 @@ export function recordSale(
 
   let updated = {
     ...store,
-    products: store.products.map(p => p.id === productId ? { 
-      ...p, 
+    products: store.products.map(p => p.id === productId ? {
+      ...p,
       quantity: newQty,
       backorderedQty: newBackorderedQty,
       units_sold: newUnitsSold,
@@ -1320,23 +1393,23 @@ export function clearSales(store: StoreData): StoreData {
 }
 
 export function importProducts(
-  store: StoreData, 
-  products: Omit<Product, 'id'>[], 
-  source: string = 'Supplier Invoice', 
+  store: StoreData,
+  products: Omit<Product, 'id'>[],
+  source: string = 'Supplier Invoice',
   actorName?: string
 ): StoreData {
   const now = new Date().toISOString();
-  const newProducts = products.map(p => ({ 
-    ...p, 
-    id: generateId(), 
-    initialQuantity: p.quantity, 
+  const newProducts = products.map(p => ({
+    ...p,
+    id: generateId(),
+    initialQuantity: p.quantity,
     addedAt: now,
     restock_count: p.quantity > 0 ? 1 : 0,
     units_sold: 0,
     total_revenue: 0,
     total_profit: 0
   }));
-  
+
   let importTotal = 0;
   products.forEach(p => {
     importTotal += p.costPrice * p.quantity;
@@ -1347,15 +1420,15 @@ export function importProducts(
   const newExpenses = [...(store.expenses || [])];
 
   // Initial mass import check: no sales yet and no existing restock expenses
-  const isInitialImport = (store.sales || []).length === 0 && 
+  const isInitialImport = (store.sales || []).length === 0 &&
     (store.expenses || []).filter(e => e.source === 'restock').length === 0;
 
   if (importTotal > 0) {
     newInvestments.push({
       id: generateId(),
       amount: importTotal,
-      note: isInitialImport 
-        ? `Initial Inventory Import (${products.length} products)` 
+      note: isInitialImport
+        ? `Initial Inventory Import (${products.length} products)`
         : `Bulk Imported Inventory (${products.length} products)`,
       date: now,
       type: isInitialImport ? 'initial' : 'additional',
@@ -1406,9 +1479,9 @@ export interface RestockEntry {
 export type RestockFunding = 'balance' | 'new_money';
 
 export function receiveStock(
-  store: StoreData, 
-  entries: RestockEntry[], 
-  funding: RestockFunding = 'balance', 
+  store: StoreData,
+  entries: RestockEntry[],
+  funding: RestockFunding = 'balance',
   source: string = 'Restock Button',
   actorName?: string,
   actorRole?: string
@@ -1436,7 +1509,7 @@ export function receiveStock(
       funding,
     });
     const currentPriceHistory = p.priceHistory || (p.costPrice > 0 ? [{ costPrice: p.costPrice, date: p.addedAt || now }] : []);
-    const newPriceHistory = entry.costPrice > 0 
+    const newPriceHistory = entry.costPrice > 0
       ? [...currentPriceHistory, { costPrice: entry.costPrice, date: now }]
       : currentPriceHistory;
     return {
@@ -1452,14 +1525,14 @@ export function receiveStock(
   // Auto-create a single Restock expense for the entire batch (always — reduces net income / cash)
   const newExpenses: Expense[] = [];
   const newInvestments: Investment[] = [];
-  
+
   let newCashBalance = store.cashBalance ?? 0;
   let newBankBalance = store.bankBalance ?? 0;
   let newWalletBalance = store.walletBalance ?? 0;
 
   if (restockTotal > 0) {
     // Initial import check: no sales yet and no existing restock expenses
-    const isInitialImport = (store.sales || []).length === 0 && 
+    const isInitialImport = (store.sales || []).length === 0 &&
       (store.expenses || []).filter(e => e.source === 'restock').length === 0;
 
     if (isInitialImport) {
@@ -1579,7 +1652,7 @@ export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'sour
     id: generateId(),
     source: 'manual',
   };
-  
+
   let newCashBalance = store.cashBalance ?? 0;
   newCashBalance = Math.max(0, newCashBalance - expense.amount);
 
@@ -1859,7 +1932,7 @@ export function recordCheckout(
     const cust = customers.find(c => c.name.toLowerCase() === opts.customerName!.toLowerCase());
     const itemsSummary = pendingItems.map(pi => `${pi.productName} (x${pi.quantity})`).join(', ');
     const purchase = { date: nowStr, amount: total, items: itemsSummary };
-    
+
     if (cust) {
       const updatedCust: Customer = {
         ...cust,
@@ -2283,10 +2356,10 @@ export function recordStockCountAudit(store: StoreData, productId: string, produ
     variance,
     product: productName
   };
-  
+
   // Adjust the product's actual stock quantity in the inventory to match actual count
   const updatedProducts = store.products.map(p => p.id === productId ? { ...p, quantity: actual } : p);
-  
+
   const updated = {
     ...store,
     products: updatedProducts,
@@ -2307,7 +2380,7 @@ export function transferStock(
   if (!product || product.quantity < quantity || quantity <= 0) return sourceStore;
 
   const now = new Date().toISOString();
-  
+
   // Decrease source stock
   let updatedSource = {
     ...sourceStore,
@@ -2341,7 +2414,7 @@ export function transferStock(
     let destProducts = [...destStore.products];
     const destProd = destProducts.find(p => p.name.toLowerCase() === product.name.toLowerCase() || (product.barcode && p.barcode === product.barcode));
     let targetProductId = destProd ? destProd.id : '';
-    
+
     if (destProd) {
       destProducts = destProducts.map(p => p.id === destProd.id ? { ...p, quantity: Math.round((p.quantity + quantity) * 100) / 100 } : p);
     } else {
@@ -2431,7 +2504,7 @@ export function addManualInvestment(store: StoreData, amount: number, note: stri
     source,
     reason,
   };
-  
+
   const updated = {
     ...store,
     investments: [newInv, ...(store.investments || [])],
@@ -2439,7 +2512,7 @@ export function addManualInvestment(store: StoreData, amount: number, note: stri
     bankBalance: source === 'Bank Account' ? Math.round(((store.bankBalance || 0) + amount) * 100) / 100 : (store.bankBalance || 0),
     walletBalance: source === 'Business Wallet' ? Math.round(((store.walletBalance || 0) + amount) * 100) / 100 : (store.walletBalance || 0),
   };
-  
+
   saveStore(updated);
   return updated;
 }
@@ -2447,7 +2520,7 @@ export function addManualInvestment(store: StoreData, amount: number, note: stri
 export function deleteManualInvestment(store: StoreData, id: string): StoreData {
   const inv = (store.investments || []).find(i => i.id === id);
   if (!inv) return store;
-  
+
   const source = inv.source || 'Cash Drawer';
   const updated = {
     ...store,
@@ -2456,7 +2529,7 @@ export function deleteManualInvestment(store: StoreData, id: string): StoreData 
     bankBalance: source === 'Bank Account' ? Math.max(0, Math.round(((store.bankBalance || 0) - inv.amount) * 100) / 100) : (store.bankBalance || 0),
     walletBalance: source === 'Business Wallet' ? Math.max(0, Math.round(((store.walletBalance || 0) - inv.amount) * 100) / 100) : (store.walletBalance || 0),
   };
-  
+
   saveStore(updated);
   return updated;
 }
@@ -2471,7 +2544,7 @@ export function addLoan(store: StoreData, amount: number, source: string, note?:
     status: 'active',
     dueDate,
   };
-  
+
   const updated = {
     ...store,
     loans: [newLoan, ...(store.loans || [])],
@@ -2480,7 +2553,7 @@ export function addLoan(store: StoreData, amount: number, source: string, note?:
     bankBalance: source === 'Bank Account' ? Math.round(((store.bankBalance || 0) + amount) * 100) / 100 : (store.bankBalance || 0),
     walletBalance: source === 'Business Wallet' ? Math.round(((store.walletBalance || 0) + amount) * 100) / 100 : (store.walletBalance || 0),
   };
-  
+
   saveStore(updated);
   return updated;
 }
@@ -2488,7 +2561,7 @@ export function addLoan(store: StoreData, amount: number, source: string, note?:
 export function deleteLoan(store: StoreData, id: string): StoreData {
   const loan = (store.loans || []).find(l => l.id === id);
   if (!loan) return store;
-  
+
   const source = loan.source || 'Cash Drawer';
   const updated = {
     ...store,
@@ -2498,7 +2571,7 @@ export function deleteLoan(store: StoreData, id: string): StoreData {
     bankBalance: source === 'Bank Account' ? Math.max(0, Math.round(((store.bankBalance || 0) - loan.amount) * 100) / 100) : (store.bankBalance || 0),
     walletBalance: source === 'Business Wallet' ? Math.max(0, Math.round(((store.walletBalance || 0) - loan.amount) * 100) / 100) : (store.walletBalance || 0),
   };
-  
+
   saveStore(updated);
   return updated;
 }
@@ -2507,7 +2580,7 @@ export function repayLoan(store: StoreData, id: string, amount: number): StoreDa
   const loans = store.loans || [];
   const loanIndex = loans.findIndex(l => l.id === id);
   if (loanIndex === -1) return store;
-  
+
   const loan = loans[loanIndex];
   const source = loan.source || 'Cash Drawer';
   // Never let a repayment exceed what's actually still owed on this loan —
@@ -2515,7 +2588,7 @@ export function repayLoan(store: StoreData, id: string, amount: number): StoreDa
   // amount from cash/bank/wallet and reduce total liabilities by more than
   // this loan actually accounted for, silently corrupting both balances.
   const effectiveAmount = Math.min(amount, loan.amount);
-  
+
   const updatedLoans = [...loans];
   const updatedLoan = {
     ...loan,
@@ -2525,7 +2598,7 @@ export function repayLoan(store: StoreData, id: string, amount: number): StoreDa
     updatedLoan.status = 'repaid';
   }
   updatedLoans[loanIndex] = updatedLoan as Loan;
-  
+
   const updated = {
     ...store,
     loans: updatedLoans,
@@ -2534,7 +2607,7 @@ export function repayLoan(store: StoreData, id: string, amount: number): StoreDa
     bankBalance: source === 'Bank Account' ? Math.max(0, Math.round(((store.bankBalance || 0) - effectiveAmount) * 100) / 100) : (store.bankBalance || 0),
     walletBalance: source === 'Business Wallet' ? Math.max(0, Math.round(((store.walletBalance || 0) - effectiveAmount) * 100) / 100) : (store.walletBalance || 0),
   };
-  
+
   saveStore(updated);
   return updated;
 }
@@ -2546,13 +2619,13 @@ export function addWithdrawal(store: StoreData, amount: number, note?: string): 
     date: new Date().toISOString(),
     note,
   };
-  
+
   const updated = {
     ...store,
     withdrawals: [newWithdrawal, ...(store.withdrawals || [])],
     cashBalance: Math.max(0, Math.round(((store.cashBalance || 0) - amount) * 100) / 100),
   };
-  
+
   saveStore(updated);
   return updated;
 }
@@ -2560,13 +2633,13 @@ export function addWithdrawal(store: StoreData, amount: number, note?: string): 
 export function deleteWithdrawal(store: StoreData, id: string): StoreData {
   const w = (store.withdrawals || []).find(x => x.id === id);
   if (!w) return store;
-  
+
   const updated = {
     ...store,
     withdrawals: (store.withdrawals || []).filter(x => x.id !== id),
     cashBalance: Math.round(((store.cashBalance || 0) + w.amount) * 100) / 100,
   };
-  
+
   saveStore(updated);
   return updated;
 }
