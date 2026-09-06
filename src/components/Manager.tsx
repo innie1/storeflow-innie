@@ -952,23 +952,31 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
               <div className="p-4 rounded-2xl bg-card border border-primary/20 shadow-card space-y-3">
                 <div className="flex items-center gap-1.5">
                   <Rocket className="w-4 h-4 text-primary" />
-                  <div>
-                    <h3 className="font-display font-bold text-sm">Top Opportunities</h3>
-                    <p className="text-[10px] text-slate-400 font-semibold">Flow recommendations to boost revenue</p>
-                  </div>
+                  <h3 className="font-display font-bold text-sm">Worth doing next</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {opps.map((o, idx) => (
-                    <div key={idx} className="p-3 rounded-xl bg-surface-2 border border-border flex flex-col justify-between">
+                    // A button, not a div with a chevron drawn on it. Every one
+                    // of these looked tappable and did nothing.
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => onNavigate?.(o.goTo, o.focus)}
+                      className="p-3 rounded-xl bg-surface-2 border border-border flex flex-col justify-between text-left hover:bg-surface-3 active:scale-[0.99] transition-all"
+                    >
                       <div>
                         <p className="font-display font-bold text-xs text-foreground line-clamp-1">{o.title}</p>
                         <p className="text-[10px] text-muted-foreground mt-1 leading-normal line-clamp-2">{o.description}</p>
                       </div>
-                      <div className="flex justify-between items-center mt-2.5 pt-2 border-t border-border/40">
-                        <span className="text-[9px] bg-primary/10 text-primary font-bold px-1.5 py-0.5 rounded-full">{o.impact}</span>
-                        <span className="text-[9px] text-muted-foreground font-semibold flex items-center gap-0.5">{o.actionLabel} ›</span>
+                      <div className="flex justify-between items-center mt-2.5 pt-2 border-t border-border/40 gap-2">
+                        <span className="text-[9px] bg-primary/10 text-primary font-bold px-1.5 py-0.5 rounded-full">
+                          {o.impactAmount !== undefined
+                            ? `₦${o.impactAmount.toLocaleString()} ${o.impactLabel}`
+                            : o.impactLabel}
+                        </span>
+                        <span className="text-[9px] text-primary font-semibold shrink-0">{o.actionLabel} ›</span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -979,41 +987,60 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
           {(() => {
             const leaks = getProfitLeaks(store);
             if (leaks.length === 0) return null;
-            const leakTotal = leaks.reduce((s, l) => s + l.amountLeak, 0);
+            const leaking = leaks.filter(l => l.kind === 'leaking');
+            const stuck = leaks.filter(l => l.kind === 'stuck');
+            // Only money actually lost is added up. The total used to include
+            // stock on the shelf and invoices raised the day before, so it
+            // read as a loss several times larger than anything was.
+            const leakTotal = leaking.reduce((sum, l) => sum + l.amountLeak, 0);
+
+            const Row = ({ l, tone }: { l: typeof leaks[number]; tone: 'bad' | 'idle' }) => (
+              <div className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
+                <div className="flex justify-between items-start gap-2">
+                  <p className="font-display font-bold text-xs text-foreground">{l.title}</p>
+                  <span className={`text-[9px] font-mono font-bold shrink-0 ${tone === 'bad' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {tone === 'bad' ? '-' : ''}₦{l.amountLeak.toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{l.description}</p>
+                <p className="text-[10px] text-foreground/80 mt-1">{l.recommendation}</p>
+              </div>
+            );
+
             return (
               <div className="p-4 rounded-2xl bg-card border border-destructive/25 shadow-card space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
                     <AlertTriangle className="w-4 h-4 text-destructive" />
                     <div>
-                      <h3 className="font-display font-bold text-sm">Profit Leak Detector</h3>
-                      <p className="text-[10px] text-slate-400">Flow identified capital leakage factors</p>
+                      <h3 className="font-display font-bold text-sm">Where money is going</h3>
+                      <p className="text-[10px] text-muted-foreground">Last 30 days</p>
                     </div>
                   </div>
                   {leakTotal > 0 && (
-                    <span className="text-[10px] bg-destructive/10 text-destructive border border-destructive/20 px-2 py-0.5 rounded-full font-bold">
-                      Leak Index: ₦{leakTotal.toLocaleString()}
+                    <span className="text-[10px] bg-destructive/10 text-destructive border border-destructive/20 px-2 py-0.5 rounded-full font-bold shrink-0">
+                      ₦{leakTotal.toLocaleString()} lost
                     </span>
                   )}
                 </div>
-                <div className="space-y-2">
-                  {leaks.map((l, idx) => (
-                    <div key={idx} className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
-                      <div className="flex justify-between items-start">
-                        <p className="font-display font-bold text-xs text-foreground flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {l.title}
-                        </p>
-                        <span className="text-[9px] font-mono font-bold text-destructive">
-                          -₦{l.amountLeak.toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{l.description}</p>
-                      <p className="text-[10px] text-emerald-400 mt-1 bg-emerald-500/5 p-1 rounded border border-emerald-500/10">
-                        <strong>Recommendation:</strong> {l.recommendation}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+
+                {leaking.length > 0 && (
+                  <div className="space-y-2">
+                    {leaking.map((l, i) => <Row key={`leak-${i}`} l={l} tone="bad" />)}
+                  </div>
+                )}
+
+                {stuck.length > 0 && (
+                  <div className="space-y-2">
+                    {/* Kept apart on purpose: this is money the merchant still
+                        has. Adding it to the figure above turned assets into
+                        losses. */}
+                    <p className="text-[10px] font-display font-bold text-muted-foreground uppercase pt-1">
+                      Money you have but can't spend
+                    </p>
+                    {stuck.map((l, i) => <Row key={`stuck-${i}`} l={l} tone="idle" />)}
+                  </div>
+                )}
               </div>
             );
           })()}
