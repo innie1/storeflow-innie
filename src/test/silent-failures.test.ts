@@ -88,12 +88,22 @@ describe('no state is computed and then never shown', () => {
       const code = readSource(file)
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^\s*\/\/.*$/gm, '');
-      for (const m of code.matchAll(/const \[(\w+), set\w+\] = useState/g)) {
-        const name = m[1];
-        // Built without backslash escapes so the word boundary survives.
+      // Built without backslash escapes so the word boundary survives.
+      for (const m of code.matchAll(/const \[(\w+), (set\w+)\] = useState/g)) {
+        const [, name, setter] = m;
         const boundary = new RegExp('[^A-Za-z0-9_$]' + name + '[^A-Za-z0-9_$]', 'g');
         const reads = ((' ' + code + ' ').match(boundary) || []).length;
-        expect(reads, `${file}: ${name} is set but never read`).toBeGreaterThan(1);
+        if (reads > 1) continue;
+
+        // A value read only through the updater's `prev` is still doing work —
+        // Settings' viewStack drives how far the back button rewinds, and
+        // deleting it as "unused" took the whole page down. Only state that
+        // nothing reads AND that is never updated from its previous value is
+        // genuinely dead.
+        const updater = new RegExp(setter + '\\(\\s*(?:\\(\\s*\\w+|\\w+\\s*(?:=>|,)|function)');
+        if (updater.test(code)) continue;
+
+        throw new Error(`${file}: ${name} is set but never read`);
       }
     }
   });
@@ -102,6 +112,11 @@ describe('no state is computed and then never shown', () => {
     const src = readSource('src/components/Manager.tsx');
     expect(src).not.toContain('storeflow_flow_patted');
     expect(src).not.toContain('storeflow_flow_xp');
+  });
+
+  it('keeps the settings navigation stack that drives the back button', () => {
+    const src = readSource('src/components/Settings.tsx');
+    expect(src).toContain('const [viewStack, setViewStack] = useState<View[]>');
   });
 });
 

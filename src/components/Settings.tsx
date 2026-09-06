@@ -587,6 +587,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     }
   });
 
+  // Back-navigation history for the settings sub-views. Its value is only ever
+  // read through the updater's `prev`, which is what made it look unused — but
+  // setView is how every row on this page navigates, so without it the first
+  // tap anywhere threw and nothing moved at all.
+  const [viewStack, setViewStack] = useState<View[]>(['home']);
+
   const setView = (newView: View) => {
     setViewStack(prev => {
       const idx = prev.indexOf(newView);
