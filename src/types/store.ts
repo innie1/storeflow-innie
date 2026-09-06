@@ -492,6 +492,14 @@ export interface ManagerSettings {
   recoveryQuestion?: string;
   recoveryAnswer?: string;         // stored lowercased for comparison
   wholesalePricingEnabled?: boolean;
+  // Written by the Settings and Marketplace toggles. Nothing reads either one
+  // to decide a price, so both switches currently persist and change nothing;
+  // declared so a future consumer is type-checked rather than guessing.
+  retailPricingEnabled?: boolean;
+  // Whether a chime plays when a customer order arrives. See the note in
+  // Index.tsx where it is honoured: this and marketplaceSettings.alertSound
+  // are two switches for one behaviour, and only one of them used to count.
+  orderAlertSoundsEnabled?: boolean;
   backorderSellingEnabled?: boolean; // when on, sales can go through even at 0 stock; the shortfall is tracked as backorderedQty on the product. Toggling this requires ownerPassword.
   emergencyRecoveryKey?: string;   // Used to encrypt/decrypt offline backup exports
   lastAutoRestockDraftDate?: string; // Last time the weekly auto restock draft notification was generated
@@ -799,6 +807,23 @@ export interface StoreData {
   // It travels with the store because the push sender runs on the server and
   // cannot see the device's own record of having acknowledged it.
   stockLossAcknowledgedSignature?: string;
+  /**
+   * What kind of business this is and what it offers.
+   *
+   * Read in the services catalogue, the laundry pricing setup, the service
+   * order controls and the storefront, all of them casting through `as any`
+   * to get at it, which is what an undeclared field forces a caller to do —
+   * and `as any` silences the next mistake as well as this one.
+   */
+  businessTemplate?: {
+    type?: string;
+    name?: string;
+    icon?: string;
+    /** e.g. ['services'] — which parts of the app this shop uses. */
+    modes?: string[];
+    offerings?: any[];
+    laundryPricing?: any;
+  };
   transfers?: InventoryTransfer[];
   activityLogs?: ActivityLog[];
   communicationHistory?: CommunicationMessage[];

@@ -637,7 +637,15 @@ export default function Index() {
         showToast(`${title}: ${body}`, 'info');
 
         // Play alert sound for foreground pushes if enabled
-        const isSoundEnabled = store?.marketplaceSettings?.alertSound !== false && store?.marketplaceSettings?.notifNewOrders !== false;
+        // Two switches, one behaviour. Marketplace Settings writes
+        // alertSound and mirrors it into managerSettings; the Settings screen
+        // writes only managerSettings.orderAlertSoundsEnabled, which nothing
+        // read — so turning the chime off there did nothing at all and the
+        // sound kept playing. Either being off means off.
+        const isSoundEnabled =
+          store?.marketplaceSettings?.alertSound !== false &&
+          store?.managerSettings?.orderAlertSoundsEnabled !== false &&
+          store?.marketplaceSettings?.notifNewOrders !== false;
         if (isSoundEnabled) {
           playOrderAlertSound();
         }

@@ -86,7 +86,14 @@ body.storeflow-ui-overhaul textarea {
   }
 }
 
-/* Accessibility: never remove keyboard focus. */
+/* Accessibility: never remove keyboard focus.
+ *
+ * The composer is the exception, and deliberately. A text field matches
+ * :focus-visible on any focus, tap included -- not only on keyboard
+ * navigation -- so tapping to type drew a hard rectangle around the inner
+ * textarea, sitting inside the composer's own rounded pill. It read as a
+ * yellow box around the message box. The composer shows focus on its own
+ * rounded outer edge instead, below. */
 body.storeflow-ui-overhaul button:focus-visible,
 body.storeflow-ui-overhaul a:focus-visible,
 body.storeflow-ui-overhaul input:focus-visible,
@@ -94,6 +101,14 @@ body.storeflow-ui-overhaul select:focus-visible,
 body.storeflow-ui-overhaul textarea:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
+}
+
+/* The composer keeps its focus on its own rounded edge. */
+body.storeflow-ui-overhaul .flow-composer textarea:focus-visible {
+  outline: none;
+}
+body.storeflow-ui-overhaul .flow-composer:focus-within {
+  border-color: hsl(var(--border));
 }
 
 /* Customer Orders must remain a primary mobile navigation destination.

@@ -369,19 +369,23 @@
   }
 }
 
-/* Custom scrollbar */
+/* No visible scrollbars.
+ *
+ * The thumb was painted in the brand yellow, so every scrollable panel showed
+ * a bright bar down its right edge and across the bottom of anything that
+ * scrolled sideways -- the chat, the settings sheets, the filter rows. On a
+ * phone, where nothing is ever dragged by its scrollbar, it was decoration
+ * that read as part of the design.
+ *
+ * Scrolling itself is untouched: this hides the indicator, it does not
+ * disable overflow. */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 0;
+  height: 0;
 }
-::-webkit-scrollbar-track {
-  background: hsl(var(--surface-1));
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--primary) / 0.4);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary) / 0.7);
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }

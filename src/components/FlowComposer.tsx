@@ -124,8 +124,11 @@ export default function FlowComposer({
         className="relative px-3 py-2"
         onSubmit={e => { e.preventDefault(); submit(); }}
       >
+        {/* The focused border was the brand yellow, which drew a bright ring
+            around the message box the moment anyone tapped it. Focus is worth
+            showing, but quietly. */}
         <div className={`flow-composer flex items-end gap-1 rounded-[22px] border bg-surface-2/40 px-1 py-1 transition-colors ${
-          focused ? 'border-primary/50' : 'border-border'
+          focused ? 'border-foreground/25' : 'border-border'
         }`}>
           <button
             type="button"

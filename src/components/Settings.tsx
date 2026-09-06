@@ -2667,8 +2667,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <ToggleRow
               label="Order Alert Sound Notifications"
               description="Play a synthesized alert chime whenever a customer order is received."
-              checked={mgr.orderAlertSoundsEnabled !== false}
-              onChange={v => updateMgr({ orderAlertSoundsEnabled: v })}
+              checked={mgr.orderAlertSoundsEnabled !== false && store.marketplaceSettings?.alertSound !== false}
+              onChange={v => {
+                // Marketplace Settings has its own switch for the same chime
+                // and writes both keys. This one wrote only its own, so the
+                // two screens could disagree about whether sound was on.
+                updateMgr({ orderAlertSoundsEnabled: v });
+                persist({ marketplaceSettings: { ...(store.marketplaceSettings || {}), alertSound: v } as any });
+              }}
             />
           </div>
 
