@@ -4,6 +4,7 @@ import { addProduct, recordSale, receiveStock, importPurchaseOrderByCode } from 
 import { flowAddExpense, flowRecordPayment, flowAddInvestment, flowAddLoan, flowAddWithdrawal, flowReceiveStock } from '@/lib/flow-finance-actions';
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
+import { flowQuickActions } from '@/lib/flow-quick-actions';
 import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';
 import { buildFlowOrderWhatsAppMessage, createFlowMessageOrder, formatFlowOrderReceipt, isFlowMessageOrderRequest, parseFlowMessageOrder, supportsFlowMessageOrders, whatsappUrl, type FlowMessageOrderDraft } from '@/lib/flow-message-orders';
 import { applyFlowConversationOrderLocalEffects, buildFlowConversationWhatsAppMessage, createFlowConversationOrder, formatFlowConversationDraft, formatFlowConversationReceipt, isFlowConversationOrderRequest, mergeFlowConversationOrderDraft, nextFlowDraftQuestion, parseFlowConversationOrder, type FlowConversationOrderDraft } from '@/lib/flow-order-draft';
@@ -12,7 +13,7 @@ import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/fl
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
 import { resolveFlowSettingCommand, flowSettingsHelp } from '@/lib/flow-settings-resolver';
 import { getNextFlowCheckIn, notifyFlowCheckIn, requestFlowNotificationPermission, checkInsQuiet } from '@/lib/flow-checkins';
-import { X, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, FileUp, FileText, KeyRound, MoreHorizontal } from 'lucide-react';
+import { X, History, Plus, Trash2, Volume2, VolumeX, RotateCcw, Bell, MoreHorizontal } from 'lucide-react';
 import Mascot from '@/components/Mascot';
 import ReceiptScanner from '@/components/ReceiptScanner';
 import FlowAttachmentMenu from '@/components/FlowAttachmentMenu';
@@ -28,7 +29,7 @@ interface ChatSession { id: string; title: string; updatedAt: string; messages: 
 interface AddDraft { name: string; costPrice?: number; sellingPrice?: number; quantity?: number; category?: string; }
 
 const SESSION_PREFIX = 'storeflow_flow_sessions_';
-const QUICK = ["How's my business?", "What's low?", 'Show my best sellers', "What's not selling?", 'What should I fix?'];
+
 function loadSessions(key: string): ChatSession[] { try { const v = JSON.parse(localStorage.getItem(SESSION_PREFIX + key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } }
 function saveSessions(key: string, sessions: ChatSession[]) { try { localStorage.setItem(SESSION_PREFIX + key, JSON.stringify(sessions.slice(0, 30))); } catch {} }
 function id(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
@@ -65,8 +66,11 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   // Overlay: hold the page behind it still while this is open.
   useBodyScrollLock();
   const storeKey = store.id || store.storeId || store.accessCode || 'default';
+  // Recomputed when the store changes, so the buttons follow what is actually
+  // happening in the shop rather than being fixed at mount.
+  const quickActions = useMemo(() => flowQuickActions(store), [store]);
   const savedBrain = loadBrainMemory(store);
-  const [messages, setMessages] = useState<ChatMessage[]>([{ id: id('greet'), from: 'flow', text: "Hey 👋 I'm Flow. Message me what you need. If this store takes orders, you can type or speak the customer's full order and I'll build the receipt." }]);
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: id('greet'), from: 'flow', text: "Hey 👋 I'm Flow. You can ask me to do anything." }]);
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions(storeKey));
   const [sessionId, setSessionId] = useState(() => id('session'));
   const [input, setInput] = useState('');
@@ -509,11 +513,12 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
     return {
       text: (store.products || []).length
-        ? `I did not catch that. I work on this store's own records — sales, stock, prices, spending and orders.
-
-Things you can say: ${examples.join(', ')}.`
-        : 'I did not catch that. Add a few products first and I can sell, restock and report on them for you.',
-      actions,
+        // One line. It used to be a paragraph plus a list of examples, on the
+        // screen a merchant reaches by already being confused.
+        ? `Not sure what you meant. Try: ${examples.slice(0, 2).join(' or ')}.`
+        : 'Add a few products first, then I can sell and restock them for you.',
+      // Three at most, like everywhere else in this chat.
+      actions: actions.slice(0, 3),
     };
   };
 
@@ -714,21 +719,23 @@ Things you can say: ${examples.join(', ')}.`
       </button>
     </div>
     {showHistory && <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setShowHistory(false)}><div className="w-full sm:max-w-sm max-h-[75vh] bg-background border border-border rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between px-4 py-3 border-b border-border"><h4 className="font-display font-bold text-sm">Message history</h4><button onClick={() => setShowHistory(false)}><X className="w-4 h-4" /></button></div><div className="overflow-y-auto">{sessions.length === 0 ? <p className="text-xs text-muted-foreground text-center py-8">No past messages yet.</p> : sessions.map(s => <div key={s.id} className="flex items-center gap-2 px-4 py-3 border-b border-border/60 cursor-pointer hover:bg-surface-2/40" onClick={() => openSession(s)}><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{s.title}</p><p className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleString()}</p></div><button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}><Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" /></button></div>)}</div></div></div>}
-    <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">{messages.map(m => <div key={m.id} className="flex flex-col gap-1.5" style={{ alignItems: m.from === 'you' ? 'flex-end' : 'flex-start' }}><div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.from === 'flow' ? 'bg-surface-2/60 text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>{m.from === 'flow' ? renderFlowText(m.text) : m.text}</div>{m.actions && <div className="flex gap-2 flex-wrap">{m.actions.map(a => <button key={a.label} onClick={a.onClick} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">{a.label}</button>)}</div>}</div>)}{messages.length === 1 && !addDraft && (
-      <div className="flex flex-wrap gap-2 pt-1 pb-2">
-        {QUICK.map(q => <button key={q} onClick={() => ask(q)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 hover:bg-surface-2/60">{q}</button>)}
-        {supportsFlowMessageOrders(store) && <button onClick={() => flow('Tell me the customer name, phone number, and everything they want. You can type it or tap the microphone and say it naturally.')} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">New customer order</button>}
-        <button onClick={() => setShowReceiptImport(true)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary flex items-center gap-1.5">
-          <FileUp className="w-3.5 h-3.5" /> Import receipt
-        </button>
-        <button onClick={() => onNavigate?.('inventory')} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 flex items-center gap-1.5">
-          <FileText className="w-3.5 h-3.5" /> Import stock file
-        </button>
-        <button onClick={() => setShowRestockCodeImport(true)} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary flex items-center gap-1.5">
-          <KeyRound className="w-3.5 h-3.5" /> Import restock code
-        </button>
+    <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">{messages.map(m => <div key={m.id} className="flex flex-col gap-1.5" style={{ alignItems: m.from === 'you' ? 'flex-end' : 'flex-start' }}><div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.from === 'flow' ? 'bg-surface-2/60 text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>{m.from === 'flow' ? renderFlowText(m.text) : m.text}</div>{m.actions && <div className="flex gap-2 flex-wrap">{m.actions.map(a => <button key={a.label} onClick={a.onClick} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">{a.label}</button>)}</div>}</div>)}</div>
+    {/* Three actions, drawn from this store's own records and always in the
+        same place — just above the composer — rather than nine chips that
+        appeared only on the empty screen and knew nothing about the shop. */}
+    {!addDraft && (
+      <div className="px-4 pt-1 pb-2 flex gap-2 overflow-x-auto">
+        {quickActions.map(a => (
+          <button
+            key={a.label}
+            onClick={() => ask(a.prompt)}
+            className="shrink-0 px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 hover:bg-surface-2/60 whitespace-nowrap"
+          >
+            {a.label}
+          </button>
+        ))}
       </div>
-    )}</div>
+    )}
     {showRestockCodeImport && <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center p-4" onClick={() => setShowRestockCodeImport(false)}>
       <div className="w-full max-w-sm bg-background border border-border rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">

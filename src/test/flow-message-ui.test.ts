@@ -16,7 +16,11 @@ describe('Flow message UI', () => {
     // FlowChat still hands it voice control.
     expect(source).toContain('isListening={isListening}');
     expect(source).toContain('onToggleVoice={startFlowVoiceInput}');
-    expect(source).toContain('New customer order');
+    // The opening chip moved: the chat now offers three actions drawn from
+    // the store rather than nine fixed ones, and this is one of them for any
+    // shop that takes orders.
+    expect(readSource('src/lib/flow-quick-actions.ts')).toContain('New customer order');
+    expect(readSource('src/lib/flow-quick-actions.ts')).toContain('supportsFlowMessageOrders');
     expect(source).toContain('Flow Messages');
   });
 

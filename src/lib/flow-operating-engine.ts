@@ -1,4 +1,6 @@
 import { Product, StoreData, TabId } from '@/types/store';
+import { fuzzyIntent } from '@/lib/flow-fuzzy-intent';
+import { inventoryIntelligence } from '@/lib/manager-intel';
 import { loadBrainMemory, resolveBrainAlias } from '@/lib/flow-brain-memory';
 
 export type OperatingIntent = 'sell'|'restock'|'add_product'|'undo'|'store_overview'|'inventory'|'sales'|'profit'|'best_sellers'|'slow_products'|'pricing'|'customers'|'expenses'|'finance'|'orders'|'improvement'|'why'|'recommendations'|'navigation'|'settings'|'product_lookup'|'help'|'unknown';
@@ -38,11 +40,12 @@ export function understand(store:StoreData,raw:string,lastProduct?:Product|null,
  if(/^(undo|undo that|reverse that|cancel the last (sale|action)|take that back)$/i.test(q))return{intent:'undo',confidence:1,items:[],reason:'undo command'};
  if(/^(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(q))return{intent:'store_overview',confidence:.98,items:[],reason:'greeting'};
  if(/\b(?:dark|light|system)\s+(?:theme|mode)\b|\b(?:turn|switch)\s+(?:on|off)\s+(?:voice|sound|notifications?)\b/.test(q))return{intent:'settings',confidence:.98,items:[],reason:'setting command'};
- if(/\b(?:how'?s|how is|tell me about|overview)\s+(?:my\s+)?(?:store|business|shop)\b|\bmy store\b.*\b(?:doing|performance|health)\b/.test(q))return{intent:'store_overview',confidence:.99,items:[],reason:'store question'};
+ if(/\b(?:how\s?s|how is|tell me about|overview)\s+(?:my\s+)?(?:store|business|shop)\b|\bmy store\b.*\b(?:doing|performance|health)\b/.test(q))return{intent:'store_overview',confidence:.99,items:[],reason:'store question'};
  if(/\b(?:why|what caused|what is causing|reason)\b/.test(q))return{intent:'why',confidence:.97,items:[],reason:'reasoning question'};
  if(/\b(?:what should i|what do i need to|what needs to|what can i do|what would you recommend|how can i improve|what else should i)\b/.test(q))return{intent:'recommendations',confidence:.97,items:[],reason:'recommendation question'};
  if(/\b(?:what should i|what do i need to|which items should i|what needs to)\s+restock\b|\b(?:restock|buy)\b.*\b(?:recommend|suggest|need|list)\b/.test(q))return{intent:'inventory',confidence:.98,items:[],reason:'restock recommendation'};
- if(/\b(?:low stock|running low|out of stock|sold out|inventory value|what is low|what's low)\b/.test(q))return{intent:'inventory',confidence:.98,items:[],reason:'inventory query'};
+ // norm() strips apostrophes, so "what's low" arrives as "what s low".
+ if(/\b(?:low stock|running low|out of stock|sold out|inventory value|what is low|what s low)\b/.test(q))return{intent:'inventory',confidence:.98,items:[],reason:'inventory query'};
  if(/\b(?:best sellers?|top sellers?|what sells best)\b/.test(q))return{intent:'best_sellers',confidence:.98,items:[],reason:'best sellers query'};
  if(/\b(?:not selling|slow moving|dead stock|no sales)\b/.test(q))return{intent:'slow_products',confidence:.98,items:[],reason:'slow stock query'};
  if(/\b(?:profit|profitability|margin)\b/.test(q)){const p=resolveProduct(store,cleanProductPhrase(text));return{intent:'profit',confidence:p?.score||.94,items:[],product:p||undefined,reason:'profit query'};}
@@ -57,6 +60,11 @@ export function understand(store:StoreData,raw:string,lastProduct?:Product|null,
  if(/^(?:and|also|what about)\b/i.test(text)){const phrase=text.replace(/^(?:and|also|what about)\s*/i,'').trim();const match=resolveProduct(store,phrase.replace(/^\d+(?:\.\d+)?\s*/,'').trim());const qty=extractQty(phrase);if(match)return{intent:lastIntent==='restock'?'restock':lastIntent==='sell'?'sell':'product_lookup',confidence:.92,items:lastIntent==='restock'||lastIntent==='sell'?[{product:match,quantity:qty}]:[],product:match,quantity:qty,reason:'context follow-up'};if(lastProduct)return{intent:lastIntent==='restock'?'restock':lastIntent==='sell'?'sell':'product_lookup',confidence:.82,items:lastIntent==='restock'||lastIntent==='sell'?[{product:{product:lastProduct,score:1,matchedBy:'exact'},quantity:qty}]:[],product:{product:lastProduct,score:1,matchedBy:'exact'},quantity:qty,reason:'context follow-up'};}
  const direct=resolveProduct(store,text);if(direct&&direct.score>=.76)return{intent:'product_lookup',confidence:direct.score,items:[],product:direct,reason:'product match'};
  if(/\b(?:what can you do|help|commands?)\b/.test(q))return{intent:'help',confidence:.9,items:[],reason:'help'};
+ // Everything above needs the words spelled correctly. Before giving up and
+ // showing the help text -- by far the most common way a merchant is told
+ // Flow did not understand them -- try to read what they meant.
+ const guess=fuzzyIntent(text);
+ if(guess)return{intent:guess.intent,confidence:Math.min(.9,guess.confidence),items:[],reason:`read "${guess.matched}" as "${guess.meant}"`};
  return{intent:'help',confidence:.6,items:[],reason:'no safe match'};
 }
 
@@ -74,7 +82,7 @@ export function storeAnalysis(store:StoreData){
 
 export function responseFor(store:StoreData,plan:OperatingPlan){const a=storeAnalysis(store),product=plan.product?.product;
  switch(plan.intent){
- case 'store_overview':{const health=Math.max(0,Math.min(100,Math.round(72+(a.revenue7>0?8:-8)-a.out.length*5-a.underpriced.length*2-a.dead.length)));return`Your store is at about **${health}/100**.\n\nRevenue (7 days): **${money(a.revenue7)}**\nProfit (7 days): **${money(a.profit7)}**\nInventory value: **${money(a.stockValue)}**\n${a.low.length+a.out.length?`⚠️ **${a.low.length+a.out.length} products** need restocking.`:'✅ Inventory looks stable.'}\n${a.salesChange>0?`📈 Sales pace is about **${a.salesChange}% higher** than your 30-day pace.`:a.salesChange<0?`📉 Sales pace is about **${Math.abs(a.salesChange)}% lower** than your 30-day pace.`:'Sales pace is stable.'}\n\n**Priority:** ${a.out.length?`restock ${a.out[0].name}`:a.low.length?`restock ${a.low[0].name}`:a.underpriced.length?`review ${a.underpriced[0].name}'s price`:'keep monitoring sales and stock'}.`;}
+ case 'store_overview':{const health=Math.max(0,Math.min(100,Math.round(72+(a.revenue7>0?8:-8)-a.out.length*5-a.underpriced.length*2-a.dead.length)));return`Your store is at about **${health}/100**.\n\nRevenue (7 days): **${money(a.revenue7)}**\nProfit (7 days): **${money(a.profit7)}**\nInventory value: **${money(a.stockValue)}**\n${a.low.length+a.out.length?`⚠️ **${a.low.length+a.out.length} products** need restocking.`:'✅ Inventory looks stable.'}\n${a.salesChange>0?`📈 Sales pace is about **${a.salesChange}% higher** than your 30-day pace.`:a.salesChange<0?`📉 Sales pace is about **${Math.abs(a.salesChange)}% lower** than your 30-day pace.`:'Sales pace is stable.'}\n\n**Priority:** ${(()=>{const top=rankedRestocks(store)[0];return top?`restock ${top.product.name}`:a.underpriced.length?`review ${a.underpriced[0].name}'s price`:'keep monitoring sales and stock';})()}.`;}
  case 'inventory':{const list=[...a.out,...a.low].slice(0,8);return list.length?`Products needing stock attention:\n${list.map((p,i)=>`${i+1}. **${p.name}** — ${p.quantity} left`).join('\n')}\n\n${a.out.length?`🔴 ${a.out.length} out of stock.`:''}`:'Your active products are not currently below the low-stock threshold.';}
  case 'best_sellers':return a.top.length?`Best sellers over the last 30 days:\n${a.top.map((x,i)=>`${i+1}. **${x.product.name}** — ${x.units} units / ${money(x.revenue)}`).join('\n')}`:'I do not have enough sales history yet.';
  case 'slow_products':return a.dead.length?`These products have stock but no recorded sale in 30 days:\n${a.dead.slice(0,8).map(p=>`• **${p.name}** — ${p.quantity} left`).join('\n')}\n\nI would pause new buying until they move.`:'Nothing is completely idle right now.';
@@ -87,13 +95,31 @@ export function responseFor(store:StoreData,plan:OperatingPlan){const a=storeAna
  case 'orders':{const orders=(store as any).orders||[];const pending=orders.filter((o:any)=>!['completed','cancelled','rejected'].includes(String(o.status||'').toLowerCase()));return orders.length?`You have **${pending.length} active order${pending.length===1?'':'s'}** and **${orders.length} total recorded orders**.\n\n${pending.slice(0,5).map((o:any,i:number)=>`${i+1}. **${o.customerName||o.customer?.name||'Customer'}** — ${o.status||'pending'}${o.total!=null?` — ${money(Number(o.total))}`:''}`).join('\n')}`:"I don't see any orders recorded in this store yet.";}
  case 'why':return whyAnalysis(a);
  case 'recommendations':
- case 'improvement':return recommendations(a);
+ case 'improvement':return recommendations(store,a);
  case 'product_lookup':return product?`**${product.name}**\nStock: ${product.quantity}\nSelling: ${money(product.sellingPrice)}\nCost: ${money(product.costPrice)}\nGross profit: ${money(product.sellingPrice-product.costPrice)} per unit.`:'Tell me the product name and I will look it up.';
  case 'help':return`I can operate your store locally. Try:\n• **Sell 2 Indomie**\n• **Add 5 Milo**\n• **Undo that**\n• **How is my store?**\n• **What's low?**\n• **Show my best sellers**\n• **How much did I spend?**\n• **Show my finances**\n• **Do I have new orders?**\n• **Why are sales down?**\n• **What should I fix?**`;
  default:return'I can operate sales, stock, customers, settings and store analysis locally. Tell me what you want done.';
  }
 }
 function whyAnalysis(a:ReturnType<typeof storeAnalysis>){const reasons:string[]=[];if(a.salesChange<0)reasons.push(`Sales pace is **${Math.abs(a.salesChange)}% lower** than your 30-day pace.`);if(a.out.length)reasons.push(`**${a.out.length} products are out of stock**, which can directly block sales.`);if(a.low.length)reasons.push(`**${a.low.length} more products are running low**, increasing the chance of missed sales.`);if(a.underpriced.length)reasons.push(`**${a.underpriced.length} products have margins below 12%**, so revenue may not be turning into enough profit.`);if(a.expenses30>a.profit30*.5&&a.expenses30>0)reasons.push(`Expenses are **${money(a.expenses30)}** in the last 30 days and are consuming a large share of gross profit.`);if(!reasons.length)return`I don't see a strong problem signal yet. Sales, stock and margins look reasonably stable from the data available.`;return`I found ${reasons.length} likely reason${reasons.length===1?'':'s'}:\n\n${reasons.slice(0,5).map((r,i)=>`${i+1}. ${r}`).join('\n')}`;}
-function recommendations(a:ReturnType<typeof storeAnalysis>){const items:string[]=[];a.out.slice(0,3).forEach(p=>items.push(`Restock **${p.name}** — it is out of stock.`));a.low.slice(0,2).forEach(p=>items.push(`Restock **${p.name}** — only ${p.quantity} left.`));a.underpriced.slice(0,2).forEach(p=>items.push(`Review **${p.name}** — margin is only ${p.sellingPrice?Math.round((p.sellingPrice-p.costPrice)/p.sellingPrice*100):0}%.`));a.dead.slice(0,2).forEach(p=>items.push(`Reduce buying **${p.name}** — ${p.quantity} units have not sold in 30 days.`));if(a.debt>0)items.push(`Collect outstanding customer balances — about **${money(a.debt)}** is due.`);if(a.expenses30>a.profit30*.5&&a.expenses30>0)items.push(`Review expenses — **${money(a.expenses30)}** recorded in the last 30 days.`);if(!items.length)return`Your store does not show a major operational problem from the data I can see. Keep monitoring stock, margins and sales.`;return`Your priorities:\n\n${items.slice(0,6).map((x,i)=>`${i+1}. ${x}`).join('\n')}\n\n**My first recommendation:** ${items[0]}`;}
+/**
+ * What Flow answers when asked what to do next.
+ *
+ * This used to read `a.out.slice(0,3)` — the first three out-of-stock products
+ * in array order. Order in that array is the order they were added to the
+ * shop, which has nothing to do with urgency, so Flow could name one product
+ * as the priority while the Manager screen named another. Both were reading
+ * the same records; only one of them was ranking.
+ *
+ * inventoryIntelligence is that ranking: sorted by the profit lost for each
+ * day a product is unavailable, and excluding anything with no sale in the
+ * last sixty days, so a line that sold once last quarter is no longer called
+ * urgent just because the shelf is empty.
+ */
+function rankedRestocks(store:StoreData){
+ return inventoryIntelligence(store).filter(f=>f.worthRestocking&&f.restockQty>0);
+}
+
+function recommendations(store:StoreData,a:ReturnType<typeof storeAnalysis>){const items:string[]=[];for(const f of rankedRestocks(store).slice(0,3))items.push(f.product.quantity<=0?`Restock **${f.product.name}** — sold out, and it was earning about ${money(f.dailyProfitAtRisk)} a day.`:`Restock **${f.product.name}** — about ${Math.max(0,Math.floor(f.daysLeft))} days left.`);a.underpriced.slice(0,2).forEach(p=>items.push(`Review **${p.name}** — margin is only ${p.sellingPrice?Math.round((p.sellingPrice-p.costPrice)/p.sellingPrice*100):0}%.`));a.dead.slice(0,2).forEach(p=>items.push(`Reduce buying **${p.name}** — ${p.quantity} units have not sold in 30 days.`));if(a.debt>0)items.push(`Collect outstanding customer balances — about **${money(a.debt)}** is due.`);if(a.expenses30>a.profit30*.5&&a.expenses30>0)items.push(`Review expenses — **${money(a.expenses30)}** recorded in the last 30 days.`);if(!items.length)return`Nothing urgent from what I can see. Keep an eye on stock, margins and sales.`;return`${items.slice(0,4).map((x,i)=>`${i+1}. ${x}`).join('\n')}`;}
 export function aliasSuggestion(store:StoreData,query:string){const match=resolveProduct(store,query);if(!match||match.score>=.9)return null;return`I think you mean **${match.product.name}**. Is that right?`;}
-export function flowBrainSnapshot(store:StoreData){const memory=loadBrainMemory(store);const analysis=storeAnalysis(store);return {memory,analysis,priorities:recommendations(analysis)};}
+export function flowBrainSnapshot(store:StoreData){const memory=loadBrainMemory(store);const analysis=storeAnalysis(store);return {memory,analysis,priorities:recommendations(store,analysis)};}
