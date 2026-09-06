@@ -20,8 +20,14 @@ import { VitePWA } from "vite-plugin-pwa";
  * needs before it will rebuild the installed app's icon. Nothing to remember
  * to bump by hand -- change the PNG and the version follows.
  */
-const iconVersion = createHash("sha256")
-  .update(readFileSync(path.resolve(__dirname, "public/icons/icon-512.png")))
+const ICON_FILES = ["public/icons/icon-192.png", "public/icons/icon-512.png"];
+const iconVersion = ICON_FILES
+  .reduce(
+    // Every icon feeds the hash. It used to read icon-512 alone, so replacing
+    // only the 192 left the version unchanged and that icon stayed stale.
+    (hash, file) => hash.update(readFileSync(path.resolve(__dirname, file))),
+    createHash("sha256"),
+  )
   .digest("hex")
   .slice(0, 8);
 
