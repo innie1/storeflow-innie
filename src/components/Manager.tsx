@@ -1363,6 +1363,12 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
                         <div>
                           <p className="text-[10px] text-muted-foreground uppercase font-bold">Expected profit</p>
                           <p className="font-display font-black text-lg text-success">₦{Math.round(f.expectedProfit).toLocaleString()}</p>
+                          {/* Profit swings wider than revenue, being the gap
+                              between two moving numbers, so it gets its own
+                              range rather than borrowing revenue's. */}
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            ₦{Math.round(f.profitLow).toLocaleString()} – ₦{Math.round(f.profitHigh).toLocaleString()}
+                          </p>
                         </div>
                       )}
                     </div>
