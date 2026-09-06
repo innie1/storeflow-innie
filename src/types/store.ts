@@ -34,6 +34,12 @@ export interface Product {
   source?: 'voice_sale' | 'manual' | 'scan'; // how this product was first created
   backorderedQty?: number; // units sold while stock was at 0 (only when backorderSellingEnabled is on) — owed stock, settled via sync or cleared via delete
   reorderLevel?: number; // owner-set (or Auto Fix-set) stock threshold that should trigger a restock advice card
+  // Both of these were read across the app — the inventory rows, the product
+  // detail sheet, Settings, the services catalogue and the published
+  // storefront — without ever being declared, so they were always undefined
+  // and nothing could ever set them. Product photos simply never appeared.
+  image?: string;        // data URL, downscaled on upload by lib/downscale-image
+  description?: string;  // shown on the storefront and on service listings
   promoPrice?: number; // temporary discounted sellingPrice, set by Auto Fix "create promotion" or manually
   promoUntil?: string; // ISO date the promo price expires — POS/customer app should stop honoring it after this
   promoReason?: string; // short human-readable reason the promo was created (e.g. "Clearing dead stock")
@@ -478,6 +484,14 @@ export interface BusinessChallenge {
 export interface ManagerSettings {
   enabled: boolean;
   ownerPassword?: string;          // Owner login password, checked on role switch and backup export
+  // Account recovery. StoreAccess writes all four when a store is secured and
+  // Settings reads them back; none of them were declared, so the recovery
+  // flow type-checked only by accident.
+  recoveryEmail?: string;
+  recoveryPhone?: string;
+  recoveryQuestion?: string;
+  recoveryAnswer?: string;         // stored lowercased for comparison
+  wholesalePricingEnabled?: boolean;
   backorderSellingEnabled?: boolean; // when on, sales can go through even at 0 stock; the shortfall is tracked as backorderedQty on the product. Toggling this requires ownerPassword.
   emergencyRecoveryKey?: string;   // Used to encrypt/decrypt offline backup exports
   lastAutoRestockDraftDate?: string; // Last time the weekly auto restock draft notification was generated

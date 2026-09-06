@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ThemeMode, getThemeMode, setThemeMode } from '@/lib/theme';
 
 interface DayNightToggleProps {
@@ -7,25 +7,8 @@ interface DayNightToggleProps {
 
 export default function DayNightToggle({ onChange }: DayNightToggleProps) {
   const [mode, setMode] = useState<ThemeMode>(getThemeMode());
-  const [isDark, setIsDark] = useState(() => {
-    const m = getThemeMode();
-    if (m === 'dark') return true;
-    if (m === 'light') return false;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
-
-  useEffect(() => {
-    if (mode !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    setIsDark(mq.matches);
-    const listener = () => setIsDark(mq.matches);
-    mq.addEventListener('change', listener);
-    return () => mq.removeEventListener('change', listener);
-  }, [mode]);
-
   const choose = (next: ThemeMode) => {
     setMode(next);
-    setIsDark(next === 'dark' || (next === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches));
     setThemeMode(next);
     onChange?.(next);
   };

@@ -63,7 +63,10 @@ export function getFlowFinanceSnapshot(store: StoreData): FlowFinanceSnapshot {
 export function getFlowRestockSuggestions(store: StoreData): FlowRestockSuggestion[] {
   return (store.products || [])
     .map(product => {
-      const currentStock = n(product.stock);
+      // Product holds its count in `quantity`; there is no `stock` field, so
+      // this read was always undefined -> 0 and every product with a reorder
+      // level would have been reported as out of stock.
+      const currentStock = n(product.quantity);
       const reorderLevel = n(product.reorderLevel);
       const unitsSold = n(product.units_sold);
 

@@ -12,6 +12,7 @@ import BarcodeScanner from '@/components/BarcodeScanner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SmartRestockEngine from '@/components/SmartRestockEngine';
 import MyBuyLists from '@/components/MyBuyLists';
+import { downscaleImageToDataUrl } from '@/lib/downscale-image';
 import ProductIcon from '@/components/ProductIcon';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import {
@@ -28,7 +29,8 @@ import {
   Trash2,
   FileText,
   Sparkles,
-  ClipboardList
+  ClipboardList,
+  Image as ImageIcon
 } from 'lucide-react';
 import type { ProductFocus } from '@/lib/product-focus';
 
@@ -267,6 +269,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     sellingPrice: string;
     quantity: string;
     category: string;
+    image?: string;
+    description?: string;
     isCartonSingleEnabled: boolean;
     singlesPerCarton: string;
     singleSellingPrice: string;
@@ -611,6 +615,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [showBuyLists, setShowBuyLists] = useState(false);
+  const productPhotoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (autoOpenRestock) {
@@ -683,6 +688,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       sellingPrice: String(p.sellingPrice),
       quantity: String(p.quantity),
       category: p.category,
+      image: p.image,
+      description: p.description,
       isCartonSingleEnabled: p.isCartonSingleEnabled === true,
       singlesPerCarton: p.singlesPerCarton != null ? String(p.singlesPerCarton) : '',
       singleSellingPrice: p.singleSellingPrice != null ? String(p.singleSellingPrice) : '',
@@ -1006,6 +1013,8 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       sellingPrice: Number(editDraft.sellingPrice) || 0,
       quantity: Number(editDraft.quantity) || 0,
       category: editDraft.category,
+      image: editDraft.image,
+      description: editDraft.description,
       isCartonSingleEnabled: editDraft.isCartonSingleEnabled,
       singlesPerCarton: singlesPerCartonVal,
       singleSellingPrice: singlePriceVal,
@@ -2471,6 +2480,65 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 <Camera className="w-4 h-4" />
               </button>
             </div>
+            {/* Photo and description. Both fields were read all over the app —
+                these rows, the detail sheet, the services catalogue and the
+                published storefront — but were not on Product and nothing
+                could set them, so a product photo never appeared anywhere.
+                The picture goes through the same downscaler as the store
+                logo, so a camera photo is stored at a few tens of kB rather
+                than several megabytes. */}
+            <div className="flex items-center gap-3 p-2.5 rounded-lg bg-surface-2 border border-border">
+              <div className="w-14 h-14 rounded-xl bg-surface-3 border border-border/60 overflow-hidden flex items-center justify-center shrink-0">
+                {editDraft.image
+                  ? <img src={editDraft.image} alt="" className="w-full h-full object-cover" />
+                  : <ImageIcon className="w-5 h-5 text-muted-foreground" />}
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => productPhotoRef.current?.click()}
+                    className="px-2.5 py-1.5 rounded-lg bg-surface-3 border border-border text-[11px] font-display font-bold"
+                  >
+                    {editDraft.image ? 'Change photo' : 'Add photo'}
+                  </button>
+                  {editDraft.image && (
+                    <button
+                      type="button"
+                      onClick={() => setEditDraft(prev => (prev ? { ...prev, image: undefined } : prev))}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-display font-bold text-destructive"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <input
+                  value={editDraft.description || ''}
+                  onChange={e => setEditDraft(prev => (prev ? { ...prev, description: e.target.value } : prev))}
+                  placeholder="Short description (optional)"
+                  className={inputClass}
+                />
+              </div>
+              <input
+                ref={productPhotoRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  if (file.size > 8 * 1024 * 1024) return showToast('Image must be under 8 MB', 'error');
+                  try {
+                    const image = await downscaleImageToDataUrl(file, { maxEdge: 320 });
+                    setEditDraft(prev => (prev ? { ...prev, image } : prev));
+                  } catch {
+                    showToast('That image could not be read', 'error');
+                  }
+                }}
+              />
+            </div>
+
             <button onClick={handleEdit} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">Save Changes</button>
 
             {/* Price History Section */}

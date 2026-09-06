@@ -307,8 +307,6 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
   // ─── Order Workflow Simulation States ───
   const [simulateWorkflowStep, setSimulateWorkflowStep] = useState<'received' | 'preparing' | 'ready' | 'delivery' | 'completed'>('received');
   const [prepTimeRemaining, setPrepTimeRemaining] = useState<number>(0);
-  const [prepTimeSelected, setPrepTimeSelected] = useState<string>('20');
-  const [customTimeInput, setCustomTimeInput] = useState<string>('25');
 
   useEffect(() => {
     if (simulateWorkflowStep !== 'preparing') return;

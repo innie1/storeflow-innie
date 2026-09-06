@@ -567,13 +567,11 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
 // ============ MAIN ============
 export default function Settings({ store, onUpdate, onLock, currentUser, isActive = true }: SettingsProps) {
   const [view, setViewState] = useState<View>('home');
-  const [viewStack, setViewStack] = useState<View[]>(['home']);
   const serviceBusiness = isServiceBusiness(store);
   const barcodeQrCanvasRef = useRef<HTMLCanvasElement>(null);
   const storeBarcodeCanvasRef = useRef<HTMLCanvasElement>(null);
   const [showAllProductsQR, setShowAllProductsQR] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [analyticsFilter, setAnalyticsFilter] = useState<'today' | 'week' | 'month' | 'year'>('week');
   const [showUrl, setShowUrl] = useState(false);
   const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -962,7 +960,6 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   const [showContactPopup, setShowContactPopup] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showSQLDetails, setShowSQLDetails] = useState(false);
 
   // Draw the store QR code and Barcode when barcode view is active
   // 1. Permanent QR Cache & Background Validation

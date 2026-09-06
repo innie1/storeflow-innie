@@ -24,10 +24,18 @@ function describe(item: TrashItem): { title: string; subtitle: string } {
   }
   if (item.kind === 'sale') {
     const s = item.payload as Sale;
-    return { title: `Sale #${s.id.slice(-6)}`, subtitle: `₦${s.totalAmount.toLocaleString()} • ${s.items.length} items` };
+    // Sale has `total`, not `totalAmount`, and has no `items` array at all —
+    // it is one line per product. Reading either threw, so opening the trash
+    // with a deleted sale in it blanked the app.
+    return {
+      title: `Sale #${s.id.slice(-6)}`,
+      subtitle: `₦${Number(s.total || 0).toLocaleString()} • ${s.productName || 'Item'} ×${s.quantity ?? 1}`,
+    };
   }
   const e = item.payload as Expense;
-  return { title: e.description || 'Expense', subtitle: `₦${e.amount.toLocaleString()} • ${e.category}` };
+  // Expense keeps its free text in `note`, not `description`, so the title
+  // was always the bare word "Expense".
+  return { title: e.note || e.category || 'Expense', subtitle: `₦${Number(e.amount || 0).toLocaleString()} • ${e.category}` };
 }
 
 function timeLeft(deletedAt: string): string {

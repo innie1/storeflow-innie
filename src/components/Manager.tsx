@@ -523,11 +523,7 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
 
   const [autoFixTarget, setAutoFixTarget] = useState<AutoFixSpec | null>(null);
   const [autoFixBusy, setAutoFixBusy] = useState(false);
-  const [hasPatted, setHasPatted] = useState(() => localStorage.getItem('storeflow_flow_patted') === new Date().toISOString().split('T')[0]);
   const [showArchive, setShowArchive] = useState(false);
-  const [showPatHearts, setShowPatHearts] = useState(false);
-  const [flowXP, setFlowXP] = useState(() => Number(localStorage.getItem('storeflow_flow_xp') || '0'));
-  const [xpAnimation, setXpAnimation] = useState(false);
   const [greeting] = useState(() => flowGreeting(store));
   const [seenAdviceIds, setSeenAdviceIds] = useState<Set<string>>(() => {
     try {
