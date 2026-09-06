@@ -490,6 +490,18 @@ export interface StockForecast {
   worthRestocking: boolean;
   restockQty: number;
   urgency: 'critical' | 'soon' | 'ok';
+  /** Profit on one unit, at the current prices. */
+  unitProfit: number;
+  /**
+   * Profit the shop stops earning for each day this product is unavailable —
+   * demand times margin.
+   *
+   * Ranking used to be days-of-cover alone, which says nothing about whether
+   * running out matters. A sold-out product scored 0 days left whether it
+   * shifts twenty a day at a good margin or sold one unit last quarter, so
+   * the two sat side by side at the top of the restock list.
+   */
+  dailyProfitAtRisk: number;
 }
 
 /**
@@ -517,11 +529,27 @@ function byDaysLeft(a: StockForecast, b: StockForecast) {
   return a.daysLeft < b.daysLeft ? -1 : 1;
 }
 
+/**
+ * Products worth reordering first, then by what each day without them costs.
+ *
+ * A product nobody is buying is never urgent however empty the shelf is, so it
+ * sorts below everything that is actually moving rather than being dropped —
+ * the merchant can still see it is out.
+ */
+function byMoneyAtRisk(a: StockForecast, b: StockForecast) {
+  if (a.worthRestocking !== b.worthRestocking) return a.worthRestocking ? -1 : 1;
+  if (a.dailyProfitAtRisk !== b.dailyProfitAtRisk) return b.dailyProfitAtRisk - a.dailyProfitAtRisk;
+  return byDaysLeft(a, b);
+}
+
 // Shared by inventoryIntelligence() (restock suggestions) AND healthScore()
 // (inventory factor) so the two features are always computed from the same
 // numbers and can never disagree about whether a product's stock is fine.
 // Unlike inventoryIntelligence(), this does NOT filter out 'ok' products —
 // callers that need "what's low" should filter the result themselves.
+/** How far back a sale still counts as evidence that a product sells. */
+const RECENT_DEMAND_DAYS = 60;
+
 function computeStockForecasts(store: StoreData): StockForecast[] {
   const threshold = getLowStockThreshold();
   return store.products
@@ -530,13 +558,27 @@ function computeStockForecasts(store: StoreData): StockForecast[] {
       const sold14 = store.sales
         .filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(13))
         .reduce((sum, s) => sum + s.quantity, 0);
+      const sold60 = store.sales
+        .filter(s => s.productId === p.id && new Date(s.date) >= daysAgo(RECENT_DEMAND_DAYS - 1))
+        .reduce((sum, s) => sum + s.quantity, 0);
       const perDay = sold14 / 14;
       const hasVelocity = perDay > 0;
-      const everSold = store.sales.some(sale => sale.productId === p.id);
-      const worthRestocking = hasVelocity || (p.quantity <= 0 && everSold);
+      // This asked whether the product had EVER sold, so one sale months back
+      // made a sold-out item a standing priority for the life of the shop.
+      // Demand has to be recent to count as demand.
+      const soldRecently = sold60 > 0;
+      const worthRestocking = hasVelocity || (p.quantity <= 0 && soldRecently);
       const daysLeft = p.quantity === 0 ? 0 : (hasVelocity ? Math.floor(p.quantity / perDay) : Infinity);
-      // Recommend 14-day supply + 20% buffer, default to 10 if no sales history
-      const restockQty = perDay > 0 ? Math.ceil(perDay * 14 * 1.2) : 10;
+      // A sold-out product shows no recent sales precisely because there was
+      // nothing left to sell, so its longer-run rate is the honest one.
+      const demandPerDay = hasVelocity
+        ? perDay
+        : (p.quantity <= 0 && soldRecently ? sold60 / RECENT_DEMAND_DAYS : 0);
+      // Fourteen days of cover plus a fifth. Nothing is suggested for a product
+      // with no demand behind it — that used to default to a flat 10 units.
+      const restockQty = demandPerDay > 0 ? Math.max(1, Math.ceil(demandPerDay * 14 * 1.2)) : 0;
+      const unitProfit = Math.max(0, (p.sellingPrice || 0) - (p.costPrice || 0));
+      const dailyProfitAtRisk = demandPerDay * unitProfit;
 
       let urgency: StockForecast['urgency'] = 'ok';
       if (p.quantity === 0) {
@@ -547,14 +589,23 @@ function computeStockForecasts(store: StoreData): StockForecast[] {
         urgency = 'soon';
       }
 
-      return { product: p, perDay, daysLeft, hasVelocity, worthRestocking, restockQty, urgency };
+      return { product: p, perDay, daysLeft, hasVelocity, worthRestocking, restockQty, urgency, unitProfit, dailyProfitAtRisk };
     });
 }
 
+/**
+ * Restock candidates, worst first.
+ *
+ * Sorting on days-of-cover alone put anything at zero stock at the top,
+ * regardless of whether it sells — so a product that shifted one unit last
+ * quarter outranked a fast mover with three days left. Demand that is real and
+ * recent comes first, then the money lost per day it stays unavailable, and
+ * cover is only the tie-breaker.
+ */
 export function inventoryIntelligence(store: StoreData): StockForecast[] {
   return computeStockForecasts(store)
     .filter(f => f.urgency !== 'ok')
-    .sort(byDaysLeft);
+    .sort(byMoneyAtRisk);
 }
 
 // ─── Expense Analysis ─────────────────────────────────────────────────────────
@@ -2106,7 +2157,11 @@ export function getTopOpportunities(store: StoreData): OpportunityCard[] {
   }
 
   // 2. Fast sellers about to run out.
-  const critical = inventoryIntelligence(store).filter(f => f.urgency === 'critical');
+  // Already sorted by money at risk, and only items with real recent demand
+  // qualify — restocking something that sold once last quarter is not an
+  // opportunity, it is a way to turn cash into shelf ornaments.
+  const critical = inventoryIntelligence(store)
+    .filter(f => f.urgency === 'critical' && f.worthRestocking && f.restockQty > 0);
   if (critical.length > 0) {
     const item = critical[0];
     // Profit, not revenue: the cost of the order is the merchant's own cash.

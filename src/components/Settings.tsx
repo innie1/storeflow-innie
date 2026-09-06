@@ -70,7 +70,9 @@ import {
   Star,
   Upload,
   Cloud,
-  MoreHorizontal
+  MoreHorizontal,
+  Bluetooth,
+  Wifi
 } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import { downscaleImageToDataUrl } from '@/lib/downscale-image';
@@ -2273,16 +2275,16 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               <button
                 type="button"
                 onClick={() => setPrintMethod('system')}
-                className={`flex-1 p-3 rounded-xl border text-sm font-display font-semibold ${printMethod === 'system' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
+                className={`flex-1 p-3 rounded-xl border text-sm font-display font-semibold flex items-center justify-center gap-1.5 ${printMethod === 'system' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
               >
-                🖨️ System / WiFi
+                <Wifi className="w-4 h-4" /> System / Wi-Fi
               </button>
               <button
                 type="button"
                 onClick={() => setPrintMethod('bluetooth')}
-                className={`flex-1 p-3 rounded-xl border text-sm font-display font-semibold ${printMethod === 'bluetooth' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
+                className={`flex-1 p-3 rounded-xl border text-sm font-display font-semibold flex items-center justify-center gap-1.5 ${printMethod === 'bluetooth' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
               >
-                🔵 Bluetooth
+                <Bluetooth className="w-4 h-4" /> Bluetooth
               </button>
             </div>
             <p className="text-[11px] text-muted-foreground leading-normal">
@@ -2321,7 +2323,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                     saveStore(updated);
                     showToast(`Connected to ${name} — test receipt sent`);
                   } catch (err: any) {
-                    showToast('Bluetooth pairing failed: ' + err.message, 'error');
+                    // Closing the chooser is a decision, not a failure — it
+                    // used to raise a red "pairing failed" message.
+                    const { describeBluetoothFailure } = await import('@/lib/print-engine');
+                    const { cancelled, message } = describeBluetoothFailure(err);
+                    if (!cancelled) showToast(message, 'error');
                   }
                 }}
                 className="w-full p-3 rounded-xl bg-primary text-primary-foreground text-sm font-display font-bold"
@@ -4487,7 +4493,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           <SettingTile icon={<Store className="w-5 h-5" />} color="#EC4899" title="Marketplace & Loyalty" desc="Storefront, pricing, rewards & delivery." onClick={() => setView('marketplace-settings')} />
 
           <SettingTile icon={<Printer className="w-5 h-5" />} color="#22C55E" title="Printer Settings" desc="Receipt printing method."
-            right={<p className="text-[10px] font-display font-semibold" style={{color:'#22C55E'}}>{(store.managerSettings?.printMethod || 'system') === 'bluetooth' ? '🔵 Bluetooth' : '🖨️ System/WiFi'}</p>}
+            right={<p className="text-[10px] font-display font-semibold flex items-center gap-1" style={{color:'#22C55E'}}>{(store.managerSettings?.printMethod || 'system') === 'bluetooth' ? <><Bluetooth className="w-3 h-3" /> Bluetooth</> : <><Wifi className="w-3 h-3" /> System/Wi-Fi</>}</p>}
             onClick={() => setView('printer-settings')} />
 
           <SettingTile icon={<Database className="w-5 h-5" />} color="#3B82F6" title="Data & Storage" desc="Backups & transfers." onClick={() => setView('data')}

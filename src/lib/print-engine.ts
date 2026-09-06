@@ -309,6 +309,33 @@ async function findWriteCharacteristic(server: BluetoothRemoteGATTServer) {
   return null;
 }
 
+/**
+ * Why a pairing attempt did not print, in words a merchant can act on.
+ *
+ * Both pairing buttons showed "Bluetooth pairing failed: <raw error>" in red
+ * for everything, including closing the device chooser — which is a decision,
+ * not a failure. Backing out of the list produced an alarming red message
+ * about a failure that had not happened.
+ */
+export function describeBluetoothFailure(err: any): { cancelled: boolean; message: string } {
+  // Chrome throws NotFoundError both when the chooser is dismissed and when it
+  // finds nothing; the message distinguishes them.
+  const raw = String(err?.message || '');
+  if (err?.name === 'NotFoundError' && /cancel/i.test(raw)) {
+    return { cancelled: true, message: '' };
+  }
+  if (err?.name === 'NotFoundError') {
+    return { cancelled: false, message: 'No printer found. Switch it on, and pair it in your phone\'s Bluetooth settings first.' };
+  }
+  if (err?.name === 'SecurityError' || err?.name === 'NotAllowedError') {
+    return { cancelled: false, message: 'This page is not allowed to use Bluetooth. Open StoreFlow over https and try again.' };
+  }
+  if (!navigator.bluetooth) {
+    return { cancelled: false, message: 'This device cannot print over Bluetooth. Use System / Wi-Fi printing instead.' };
+  }
+  return { cancelled: false, message: raw || 'The printer could not be reached.' };
+}
+
 export async function printBluetooth(data: PrintReceiptData, paperWidth: '58mm' | '80mm' = '58mm'): Promise<string> {
   if (!navigator.bluetooth) {
     throw new Error('This browser cannot talk to Bluetooth printers. Chrome on Android works; iPhone does not.');

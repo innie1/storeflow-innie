@@ -6,6 +6,7 @@ import StoreLogo from '@/components/StoreLogo';
 import { drawQRCode, encodeQRData } from '@/lib/qr-code';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import { downscaleImageToDataUrl } from '@/lib/downscale-image';
+import { Bluetooth, Wifi } from 'lucide-react';
 
 interface SaleReceiptProps {
   store: StoreData;
@@ -432,9 +433,9 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
                       const updated = { ...store, managerSettings: { ...settings, printMethod: 'system' as const } };
                       onUpdateStore?.(updated);
                     }}
-                    className={`flex-1 p-2 rounded-lg border text-xs font-semibold ${(settings.printMethod || 'system') === 'system' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
+                    className={`flex-1 p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 ${(settings.printMethod || 'system') === 'system' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
                   >
-                    🖨️ System / WiFi
+                    <Wifi className="w-3.5 h-3.5" /> System / Wi-Fi
                   </button>
                   <button
                     type="button"
@@ -442,9 +443,9 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
                       const updated = { ...store, managerSettings: { ...settings, printMethod: 'bluetooth' as const } };
                       onUpdateStore?.(updated);
                     }}
-                    className={`flex-1 p-2 rounded-lg border text-xs font-semibold ${settings.printMethod === 'bluetooth' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
+                    className={`flex-1 p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 ${settings.printMethod === 'bluetooth' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'}`}
                   >
-                    🔵 Bluetooth
+                    <Bluetooth className="w-3.5 h-3.5" /> Bluetooth
                   </button>
                 </div>
                 {settings.printMethod === 'bluetooth' && (
@@ -474,7 +475,9 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
                           onUpdateStore?.(updated);
                           showToast(`Connected to ${name} — test receipt sent`);
                         } catch (err: any) {
-                          showToast('Bluetooth pairing failed: ' + err.message, 'error');
+                          const { describeBluetoothFailure } = await import('@/lib/print-engine');
+                          const { cancelled, message } = describeBluetoothFailure(err);
+                          if (!cancelled) showToast(message, 'error');
                         }
                       }}
                       className="w-full p-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold"
@@ -527,7 +530,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
               {/* QR Code section */}
               <div className="p-2 rounded bg-surface-2/50 border border-border/60 space-y-2">
                 <span className="text-xs font-semibold text-foreground block">Receipt QR Code</span>
-                
+
                 {/* Generate branded QR button */}
                 <button
                   onClick={handleGenerateBrandedQR}
