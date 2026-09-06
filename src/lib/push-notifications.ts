@@ -187,3 +187,143 @@ export async function clearAllStoreFlowNotifications(): Promise<void> {
   }
 }
 
+
+/**
+ * Raises a real system notification from the app itself, with no server.
+ *
+ * Web Push exists so a phone can be reached while the app is closed: the
+ * subscription goes to a backend, which holds the VAPID private key and asks
+ * the browser vendor's push service to wake the device. None of that can
+ * happen from the client, and it is why the savings and shrinkage notices
+ * needed a sender adding to the edge function.
+ *
+ * But it is only needed for the *closed* case. While the app is running — open,
+ * in another tab, or minimised — the service worker registration can post a
+ * notification directly, with the same buttons and the same behaviour when
+ * they are tapped. That covers a merchant who has StoreFlow up on the counter
+ * all day, needs no backend, and works right now whatever state the project's
+ * API is in.
+ *
+ * Returns false when nothing was shown, so a caller can fall back to the
+ * in-app tray alone.
+ */
+export async function showLocalNotification(options: {
+  title: string;
+  body: string;
+  tag: string;
+  /** Drives which buttons appear and what tapping them does. */
+  category: 'savings' | 'stock_loss' | 'insight';
+  /** Where tapping the body should land. */
+  url?: string;
+}): Promise<boolean> {
+  if (!isPushSupported()) return false;
+  if (Notification.permission !== 'granted') return false;
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+
+    // Same tag as a pushed one, so a later push about the same subject
+    // replaces this rather than stacking a duplicate underneath it.
+    const existing = await registration.getNotifications({ tag: options.tag });
+    if (existing.length > 0) return false;
+
+    await registration.showNotification(options.title, {
+      body: options.body,
+      tag: options.tag,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: {
+        url: options.url || '/?tab=dashboard',
+        tag: options.tag,
+        category: options.category,
+      },
+      // The service worker's notificationclick handler reads data.category, so
+      // "I understand" behaves identically whether this came from a push or
+      // from here.
+      actions: [
+        { action: 'acknowledge', title: '👍 I understand' },
+        { action: 'open', title: 'Open' },
+      ],
+    } as NotificationOptions);
+    return true;
+  } catch (err) {
+    console.warn('[push] showLocalNotification error:', err);
+    return false;
+  }
+}
+
+/**
+ * Asks the browser to wake this app periodically, so notices worked out on the
+ * device can still be shown after it is closed.
+ *
+ * This is the only route by which savings and shrinkage reach a closed phone
+ * without a backend. Web Push needs one because the VAPID private key cannot
+ * ship in the app; periodic background sync does not, because the browser
+ * wakes the service worker itself.
+ *
+ * It is Chrome on Android only, only once the app is installed, and it fires
+ * on the browser's schedule rather than ours — Chrome throttles by how much
+ * the site is used and may never fire at all. So it supplements push, it does
+ * not replace it, and nothing should be promised to a merchant on the strength
+ * of it.
+ */
+export async function enableBackgroundNotices(): Promise<boolean> {
+  if (!isPushSupported()) return false;
+  if (Notification.permission !== 'granted') return false;
+  try {
+    const registration: any = await navigator.serviceWorker.ready;
+    if (!registration.periodicSync) return false;
+
+    // Chrome refuses the registration outright without this permission, and
+    // the query itself is not supported everywhere.
+    try {
+      const status = await navigator.permissions.query({ name: 'periodic-background-sync' as PermissionName });
+      if (status.state !== 'granted') return false;
+    } catch {
+      return false;
+    }
+
+    const existing: string[] = await registration.periodicSync.getTags();
+    if (existing.includes('storeflow-notices')) return true;
+
+    // Twelve hours is a floor, not a promise: Chrome decides the real cadence.
+    await registration.periodicSync.register('storeflow-notices', { minInterval: 12 * 60 * 60 * 1000 });
+    return true;
+  } catch (err) {
+    console.warn('[push] enableBackgroundNotices error:', err);
+    return false;
+  }
+}
+
+/**
+ * Hands a notice to the service worker to show if the app is closed when the
+ * browser next wakes it. Safe to call repeatedly — the worker keys on id.
+ */
+export async function queueBackgroundNotice(notice: {
+  id: string;
+  title: string;
+  body: string;
+  tag: string;
+  category: 'savings' | 'stock_loss' | 'insight';
+  url?: string;
+}): Promise<void> {
+  if (!isPushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    registration.active?.postMessage({
+      type: 'QUEUE_NOTICE',
+      notice: { ...notice, url: notice.url || '/?tab=dashboard' },
+    });
+  } catch (err) {
+    console.warn('[push] queueBackgroundNotice error:', err);
+  }
+}
+
+/** Drops a queued notice, for when the merchant has already dealt with it. */
+export async function dropBackgroundNotice(id: string): Promise<void> {
+  if (!isPushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    registration.active?.postMessage({ type: 'DROP_QUEUED_NOTICE', id });
+  } catch { /* nothing queued, or no worker yet */ }
+}

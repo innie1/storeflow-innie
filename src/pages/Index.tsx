@@ -4,6 +4,7 @@ import FlowShirtFab from '@/components/FlowShirtFab';
 import { getBusinessTemplate, isBusinessTabAllowed, isServiceFirstBusiness, resolveBusinessType, shouldRunRetailRestockEngine } from '@/lib/business-runtime';
 import { readLinkedTab, readNotificationAct, readOrderDeepLink, stripOrderDeepLink } from '@/lib/order-deep-link';
 import { acknowledgeStockLoss, getStockLossNotice, markStockLossRaised } from '@/lib/stock-loss-notice';
+import { dropBackgroundNotice, enableBackgroundNotices, queueBackgroundNotice, showLocalNotification } from '@/lib/push-notifications';
 import type { NotificationAct } from '@/lib/order-deep-link';
 import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
@@ -620,6 +621,9 @@ export default function Index() {
       if (event.data?.type === 'STOREFLOW_NOTIFICATION_ACK') {
         if (event.data.category === 'stock_loss') {
           const signature = acknowledgeStockLoss();
+          // Otherwise a copy already handed to the worker would still surface
+          // after the merchant said they had understood it.
+          if (event.data.tag) void dropBackgroundNotice(String(event.data.tag).replace('stock-loss-', ''));
           // The push sender runs on the server and cannot read this device's
           // storage, so the acknowledgement has to travel with the store.
           if (signature) {
@@ -1246,6 +1250,13 @@ export default function Index() {
     window.scrollTo(0, 0);
   }, [tab]);
 
+  // Chrome only grants this to an installed app, and refuses quietly
+  // otherwise, so it is asked for once and its answer is not acted on.
+  useEffect(() => {
+    if (!store?.id) return;
+    void enableBackgroundNotices();
+  }, [store?.id]);
+
   // Shrinkage is worth mentioning on its own rather than only as a line inside
   // the leak detector. getStockLossNotice decides whether there is anything
   // worth an interruption and how recently one was made, so this can run on
@@ -1254,6 +1265,27 @@ export default function Index() {
     if (!store) return;
     const notice = getStockLossNotice(store);
     if (!notice) return;
+
+    // Three routes, in order of how far they reach:
+    //   the tray, which needs nothing;
+    //   a system notification, which needs only that the app is running;
+    //   the queue, which the browser may show after the app is closed.
+    // The pushed version comes from send-flow-reminders and needs a backend.
+    void showLocalNotification({
+      title: notice.title,
+      body: notice.body,
+      tag: `stock-loss-${notice.id}`,
+      category: 'stock_loss',
+      url: '/?tab=inventory',
+    });
+    void queueBackgroundNotice({
+      id: notice.id,
+      title: notice.title,
+      body: notice.body,
+      tag: `stock-loss-${notice.id}`,
+      category: 'stock_loss',
+      url: '/?tab=inventory',
+    });
 
     setStore(prev => {
       if (!prev) return prev;
@@ -1287,10 +1319,21 @@ export default function Index() {
     saveSession(s.accessCode);
   }, []);
 
-  const handleNavigate = useCallback((targetTab: TabId, lowStockOrFocus?: boolean | ProductFocus) => {
+  const handleNavigate = useCallback((targetTab: TabId, lowStockOrFocus?: boolean | ProductFocus | string) => {
     setTab(targetTab);
     if (lowStockOrFocus === true) {
       setFilterLowStock(true);
+      return;
+    }
+    // Notifications carry a plain signal rather than a product — the drawer
+    // hands through whatever actionParam the notification was created with.
+    // Manager renders its own copy of the drawer and passed this handler,
+    // whose parameter was typed for a ProductFocus only, so a string fell
+    // through every branch and the signal was silently dropped: tapping a
+    // restock notification from there landed on Inventory without opening
+    // Smart Restock.
+    if (typeof lowStockOrFocus === 'string') {
+      if (lowStockOrFocus === 'openRestock') setAutoOpenRestock(true);
       return;
     }
     // Advice that named a single product sends it along, so the destination

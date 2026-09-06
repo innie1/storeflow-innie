@@ -91,14 +91,34 @@ function quietNow(start:string,end:string) {
   if (from === to) return true;
   return from < to ? current >= from && current < to : current >= from || current < to;
 }
+/**
+ * The one place this database is opened.
+ *
+ * Version 2 adds `queued`, which holds notices the app worked out while it was
+ * running so they can still be shown after it is closed. Both openers have to
+ * agree on the version — a second one still asking for version 1 would throw
+ * VersionError and take notification preferences down with it.
+ */
+const DB_NAME = 'storeflow-notifications';
+const DB_VERSION = 2;
+const STORES = ['preferences', 'queued'] as const;
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      for (const name of STORES) {
+        if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 async function readPreferences(): Promise<NotificationPreferences> {
   try {
-    const db = await new Promise<IDBDatabase>((resolve,reject)=>{
-      const req = indexedDB.open('storeflow-notifications',1);
-      req.onupgradeneeded = () => req.result.createObjectStore('preferences');
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
+    const db = await openDb();
     return await new Promise(resolve=>{
       const req=db.transaction('preferences','readonly').objectStore('preferences').get('global');
       req.onsuccess=()=>resolve({ ...DEFAULT_PREFS, ...(req.result || {}) } as NotificationPreferences);
@@ -111,7 +131,10 @@ function allowed(data:PushPayload,prefs:NotificationPreferences) {
   const category=categoryOf(data);
   if (category==='order' && !prefs.orders) return false;
   if (category==='flow' && !prefs.flowCheckins) return false;
-  if (category==='insight' && !prefs.businessInsights) return false;
+  // Savings and shrinkage are business insights as far as the merchant's
+  // switches are concerned — without this there would be no way to turn them
+  // off short of revoking notifications for the whole app.
+  if ((category==='insight' || category==='savings' || category==='stock_loss') && !prefs.businessInsights) return false;
   if (category==='debt' && !prefs.debtReminders) return false;
   const priority=data.priority || 'normal';
   if (prefs.quietHoursEnabled && quietNow(prefs.quietStart,prefs.quietEnd) && !(priority==='critical' && prefs.criticalAlerts)) return false;
@@ -125,6 +148,90 @@ async function postToClients(message: unknown) {
     try { client.postMessage(message); } catch { /* window went away */ }
   }
 }
+
+/**
+ * Notices the app queued for later, in the order they were added.
+ *
+ * Savings and shrinkage are both worked out entirely from data already on the
+ * phone, so raising them does not actually need a server — only something
+ * awake to do it. Web Push needs a backend because the VAPID private key
+ * cannot ship in the app; periodic background sync does not, because the
+ * browser wakes this worker directly. It is Chrome-and-Android only, only for
+ * an installed app, and fires when the browser feels like it rather than on a
+ * schedule, so it is a fallback rather than a promise — but it costs nothing
+ * and works while the backend is unavailable.
+ */
+interface QueuedNotice {
+  id: string;
+  title: string;
+  body: string;
+  tag: string;
+  category: string;
+  url: string;
+  queuedAt: number;
+}
+
+/** Queued notices older than this are stale news and are dropped unshown. */
+const QUEUED_NOTICE_TTL_MS = 3 * 86400000;
+
+async function readQueuedNotices(): Promise<QueuedNotice[]> {
+  try {
+    const db = await openDb();
+    return await new Promise(resolve => {
+      const req = db.transaction('queued', 'readonly').objectStore('queued').get('pending');
+      req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+      req.onerror = () => resolve([]);
+    });
+  } catch { return []; }
+}
+
+async function writeQueuedNotices(notices: QueuedNotice[]) {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('queued', 'readwrite');
+      tx.objectStore('queued').put(notices, 'pending');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* nothing queued is better than a broken worker */ }
+}
+
+/** Shows whatever is waiting, then empties the queue. */
+async function drainQueuedNotices() {
+  const queued = await readQueuedNotices();
+  if (queued.length === 0) return;
+  await writeQueuedNotices([]);
+
+  const prefs = await readPreferences();
+  const now = Date.now();
+  const appIcon = versionedAsset('/icons/icon-192.png');
+
+  for (const notice of queued) {
+    if (now - notice.queuedAt > QUEUED_NOTICE_TTL_MS) continue;
+    if (!allowed({ title: notice.title, tag: notice.tag, category: notice.category }, prefs)) continue;
+    // Don't say it again if one about the same subject is already sitting there.
+    const already = await self.registration.getNotifications({ tag: notice.tag });
+    if (already.length > 0) continue;
+
+    await self.registration.showNotification(notice.title, {
+      body: notice.body,
+      tag: notice.tag,
+      icon: appIcon,
+      badge: appIcon,
+      silent: !prefs.sounds,
+      data: { url: new URL(notice.url, self.location.origin).href, tag: notice.tag, category: notice.category },
+      actions: buildActions({ title: notice.title, tag: notice.tag, category: notice.category }),
+    } as NotificationOptions);
+  }
+}
+
+// Chrome wakes an installed app's worker on its own schedule. This is the only
+// route by which these notices reach a closed phone without a backend.
+self.addEventListener('periodicsync', (event: any) => {
+  if (event.tag !== 'storeflow-notices') return;
+  event.waitUntil(drainQueuedNotices());
+});
 
 self.addEventListener('push', event => {
   let data: PushPayload = {};
@@ -216,11 +323,22 @@ self.addEventListener('message', event => {
   if (msg.type === 'SET_NOTIFICATION_PREFERENCES' && msg.preferences) {
     event.waitUntil((async()=>{
       try {
-        const db=await new Promise<IDBDatabase>((resolve,reject)=>{const req=indexedDB.open('storeflow-notifications',1);req.onupgradeneeded=()=>req.result.createObjectStore('preferences');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
+        const db=await openDb();
         await new Promise<void>((resolve,reject)=>{const tx=db.transaction('preferences','readwrite');tx.objectStore('preferences').put(msg.preferences,'global');tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});
       } catch {}
     })());
   }
+  // The app worked something out while it was open and wants it shown later,
+  // if it gets the chance.
+  if (msg.type === 'QUEUE_NOTICE' && msg.notice) event.waitUntil((async () => {
+    const queued = await readQueuedNotices();
+    if (queued.some(n => n.id === msg.notice.id)) return;
+    await writeQueuedNotices([...queued, { ...msg.notice, queuedAt: Date.now() }]);
+  })());
+  if (msg.type === 'DROP_QUEUED_NOTICE' && msg.id) event.waitUntil((async () => {
+    const queued = await readQueuedNotices();
+    await writeQueuedNotices(queued.filter(n => n.id !== msg.id));
+  })());
   if (msg.type === 'CLEAR_NOTIFICATIONS') event.waitUntil((async () => {
     const notifications = await self.registration.getNotifications();
     for (const n of notifications) if (!msg.orderId || n.data?.orderId === msg.orderId || n.tag?.includes(msg.orderId)) n.close();

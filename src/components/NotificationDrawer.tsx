@@ -1,3 +1,4 @@
+import type { TabId } from '@/types/store';
 import { StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
@@ -6,7 +7,7 @@ interface NotificationDrawerProps {
   store: StoreData;
   onClose: () => void;
   onUpdate: (s: StoreData) => void;
-  onNavigate?: (tab: string, param?: string) => void;
+  onNavigate?: (tab: TabId, param?: string) => void;
 }
 
 export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate }: NotificationDrawerProps) {
@@ -93,7 +94,11 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
                         onClick={() => {
                           // Acting on it is attending to it — and only to it.
                           dismiss(n.id);
-                          if (onNavigate) onNavigate(n.actionTab!, n.actionParam);
+                          // actionTab is a plain string on the stored
+                          // notification. Index renders "That screen isn't
+                          // available" for anything it does not know, so an
+                          // unrecognised one is handled rather than fatal.
+                          if (onNavigate) onNavigate(n.actionTab as TabId, n.actionParam);
                           handleClose();
                         }}
                         className="px-2.5 py-1 rounded bg-primary text-primary-foreground text-[9px] font-display font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"

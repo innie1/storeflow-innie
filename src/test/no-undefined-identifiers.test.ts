@@ -38,10 +38,10 @@ import { execSync } from 'node:child_process';
 /** TS2304 and TS2552 both mean "this name does not exist". */
 const MISSING_NAME_CODES = ['TS2304', 'TS2552'];
 
-const TYPE_ONLY_ALLOWED = new Set([
-  'SpeechRecognition',
-  'SpeechRecognitionEvent',
-  'SpeechRecognitionErrorEvent',
+const TYPE_ONLY_ALLOWED = new Set<string>([
+  // Previously needed by VoiceSell.tsx, which was an unused duplicate of
+  // SimpleVoiceSell and has been deleted. Kept empty rather than removed so
+  // the next genuinely type-only case has an obvious home.
 ]);
 
 function undefinedIdentifiers(): { file: string; name: string }[] {

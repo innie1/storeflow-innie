@@ -39,7 +39,7 @@ interface ManagerProps {
   orders?: any[];
   onUpdate: (s: StoreData) => void;
   onEnable?: () => void;
-  onNavigate?: (tab: TabId, focus?: ProductFocus) => void;
+  onNavigate?: (tab: TabId, focus?: ProductFocus | string) => void;
 }
 
 type ManagerTab = 'overview' | 'predictions' | 'analysis' | 'advice';
