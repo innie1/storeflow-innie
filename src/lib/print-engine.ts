@@ -117,11 +117,11 @@ export function generateEscPosBytes(data: PrintReceiptData, paperWidth: '58mm' |
   encoder.align('center').bold(true).size('large');
   encoder.line(data.storeName);
   encoder.size('normal').bold(false);
-  
+
   if (data.storeType) encoder.line(data.storeType);
   if (data.storeAddress) encoder.line(data.storeAddress);
   if (data.storePhone) encoder.line(`Tel: ${data.storePhone}`);
-  
+
   encoder.divider('=');
 
   // Metadata
@@ -130,7 +130,7 @@ export function generateEscPosBytes(data: PrintReceiptData, paperWidth: '58mm' |
   encoder.line(`Receipt #: ${data.receiptNumber.toUpperCase()}`);
   if (data.cashierName) encoder.line(`Cashier: ${data.cashierName}`);
   if (data.customerName) encoder.line(`Customer: ${data.customerName}`);
-  
+
   encoder.divider('-');
 
   // Items Header
@@ -167,9 +167,9 @@ export function generateEscPosBytes(data: PrintReceiptData, paperWidth: '58mm' |
     encoder.bold(true);
     encoder.twoColumn('TOTAL', `${cur}${data.total.toLocaleString()}`);
     encoder.bold(false);
-    
+
     encoder.divider('.');
-    
+
     encoder.twoColumn('Amount Paid', `${cur}${data.paid.toLocaleString()}`);
     if (data.balance > 0) {
       encoder.bold(true);
@@ -192,7 +192,7 @@ export function generateEscPosBytes(data: PrintReceiptData, paperWidth: '58mm' |
   } else {
     encoder.line('Thank you for your patronage! 🙏');
   }
-  
+
   encoder.feed(4);
   encoder.cut();
   return encoder.encode();
@@ -269,52 +269,86 @@ export function generatePlainTextReceipt(data: PrintReceiptData, paperWidth: '58
 }
 
 // ─── BLE Bluetooth Printer Service ──────────────────────────────────────────
+/**
+ * Services used by the ESC/POS thermal printers merchants actually buy, each
+ * with the characteristic that accepts print data.
+ *
+ * These have to be full 128-bit UUIDs. The previous code passed '000018f0',
+ * which is not a valid Service name — Web Bluetooth rejects it outright, and
+ * because it was in `optionalServices`, requestDevice threw before the picker
+ * ever appeared. Bluetooth printing could not have worked on any device: every
+ * attempt fell through to the silent system-print fallback.
+ *
+ * The third entry is the ISSC/Microchip transparent UART, which is what most
+ * cheap 58mm printers present.
+ */
+const PRINTER_PROFILES = [
+  { service: '000018f0-0000-1000-8000-00805f9b34fb', characteristic: '00002af1-0000-1000-8000-00805f9b34fb' },
+  { service: '0000ff00-0000-1000-8000-00805f9b34fb', characteristic: '0000ff02-0000-1000-8000-00805f9b34fb' },
+  { service: '49535343-fe7d-4ae5-8fa9-9fafd205e455', characteristic: '49535343-8841-43f4-a8d4-ecbe34729bb3' },
+  { service: '0000ffe0-0000-1000-8000-00805f9b34fb', characteristic: '0000ffe1-0000-1000-8000-00805f9b34fb' },
+];
+
+/** Finds a characteristic that accepts writes, whichever profile the printer uses. */
+async function findWriteCharacteristic(server: BluetoothRemoteGATTServer) {
+  for (const profile of PRINTER_PROFILES) {
+    try {
+      const service = await server.getPrimaryService(profile.service);
+      try {
+        return await service.getCharacteristic(profile.characteristic);
+      } catch {
+        // The service is there but names its characteristic differently.
+        const found = (await service.getCharacteristics())
+          .find(c => c.properties.write || c.properties.writeWithoutResponse);
+        if (found) return found;
+      }
+    } catch {
+      // Printer does not expose this profile; try the next.
+    }
+  }
+  return null;
+}
+
 export async function printBluetooth(data: PrintReceiptData, paperWidth: '58mm' | '80mm' = '58mm'): Promise<string> {
   if (!navigator.bluetooth) {
-    throw new Error('Bluetooth is not supported on this browser/device.');
+    throw new Error('This browser cannot talk to Bluetooth printers. Chrome on Android works; iPhone does not.');
   }
 
-  // Common thermal printer UUIDs
-  const serviceUuid = '000018f0'; // Serial port service profile / thermal generic
-  const charUuid = '00002af1';
+  const device = await navigator.bluetooth.requestDevice({
+    acceptAllDevices: true,
+    optionalServices: PRINTER_PROFILES.map(p => p.service),
+  });
+
+  const server = await device.gatt?.connect();
+  if (!server) throw new Error('Could not connect to the printer. Is it switched on and in range?');
 
   try {
-    const device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [serviceUuid, '00001101-0000-1000-8000-00805f9b34fb']
-    });
-
-    const server = await device.gatt?.connect();
-    if (!server) throw new Error('Failed to connect to printer GATT server');
-
-    // Attempt service discovery
-    let service;
-    try {
-      service = await server.getPrimaryService(serviceUuid);
-    } catch {
-      // Fallback service
-      service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
-    }
-
-    const characteristics = await service.getCharacteristics();
-    const writeChar = characteristics.find(c => c.properties.write || c.properties.writeWithoutResponse);
-    if (!writeChar) throw new Error('No write characteristic found on printer');
+    const writeChar = await findWriteCharacteristic(server);
+    if (!writeChar) throw new Error(`${device.name || 'That printer'} did not offer a printing service.`);
 
     const bytes = generateEscPosBytes(data, paperWidth);
 
-    // Chunk bytes (BLE standard limit is usually 20 bytes per write)
+    // BLE writes are capped by the negotiated MTU; 20 bytes is the floor every
+    // device supports. writeValueWithoutResponse is markedly faster where the
+    // characteristic allows it, and is what these printers expect.
+    const canWriteFast = writeChar.properties.writeWithoutResponse;
     const chunkSize = 20;
     for (let i = 0; i < bytes.length; i += chunkSize) {
       const chunk = bytes.slice(i, i + chunkSize);
-      await writeChar.writeValue(chunk);
-      // Wait briefly to allow the printer buffer to digest
-      await new Promise(r => setTimeout(r, 45));
+      if (canWriteFast && 'writeValueWithoutResponse' in writeChar) {
+        await (writeChar as any).writeValueWithoutResponse(chunk);
+      } else {
+        await writeChar.writeValue(chunk);
+      }
+      await new Promise(r => setTimeout(r, canWriteFast ? 20 : 45));
     }
 
-    await server.disconnect();
+    // A resolved write means the bytes left the phone, not that the printer has
+    // put them on paper. Disconnecting straight away truncated the receipt.
+    await new Promise(r => setTimeout(r, 600));
     return device.name || 'Bluetooth Printer';
-  } catch (err: any) {
-    throw new Error(`Bluetooth print failed: ${err.message}`);
+  } finally {
+    try { server.disconnect(); } catch { /* already gone */ }
   }
 }
 
@@ -331,9 +365,9 @@ export async function printUSB(data: PrintReceiptData, paperWidth: '58mm' | '80m
 
     await device.open();
     await device.selectConfiguration(1);
-    
+
     // Find printer interface
-    const iface = device.configuration?.interfaces.find(i => 
+    const iface = device.configuration?.interfaces.find(i =>
       i.alternates.some(alt => alt.interfaceClass === 7)
     );
     if (!iface) throw new Error('No printer interface found on USB device.');
@@ -346,7 +380,7 @@ export async function printUSB(data: PrintReceiptData, paperWidth: '58mm' | '80m
 
     const bytes = generateEscPosBytes(data, paperWidth);
     await device.transferOut(endpointOut.endpointNumber, bytes);
-    
+
     await device.releaseInterface(iface.interfaceNumber);
     await device.close();
 
@@ -361,7 +395,7 @@ export function printSystem(data: PrintReceiptData, paperWidth: '58mm' | '80mm' 
   return new Promise((resolve, reject) => {
     try {
       const cur = data.receiptCurrency || '₦';
-      
+
       // Build HTML template
       const itemsHtml = data.items.map(item => `
         <div style="margin-bottom: 4px;">
@@ -450,33 +484,33 @@ export function printSystem(data: PrintReceiptData, paperWidth: '58mm' | '80mm' 
               ${data.storeAddress ? `<div style="font-size: ${isThermal ? '10px' : '13px'};">${data.storeAddress}</div>` : ''}
               ${data.storePhone ? `<div style="font-size: ${isThermal ? '10px' : '13px'};">Tel: ${data.storePhone}</div>` : ''}
             </div>
-            
+
             <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
-            
+
             <div style="font-size: ${isThermal ? '10px' : '12px'}; color: #444;">
               <div>Date: ${new Date(data.date).toLocaleString()}</div>
               <div>Receipt #: ${data.receiptNumber.toUpperCase()}</div>
               ${data.cashierName ? `<div>Cashier: ${data.cashierName}</div>` : ''}
               ${data.customerName ? `<div>Customer: ${data.customerName}</div>` : ''}
             </div>
-            
+
             <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
-            
+
             <div style="font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 4px;">
               <span>Item</span><span>Total</span>
             </div>
             <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
-            
+
             <div>${itemsHtml}</div>
-            
+
             <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
-            
+
             <div style="line-height: 1.4;">${financialsHtml}</div>
-            
+
             <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
             <div>Payment Method: ${data.paymentMethod.toUpperCase()}</div>
             <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
-            
+
             <div style="text-align: center; margin-top: 8px; font-style: italic;">
               ${data.footerMessage || 'Thank you for your patronage! 🙏'}
             </div>
@@ -484,37 +518,62 @@ export function printSystem(data: PrintReceiptData, paperWidth: '58mm' | '80mm' 
         </html>
       `;
 
-      // Create an iframe to print silently without navigating away
+      // Print through a hidden iframe so the app is not navigated away from.
+      //
+      // This used to set visibility:hidden — which some browsers refuse to
+      // print, producing a blank page — and then remove the iframe one second
+      // after calling print(). On desktop print() blocks until the dialog is
+      // dismissed, so that was survivable; on Android it returns immediately
+      // and the preview renders afterwards, so the document was torn out from
+      // under the preview and the receipt came out blank or not at all.
       const iframe = document.createElement('iframe');
+      iframe.setAttribute('aria-hidden', 'true');
       iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
       iframe.style.width = '0';
       iframe.style.height = '0';
       iframe.style.border = 'none';
-      iframe.style.visibility = 'hidden';
       document.body.appendChild(iframe);
 
       const doc = iframe.contentWindow?.document || iframe.contentDocument;
-      if (!doc) throw new Error('Could not open iframe document');
+      if (!doc) {
+        document.body.removeChild(iframe);
+        throw new Error('Could not prepare the receipt for printing.');
+      }
 
+      doc.open();
       doc.write(html);
       doc.close();
 
-      iframe.contentWindow?.focus();
-      
-      // Delay printing to let styles apply
-      setTimeout(() => {
+      let cleanedUp = false;
+      const cleanUp = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        if (iframe.parentNode) document.body.removeChild(iframe);
+        resolve('System Printer / PDF');
+      };
+
+      // Tear down when the print dialog closes, not on a guessed delay.
+      iframe.contentWindow?.addEventListener('afterprint', cleanUp);
+      // Android Chrome does not always fire afterprint; keep a long backstop
+      // rather than a one-second one.
+      const backstop = setTimeout(cleanUp, 60_000);
+
+      const startPrint = () => {
         try {
+          iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
-          // Give user time to print/cancel, then clean up
-          setTimeout(() => {
-            document.body.removeChild(iframe);
-            resolve('System Printer / PDF');
-          }, 1000);
         } catch (err: any) {
-          document.body.removeChild(iframe);
+          clearTimeout(backstop);
+          if (iframe.parentNode) document.body.removeChild(iframe);
           reject(err);
         }
-      }, 500);
+      };
+
+      // Wait for the iframe document to lay out before printing it.
+      if (doc.readyState === 'complete') setTimeout(startPrint, 250);
+      else iframe.onload = () => setTimeout(startPrint, 250);
     } catch (err: any) {
       reject(err);
     }
@@ -531,17 +590,28 @@ export async function printReceipt(
   data: PrintReceiptData,
   paperWidth: '58mm' | '80mm' | 'standard' = '58mm',
   method: 'system' | 'bluetooth' = 'system'
-): Promise<{ printerName: string; usedFallback: boolean }> {
+): Promise<{ printerName: string; usedFallback: boolean; reason?: string; cancelled?: boolean }> {
   if (method === 'bluetooth') {
     try {
       const width = paperWidth === 'standard' ? '58mm' : paperWidth;
       const printerName = await printBluetooth(data, width);
       return { printerName, usedFallback: false };
-    } catch (err) {
-      // Fall back silently to system print so a failed/disconnected
-      // Bluetooth printer never blocks a sale.
+    } catch (err: any) {
+      // Choosing nothing in the device picker is a decision, not a failure.
+      // Falling through to a system print dialog after the merchant backed out
+      // is the opposite of what they just asked for.
+      if (err?.name === 'NotFoundError') {
+        return { printerName: '', usedFallback: false, cancelled: true };
+      }
+      // Anything else: print it some other way rather than block a sale, and
+      // say why, so "printer is off" is distinguishable from "this phone
+      // cannot do Bluetooth printing at all".
       await printSystem(data, paperWidth);
-      return { printerName: 'System Printer / PDF (Bluetooth unavailable)', usedFallback: true };
+      return {
+        printerName: 'System Printer / PDF',
+        usedFallback: true,
+        reason: err?.message || 'The Bluetooth printer could not be reached.',
+      };
     }
   }
   const printerName = await printSystem(data, paperWidth);

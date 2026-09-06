@@ -106,8 +106,10 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
       receiptCurrency: settings.receiptCurrency || '₦',
     };
     printReceipt(receiptData, settings.receiptWidth || '58mm', settings.printMethod || 'system')
-      .then(({ usedFallback }) => {
-        if (usedFallback) showToast('Bluetooth printer unavailable — sent to system print instead', 'info');
+      .then(({ usedFallback, reason, cancelled }) => {
+        if (cancelled) return;
+        // Say which printer failed and why, so it can be fixed.
+        if (usedFallback) showToast(reason || 'Bluetooth printer unavailable — used system print instead', 'info');
       })
       .catch(err => {
         showToast('Printing failed: ' + err.message, 'error');
