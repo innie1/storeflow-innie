@@ -32,6 +32,7 @@ import {
 import ScrollLock from '@/components/ScrollLock';
 import FlowAdviceReport from '@/components/FlowAdviceReport';
 import type { ProductFocus } from '@/lib/product-focus';
+import { speakAsFlow, stopFlowVoice, type FlowVoiceGender } from '@/lib/flow-voice';
 
 interface ManagerProps {
   store: StoreData;
@@ -419,89 +420,27 @@ export function Typewriter({ text, speed = 50, speak = false }: { text: string; 
 
   // Natural human-sounding speech synthesis read-out
   useEffect(() => {
-    if (speak && text && typeof window !== 'undefined' && window.speechSynthesis) {
-      // Cancel any ongoing speech synthesis first
-      window.speechSynthesis.cancel();
+    if (!speak || !text) return;
 
-      // Clean up markdown/extra formatting symbols for cleaner voice speech
-      const cleanText = text
-        .replace(/[*#_~`>[\]()-]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-
-      // Get the active session and load store settings to read voiceGender
-      let voiceGender = 'young-male'; // Default
-      try {
-        const sessionRaw = localStorage.getItem('storeflow_session');
-        if (sessionRaw) {
-          const session = JSON.parse(sessionRaw);
-          const activeStoreRaw = localStorage.getItem(`storeflow_${session.accessCode}`);
-          if (activeStoreRaw) {
-            const activeStore = JSON.parse(activeStoreRaw);
-            if (activeStore.managerSettings?.voiceGender) {
-              voiceGender = activeStore.managerSettings.voiceGender;
-            }
-          }
+    // Voice choice lives in lib/flow-voice. This used to hunt for names like
+    // "david", "zira" and "hazel" — the legacy formant voices, which are the
+    // robotic ones — and then push pitch to 1.35 to make one sound younger,
+    // which is what makes synthesis sound strained.
+    let gender: FlowVoiceGender = 'young-male';
+    try {
+      const sessionRaw = localStorage.getItem('storeflow_session');
+      if (sessionRaw) {
+        const session = JSON.parse(sessionRaw);
+        const activeStoreRaw = localStorage.getItem(`storeflow_${session.accessCode}`);
+        if (activeStoreRaw) {
+          const saved = JSON.parse(activeStoreRaw)?.managerSettings?.voiceGender;
+          if (saved) gender = saved as FlowVoiceGender;
         }
-      } catch (e) {
-        // ignore
       }
+    } catch { /* fall back to the default voice */ }
 
-      const setVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const enVoices = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
-        const maleNames = ['david', 'mark', 'george', 'daniel', 'ravi', 'male', 'google us english male', 'google uk english male'];
-        const femaleNames = ['zira', 'samantha', 'hazel', 'susan', 'heera', 'female', 'google us english female', 'google uk english female'];
-
-        let selectedVoice = null;
-        let pitch = 1.0;
-        let rate = 0.95;
-
-        if (voiceGender === 'male') {
-          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) ||
-                          voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
-          pitch = 0.95;
-          rate = 0.92;
-        } else if (voiceGender === 'female') {
-          selectedVoice = enVoices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name))) ||
-                          voices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name)));
-          pitch = 1.05;
-          rate = 0.95;
-        } else {
-          // young-male (default)
-          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) ||
-                          voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
-          pitch = 1.35; // Higher pitch for younger male voice
-          rate = 0.98;
-        }
-
-        if (!selectedVoice) {
-          selectedVoice = enVoices.find(v =>
-            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Premium')) &&
-            v.lang.startsWith('en')
-          ) || enVoices[0] || voices[0];
-        }
-
-        if (selectedVoice) {
-          utterance.voice = selectedVoice;
-        }
-        utterance.pitch = pitch;
-        utterance.rate = rate;
-      };
-
-      setVoice();
-      if (window.speechSynthesis.onvoiceschanged !== undefined) {
-        window.speechSynthesis.onvoiceschanged = setVoice;
-      }
-
-      window.speechSynthesis.speak(utterance);
-
-      return () => {
-        window.speechSynthesis.cancel();
-      };
-    }
+    speakAsFlow(text, { gender });
+    return () => stopFlowVoice();
   }, [text, speak]);
 
   const isDone = index >= text.length;

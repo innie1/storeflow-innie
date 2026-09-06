@@ -19,6 +19,7 @@ import FlowAttachmentMenu from '@/components/FlowAttachmentMenu';
 import FlowComposer, { makeFlowAttachment, type FlowAttachment } from '@/components/FlowComposer';
 import FlowCameraCapture from '@/components/FlowCameraCapture';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
+import { speakAsFlow } from '@/lib/flow-voice';
 
 interface FlowChatProps { store: StoreData; orders?: any[]; onClose: () => void; onNavigate?: (tab: TabId) => void; onUpdate: (s: StoreData) => void; }
 interface ChatAction { label: string; onClick: () => void; }
@@ -111,7 +112,11 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     });
   }, [messages, sessionId, storeKey]);
 
-  const speak = (text: string) => { if (!voiceOn || !window.speechSynthesis) return; try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text.replace(/\*\*/g, '').replace(/\n/g, '. ')); u.rate = 1.04; window.speechSynthesis.speak(u); } catch {} };
+  // Spoke with no voice chosen and at 1.04, which reads as hurried.
+  const speak = (text: string) => {
+    if (!voiceOn) return;
+    speakAsFlow(text.replace(/\*\*/g, '').replace(/\n/g, '. '));
+  };
   const flow = (text: string, actions?: ChatAction[]) => { setMessages(prev => [...prev, { id: id('flow'), from: 'flow', text, actions }]); speak(text); };
   const you = (text: string) => setMessages(prev => [...prev, { id: id('you'), from: 'you', text }]);
   const rememberUndo = () => setLastUndo(store);

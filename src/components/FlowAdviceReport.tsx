@@ -5,6 +5,7 @@ import type { FlowReport, FlowReportSection, FlowReportTone } from '@/lib/manage
 import type { AutoFixSpec } from '@/lib/auto-fix';
 import type { TabId } from '@/types/store';
 import type { ProductFocus } from '@/lib/product-focus';
+import { speakAsFlow, stopFlowVoice } from '@/lib/flow-voice';
 
 interface Props {
   report: FlowReport;
@@ -33,20 +34,20 @@ export default function FlowAdviceReport({ report, onDismiss, onNavigate, onAuto
 
   const spoken = useMemo(() => reportToText(report), [report]);
 
-  useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch {} }, []);
+  useEffect(() => () => stopFlowVoice(), []);
 
   // Reading aloud is now something you ask for. It used to start by itself on
   // every report, with no way to stop it short of leaving the screen.
   const toggleSpeech = () => {
     const synth = window.speechSynthesis;
     if (!synth) return;
-    if (speaking) { synth.cancel(); setSpeaking(false); return; }
-    const utterance = new SpeechSynthesisUtterance(spoken);
-    utterance.rate = 0.98;
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    synth.cancel();
-    synth.speak(utterance);
+    if (speaking) { stopFlowVoice(); setSpeaking(false); return; }
+    // Was a bare SpeechSynthesisUtterance, so the browser picked its default —
+    // on Windows and Android the oldest voice installed.
+    speakAsFlow(spoken, {
+      onEnd: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
     setSpeaking(true);
   };
 

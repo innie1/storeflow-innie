@@ -74,6 +74,7 @@ import {
 } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import { downscaleImageToDataUrl } from '@/lib/downscale-image';
+import { speakAsFlow, type FlowVoiceGender } from '@/lib/flow-voice';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
 
@@ -250,11 +251,11 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
     }
 
     const qrImgData = qrCanvasRef.current ? qrCanvasRef.current.toDataURL('image/png') : (qrDataUrl || '');
-    const barcodeImgData = (barcodeCanvasRef.current && product.barcode) 
-      ? barcodeCanvasRef.current.toDataURL('image/png') 
+    const barcodeImgData = (barcodeCanvasRef.current && product.barcode)
+      ? barcodeCanvasRef.current.toDataURL('image/png')
       : (barcodeDataUrl || '');
 
-    const storeLogoHtml = store.profile?.photo 
+    const storeLogoHtml = store.profile?.photo
       ? `<img class="store-logo" src="${store.profile.photo}" alt="" />`
       : `<div class="store-icon-placeholder">🏪</div>`;
 
@@ -448,7 +449,7 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
   const isOutOfStock = (product.quantity || 0) <= 0;
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="bg-card border border-border/40 hover:border-primary/20 rounded-2xl p-4 flex flex-col justify-between gap-3 min-h-[140px] relative overflow-hidden transition-all shadow-sm select-none"
     >
@@ -515,7 +516,7 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
       {/* Expanded Full Barcode (shown when tapped) */}
       {showFullBarcode && barcodeDataUrl && (
         <div className="animate-scale-up">
-          <div 
+          <div
             className="p-4 bg-white rounded-2xl border border-border/40 flex flex-col items-center gap-2 shadow-md cursor-pointer"
             onClick={() => setShowFullBarcode(false)}
           >
@@ -728,7 +729,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
   const handleCloudAuthSuccess = async (profile: any) => {
     setShowCloudAuthModal(false);
-    
+
     if (!profile || !profile.id) {
       showToast("Please sign in again.", "error");
       return;
@@ -894,7 +895,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           stores[k] = v;
         }
       }
-      
+
       const payload: BackupPayload = {
         version: '1.0',
         timestamp: restoreConfirm.timestamp,
@@ -909,7 +910,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
       const result = restoreBackupPayload(payload);
       showToast(`✓ Restored: ${result.storesRestoredCount} stores merged successfully`);
       setRestoreConfirm(null);
-      
+
       setTimeout(() => {
         window.location.reload();
       }, 1000);
@@ -939,15 +940,15 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             return;
           }
         }
-        
+
         if (!payload.version || !payload.index) {
           showToast('Invalid StoreFlow backup file schema', 'error');
           return;
         }
-        
+
         const result = restoreBackupPayload(payload);
         showToast(`✓ Imported: ${result.storesRestoredCount} stores successfully merged`);
-        
+
         setTimeout(() => {
           window.location.reload();
         }, 1200);
@@ -1009,7 +1010,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           const cloudVersion = cloudStore.data?.qrDesignVersion || 1;
           const cloudStoreId = cloudStore.store_id || storeId;
 
-          const needsUpdate = 
+          const needsUpdate =
             !cachedQR ||
             cachedQR.qrVersion !== cloudVersion ||
             cachedQR.storeUrl !== cloudUrl ||
@@ -1020,7 +1021,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = 400;
             tempCanvas.height = 400;
-            
+
             await drawQRCode({ text: cloudUrl, canvas: tempCanvas, standard: true });
             const dataUrl = tempCanvas.toDataURL('image/png');
             const cacheData = {
@@ -1059,7 +1060,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   useEffect(() => {
     if (view !== 'barcode') return;
     const storeId = store.storeId || store.accessCode;
-    
+
     if (storeBarcodeCanvasRef.current) {
       drawBarcode(storeId, storeBarcodeCanvasRef.current, {
         barColor: '#000000',
@@ -1497,7 +1498,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     const updated = { ...store, accessCode: cleanCode };
     localStorage.setItem(STORE_PREFIX + cleanCode, JSON.stringify(updated));
     localStorage.setItem('storeflow_active_session', cleanCode);
-    
+
     const updatedIndex = index.map(s => s.code === store.accessCode ? { ...s, code: cleanCode } : s);
     localStorage.setItem('storeflow_store_index', JSON.stringify(updatedIndex));
 
@@ -1539,11 +1540,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         showToast('Could not open print window. Please allow popups.', 'error');
         return;
       }
-      
+
       const qrDataUrl = barcodeQrCanvasRef.current ? barcodeQrCanvasRef.current.toDataURL('image/png') : '';
       const barcodeDataUrl = storeBarcodeCanvasRef.current ? storeBarcodeCanvasRef.current.toDataURL('image/png') : '';
-      
-      const logoHtml = store.profile?.photo 
+
+      const logoHtml = store.profile?.photo
         ? `<img class="store-logo" src="${store.profile.photo}" alt="" />`
         : `<div class="store-icon-placeholder">🏪</div>`;
 
@@ -1616,7 +1617,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               ${logoHtml}
               <h1>${store.storeName}</h1>
               <div class="store-id">Store ID: ${storeId}</div>
-              
+
               <div class="qr-box">
                 <img class="qr-img" src="${qrDataUrl}" alt="QR" />
               </div>
@@ -1793,10 +1794,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         targetId = parts[parts.length - 1];
       }
 
-      const isStoreMatch = 
-        code === storeId || 
-        code === storeUrl || 
-        code.endsWith(`/s/${storeId}`) || 
+      const isStoreMatch =
+        code === storeId ||
+        code === storeUrl ||
+        code.endsWith(`/s/${storeId}`) ||
         code.endsWith(`/store/${storeId}`);
 
       if (isStoreMatch) {
@@ -1817,15 +1818,15 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     };
 
     return (
-      <SubPage 
-        title="QR & Barcodes" 
+      <SubPage
+        title="QR & Barcodes"
         onBack={() => setView('home')}
       >
         <div className="space-y-6 pb-20 select-none text-left">
           {/* Store Information Card (Premium Identity Card style) */}
           <div className="relative overflow-hidden p-5 rounded-2xl bg-card border border-border/80 shadow-sm flex flex-col gap-4">
             <div className="absolute -top-12 -right-12 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-            
+
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 rounded-2xl bg-surface-2 border border-border overflow-hidden shrink-0 flex items-center justify-center text-3xl shadow-sm">
                 {store.profile?.photo ? (
@@ -1847,19 +1848,19 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             </div>
 
             <div className="border-t border-border/40 pt-3 flex gap-2">
-              <button 
+              <button
                 onClick={handleShare}
                 className="flex-1 py-2 rounded-xl bg-surface-2 border border-border hover:bg-surface-3 hover:text-primary text-foreground text-xs font-display font-bold flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
               >
                 <Share2 className="w-3.5 h-3.5" /> Share Store
               </button>
-              <button 
+              <button
                 onClick={handlePrint}
                 className="flex-1 py-2 rounded-xl bg-surface-2 border border-border hover:bg-surface-3 hover:text-primary text-foreground text-xs font-display font-bold flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
               >
                 <Printer className="w-3.5 h-3.5" /> Print Details
               </button>
-              <button 
+              <button
                 onClick={() => {
                   navigator.clipboard.writeText(storeId);
                   showToast('✓ Store ID copied to clipboard', 'success');
@@ -1906,15 +1907,15 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 {/* QR Image or Canvas */}
                 <div className="relative flex flex-col items-center justify-center p-5 bg-white rounded-3xl max-w-[200px] w-full mx-auto border border-border/30 shadow-md">
                   {cachedQR ? (
-                    <img 
-                      src={cachedQR.qrDataUrl} 
-                      alt="Store QR Code" 
-                      className="w-40 h-40 object-contain transition-all duration-300 hover:scale-105" 
+                    <img
+                      src={cachedQR.qrDataUrl}
+                      alt="Store QR Code"
+                      className="w-40 h-40 object-contain transition-all duration-300 hover:scale-105"
                     />
                   ) : (
                     <canvas ref={barcodeQrCanvasRef} className="w-40 h-40" />
                   )}
-                  
+
                   {/* Store ID Display below QR */}
                   <div className="mt-3.5 w-full flex flex-col items-center gap-1 select-all">
                     <span className="text-[8px] font-display font-black uppercase tracking-widest text-neutral-400">Store ID</span>
@@ -1951,7 +1952,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
                 {/* View Link Toggle */}
                 <div className="space-y-2">
-                  <button 
+                  <button
                     onClick={() => setShowUrl(!showUrl)}
                     className="text-xs text-primary font-semibold hover:underline flex items-center justify-center gap-1 mx-auto"
                   >
@@ -2047,7 +2048,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-2 border-b border-border/40 pb-3">
               🏪 Store Profile & Metadata
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               {/* Left col */}
               <div className="space-y-3">
@@ -2073,8 +2074,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 <div>
                   <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Business Hours</span>
                   <p className="mt-1 text-foreground font-semibold transition-all duration-500 animate-fade-in">
-                    {store.profile?.openingTime && store.profile?.closingTime 
-                      ? `${store.profile.openingTime} - ${store.profile.closingTime}` 
+                    {store.profile?.openingTime && store.profile?.closingTime
+                      ? `${store.profile.openingTime} - ${store.profile.closingTime}`
                       : 'Not Set'}
                   </p>
                 </div>
@@ -2093,7 +2094,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <div className="flex items-center justify-between">
               <h3 className="font-display font-bold text-sm text-foreground">{serviceBusiness ? 'Product & Service QR Codes' : 'Product QR Codes'}</h3>
               {store.products.length > 0 && (
-                <button 
+                <button
                   onClick={() => setShowAllProductsQR(true)}
                   className="text-xs text-yellow-500 hover:text-yellow-600 font-display font-bold cursor-pointer"
                 >
@@ -2138,7 +2139,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                   <h3 className="font-display font-bold text-base text-foreground">All Product QR Codes</h3>
                   <p className="text-[10px] text-muted-foreground">Print a customer QR for a product or service.</p>
                 </div>
-                <button 
+                <button
                   onClick={() => { setShowAllProductsQR(false); setProductSearchQuery(''); }}
                   className="w-8 h-8 rounded-full bg-surface-2 border border-border flex items-center justify-center text-sm font-bold cursor-pointer"
                 >
@@ -2149,7 +2150,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               {/* Search bar inside View All Modal */}
               <div className="relative">
                 <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
-                <input 
+                <input
                   type="text"
                   placeholder="Search products..."
                   value={productSearchQuery}
@@ -2200,8 +2201,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-success" /> Scanned Product Found
                 </h3>
-                <button 
-                  onClick={() => setScannedProduct(null)} 
+                <button
+                  onClick={() => setScannedProduct(null)}
                   className="w-7 h-7 rounded-full bg-surface-2 border border-border flex items-center justify-center text-xs font-bold"
                 >
                   ✕
@@ -2398,7 +2399,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           </div>
 
           <Field label="Owner Name" value={profile.ownerName || ''} onChange={v => setProfile({ ...profile, ownerName: v })} placeholder="Your full name" />
-          
+
           {/* Read-Only Store Type Display Badge */}
           <div className="p-3.5 rounded-xl bg-surface-2 border border-border/70 flex items-center justify-between">
             <div>
@@ -2435,7 +2436,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <Field label="Email" value={profile.email} onChange={v => setProfile({ ...profile, email: v })} placeholder="store@email.com" type="email" />
           </div>
           <Field label="Website" value={profile.website || ''} onChange={v => setProfile({ ...profile, website: v })} placeholder="www.mystore.com" />
-          
+
           <div className="space-y-1 text-left">
             <label className="block text-xs text-muted-foreground font-bold">Owner Password</label>
             <div className="relative flex items-center">
@@ -2642,23 +2643,23 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <SectionLabel>Customer Marketplace Settings</SectionLabel>
           </div>
           <div className={`${card} px-4 divide-y divide-border`}>
-            <ToggleRow 
-              label="Enable Retail Pricing Mode" 
-              description="Allow customers to browse and purchase items at retail prices." 
-              checked={mgr.retailPricingEnabled !== false} 
-              onChange={v => updateMgr({ retailPricingEnabled: v })} 
+            <ToggleRow
+              label="Enable Retail Pricing Mode"
+              description="Allow customers to browse and purchase items at retail prices."
+              checked={mgr.retailPricingEnabled !== false}
+              onChange={v => updateMgr({ retailPricingEnabled: v })}
             />
-            <ToggleRow 
-              label="Enable Wholesale Pricing Mode" 
-              description="Allow customers to browse and purchase items at wholesale prices." 
-              checked={mgr.wholesalePricingEnabled !== false} 
-              onChange={v => updateMgr({ wholesalePricingEnabled: v })} 
+            <ToggleRow
+              label="Enable Wholesale Pricing Mode"
+              description="Allow customers to browse and purchase items at wholesale prices."
+              checked={mgr.wholesalePricingEnabled !== false}
+              onChange={v => updateMgr({ wholesalePricingEnabled: v })}
             />
-            <ToggleRow 
-              label="Order Alert Sound Notifications" 
-              description="Play a synthesized alert chime whenever a customer order is received." 
-              checked={mgr.orderAlertSoundsEnabled !== false} 
-              onChange={v => updateMgr({ orderAlertSoundsEnabled: v })} 
+            <ToggleRow
+              label="Order Alert Sound Notifications"
+              description="Play a synthesized alert chime whenever a customer order is received."
+              checked={mgr.orderAlertSoundsEnabled !== false}
+              onChange={v => updateMgr({ orderAlertSoundsEnabled: v })}
             />
           </div>
 
@@ -2685,56 +2686,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                     key={voiceOpt.id}
                     onClick={() => {
                       updateMgr({ voiceGender: voiceOpt.id });
-                      
+
                       // Speak a small preview using standard SpeechSynthesis with selected voice characteristics
-                      if (typeof window !== 'undefined' && window.speechSynthesis) {
-                        window.speechSynthesis.cancel();
-                        const previewText = voiceOpt.id === 'young-male' ? "Hi, I am Flow! Ready to scale your store?" :
-                                            voiceOpt.id === 'male' ? "Hello. I am Flow, your business manager companion." :
-                                            "Hi there, I am Flow! Let's make some sales today.";
-                        const utterance = new SpeechSynthesisUtterance(previewText);
-                        
-                        const voices = window.speechSynthesis.getVoices();
-                        const enVoices = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
-                        const maleNames = ['david', 'mark', 'george', 'daniel', 'ravi', 'male', 'google us english male', 'google uk english male'];
-                        const femaleNames = ['zira', 'samantha', 'hazel', 'susan', 'heera', 'female', 'google us english female', 'google uk english female'];
-                        
-                        let selectedVoice = null;
-                        let pitch = 1.0;
-                        let rate = 0.95;
-                        
-                        if (voiceOpt.id === 'male') {
-                          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) || 
-                                          voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
-                          pitch = 0.95;
-                          rate = 0.92;
-                        } else if (voiceOpt.id === 'female') {
-                          selectedVoice = enVoices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name))) || 
-                                          voices.find(v => femaleNames.some(name => v.name.toLowerCase().includes(name)));
-                          pitch = 1.05;
-                          rate = 0.95;
-                        } else {
-                          // young-male
-                          selectedVoice = enVoices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name))) || 
-                                          voices.find(v => maleNames.some(name => v.name.toLowerCase().includes(name)));
-                          pitch = 1.35;
-                          rate = 0.98;
-                        }
-                        
-                        if (!selectedVoice) {
-                          selectedVoice = enVoices.find(v => 
-                            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Premium')) && 
-                            v.lang.startsWith('en')
-                          ) || enVoices[0] || voices[0];
-                        }
-                        
-                        if (selectedVoice) {
-                          utterance.voice = selectedVoice;
-                        }
-                        utterance.pitch = pitch;
-                        utterance.rate = rate;
-                        window.speechSynthesis.speak(utterance);
-                      }
+                      // Previews through the same picker the app speaks
+                      // with, so what is demoed here is what is heard.
+                      const previewText = voiceOpt.id === 'young-male' ? "Hi, I am Flow! Ready to scale your store?" :
+                                          voiceOpt.id === 'male' ? "Hello. I am Flow, your business manager companion." :
+                                          "Hi there, I am Flow! Let's make some sales today.";
+                      speakAsFlow(previewText, { gender: voiceOpt.id as FlowVoiceGender });
                     }}
                     className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all ${
                       isSelected
@@ -2925,7 +2884,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           </div>
         </div>
       )}
-      
+
       <div className="p-3 bg-success/10 border border-success/20 rounded-xl text-[11px] text-success leading-relaxed">
         <strong>How it works:</strong> Automatic discounts apply in the shopping cart when the subtotal falls within your defined criteria range. You can always override or edit the discount manually during checkout.
       </div>
@@ -3199,10 +3158,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         <SectionLabel>Cloud Integration</SectionLabel>
       </div>
       <div className={`${card} px-4 divide-y divide-border`}>
-        <ToggleRow 
-          label="Multi-device Cloud Sync" 
-          description="Enable real-time cloud backup to sync and access this store on other devices." 
-          checked={mgr.multiDeviceSync || false} 
+        <ToggleRow
+          label="Multi-device Cloud Sync"
+          description="Enable real-time cloud backup to sync and access this store on other devices."
+          checked={mgr.multiDeviceSync || false}
           onChange={async (v) => {
             if (v) {
               // 1. Immediately toggle the switch ON for instant user response
@@ -3303,10 +3262,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               saveStore(updatedStore);
               showToast('Cloud Sync disabled.');
             }
-          }} 
+          }}
         />
       </div>
-      
+
       {mgr.multiDeviceSync && (
         <div className={`${card} p-4 text-left text-xs border border-success/20 bg-success/5 space-y-2`}>
           <p className="text-success font-semibold flex items-center gap-1.5">
@@ -3497,37 +3456,37 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   if (view === 'data') return (
     <SubPage title="Data & Storage" onBack={() => setView('home')}>
       <div className="grid grid-cols-2 gap-3">
-        <DataTile 
-          icon={<RefreshCw className="w-4.5 h-4.5" />} 
-          label="Switch Store" 
+        <DataTile
+          icon={<RefreshCw className="w-4.5 h-4.5" />}
+          label="Switch Store"
           subtitle="Switch between your stores"
           iconBg="rgba(99, 102, 241, 0.15)"
           iconColor="#818CF8"
-          onClick={() => setShowSwitcher(true)} 
+          onClick={() => setShowSwitcher(true)}
         />
-        <DataTile 
-          icon={<Trash2 className="w-4.5 h-4.5" />} 
+        <DataTile
+          icon={<Trash2 className="w-4.5 h-4.5" />}
           label={trashCount ? `Recently Deleted (${trashCount})` : 'Recently Deleted'}
           subtitle="View and restore deleted items"
           iconBg="rgba(239, 68, 68, 0.15)"
           iconColor="#F87171"
-          onClick={() => setShowTrash(true)} 
+          onClick={() => setShowTrash(true)}
         />
-        <DataTile 
-          icon={<ShieldCheck className="w-4.5 h-4.5" />} 
-          label="Backups & Restore" 
+        <DataTile
+          icon={<ShieldCheck className="w-4.5 h-4.5" />}
+          label="Backups & Restore"
           subtitle="Backup and restore your data"
           iconBg="rgba(59, 130, 246, 0.15)"
           iconColor="#60A5FA"
-          onClick={() => setView('backups')} 
+          onClick={() => setView('backups')}
         />
-        <DataTile 
-          icon={<Download className="w-4.5 h-4.5" />} 
-          label="Raw Export" 
+        <DataTile
+          icon={<Download className="w-4.5 h-4.5" />}
+          label="Raw Export"
           subtitle="Export your data (CSV)"
           iconBg="rgba(16, 185, 129, 0.15)"
           iconColor="#34D399"
-          onClick={() => setShowExport(true)} 
+          onClick={() => setShowExport(true)}
         />
       </div>
 
@@ -3700,7 +3659,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <span className="font-display font-semibold text-xs text-foreground">Export Backup</span>
             <span className="text-[9px] text-muted-foreground">Download database JSON</span>
           </button>
-          
+
           <label className="p-4 rounded-2xl bg-card shadow-card flex flex-col items-center justify-center gap-2 hover:ring-1 hover:ring-primary/30 transition-all text-center cursor-pointer">
             <span className="text-2xl">📥</span>
             <span className="font-display font-semibold text-xs text-foreground">Import Backup</span>
@@ -4243,7 +4202,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               );
             })
           )}
-          
+
           {/* Search bar inside the card container at the bottom */}
           <div className="p-4 border-t border-border/60 bg-black/5">
             <div className="relative">
@@ -4682,16 +4641,16 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
           <div>
             <label className="text-[10px] uppercase font-bold text-muted-foreground">Deduction Type</label>
             <div className="flex gap-2 mt-1">
-              <button 
-                type="button" 
-                onClick={() => setG({ ...g, autoSaveAmount: undefined })} 
+              <button
+                type="button"
+                onClick={() => setG({ ...g, autoSaveAmount: undefined })}
                 className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${!g.autoSaveAmount ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-3 border-border text-muted-foreground'}`}
               >
                 Use Percentage
               </button>
-              <button 
-                type="button" 
-                onClick={() => setG({ ...g, autoSaveAmount: g.autoSaveAmount || 2000 })} 
+              <button
+                type="button"
+                onClick={() => setG({ ...g, autoSaveAmount: g.autoSaveAmount || 2000 })}
                 className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${g.autoSaveAmount ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-3 border-border text-muted-foreground'}`}
               >
                 Use Fixed Cash
@@ -4701,20 +4660,20 @@ function SavingsModal({ initial, onClose, onSave, animate = true, store }: { ini
           {g.autoSaveAmount !== undefined && (
             <div>
               <label className="text-[10px] uppercase font-bold text-muted-foreground">Periodic Cash Deduction (₦)</label>
-              <input 
-                type="number" 
-                value={g.autoSaveAmount || ''} 
-                onChange={e => setG({ ...g, autoSaveAmount: Math.max(0, Number(e.target.value) || 0) })} 
-                placeholder="e.g. 2000" 
-                className={inp} 
+              <input
+                type="number"
+                value={g.autoSaveAmount || ''}
+                onChange={e => setG({ ...g, autoSaveAmount: Math.max(0, Number(e.target.value) || 0) })}
+                placeholder="e.g. 2000"
+                className={inp}
               />
             </div>
           )}
           <label className="flex items-center justify-between text-xs font-bold text-foreground cursor-pointer select-none pt-1.5 border-t border-border/60">
             <span>Automated Business Balance Deduction</span>
-            <input 
-              type="checkbox" 
-              checked={!!g.autoSaveEnabled} 
+            <input
+              type="checkbox"
+              checked={!!g.autoSaveEnabled}
               onChange={e => setG({ ...g, autoSaveEnabled: e.target.checked })}
               className="rounded accent-primary w-4 h-4 cursor-pointer"
             />
@@ -5192,7 +5151,7 @@ Thank you.`;
             {/* Quick Copy Section */}
             <div className="px-5 py-3 border-t border-border mt-3 space-y-2 bg-surface-2/40 shrink-0">
               <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">StoreFlow Contact Details</p>
-              
+
               <div className="flex items-center justify-between text-xs p-2 rounded-xl bg-card border border-border">
                 <span className="text-muted-foreground">WhatsApp: <strong className="text-foreground">07025517388</strong></span>
                 <div className="flex gap-1">
@@ -5232,7 +5191,7 @@ Thank you.`;
               <h3 className="font-display font-bold text-lg text-destructive">Report a Bug 🪲</h3>
               <button onClick={() => setActiveTab('menu')} className="text-xs text-muted-foreground hover:underline">Back</button>
             </div>
-            
+
             <div className="space-y-3 flex-1 overflow-y-auto pb-4 no-scrollbar">
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Subject / Short Summary</label>
@@ -5286,7 +5245,7 @@ Thank you.`;
               <h3 className="font-display font-bold text-lg text-primary">Suggest a Feature 💡</h3>
               <button onClick={() => setActiveTab('menu')} className="text-xs text-muted-foreground hover:underline">Back</button>
             </div>
-            
+
             <div className="space-y-3 flex-1 overflow-y-auto pb-4 no-scrollbar">
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Feature Name</label>
