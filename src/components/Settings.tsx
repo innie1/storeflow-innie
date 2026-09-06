@@ -1349,6 +1349,35 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     const updated = { ...store, ...patch };
     saveStore(updated); onUpdate(updated);
   };
+  /**
+   * Both pricing switches, kept in step with the one thing customers read.
+   *
+   * These wrote only managerSettings, which the storefront payload does not
+   * carry — the customer app is served marketplaceSettings.pricingMode. So a
+   * merchant could turn wholesale off here and customers would carry on seeing
+   * wholesale prices. Marketplace Settings sets the mode and mirrors the
+   * booleans; this now does the same, from the other direction.
+   *
+   * Turning both off would leave a storefront with no prices at all, so the
+   * last one on stays on.
+   */
+  const setPricingModes = (retail: boolean, wholesale: boolean) => {
+    const bothOff = !retail && !wholesale;
+    const nextRetail = bothOff ? true : retail;
+    const nextWholesale = bothOff ? false : wholesale;
+    if (bothOff) showToast('A storefront needs at least one price, so retail stays on', 'info');
+
+    const nextMgr = { ...mgr, retailPricingEnabled: nextRetail, wholesalePricingEnabled: nextWholesale };
+    setMgr(nextMgr);
+    persist({
+      managerSettings: nextMgr,
+      marketplaceSettings: {
+        ...(store.marketplaceSettings || {}),
+        pricingMode: nextRetail && nextWholesale ? 'both' : nextWholesale ? 'wholesale' : 'retail',
+      } as any,
+    });
+  };
+
   const updateMgr = (patch: Partial<ManagerSettings>) => {
     const next = { ...mgr, ...patch };
     setMgr(next); persist({ managerSettings: next });
@@ -2656,13 +2685,13 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               label="Enable Retail Pricing Mode"
               description="Allow customers to browse and purchase items at retail prices."
               checked={mgr.retailPricingEnabled !== false}
-              onChange={v => updateMgr({ retailPricingEnabled: v })}
+              onChange={v => setPricingModes(v, mgr.wholesalePricingEnabled !== false)}
             />
             <ToggleRow
               label="Enable Wholesale Pricing Mode"
               description="Allow customers to browse and purchase items at wholesale prices."
               checked={mgr.wholesalePricingEnabled !== false}
-              onChange={v => updateMgr({ wholesalePricingEnabled: v })}
+              onChange={v => setPricingModes(mgr.retailPricingEnabled !== false, v)}
             />
             <ToggleRow
               label="Order Alert Sound Notifications"
