@@ -4079,7 +4079,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         id: 'partial', icon: <CreditCard className="w-4 h-4" />, iconBg: 'rgba(245, 158, 11, 0.12)', iconColor: '#FBBF24', title: 'Partial Payments',
         body: (
           <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
-            <p>When a customer pays part of their total, StoreFlow automatically creates a Pending Balance. The sale is still recorded fully.</p>
+            <p>Part-payments create a Pending Balance. The sale is still recorded in full.</p>
             <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11px] space-y-1.5">
               <div className="flex justify-between"><span>Customer buys</span><strong className="text-foreground">₦2,500</strong></div>
               <div className="flex justify-between"><span>Customer pays</span><strong className="text-foreground">₦2,000</strong></div>
@@ -4112,7 +4112,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         id: 'pricing', icon: <Tag className="w-4 h-4" />, iconBg: 'rgba(234, 179, 8, 0.12)', iconColor: '#FACC15', title: 'Auto Pricing',
         body: (
           <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-            <p>When Auto Pricing is on, StoreFlow suggests a selling price based on cost + desired margin.</p>
+            <p>Suggests a selling price from cost plus your target markup.</p>
             <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11px] space-y-1.5">
               <div className="flex justify-between"><span>Cost Price</span><strong className="text-foreground">₦1,000</strong></div>
               <div className="flex justify-between"><span>Margin</span><strong className="text-foreground">20%</strong></div>
@@ -4125,14 +4125,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
       {
         id: 'batch', icon: <Download className="w-4 h-4" />, iconBg: 'rgba(16, 185, 129, 0.12)', iconColor: '#34D399', title: 'Batch Import',
         body: (
-          <p className="text-xs text-muted-foreground leading-relaxed">Import multiple products at once. Before saving, StoreFlow shows a preview screen where you can edit products, correct prices or names, and remove mistakes — then approve and save all at once.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">Import many products at once, with a preview to fix names and prices first.</p>
         ),
       },
       {
         id: 'flow', icon: <Cpu className="w-4 h-4" />, iconBg: 'rgba(6, 182, 212, 0.12)', iconColor: '#22D3EE', title: 'Flow Assistant',
         body: (
           <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-            <p>Flow analyzes your sales, expenses, inventory, debts, and trends to give tailored recommendations.</p>
+            <p>Flow reads your sales, expenses, stock and debts to suggest what to do next.</p>
             <ul className="space-y-1 text-[11px]">
               {['Predict revenue and profits', 'Detect slow and fast-moving products', 'Suggest savings targets', 'Analyze rent and expense impact', 'Forecast busy periods and daily sales', 'Answer business questions (Ask Advice)', 'Suggest products worth stocking'].map(f => (
                 <li key={f} className="flex items-center gap-1.5"><span className="text-success text-[6px]">●</span>{f}</li>
@@ -4146,7 +4146,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         id: 'health', icon: <Heart className="w-4 h-4" />, iconBg: 'rgba(244, 63, 94, 0.12)', iconColor: '#F43F5E', title: 'Store Health Score',
         body: (
           <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-            <p>Your Store Health Score reflects overall business performance based on revenue, profit, expenses, inventory levels, savings progress, and outstanding balances. A higher score means a healthier, more profitable business.</p>
+            <p>Scores your business on revenue, profit, expenses, stock, savings and debts.</p>
             <p className="text-[10px] italic">Tap the score on your dashboard for a full breakdown.</p>
           </div>
         ),
@@ -4155,7 +4155,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         id: 'requests', icon: <MessageSquare className="w-4 h-4" />, iconBg: 'rgba(20, 184, 166, 0.12)', iconColor: '#2DD4BF', title: 'Customer Requests',
         body: (
           <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-            <p>When a customer asks for a product you don't have, record their request. StoreFlow tracks the product name, frequency, number of requests, and last request date.</p>
+            <p>Record what customers ask for, so you can see what to start stocking.</p>
             <p>Flow uses this data to recommend which products to stock next.</p>
           </div>
         ),
@@ -4164,7 +4164,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         id: 'rent', icon: <Home className="w-4 h-4" />, iconBg: 'rgba(59, 130, 246, 0.12)', iconColor: '#60A5FA', title: 'Rent Analysis',
         body: (
           <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-            <p><strong className="text-foreground">Rented store:</strong> Flow calculates weekly and monthly savings targets to cover rent, including a 10% buffer for increases. It also shows how rent affects your profitability.</p>
+            <p><strong className="text-foreground">Rented store:</strong> Weekly and monthly savings to cover rent, with a 10% buffer.</p>
             <p><strong className="text-foreground">Owned store:</strong> Flow estimates annual savings, emergency reserves, and property maintenance suggestions.</p>
             <p className="text-[10px] italic">Configure in Settings → Edit Profile.</p>
           </div>

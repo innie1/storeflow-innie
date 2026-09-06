@@ -1434,11 +1434,11 @@ function PushNotificationToggle({ store }: { store: StoreData }) {
   };
 
   if (state === 'unsupported') {
-    return <p className="text-[11px] text-muted-foreground italic">Not supported on this browser/device. Works on Chrome/Edge (Android or desktop) and Safari 16.4+ on iOS when the app is added to your home screen.</p>;
+    return <p className="text-[11px] text-muted-foreground italic">Needs Chrome or Edge, or iOS 16.4+ with the app on your home screen.</p>;
   }
 
   if (state === 'denied') {
-    return <p className="text-[11px] text-destructive">Notifications are blocked for this app in your browser/phone settings. Enable them there, then reload this page.</p>;
+    return <p className="text-[11px] text-destructive">Blocked in your browser settings. Enable there, then reload.</p>;
   }
 
   return (

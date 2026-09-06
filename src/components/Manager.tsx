@@ -650,14 +650,21 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
   useEffect(() => {
     if (!settings.enabled) return;
     const newNotes = generateNotifications(store);
-    if (newNotes.length > 0) {
-      const existing = store.flowNotifications || [];
-      const existingIds = new Set(existing.map(n => n.id));
-      const fresh = newNotes.filter(n => !existingIds.has(n.id));
-      if (fresh.length > 0) {
-        const updated = { ...store, flowNotifications: [...fresh, ...existing].slice(0, 50) };
-        saveStore(updated); onUpdate(updated);
-      }
+    const existing = store.flowNotifications || [];
+    const existingIds = new Set(existing.map(n => n.id));
+    const liveIds = new Set(newNotes.map(n => n.id));
+    const fresh = newNotes.filter(n => !existingIds.has(n.id));
+
+    // A notification the merchant has dealt with, whose condition has since
+    // cleared, is finished with. Dropping it frees its id: alerts are
+    // deduplicated by id, and ids are stable per product, so keeping a read one
+    // forever meant the same product running low again months later could never
+    // raise an alert. Unread ones are always kept — they are still waiting.
+    const kept = existing.filter(n => !n.read || liveIds.has(n.id));
+
+    if (fresh.length > 0 || kept.length !== existing.length) {
+      const updated = { ...store, flowNotifications: [...fresh, ...kept].slice(0, 50) };
+      saveStore(updated); onUpdate(updated);
     }
   }, [settings.enabled, store.sales.length, store.products, store.expenses?.length, store.customerRequests?.length]);
 
@@ -834,7 +841,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
           <div className="flex justify-center"><Mascot size={120} mood="sleeping" store={store} /></div>
           <MascotBadge on={false} />
           <h2 className="font-display font-bold text-xl text-foreground">Flow is sleeping</h2>
-          <p className="text-sm text-muted-foreground max-w-xs mx-auto">Wake Flow up to unlock insights, forecasts, recommendations and savings plans tailored to your store.</p>
+          <p className="text-sm text-muted-foreground max-w-xs mx-auto">Wake Flow for insights, forecasts and savings plans.</p>
           <ul className="text-left text-sm text-muted-foreground max-w-xs mx-auto space-y-1.5">
             {['Business Insights', 'Revenue Forecasts', 'Expense Analysis', 'Product Suggestions', 'Savings Plans', 'FLOW Rewards'].map(x => (
               <li key={x} className="flex items-center gap-2"><span className="text-success">✓</span>{x}</li>
@@ -2058,7 +2065,7 @@ function RepaymentPredictionsCard({ store }: { store: StoreData }) {
     return (
       <div className="p-4 rounded-2xl bg-card shadow-card">
         <h3 className="font-display font-bold text-base mb-1">Repayment Predictions</h3>
-        <p className="text-xs text-muted-foreground">No pending-payment history yet. Once customers start settling debts, Flow will learn their repayment rhythm.</p>
+        <p className="text-xs text-muted-foreground">No pending payments yet. Flow learns repayment habits as they settle.</p>
       </div>
     );
   }

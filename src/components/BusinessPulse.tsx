@@ -60,7 +60,7 @@ export default function BusinessPulse({ store, orders = [], onNavigate }: Props)
       <button onClick={() => onNavigate(urgentOrders.some(order => order.business_type === 'laundry') ? 'laundry-records' : 'orders')} className="rounded-2xl border border-border bg-card p-4 text-left">
         <div className="flex items-center gap-2 text-xs font-black uppercase text-muted-foreground"><BellRing className="h-4 w-4 text-amber-500" /> Promised-time reminders</div>
         <p className="mt-2 font-display text-xl font-black">{urgentOrders.length} due / due soon</p>
-        <p className="mt-1 text-xs text-muted-foreground">Uses each order’s promised pickup, delivery or scheduled time across applicable store types.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Uses each order’s promised pickup or delivery time.</p>
       </button>
     </section>
   );

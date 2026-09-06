@@ -61,9 +61,14 @@ describe('the mode picker says what the modes do', () => {
     expect(engine).not.toContain('🪄 Smart Budget');
   });
 
-  it('tells the merchant which kind of list they are about to save', () => {
+  it('uses the same words as the badge, so the two connect', () => {
+    // The picker used to spell out "Saved as a Hand-picked list" underneath.
+    // With the buttons themselves reading Hand-pick and Smart, that sentence
+    // repeated the button directly above it, so it went when the panel's copy
+    // was cut back. What matters is that the vocabulary matches.
     const engine = readSource('src/components/SmartRestockEngine.tsx');
-    expect(engine).toContain('Saved as a Hand-picked list.');
-    expect(engine).toContain('Saved as a Smart list.');
+    const picker = engine.slice(engine.indexOf('✋ Hand-pick'), engine.indexOf('✋ Hand-pick') + 1200);
+    expect(picker).toContain('You pick the items and quantities.');
+    expect(picker).toMatch(/Flow sizes each order/);
   });
 });

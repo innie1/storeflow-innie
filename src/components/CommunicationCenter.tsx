@@ -266,7 +266,7 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
         <h2 className="font-display font-bold text-2xl text-foreground flex items-center gap-2">
           <MessageSquare className="w-6 h-6 text-yellow-500" /> WhatsApp Message Center
         </h2>
-        <p className="text-sm text-muted-foreground">Draft and send smart WhatsApp messages to customer, supplier, and employee contacts fully offline.</p>
+        <p className="text-sm text-muted-foreground">WhatsApp messages to customers, suppliers and staff. Works offline.</p>
       </div>
 
       {/* Navigation Headers */}
@@ -694,7 +694,7 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
                     <Mascot size={32} mood="happy" store={store} />
                     <div className="text-xs text-muted-foreground flex-1 leading-snug">
                       <strong>Flow Mascot</strong>
-                      <p className="mt-0.5">I have generated the smart text template for you! Review the draft below, double check the recipient phone number, and tap send to open WhatsApp.</p>
+                      <p className="mt-0.5">Draft ready. Check the number, then send.</p>
                     </div>
                   </div>
 

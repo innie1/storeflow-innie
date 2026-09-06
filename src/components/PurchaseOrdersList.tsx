@@ -82,7 +82,7 @@ export default function PurchaseOrdersList({ store, onClose, onUpdate }: Purchas
         <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setShowImport(false)}><ScrollLock />
           <div className="w-full sm:max-w-sm bg-background border border-border rounded-t-2xl sm:rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <h4 className="font-display font-bold text-sm">Import with Purchase Code</h4>
-            <p className="text-xs text-muted-foreground">Enter the code from a Buy List you already approved. It'll add those exact items to your stock — each code works once.</p>
+            <p className="text-xs text-muted-foreground">Enter a code from an approved buy list. Each code works once.</p>
             <input
               value={codeInput}
               onChange={e => setCodeInput(e.target.value.toUpperCase())}

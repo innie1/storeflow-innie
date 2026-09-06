@@ -45,7 +45,7 @@ export default function NotificationPreferences() {
           <label className="text-xs text-muted-foreground">Until<input type="time" value={prefs.quietEnd} onChange={e => patch('quietEnd', e.target.value)} className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground" /></label>
         </div>}
       </div>
-      <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">These preferences are stored on this device and shared with the StoreFlow Service Worker, so they continue to apply when the PWA is closed.</p>
+      <p className="px-1 text-[10px] leading-relaxed text-muted-foreground">Saved on this device, so alerts keep working when the app is closed.</p>
     </div>
   );
 }

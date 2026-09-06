@@ -14,27 +14,30 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
   // Only display unread notifications in the tray
   const notes = (store.flowNotifications || []).filter(n => !n.read);
 
-  const handleClose = () => {
-    // Mark all notifications in the store as read when closing the tray
-    const allNotes = store.flowNotifications || [];
-    if (allNotes.some(n => !n.read)) {
-      const updated = { 
-        ...store, 
-        flowNotifications: allNotes.map(n => ({ ...n, read: true })) 
-      };
-      saveStore(updated); 
-      onUpdate(updated);
-    }
-    onClose();
+  // Closing the tray used to mark every notification read. Since the tray only
+  // shows unread ones, opening it and acting on a single alert wiped the rest —
+  // and because new notifications are deduplicated by id, a read one was never
+  // re-added, so alerts for problems that were still unresolved never came
+  // back. Closing is now just closing.
+  const handleClose = () => onClose();
+
+  /** Marks one notification attended to. Nothing else is touched. */
+  const dismiss = (id: string) => {
+    const updated = {
+      ...store,
+      flowNotifications: (store.flowNotifications || []).map(n => (n.id === id ? { ...n, read: true } : n)),
+    };
+    saveStore(updated);
+    onUpdate(updated);
   };
 
   const markAllRead = () => {
     const allNotes = store.flowNotifications || [];
-    const updated = { 
-      ...store, 
-      flowNotifications: allNotes.map(n => ({ ...n, read: true })) 
+    const updated = {
+      ...store,
+      flowNotifications: allNotes.map(n => ({ ...n, read: true }))
     };
-    saveStore(updated); 
+    saveStore(updated);
     onUpdate(updated);
   };
 
@@ -70,7 +73,16 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
               <div key={n.id} className={`p-3 rounded-xl border flex gap-3 text-left ${toneStyle[n.tone] || 'bg-surface-2 border-border/40'}`}>
                 <span className="text-lg shrink-0 mt-0.5">{n.icon || '🔔'}</span>
                 <div className="space-y-1.5 flex-1 min-w-0">
-                  <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'Flow Alert'}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'Flow Alert'}</p>
+                    <button
+                      onClick={() => dismiss(n.id)}
+                      aria-label="Dismiss this notification"
+                      className="shrink-0 -mt-0.5 -mr-1 w-6 h-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-surface-3"
+                    >
+                      <span className="text-sm leading-none">×</span>
+                    </button>
+                  </div>
                   <p className="text-[11px] text-muted-foreground leading-normal">{n.description || n.text}</p>
                   <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-border/10">
                     <p className="text-[9px] text-muted-foreground/80 font-mono">
@@ -79,6 +91,8 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
                     {n.actionTab && onNavigate && (
                       <button
                         onClick={() => {
+                          // Acting on it is attending to it — and only to it.
+                          dismiss(n.id);
                           if (onNavigate) onNavigate(n.actionTab!, n.actionParam);
                           handleClose();
                         }}
@@ -94,7 +108,7 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
           )}
         </div>
         <div className="p-4 border-t border-border">
-          <button onClick={handleClose} className="w-full py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold hover:bg-surface-3 transition-colors">
+          <button onClick={handleClose} aria-label="Close notifications" className="w-full py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold hover:bg-surface-3 transition-colors">
             Close
           </button>
         </div>

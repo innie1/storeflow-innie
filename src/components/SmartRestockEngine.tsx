@@ -857,9 +857,9 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
         <div className="flex justify-between items-start border-b border-border pb-3">
           <div>
             <h2 className="font-display font-bold text-xl text-foreground flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" /> StoreFlow AI Smart Restock Engine
+              <Sparkles className="w-5 h-5 text-yellow-500" /> Buy List
             </h2>
-            <p className="text-xs text-muted-foreground">Intelligent, cash-budget constrained inventory purchasing advice.</p>
+            <p className="text-xs text-muted-foreground">What to buy next, and what it costs.</p>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-surface-3 rounded text-muted-foreground hover:text-foreground">✕</button>
         </div>
@@ -888,8 +888,8 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
             list keeps that answer afterwards, and shows it as a badge. */}
         <p className="text-[11px] text-muted-foreground -mt-2">
           {mode === 'simple'
-            ? 'You choose the items and the quantities. Saved as a Hand-picked list.'
-            : `Flow sizes each order from what the product sells and fits the total to your balance. Saved as a Smart list.`}
+            ? 'You pick the items and quantities.'
+            : 'Flow sizes each order from sales and your balance.'}
         </p>
 
         {mode === 'smart' && (
@@ -1055,7 +1055,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           </div>
         </div>
         <p className="text-[11px] text-muted-foreground -mt-2">
-          Smart Pick considers what's low or out of stock, what's actually selling, what customers have asked for, and how much you usually order — it won't touch anything you've already picked by hand.
+          Smart Pick adds what your sales say you need. It won't change items you picked.
         </p>
 
         {/* Live suggestions & forms row */}
@@ -1063,7 +1063,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
           {/* AI Suggestions */}
           <div className="bg-surface-2/40 border border-border/40 rounded-xl p-4 space-y-2.5 md:col-span-2">
             <h3 className="font-display font-bold text-xs text-primary flex items-center gap-1">
-              <Lightbulb className="w-3.5 h-3.5 text-yellow-500 animate-bounce" /> Live AI Engine Suggestions
+              <Lightbulb className="w-3.5 h-3.5 text-yellow-500" /> Suggestions
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               {suggestions.map((sug, i) => (
@@ -1073,7 +1073,7 @@ export default function SmartRestockEngine({ store, onUpdate, onClose }: SmartRe
                 </div>
               ))}
               {suggestions.length === 0 && (
-                <p className="text-muted-foreground text-[11px] py-1.5 sm:col-span-2">AI is evaluating your manual updates in real-time...</p>
+                <p className="text-muted-foreground text-[11px] py-1.5 sm:col-span-2">Nothing to flag right now.</p>
               )}
             </div>
           </div>
