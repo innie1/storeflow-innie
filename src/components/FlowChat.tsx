@@ -306,9 +306,42 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     }
   };
 
+  /**
+   * Input that is plainly a different instruction, not a line of an order.
+   *
+   * While an order draft is open it takes every message as an edit to that
+   * order, so "open settings", "dark theme" or "create list" were absorbed
+   * into it and nothing happened. The merchant is then stuck in an order they
+   * may not have meant to start, with no way out except the Cancel button they
+   * have to notice.
+   *
+   * Every pattern here is anchored at the start of the message, so a genuine
+   * order line — "John wants 2 bags of rice" — cannot trip it.
+   */
+  const isClearlyNotOrderInput = (text: string) => {
+    const q = text.trim().toLowerCase();
+    return (
+      /^(?:undo|help|cancel everything)\b/.test(q) ||
+      /^(?:open|go to|take me to|navigate to|switch to|show me)\s+\w+/.test(q) ||
+      /^(?:create|make|build|generate)\s+(?:a\s+)?(?:smart\s+)?(?:buy|shopping|purchase)?\s*list\b/.test(q) ||
+      /^(?:dark|light|system)\s+(?:theme|mode)\b/.test(q) ||
+      /^(?:change|switch)\s+(?:the\s+)?theme\b/.test(q) ||
+      /^(?:turn|switch)\s+(?:on|off)\b/.test(q) ||
+      /^(?:sell|sold|restock|receive)\s+\d/.test(q) ||
+      /^(?:what|how|why|which|show)\b/.test(q)
+    );
+  };
+
   const handleFlowConversationOrder = (text: string): boolean => {
     const active = flowOrderDraftRef.current;
     if (active) {
+      // Let an unmistakably different instruction out, rather than folding it
+      // into the order and looking broken.
+      if (isClearlyNotOrderInput(text)) {
+        cancelFlowOrderDraft();
+        flow('I have put that order aside. Say **new order** when you want to pick it up again.');
+        return false;
+      }
       if (/^\s*(?:yes|yes\s+create|create|create\s+(?:the\s+)?order|confirm|confirm\s+(?:the\s+)?order|save|save\s+(?:the\s+)?order|place\s+(?:the\s+)?order)\s*[.!]?\s*$/i.test(text)) {
         const question = nextFlowDraftQuestion(active);
         if (question) presentFlowOrderDraft(active, question);
@@ -728,7 +761,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
         {quickActions.map(a => (
           <button
             key={a.label}
-            onClick={() => ask(a.prompt)}
+            onClick={() => (a.say ? flow(a.say) : ask(a.prompt))}
             className="shrink-0 px-3 py-2 rounded-full text-xs font-display font-semibold border border-border bg-surface-2/30 hover:bg-surface-2/60 whitespace-nowrap"
           >
             {a.label}

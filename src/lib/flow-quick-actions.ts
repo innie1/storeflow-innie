@@ -22,6 +22,17 @@ export interface FlowQuickAction {
   label: string;
   /** What gets sent to the chat when it is tapped. */
   prompt: string;
+  /**
+   * Say this instead of running the prompt through the engine.
+   *
+   * "New customer order" is the reason this exists. Sent as a prompt it opens
+   * an order draft with nothing in it, and an open draft takes every message
+   * afterwards as a line of that order — so tapping the button quietly locked
+   * the merchant out of selling, changing the theme or anything else. The chip
+   * it replaced only ever explained how to give an order, which is right: the
+   * order starts when the merchant says what it is.
+   */
+  say?: string;
 }
 
 /** Never more than this many, however much is wrong. */
@@ -31,10 +42,10 @@ export function flowQuickActions(store: StoreData): FlowQuickAction[] {
   const actions: FlowQuickAction[] = [];
   const seen = new Set<string>();
 
-  const add = (label: string, prompt: string) => {
+  const add = (label: string, prompt: string, say?: string) => {
     if (actions.length >= MAX_ACTIONS || seen.has(label)) return;
     seen.add(label);
-    actions.push({ label, prompt });
+    actions.push({ label, prompt, say });
   };
 
   // 1. The single most expensive thing to be out of, if anything is.
@@ -50,7 +61,11 @@ export function flowQuickActions(store: StoreData): FlowQuickAction[] {
   //    which is something going wrong rather than something routine, and
   //    before everything else.
   if (supportsFlowMessageOrders(store)) {
-    add('New customer order', 'take a new customer order');
+    add(
+      'New customer order',
+      'take a new customer order',
+      "Tell me the customer's name, their phone number, and what they want — type it or hold the microphone and say it.",
+    );
   }
 
   // 3. Money going astray, if any is.
