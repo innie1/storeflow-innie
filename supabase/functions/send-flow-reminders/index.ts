@@ -7,6 +7,8 @@
 // 2) Sales Check-In: Reminds merchants to track daily sales, check margins, and review performance.
 // 3) Debt & Bill Reminders: Prompts merchants to review overdue customer balances and recurring bills.
 // 4) Streak Targeted: Per-store pre-loss warning — only fires for stores where it's 7pm+ local and they haven't opened today.
+// 5) Savings: Per-store confirmation that money was set aside, with what it was and where the goal now stands.
+// 6) Stock Loss: Per-store shrinkage warning, deliberately infrequent — see the notes on that branch.
 //
 // Required secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
 // Already-available secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
@@ -67,7 +69,7 @@ Deno.serve(async (req: Request) => {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
     let storeId: string | null = null;
-    let reminderType: "streak" | "sales" | "debt" | "auto" | "streak_targeted" = "auto";
+    let reminderType: "streak" | "sales" | "debt" | "auto" | "streak_targeted" | "savings" | "stock_loss" = "auto";
     let customTitle: string | null = null;
     let customBody: string | null = null;
 
@@ -247,6 +249,218 @@ Deno.serve(async (req: Request) => {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // PER-STORE MODES: savings / stock_loss
+    //
+    // Unlike the generic reminders below, these two say something specific
+    // about one shop, so they read that shop's own record and send a different
+    // message to each. A merchant seeing "your savings was deducted" with no
+    // figure attached would have to open the app to learn anything, which
+    // defeats the point of telling them at all.
+    // ─────────────────────────────────────────────────────────────────────
+    if (reminderType === "savings" || reminderType === "stock_loss") {
+      const { data: storeRows, error: storeErr } = await supabase
+        .from("stores")
+        .select("id, timezone, data")
+        .not("data", "is", null);
+
+      if (storeErr) {
+        return new Response(JSON.stringify({ error: storeErr.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+      }
+
+      interface Targeted {
+        storeId: string;
+        title: string;
+        body: string;
+        tag: string;
+        url: string;
+        /** Written back so the same fact is not announced twice. */
+        mark: Record<string, unknown>;
+      }
+      const targeted: Targeted[] = [];
+      const money = (n: number) => `\u20a6${Math.round(n).toLocaleString("en-NG")}`;
+
+      for (const row of (storeRows || [])) {
+        const storeData = (row.data || {}) as any;
+        const tz = row.timezone || "UTC";
+        const todayStr = todayInTimezone(tz);
+        const hour = currentHourInTimezone(tz);
+
+        if (reminderType === "savings") {
+          // Auto-save runs inside the app; this reports what it did. Only
+          // deposits since the last time we mentioned one are new news.
+          const goals: any[] = Array.isArray(storeData.savingsGoals) ? storeData.savingsGoals : [];
+          const lastToldIso = storeData.lastSavingsPushAt || null;
+          const lastTold = lastToldIso ? new Date(lastToldIso).getTime() : 0;
+
+          let newest = 0;
+          let deposited = 0;
+          let goalLabel = "Savings";
+          let saved = 0;
+          let target = 0;
+
+          for (const goal of goals) {
+            if (!goal?.autoSaveEnabled || !goal.lastDeductionTime) continue;
+            const at = new Date(goal.lastDeductionTime).getTime();
+            if (!at || at <= lastTold) continue;
+            if (at > newest) {
+              newest = at;
+              goalLabel = goal.label || "Savings";
+              saved = Number(goal.saved) || 0;
+              target = Number(goal.amount) || 0;
+            }
+            deposited += Number(goal.saved) || 0;
+          }
+          if (!newest) continue;
+
+          // Nothing is gained by waking someone at 3am to say they saved money.
+          if (hour < 8 || hour >= 21) continue;
+
+          const progress = target > 0
+            ? ` ${money(saved)} of ${money(target)} saved so far.`
+            : ` ${money(saved)} set aside so far.`;
+          targeted.push({
+            storeId: row.id,
+            title: "\ud83c\udfe6 Money set aside",
+            body: `Your ${goalLabel} auto-save ran.${progress}`,
+            tag: `savings-${row.id}`,
+            url: "/?tab=dashboard",
+            mark: { lastSavingsPushAt: new Date(newest).toISOString() },
+          });
+        } else {
+          // Shrinkage. This is the one category where being talked at is worse
+          // than being uninformed, so the bar is high on purpose: only recent
+          // counts, only losses worth a real share of a day's profit, only one
+          // mention a week, and never again once the merchant has said they
+          // understand it (recorded by the app as stockLossAcknowledgedAt).
+          const audits: any[] = Array.isArray(storeData.stockCountAudits) ? storeData.stockCountAudits : [];
+          const since = Date.now() - 30 * 86400000;
+          const recent = audits.filter((a) => Number(a?.variance) < 0 && new Date(a.date).getTime() >= since);
+          if (recent.length === 0) continue;
+
+          const products: any[] = Array.isArray(storeData.products) ? storeData.products : [];
+          const priced = products.filter((p) => !p.discontinued && Number(p.costPrice) > 0);
+          const avgCost = priced.length
+            ? priced.reduce((sum, p) => sum + Number(p.costPrice), 0) / priced.length
+            : 0;
+
+          const units = recent.reduce((sum, a) => sum + Math.abs(Number(a.variance)), 0);
+          const value = recent.reduce((sum, a) => {
+            const match = products.find((p) => p.name === a.product);
+            return sum + Math.abs(Number(a.variance)) * (Number(match?.costPrice) || avgCost);
+          }, 0);
+          if (value <= 0) continue;
+
+          const sales: any[] = Array.isArray(storeData.sales) ? storeData.sales : [];
+          const profit30 = sales
+            .filter((sale) => new Date(sale.date).getTime() >= since)
+            .reduce((sum, sale) => sum + (Number(sale.profit) || 0), 0);
+          const dailyProfit = profit30 / 30;
+          if (dailyProfit > 0 && value < dailyProfit * 0.25) continue;
+
+          // The exact shortfalls this is about, so acknowledging today's does
+          // not silence a different one next month.
+          const signature = recent.map((a) => `${a.id}:${a.variance}`).sort().join("|");
+          if (storeData.stockLossAcknowledgedSignature === signature) continue;
+
+          const lastTold = storeData.lastStockLossPushAt ? new Date(storeData.lastStockLossPushAt).getTime() : 0;
+          if (lastTold && Date.now() - lastTold < 7 * 86400000) continue;
+          if (hour < 8 || hour >= 21) continue;
+
+          targeted.push({
+            storeId: row.id,
+            title: "\u26a0\ufe0f Stock has gone missing",
+            body: `${units} unit${units === 1 ? "" : "s"} unaccounted for since your last counts, worth about ${money(value)}.`,
+            tag: `stock-loss-${row.id}`,
+            url: "/?tab=inventory",
+            mark: { lastStockLossPushAt: new Date().toISOString(), lastStockLossSignature: signature },
+          });
+        }
+      }
+
+      if (targeted.length === 0) {
+        return new Response(JSON.stringify({ message: `No stores need a ${reminderType} notice right now`, sent: 0, checked: (storeRows || []).length }), {
+          status: 200, headers: { "Content-Type": "application/json" }
+        });
+      }
+
+      const { data: subs, error: subsErr } = await supabase
+        .from("push_subscriptions")
+        .select("id, store_id, endpoint, p256dh, auth")
+        .in("store_id", targeted.map((t) => t.storeId));
+
+      if (subsErr) {
+        return new Response(JSON.stringify({ error: subsErr.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+      }
+      if (!subs || subs.length === 0) {
+        return new Response(JSON.stringify({ message: "Targeted stores have no push subscriptions", sent: 0, targeted: targeted.length }), {
+          status: 200, headers: { "Content-Type": "application/json" }
+        });
+      }
+
+      const byStoreId: Record<string, Targeted> = {};
+      for (const t of targeted) byStoreId[t.storeId] = t;
+
+      const sendResults = await Promise.allSettled(
+        subs.map((sub: any) => {
+          const t = byStoreId[sub.store_id];
+          const payload = JSON.stringify({
+            title: t.title,
+            body: t.body,
+            tag: t.tag,
+            url: t.url,
+            // The service worker turns this into the right buttons: both of
+            // these get "I understand", which closes the subject from the
+            // notification shade without opening the app.
+            category: reminderType,
+          });
+          return webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          );
+        })
+      );
+
+      const deadSubIds: string[] = [];
+      const deliveredStoreIds = new Set<string>();
+      sendResults.forEach((r, i) => {
+        if (r.status === "fulfilled") {
+          deliveredStoreIds.add(subs[i].store_id);
+          return;
+        }
+        const statusCode = (r.reason && (r.reason.statusCode || r.reason.status)) || null;
+        if (statusCode === 404 || statusCode === 410) {
+          deadSubIds.push(subs[i].id);
+        } else {
+          console.error(`Push send failed for store ${subs[i].store_id}:`, r.reason?.message || r.reason);
+        }
+      });
+
+      if (deadSubIds.length > 0) {
+        await supabase.from("push_subscriptions").delete().in("id", deadSubIds);
+      }
+
+      // Only record having told a shop something once it actually went out —
+      // otherwise a failed send would silence the subject for a week.
+      for (const storeId of deliveredStoreIds) {
+        const t = byStoreId[storeId];
+        if (!t) continue;
+        const row = (storeRows || []).find((r) => r.id === storeId);
+        if (!row) continue;
+        await supabase
+          .from("stores")
+          .update({ data: { ...(row.data as any), ...t.mark } })
+          .eq("id", storeId);
+      }
+
+      return new Response(JSON.stringify({
+        message: `${reminderType} notices sent`,
+        sent: deliveredStoreIds.size,
+        targeted: targeted.length,
+        removed: deadSubIds.length,
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
     // EXISTING MODES: streak / sales / debt / auto (unchanged)
     // ─────────────────────────────────────────────────────────────────────
 

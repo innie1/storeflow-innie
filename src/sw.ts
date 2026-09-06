@@ -79,7 +79,7 @@ function categoryOf(data: PushPayload): 'order'|'flow'|'insight'|'debt'|'savings
   const raw = `${data.type || ''} ${data.category || ''} ${data.tag || ''} ${data.title || ''}`.toLowerCase();
   if (data.orderId || raw.includes('order')) return 'order';
   if (raw.includes('saving') || raw.includes('auto-saved')) return 'savings';
-  if (raw.includes('shrink') || raw.includes('stock loss') || raw.includes('missing')) return 'stock_loss';
+  if (raw.includes('shrink') || raw.includes('stock_loss') || raw.includes('stock loss') || raw.includes('missing')) return 'stock_loss';
   if (raw.includes('flow') || raw.includes('check-in') || raw.includes('checkin')) return 'flow';
   if (raw.includes('debt') || raw.includes('repayment') || raw.includes('pending')) return 'debt';
   if (raw.includes('insight') || raw.includes('stock') || raw.includes('sales') || raw.includes('recommend')) return 'insight';

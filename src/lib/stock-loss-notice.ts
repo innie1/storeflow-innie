@@ -64,11 +64,19 @@ function writeState(state: NoticeState) {
   }
 }
 
-/** Marks the current shortfall as understood, so it stops being raised. */
-export function acknowledgeStockLoss() {
+/**
+ * Marks the current shortfall as understood, so it stops being raised.
+ *
+ * Returns the signature of what was acknowledged. The caller writes that onto
+ * the store record, because the push sender runs on the server and cannot see
+ * this device's localStorage — without it, saying "I understand" would silence
+ * the in-app notice while the phone kept buzzing about the same shortfall.
+ */
+export function acknowledgeStockLoss(): string | null {
   const state = readState();
-  if (!state) return;
+  if (!state) return null;
   writeState({ ...state, acknowledged: true });
+  return state.signature;
 }
 
 /** Forgets everything, for tests and for a merchant switching stores. */

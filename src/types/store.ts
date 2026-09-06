@@ -795,6 +795,10 @@ export interface StoreData {
   documents?: VaultDocument[];
   challenges?: BusinessChallenge[];
   stockCountAudits?: { id: string; date: string; expected: number; actual: number; variance: number; product: string }[];
+  // Set when the merchant taps "I understand" on a shrinkage notification.
+  // It travels with the store because the push sender runs on the server and
+  // cannot see the device's own record of having acknowledged it.
+  stockLossAcknowledgedSignature?: string;
   transfers?: InventoryTransfer[];
   activityLogs?: ActivityLog[];
   communicationHistory?: CommunicationMessage[];

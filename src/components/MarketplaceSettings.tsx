@@ -53,7 +53,10 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       showLimitedStock: false,
 
       // 2. Preview settings
-      description: store.profile?.address || '',
+      // StoreProfile has no `address` — the field is `location`. This read was
+      // always undefined, so the storefront preview description was always
+      // blank however much the merchant had filled in.
+      description: store.profile?.location || '',
       coverImage: '',
       rating: 0,
       deliveryTime: '20-30 mins',

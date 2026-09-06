@@ -618,7 +618,14 @@ export default function Index() {
       // deliberately does not open a window for it; this only records that the
       // subject is closed so it stops being raised.
       if (event.data?.type === 'STOREFLOW_NOTIFICATION_ACK') {
-        if (event.data.category === 'stock_loss') acknowledgeStockLoss();
+        if (event.data.category === 'stock_loss') {
+          const signature = acknowledgeStockLoss();
+          // The push sender runs on the server and cannot read this device's
+          // storage, so the acknowledgement has to travel with the store.
+          if (signature) {
+            setStore(prev => prev ? { ...prev, stockLossAcknowledgedSignature: signature } as StoreData : prev);
+          }
+        }
         return;
       }
       if (event.data?.type === 'STOREFLOW_PUSH_RECEIVED') {
