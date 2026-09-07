@@ -27,7 +27,8 @@ import {
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
-import { ChevronDown, ChevronUp, ClipboardList, MessageCircle, Plus, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ClipboardList, MapPin, MessageCircle, Plus, Search, X } from 'lucide-react';
+import BundlePhotos from '@/components/laundry/BundlePhotos';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { getPromisedTime } from '@/lib/business-insights';
 
@@ -65,6 +66,8 @@ interface DecoratedRecord {
   /** Still owed on this bundle, 0 when settled. */
   balance: number;
   clientRef: string;
+  /** Free-text shelf or rack, as the attendant wrote it at drop-off. */
+  shelfLocation?: string;
   synced: boolean;
   whatsapp: ReturnType<typeof buildLaundryWhatsAppPayload>;
   total: number;
@@ -94,6 +97,7 @@ function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     key: String(order._localClientRef || order.client_ref || order.id || ''),
     tagCode: String(meta.tag_code || meta.receipt_number || order.order_number || '—').toUpperCase(),
     customerName: order.customer_name || 'Walk-in Customer',
+    shelfLocation: meta.shelf_location || undefined,
     recordedByName: meta.recorded_by_name || undefined,
     recordedByRole: meta.recorded_by_role || undefined,
     customerPhone: order.customer_phone || '',
@@ -473,6 +477,11 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                               ₦{record.balance.toLocaleString()} owing
                             </span>
                           )}
+                          {record.shelfLocation && (
+                            <span className="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-500 text-[10px] font-black inline-flex items-center gap-1">
+                              <MapPin className="w-3 h-3" /> {record.shelfLocation}
+                            </span>
+                          )}
                           {record.synced
                             ? <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-black">Synced</span>
                             : <span className="px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>}
@@ -500,6 +509,10 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                       {record.pieceCount ? ` · ${record.pieceCount} ${record.pieceCount === 1 ? 'piece' : 'pieces'}` : ''}
                       {record.garmentSummary ? ` · ${record.garmentSummary}` : ''}
                     </p>
+
+                    <div className="mt-2">
+                      <BundlePhotos clientRef={record.clientRef} accessCode={String((store as any).accessCode || '')} hint={false} />
+                    </div>
 
                     {(record.address || record.washMethod || record.dryMethod) && (
                       <div className="mt-2 rounded-xl border border-border/60 bg-surface-2 p-2.5 text-xs text-muted-foreground">

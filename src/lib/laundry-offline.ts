@@ -35,6 +35,15 @@ export interface LocalLaundryRecord {
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
+  /**
+   * Where the bundle physically is.
+   *
+   * Losing a bundle is the most damaging thing that happens in a laundry, and
+   * the app could say everything about a job except which shelf it was on. Free
+   * text, because every shop numbers its own space differently - "Rack B",
+   * "3rd shelf", "under the counter".
+   */
+  shelfLocation?: string;
   promisedFor?: string;
   washMethodId?: string;
   washMethodName?: string;
@@ -72,6 +81,15 @@ export interface NewLocalLaundryRecord {
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
+  /**
+   * Where the bundle physically is.
+   *
+   * Losing a bundle is the most damaging thing that happens in a laundry, and
+   * the app could say everything about a job except which shelf it was on. Free
+   * text, because every shop numbers its own space differently - "Rack B",
+   * "3rd shelf", "under the counter".
+   */
+  shelfLocation?: string;
   promisedFor?: string;
   washMethodId?: string;
   washMethodName?: string;
@@ -164,6 +182,7 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     customerName,
     customerPhone,
     customerAddress: (input.customerAddress || '').trim() || undefined,
+    shelfLocation: (input.shelfLocation || '').trim() || undefined,
     promisedFor: input.promisedFor && Number.isFinite(new Date(input.promisedFor).getTime()) ? new Date(input.promisedFor).toISOString() : undefined,
     washMethodId: input.washMethodId || undefined,
     washMethodName: input.washMethodName || undefined,
@@ -250,6 +269,7 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     garment_lines: record.garments,
     // Carried into the order shape too, or the workspace - which rebuilds
     // every row from an order - loses who took the bundle in.
+    shelf_location: record.shelfLocation,
     recorded_by_name: record.recordedByName,
     recorded_by_role: record.recordedByRole,
     receipt_number: record.tagCode,

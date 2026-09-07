@@ -24,7 +24,9 @@ import {
 } from '@/lib/laundry-offline';
 import { openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
-import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MessageCircle, Minus, Plus, Search, Shirt, X } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MapPin, MessageCircle, Minus, Plus, Search, Shirt, X } from 'lucide-react';
+import BundlePhotos from '@/components/laundry/BundlePhotos';
+import { reassignLaundryPhotos } from '@/lib/laundry-photos';
 import { filterGarments, findSimilarGarment } from '@/lib/garment-match';
 
 interface Props {
@@ -188,6 +190,13 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser }: 
   const [promisedTouched, setPromisedTouched] = useState(false);
   const [milestone, setMilestone] = useState<MilestoneDef | null>(null);
   const [pickingCustom, setPickingCustom] = useState(false);
+  /** Where the bundle is being put, so it can be found again. */
+  const [shelfLocation, setShelfLocation] = useState('');
+  /**
+   * Photos are taken before the bundle has a client ref of its own, so they
+   * are held against a draft key and moved onto the real ref once it saves.
+   */
+  const [draftRef] = useState(() => `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`);
   const [customDue, setCustomDue] = useState<number | null>(() => readCustomDue());
   const [washMethodId, setWashMethodId] = useState('manual:hand-wash');
   const [dryMethodId, setDryMethodId] = useState('manual:sun-dry');
@@ -279,6 +288,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser }: 
     setSelectedCustomerId('');
     setSelectedServiceId(services[0] ? String(services[0].id) : '');
     setGarmentCounts(emptyCounts(garmentTypes));
+    setShelfLocation('');
     setCustomGarment('');
     setBillingQuantity('1');
     setTotalPrice('');
@@ -402,9 +412,12 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser }: 
         billingQuantity: isCountedUnit(pricing) ? billingQty : 1,
         total,
         notes: notes.trim(),
+        shelfLocation: shelfLocation.trim(),
         garments: pricedGarments,
         ...attribution(currentUser),
       });
+
+      reassignLaundryPhotos(draftRef, localRecord.clientRef).catch(() => {});
 
       // Money first, so a failure here cannot leave a bundle recorded as paid
       // when it was not. recordLaundryPayment books only what was handed over
@@ -658,7 +671,22 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser }: 
             {isCountedUnit(pricing) && <section className="text-left space-y-1"><label className="text-[10px] uppercase font-black text-muted-foreground">Quantity {pricingLabel.unitLabel}</label><input value={billingQuantity} onChange={event => { setBillingQuantity(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(false); }} inputMode="decimal" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /></section>}
 
             <section className="space-y-2 text-left">
-              <p className="text-[11px] uppercase font-black text-muted-foreground">4. Due &amp; price</p>
+              <p className="text-[11px] uppercase font-black text-muted-foreground">4. Where it goes</p>
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3">
+                <MapPin className="h-4 w-4 text-primary shrink-0" />
+                <input
+                  value={shelfLocation}
+                  onChange={event => setShelfLocation(event.target.value)}
+                  placeholder="Shelf or rack - e.g. Rack B, 3rd shelf"
+                  className="w-full bg-transparent py-3 text-sm outline-none"
+                />
+              </div>
+              {/* Kept on this phone. Nothing uploads them. */}
+              <BundlePhotos clientRef={draftRef} accessCode={String((store as any).accessCode || '')} />
+            </section>
+
+            <section className="space-y-2 text-left">
+              <p className="text-[11px] uppercase font-black text-muted-foreground">5. Due &amp; price</p>
               {/* One line, scrolled rather than wrapped, so the row does not
                   push the price out of reach on a phone. */}
               <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-0.5 px-0.5 py-0.5">
