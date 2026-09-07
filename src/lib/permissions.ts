@@ -45,7 +45,7 @@ const MANAGER: Capability[] = ['delete', 'money', 'prices'];
  */
 export function isManagement(user: ActingUser | null | undefined): boolean {
   const role = String(user?.role || '').toLowerCase();
-  return role === 'owner' || role === 'manager' || role === 'admin';
+  return role === 'owner' || role === 'manager';
 }
 
 export function can(user: ActingUser | null | undefined, capability: Capability): boolean {
@@ -56,7 +56,7 @@ export function can(user: ActingUser | null | undefined, capability: Capability)
   if (!role) return false;
 
   if (role === 'owner') return OWNER_ONLY.includes(capability);
-  if (role === 'manager' || role === 'admin') return MANAGER.includes(capability);
+  if (role === 'manager') return MANAGER.includes(capability);
 
   // An accountant is trusted with the figures and nothing else: they report on
   // the business, they do not reshape it, and they do not delete its records.

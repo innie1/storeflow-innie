@@ -334,6 +334,27 @@ const RENDERABLE_TABS = new Set<string>([
   'wishlist',
 ]);
 
+/**
+ * The signed-in session, with the retired 'admin' role moved across.
+ *
+ * loadStore migrates the staff list, but whoever is signed in right now holds
+ * their role in their own session too. Without this, dropping the role would
+ * lock out the very person already using it - the opposite of the point.
+ */
+const readActiveUser = (): any => {
+  try {
+    const raw = localStorage.getItem('storeflow_active_user');
+    if (!raw) return null;
+    const user = JSON.parse(raw);
+    if (user?.role !== 'admin') return user;
+    const migrated = { ...user, role: 'manager' };
+    localStorage.setItem('storeflow_active_user', JSON.stringify(migrated));
+    return migrated;
+  } catch {
+    return null;
+  }
+};
+
 const isTabAllowed = (tabId: TabId, user: any) => {
   if (!user) return false;
   if (user.role === 'owner') return true;
@@ -367,12 +388,6 @@ const isTabAllowed = (tabId: TabId, user: any) => {
     // see a single order.
     case 'supervisor':
       return ['dashboard', 'orders', 'laundry-records', 'customers', 'staff', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
-    // Offered in the staff form but never given a case here, so it fell to
-    // `default` and reached nothing at all - an admin signed in to an app with
-    // no tabs. Kept working as a manager for anyone already created with it;
-    // it is no longer offered for new staff.
-    case 'admin':
-      return tabId !== 'settings' && tabId !== 'activity-log';
     case 'custom':
       if (tabId === 'dashboard') return true;
       // "Sales access" has to mean taking work in at a service business too,
@@ -1242,10 +1257,10 @@ export default function Index() {
     const code = getActiveSession();
     if (code) {
       const restored = loadStore(code);
-      const activeUser = localStorage.getItem('storeflow_active_user');
+      const activeUser = readActiveUser();
       if (restored && activeUser) {
         setStore(restored);
-        setCurrentUser(JSON.parse(activeUser));
+        setCurrentUser(activeUser);
       } else {
         clearSession();
         localStorage.removeItem('storeflow_active_user');
@@ -1363,9 +1378,9 @@ export default function Index() {
   }, [store?.stockCountAudits?.length]);
 
   const handleStoreLoaded = useCallback((s: StoreData) => {
-    const activeUser = localStorage.getItem('storeflow_active_user');
+    const activeUser = readActiveUser();
     if (activeUser) {
-      setCurrentUser(JSON.parse(activeUser));
+      setCurrentUser(activeUser);
     }
     setStore(s);
     saveSession(s.accessCode);

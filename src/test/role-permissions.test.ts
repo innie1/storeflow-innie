@@ -132,15 +132,24 @@ describe('the audit of the staff area', () => {
   const index = readSource('src/pages/Index.tsx');
   const staff = readSource('src/components/StaffManagement.tsx');
 
-  it('gives admin a definition, instead of dropping it to no tabs at all', () => {
-    // 'admin' was offered in the staff form and had no case in isTabAllowed,
-    // so it hit `default: return false` and reached nothing whatsoever.
-    expect(index).toContain("case 'admin':");
-    expect(readSource('src/components/Dashboard.tsx')).toContain("case 'admin':");
+  it('has retired the admin role everywhere', () => {
+    // It was offered in the staff form and implemented nowhere: no case in
+    // isTabAllowed, so it hit `default: return false` and reached no tabs at
+    // all. Manager is what it always meant.
+    expect(staff).not.toContain('value="admin"');
+    expect(index).not.toContain("case 'admin':");
+    expect(readSource('src/components/Dashboard.tsx')).not.toContain("case 'admin':");
+    expect(readSource('src/lib/permissions.ts')).not.toContain("'admin'");
   });
 
-  it('no longer offers admin for new staff, since manager already means that', () => {
-    expect(staff).not.toContain('value="admin"');
+  it('moves anyone already on it across, rather than locking them out', () => {
+    // Two places hold a role: the staff list, and the session of whoever is
+    // signed in right now. Migrating only the first would strand the very
+    // person using it.
+    expect(readSource('src/lib/store-data.ts')).toContain('function retireAdminRole');
+    expect(readSource('src/lib/store-data.ts')).toContain('store = retireAdminRole(store)');
+    expect(index).toContain('const readActiveUser');
+    expect(index).toContain("user?.role !== 'admin'");
   });
 
   it('lets a supervisor see the floor they supervise', () => {

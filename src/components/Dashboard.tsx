@@ -38,10 +38,6 @@ export default function Dashboard({ store, orders = [], onNavigate, currentUser 
   }
 
   switch (role) {
-    // 'admin' is an older name for a manager that no code ever implemented,
-    // so it fell to `default` and got the owner's dashboard. Anyone already
-    // created with it now lands where a manager does.
-    case 'admin':
     case 'manager':
       return <ManagerDashboard store={store} onNavigate={onNavigate} />;
     case 'cashier':

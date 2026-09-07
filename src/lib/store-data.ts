@@ -803,6 +803,36 @@ export function runScheduledSavingsDeduction(store: StoreData): StoreData {
   return updated;
 }
 
+/**
+ * Move anyone left on the retired 'admin' role over to manager.
+ *
+ * 'admin' was offered in the staff form and implemented nowhere: it had no
+ * case in isTabAllowed, so it fell to `default: return false` and reached no
+ * tabs at all. Manager is what it was always meant to be, and is the role that
+ * exists. Runs on load so a staff member created before this cannot be locked
+ * out of the app by the role being dropped.
+ */
+function retireAdminRole(store: any): any {
+  const staff = store?.staffMembers;
+  if (!Array.isArray(staff) || !staff.some((member: any) => member?.role === 'admin')) return store;
+  const migrated = {
+    ...store,
+    staffMembers: staff.map((member: any) => (
+      member?.role === 'admin' ? { ...member, role: 'manager' } : member
+    )),
+  };
+  // Written back, or the record on disk keeps saying 'admin' forever and only
+  // the copy in memory is ever right. A plain setItem rather than saveStore:
+  // this is a one-off correction, not a change worth a cloud sync and a backup
+  // on every load.
+  try {
+    if (typeof localStorage !== 'undefined' && migrated.accessCode) {
+      localStorage.setItem(STORE_PREFIX + migrated.accessCode, JSON.stringify(migrated));
+    }
+  } catch { /* private mode: the in-memory copy is still correct */ }
+  return migrated;
+}
+
 export function loadStore(code: string): StoreData | null {
   if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') {
     return null;
@@ -811,6 +841,7 @@ export function loadStore(code: string): StoreData | null {
   if (!data) return null;
   let store = JSON.parse(data);
 
+  store = retireAdminRole(store);
   store = ensureStoreId(store);
   store = runScheduledSavingsDeduction(store);
   store = syncStoreData(store);
