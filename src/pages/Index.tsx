@@ -76,6 +76,7 @@ import {
   Settings as SettingsIcon,
   Lock,
   ChevronDown,
+  ChevronLeft,
   Gamepad2,
   Gamepad,
   Users,
@@ -1622,6 +1623,21 @@ export default function Index() {
       {/* Main Layout Area */}
       <div className="flex-1 flex flex-col md:pl-64">
         <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-3 md:px-6 py-1.5 flex items-center justify-between" style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingTop: 'max(0.4rem, env(safe-area-inset-top))', paddingBottom: '0.35rem' }}>
+          {/* Back, on every screen that is not the dashboard.
+              The history model already puts exactly one entry between any tab
+              and the dashboard, so hardware back worked — but on a desktop or
+              an iPhone there is no hardware back, and even on Android nobody
+              should have to guess. Opening a customer from the dashboard left
+              the merchant with the bottom bar as the only way out. */}
+          {tab !== 'dashboard' && (
+            <button
+              onClick={() => setTab('dashboard')}
+              aria-label="Back to dashboard"
+              className="mr-1 -ml-1 w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          )}
           <div className="flex flex-col text-left">
             <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
             <button

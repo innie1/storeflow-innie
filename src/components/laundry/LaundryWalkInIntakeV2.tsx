@@ -10,6 +10,7 @@ import {
   getLaundryPricingConfig,
 } from '@/lib/laundry-pricing';
 import { recordLaundryPayment, requiredDeposit } from '@/lib/laundry-money';
+import { suggestCustomers } from '@/lib/customer-suggest';
 import {
   createLocalLaundryRecord,
   getLocalLaundryRecords,
@@ -91,6 +92,8 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  // Hidden once one is picked, and while the field is untouched.
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [garmentCounts, setGarmentCounts] = useState<Record<string, number>>(() => emptyCounts(garmentTypes));
   const [customGarment, setCustomGarment] = useState('');
@@ -227,6 +230,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
   const selectCustomer = (id: string) => {
     setSelectedCustomerId(id);
+    setShowSuggestions(false);
     const customer = customers.find(item => item.id === id);
     setCustomerName(customer?.name || '');
     setCustomerPhone(customer?.phone || '');
@@ -420,7 +424,38 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">1. Customer</p>
               {customers.length > 0 && <select value={selectedCustomerId} onChange={event => selectCustomer(event.target.value)} className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm"><option value="">New customer</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name} · {customer.phone}</option>)}</select>}
-              <input value={customerName} onChange={event => { setCustomerName(event.target.value); setSelectedCustomerId(''); }} placeholder="Customer name *" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
+              {/* Matches from the customer book, offered as the name is
+                  typed. The only way to reuse a customer used to be a dropdown
+                  listing every one of them, so an attendant with a queue would
+                  type the name again — quietly making a second record for the
+                  same person, splitting their history and losing what they
+                  owed. */}
+              <div className="relative">
+              <input value={customerName} onChange={event => { setCustomerName(event.target.value); setSelectedCustomerId(''); setShowSuggestions(true); }} onFocus={() => setShowSuggestions(true)} placeholder="Customer name *" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
+              {showSuggestions && !selectedCustomerId && (() => {
+                const matches = suggestCustomers(customers, customerName);
+                if (matches.length === 0) return null;
+                return (
+                  <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                    {matches.map(({ customer, matchedOn }) => (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        onClick={() => selectCustomer(customer.id)}
+                        className="w-full px-3 py-2.5 text-left hover:bg-surface-2 border-b last:border-b-0 border-border/60"
+                      >
+                        <p className="text-sm font-bold">{customer.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {customer.phone}
+                          {matchedOn === 'phone' ? ' · matched on phone' : ''}
+                          {customer.outstandingDebt > 0 ? ` · owes ₦${Math.round(customer.outstandingDebt).toLocaleString()}` : ''}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+              </div>
               <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number * — e.g. 08012345678" inputMode="tel" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
             </section>
 
