@@ -1384,27 +1384,6 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
 }
 
 // ─── Reusable Helper Toggle Switch Row ───
-function ToggleRow({ label, description, checked, onChange }: { label: string; description?: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between py-2 text-left">
-      <div className="flex-1 pr-4">
-        <p className="text-sm font-semibold text-foreground leading-snug">{label}</p>
-        {description && <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">{description}</p>}
-      </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer outline-none shrink-0 ${
-          checked ? 'bg-success' : 'bg-surface-3 border border-border'
-        }`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-all shadow ${
-          checked ? 'translate-x-5' : 'translate-x-0'
-        }`} />
-      </button>
-    </div>
-  );
-}
-
 function PushNotificationToggle({ store }: { store: StoreData }) {
   const [state, setState] = useState<'unsupported' | 'denied' | 'subscribed' | 'not-subscribed' | 'checking'>('checking');
   const [busy, setBusy] = useState(false);
