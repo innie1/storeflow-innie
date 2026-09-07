@@ -9,6 +9,7 @@ import {
   requestLaundryWorkspace,
   type LaundryWorkspaceView,
 } from '@/lib/laundry-workspace';
+import { describeDue, type DueLabel } from '@/lib/laundry-due';
 import {
   getLocalLaundryRecords,
   LAUNDRY_LOCAL_CHANGED_EVENT,
@@ -54,6 +55,7 @@ interface DecoratedRecord {
   pieceCount: number;
   stage: LaundryWorkflowStage;
   statusLabel: string;
+  due: DueLabel | null;
   synced: boolean;
   whatsapp: ReturnType<typeof buildLaundryWhatsAppPayload>;
   total: number;
@@ -96,6 +98,13 @@ function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     createdAt: createdDate && Number.isFinite(createdDate.getTime()) ? createdDate.getTime() : 0,
     promisedAt,
     overdue: promisedAt !== null && promisedAt < Date.now() && !LAUNDRY_SETTLED_STAGES.includes(stage),
+    // A bundle waiting on the Ready shelf past its time is not late — it is
+    // finished, and waiting for someone to come for it. Only work still in
+    // progress is counted late, which is why the clock is pinned at the
+    // promised moment once a bundle settles.
+    due: LAUNDRY_SETTLED_STAGES.includes(stage)
+      ? describeDue(promisedAt, promisedAt !== null ? Math.min(Date.now(), promisedAt) : Date.now())
+      : describeDue(promisedAt),
     address: meta.customer_address || '',
     washMethod: meta.wash_method_name || '',
     dryMethod: meta.dry_method_name || '',
@@ -310,9 +319,19 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono font-black text-xl tracking-[0.12em] text-primary">{record.tagCode}</span>
                           <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black capitalize">{record.statusLabel}</span>
-                          {record.promisedAt !== null && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${record.overdue ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/10 text-amber-500'}`}>
-                              {record.overdue ? 'Overdue' : `Due ${new Date(record.promisedAt).toLocaleString()}`}
+                          {/* Was "Overdue", identical on every late bundle, or
+                              the full toLocaleString of the promised time.
+                              Neither told an attendant which bundle to pick up
+                              first on a busy morning. */}
+                          {record.due && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                              record.due.tone === 'late'
+                                ? 'bg-destructive/10 text-destructive'
+                                : record.due.tone === 'soon'
+                                  ? 'bg-amber-500/10 text-amber-500'
+                                  : 'bg-surface-3 text-muted-foreground'
+                            }`}>
+                              {record.due.text}
                             </span>
                           )}
                           {record.synced
