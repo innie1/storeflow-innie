@@ -1866,7 +1866,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 {store.profile?.photo ? (
                   <img src={store.profile.photo} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  <StoreLogo styleName={store.profile?.logoStyle} storeName={store.storeName} size="md" />
+                  // styleName and size were not props on StoreLogo, so this
+                  // quietly drew the default style rather than the merchant's.
+                  <StoreLogo selectedStyle={store.profile?.logoStyle} storeName={store.storeName} businessType={store.storeType} className="w-12 h-12" />
                 )}
               </div>
               <div className="flex-1 min-w-0 space-y-1">
@@ -2411,7 +2413,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               {profile.photo ? (
                 <img src={profile.photo} alt="" className="w-full h-full object-cover" />
               ) : profile.logoStyle ? (
-                <StoreLogo storeName={store.storeName} selectedStyle={profile.logoStyle} className="w-full h-full" />
+                <StoreLogo storeName={store.storeName} selectedStyle={profile.logoStyle} businessType={store.storeType} className="w-full h-full" />
               ) : (
                 <Store className="w-8 h-8 text-primary" />
               )}
@@ -2461,7 +2463,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                     profile.logoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-border-hover'
                   }`}
                 >
-                  <StoreLogo storeName={store.storeName} selectedStyle={style.id} className="w-8 h-8" />
+                  <StoreLogo storeName={store.storeName} selectedStyle={style.id} businessType={store.storeType} className="w-8 h-8" />
                   <span className="text-[8px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
                 </button>
               ))}
@@ -4416,7 +4418,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                   {store.profile?.photo ? (
                     <img src={store.profile.photo} alt="" className="w-full h-full object-cover" />
                   ) : store.profile?.logoStyle ? (
-                    <StoreLogo storeName={store.storeName} selectedStyle={store.profile.logoStyle} className="w-full h-full" />
+                    <StoreLogo storeName={store.storeName} selectedStyle={store.profile.logoStyle} businessType={store.storeType} className="w-full h-full" />
                   ) : (
                     '🏪'
                   )}

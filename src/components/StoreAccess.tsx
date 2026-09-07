@@ -1445,7 +1445,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                       selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-3 border-border hover:border-primary/30'
                     }`}
                   >
-                    <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} className="w-8 h-8" />
+                    <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} businessType={businessType} className="w-8 h-8" />
                     <span className="text-[7px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
                   </button>
                 ))}
@@ -1575,7 +1575,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                           selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-2 border-border hover:border-primary/30'
                         }`}
                       >
-                        <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} className="w-10 h-10" />
+                        <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} businessType={businessType} className="w-10 h-10" />
                         <span className="text-[9px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
                       </button>
                     ))}
