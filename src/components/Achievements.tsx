@@ -1,4 +1,6 @@
 import { StoreData } from '@/types/store';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
+import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { 
   Trophy, Award, Lock, Sparkles, CheckCircle2, CircleDollarSign, TrendingUp, Package, ShieldAlert
 } from 'lucide-react';
@@ -14,6 +16,9 @@ interface Badge {
   requirement: string;
   icon: string;
   category: string;
+  /** Only offered where it could actually be earned. */
+  productShopOnly?: boolean;
+  serviceShopOnly?: boolean;
   check: (store: StoreData) => boolean;
 }
 
@@ -73,13 +78,49 @@ const BADGES: Badge[] = [
     check: (s) => (s.pendingPayments || []).some(p => p.status === 'paid')
   },
   {
+    // A laundry keeps no stock, so this one could never be earned there and
+    // sat in the locked list forever as a reminder of somebody else's shop.
     id: 'inventory-pro',
     title: 'Inventory Pro',
     description: 'Cataloged a robust and comprehensive inventory list.',
     requirement: 'Add 15+ products to inventory.',
     icon: '📦',
     category: 'Operations',
+    productShopOnly: true,
     check: (s) => s.products.length >= 15
+  },
+  {
+    // Its equivalent for a shop that sells work: a price list worth the name.
+    id: 'service-menu',
+    title: 'Full Service Menu',
+    description: 'Built out what the shop offers.',
+    requirement: 'Add 3 or more services.',
+    icon: '🧾',
+    category: 'Operations',
+    serviceShopOnly: true,
+    check: (s) => (s.products || []).filter(p => p.isService && !p.discontinued).length >= 3
+  },
+  {
+    id: 'on-time',
+    title: 'Always On Time',
+    description: 'Handed work back when it was promised.',
+    requirement: 'Collect 10 jobs with nothing overdue.',
+    icon: '⏱️',
+    category: 'Operations',
+    serviceShopOnly: true,
+    check: (s) => {
+      const code = String((s as { accessCode?: string }).accessCode || '');
+      if (!code) return false;
+      let records: { workflowStage?: string; promisedFor?: string }[] = [];
+      try { records = getLocalLaundryRecords(code); } catch { return false; }
+      const collected = records.filter(r => r.workflowStage === 'collected').length;
+      const late = records.filter(r => {
+        if (r.workflowStage === 'collected') return false;
+        const due = new Date(r.promisedFor || '').getTime();
+        return Number.isFinite(due) && due < Date.now();
+      }).length;
+      return collected >= 10 && late === 0;
+    }
   },
   {
     id: 'doc-vault-user',
@@ -94,8 +135,14 @@ const BADGES: Badge[] = [
 
 export default function Achievements({ store }: AchievementsProps) {
   
-  const earnedBadges = BADGES.filter(b => b.check(store));
-  const lockedBadges = BADGES.filter(b => !b.check(store));
+  // A badge for the wrong kind of shop is not a goal, it is a reminder that
+  // the app was built for somebody else.
+  const isService = isServiceFirstBusiness(store);
+  const relevant = BADGES.filter(badge => (
+    !(badge.productShopOnly && isService) && !(badge.serviceShopOnly && !isService)
+  ));
+  const earnedBadges = relevant.filter(b => b.check(store));
+  const lockedBadges = relevant.filter(b => !b.check(store));
   
   const completionPercentage = Math.round((earnedBadges.length / BADGES.length) * 100);
 

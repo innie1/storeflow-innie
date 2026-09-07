@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
 import { 
@@ -24,11 +25,63 @@ interface Lesson {
     options: string[];
     correctIndex: number;
   };
+  /**
+   * Who the lesson is for.
+   *
+   * A laundry was being taught inventory turnover and how to reconcile a cash
+   * drawer it does not have. Teaching the wrong trade is worse than teaching
+   * nothing: it tells the owner the app was built for somebody else.
+   */
+  productShopOnly?: boolean;
+  serviceShopOnly?: boolean;
 }
 
 const LESSONS: Lesson[] = [
   {
+    id: 'service-pricing',
+    serviceShopOnly: true,
+    title: 'Pricing Work, Not Goods',
+    category: 'Pricing Strategy',
+    duration: '3 min',
+    coinsReward: 15,
+    description: 'Work out what an hour of your time and your materials really cost, so a busy week is also a profitable one.',
+    content: [
+      'A shop that sells work has no cost price to mark up. What it has is time, materials and machines — and those are easy to give away without noticing.',
+      '1. Start with materials per job. Detergent, starch, bags, water, and the share of electricity or fuel one load actually uses. Divide a full bottle by how many loads it does; that is your real cost per load.',
+      '2. Add your time. Decide what an hour of your work is worth and count the whole job — sorting, washing, drying, ironing, folding, handing back. A job that takes twice as long should not cost the same.',
+      '3. Price per piece for ordinary clothes, and price the awkward ones separately. A duvet is not a shirt. Charging one price for both means the shirts are paying for the duvets.',
+      '4. Charge more for express work. Someone who wants it tomorrow is asking you to reorder your whole day, and that is worth money.',
+    ],
+    quiz: {
+      question: 'A bottle of detergent costs ₦4,000 and washes 20 loads. What is the detergent cost of one load?',
+      options: ['₦200', '₦400', '₦100', '₦2,000'],
+      correctIndex: 0,
+    },
+  },
+  {
+    id: 'turnaround',
+    serviceShopOnly: true,
+    title: 'Promised Days and Getting Work Back Out',
+    category: 'Operations',
+    duration: '3 min',
+    coinsReward: 15,
+    description: 'The promised day is the promise customers actually judge you on. Here is how to keep it.',
+    content: [
+      'In a service shop the thing customers remember is not the price. It is whether their clothes were ready when you said they would be.',
+      '1. Promise honestly, not optimistically. In the rainy season clothes take longer to dry, so promise later. A day late costs you more goodwill than a day longer costs you at the counter.',
+      '2. Work the oldest first. Whatever has been in longest, or is closest to its promised day, goes next — not whatever is nearest the door.',
+      '3. Chase what is finished. Work sitting on the shelf is money you have already earned and space the next job needs. A short message when something is ready moves most of it.',
+      '4. Take a deposit on big bundles. It costs nothing to ask, and it is the difference between a customer who comes back and one whose clothes live with you for a month.',
+    ],
+    quiz: {
+      question: 'Two bundles are waiting. One came in on Monday and is due Friday, the other came in Wednesday and is due Thursday. Which should you do first?',
+      options: ['The Wednesday one — it is due sooner', 'The Monday one — it came in first', 'Whichever is smaller', 'Whichever pays more'],
+      correctIndex: 0,
+    },
+  },
+  {
     id: 'pricing-101',
+    productShopOnly: true,
     title: 'The Art of Pricing & Profit Markups',
     category: 'Pricing Strategy',
     duration: '3 min',
@@ -48,6 +101,7 @@ const LESSONS: Lesson[] = [
   },
   {
     id: 'inventory-turnover',
+    productShopOnly: true,
     title: 'Optimizing Inventory Turnover & Dead Stock',
     category: 'Inventory Management',
     duration: '4 min',
@@ -72,6 +126,7 @@ const LESSONS: Lesson[] = [
   },
   {
     id: 'cash-drawer',
+    productShopOnly: true,
     title: 'Cash Flow Management & Reconciliation',
     category: 'Finance Strategy',
     duration: '3 min',
@@ -97,6 +152,12 @@ const LESSONS: Lesson[] = [
 ];
 
 export default function Academy({ store, onUpdate }: AcademyProps) {
+  // Only the lessons that apply here. Teaching a laundry about inventory
+  // turnover is worse than teaching it nothing.
+  const isService = isServiceFirstBusiness(store);
+  const lessons = LESSONS.filter(lesson => (
+    !(lesson.productShopOnly && isService) && !(lesson.serviceShopOnly && !isService)
+  ));
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
@@ -237,7 +298,7 @@ export default function Academy({ store, onUpdate }: AcademyProps) {
           <Award className="w-5 h-5 text-yellow-500 shrink-0" />
           <div>
             <h4 className="font-display font-bold text-sm text-foreground">Academy Completion Status</h4>
-            <p className="text-xs text-muted-foreground">{completedLessons.length} of {LESSONS.length} modules cleared.</p>
+            <p className="text-xs text-muted-foreground">{completedLessons.length} of {lessons.length} modules cleared.</p>
           </div>
         </div>
         <span className="px-3.5 py-1.5 rounded-full bg-slate-950 border border-border text-yellow-500 font-display font-black text-sm">
@@ -247,7 +308,7 @@ export default function Academy({ store, onUpdate }: AcademyProps) {
 
       {/* Lessons List Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {LESSONS.map(l => {
+        {lessons.map(l => {
           const done = isCompleted(l.id);
           return (
             <div 

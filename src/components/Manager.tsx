@@ -90,7 +90,7 @@ function HealthBreakdownModal({ store, onClose }: { store: StoreData; onClose: (
   const rows = [
     { label: 'Revenue Performance', weight: 25, score: h.revenue, detail: h.details.revenue },
     { label: 'Profit Performance', weight: 25, score: h.profit, detail: h.details.profit },
-    { label: 'Inventory Health', weight: 15, score: h.inventory, detail: h.details.inventory },
+    { label: isServiceFirstBusiness(store) ? 'Work On Time' : 'Inventory Health', weight: 15, score: h.inventory, detail: h.details.inventory },
     { label: 'Expense Control', weight: 15, score: h.expense, detail: h.details.expense },
     { label: 'Savings Progress', weight: 10, score: h.savings, detail: h.details.savings },
     { label: 'Customer Debt', weight: 10, score: h.debt, detail: h.details.debt },

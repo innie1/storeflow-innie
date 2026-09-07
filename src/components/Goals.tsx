@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { StoreData, BusinessGoal } from '@/types/store';
 import { addGoal, updateGoal, deleteGoal, saveStore, getOperatingExpenses } from '@/lib/store-data';
 import { 
@@ -297,7 +298,8 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
                     <option value="profit">Profit</option>
                     <option value="savings">Savings</option>
                     <option value="debt">Debt Reduction</option>
-                    <option value="inventory">Inventory Growth</option>
+                    {/* A shop that keeps no stock cannot set a goal to grow it. */}
+                    {!isServiceFirstBusiness(store) && <option value="inventory">Inventory Growth</option>}
                   </select>
                 </div>
 
@@ -318,7 +320,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
                   type="text" 
                   value={label} 
                   onChange={e => setLabel(e.target.value)}
-                  placeholder="e.g. Save for Dec warehouse lease"
+                  placeholder={isServiceFirstBusiness(store) ? "e.g. Buy a second washing machine" : "e.g. Save for Dec warehouse lease"}
                   className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
                 />
               </div>

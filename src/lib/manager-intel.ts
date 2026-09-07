@@ -1,5 +1,6 @@
 import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
+import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { getLowStockThreshold } from '@/lib/settings';
 import { getPendingSummary, isStockPurchase } from '@/lib/store-data';
 import type { AutoFixSpec } from '@/lib/auto-fix';
@@ -282,6 +283,17 @@ export interface HealthScore {
   details: Record<string, string>;
 }
 
+/** Work taken in, for the shops that keep no stock. */
+function serviceRecords(store: StoreData) {
+  const accessCode = String((store as { accessCode?: string }).accessCode || '');
+  if (!accessCode) return [];
+  try {
+    return getLocalLaundryRecords(accessCode);
+  } catch {
+    return [];
+  }
+}
+
 export function healthScore(store: StoreData): HealthScore {
   const last7 = dailySeries(store, 7);
   const prev7 = dailySeries(store, 14).slice(0, 7);
@@ -319,7 +331,34 @@ export function healthScore(store: StoreData): HealthScore {
   const total = activeProducts.length;
   let inventoryScore = 100;
   let invDetail = 'No products in catalog yet';
-  if (total > 0) {
+
+  // A shop that keeps no stock cannot be scored on it. A laundry was having
+  // 15% of its health decided by an inventory it does not have, and told
+  // "All 0 products well-stocked". What it lives or dies by is whether work
+  // goes back on the day it was promised, so that is what is measured here.
+  const serviceShop = isServiceFirstBusiness(store);
+  if (serviceShop) {
+    const records = serviceRecords(store);
+    const open = records.filter(record => record.workflowStage !== 'collected');
+    const now = Date.now();
+    const late = open.filter(record => {
+      const due = new Date(record.promisedFor || '').getTime();
+      return Number.isFinite(due) && due < now;
+    }).length;
+
+    if (!records.length) {
+      inventoryScore = 100;
+      invDetail = 'Nothing taken in yet';
+    } else if (!open.length) {
+      inventoryScore = 100;
+      invDetail = 'Everything has been handed back';
+    } else {
+      inventoryScore = Math.max(0, Math.round(100 - (late / open.length) * 100));
+      invDetail = late === 0
+        ? `${open.length} in the shop, none past its promised day`
+        : `${late} of ${open.length} past the promised day`;
+    }
+  } else if (total > 0) {
     const forecasts = computeStockForecasts(store);
     const last30 = store.sales.filter(s => new Date(s.date) >= daysAgo(30));
     const sold30ByProduct = new Map<string, number>();
