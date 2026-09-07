@@ -87,13 +87,37 @@ function suggestedPromisedLocal(turnaround?: string): string {
  * tap each and the full picker stays for the exception.
  */
 const DUE_PRESETS: { label: string; hours: number }[] = [
-  { label: '2 hours', hours: 2 },
-  { label: '4 hours', hours: 4 },
-  { label: 'Tomorrow', hours: 24 },
+  { label: '12 hours', hours: 12 },
+  { label: '1 day', hours: 24 },
   { label: '2 days', hours: 48 },
   { label: '3 days', hours: 72 },
   { label: '1 week', hours: 168 },
 ];
+
+/** A custom time the merchant picked, kept so it can be tapped again. */
+const CUSTOM_DUE_KEY = 'storeflow_laundry_custom_due_hours';
+
+function readCustomDue(): number | null {
+  try {
+    const raw = Number(localStorage.getItem(CUSTOM_DUE_KEY));
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberCustomDue(hours: number): void {
+  try { localStorage.setItem(CUSTOM_DUE_KEY, String(Math.round(hours))); } catch { /* private mode */ }
+}
+
+/** "18 hours", "5 days" — how a counter would say an interval. */
+function describeHours(hours: number): string {
+  const rounded = Math.round(hours);
+  if (rounded < 24) return `${rounded} hour${rounded === 1 ? '' : 's'}`;
+  const days = Math.round(rounded / 24);
+  if (days === 7) return '1 week';
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
 
 /** An offset from now, in the YYYY-MM-DDTHH:mm shape the input wants. */
 function promisedInHours(hours: number): string {
@@ -102,14 +126,14 @@ function promisedInHours(hours: number): string {
   return local.toISOString().slice(0, 16);
 }
 
-/** Which preset, if any, the current value corresponds to - within a minute. */
-function activePreset(promisedFor: string): number | null {
+/** Which chip, if any, the current value corresponds to - within a minute. */
+function activePreset(promisedFor: string, chips: { hours: number }[]): number | null {
   if (!promisedFor) return null;
   const target = new Date(promisedFor).getTime();
   if (!Number.isFinite(target)) return null;
-  for (const preset of DUE_PRESETS) {
-    const expected = new Date(promisedInHours(preset.hours)).getTime();
-    if (Math.abs(target - expected) < 60_000) return preset.hours;
+  for (const chip of chips) {
+    const expected = new Date(promisedInHours(chip.hours)).getTime();
+    if (Math.abs(target - expected) < 60_000) return chip.hours;
   }
   return null;
 }
@@ -143,6 +167,8 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const [promisedFor, setPromisedFor] = useState('');
   const [promisedTouched, setPromisedTouched] = useState(false);
   const [milestone, setMilestone] = useState<MilestoneDef | null>(null);
+  const [pickingCustom, setPickingCustom] = useState(false);
+  const [customDue, setCustomDue] = useState<number | null>(() => readCustomDue());
   const [washMethodId, setWashMethodId] = useState('manual:hand-wash');
   const [dryMethodId, setDryMethodId] = useState('manual:sun-dry');
   const [created, setCreated] = useState<LocalLaundryRecord | null>(null);
@@ -399,6 +425,13 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
   const canSave = Boolean(customerName.trim() && validPhone(customerPhone) && selectedService && pieceCount > 0 && Number.isFinite(Number(totalPrice)));
 
+  // The saved custom interval sits alongside the fixed ones, unless it is
+  // already one of them.
+  const dueChips = customDue && !DUE_PRESETS.some(preset => preset.hours === customDue)
+    ? [...DUE_PRESETS, { label: describeHours(customDue), hours: customDue }]
+    : DUE_PRESETS;
+  const activeHours = activePreset(promisedFor, dueChips);
+
   return (
     <>
       {milestone && (
@@ -530,26 +563,63 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">4. Due &amp; price</p>
-              <div className="flex flex-wrap gap-1.5">
-                {DUE_PRESETS.map(preset => {
-                  const active = activePreset(promisedFor) === preset.hours;
+              {/* One line, scrolled rather than wrapped, so the row does not
+                  push the price out of reach on a phone. */}
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-0.5 px-0.5 py-0.5">
+                {dueChips.map(chip => {
+                  const active = activeHours === chip.hours;
                   return (
                     <button
-                      key={preset.label}
+                      key={chip.label}
                       type="button"
-                      onClick={() => { setPromisedFor(promisedInHours(preset.hours)); setPromisedTouched(true); }}
+                      onClick={() => { setPromisedFor(promisedInHours(chip.hours)); setPromisedTouched(true); }}
                       aria-pressed={active}
-                      className={`h-9 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${
+                      className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${
                         active
                           ? 'bg-primary text-primary-foreground border-primary'
                           : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
                       }`}
                     >
-                      {preset.label}
+                      {chip.label}
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => setPickingCustom(current => !current)}
+                  aria-expanded={pickingCustom}
+                  className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${
+                    pickingCustom || activeHours === null
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+                  }`}
+                >
+                  Custom
+                </button>
               </div>
+
+              {/* Picking a custom time keeps it: it joins the row above so the
+                  next customer with the same turnaround is one tap, not four. */}
+              {pickingCustom && (
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3">
+                  <CalendarClock className="h-4 w-4 text-primary shrink-0" />
+                  <input
+                    type="datetime-local"
+                    value={promisedFor}
+                    onChange={event => {
+                      setPromisedFor(event.target.value);
+                      setPromisedTouched(true);
+                      const hours = (new Date(event.target.value).getTime() - Date.now()) / 3_600_000;
+                      if (Number.isFinite(hours) && hours > 0) {
+                        rememberCustomDue(hours);
+                        setCustomDue(Math.round(hours));
+                      }
+                    }}
+                    className="w-full bg-transparent py-3 text-sm outline-none"
+                  />
+                </div>
+              )}
+
               {promisedFor && (
                 <p className="text-[11px] text-muted-foreground">
                   Ready {new Date(promisedFor).toLocaleString(undefined, {
@@ -557,12 +627,6 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
                   })}
                 </p>
               )}
-              <details className="group">
-                <summary className="text-[11px] text-muted-foreground cursor-pointer list-none select-none hover:text-foreground">
-                  Pick an exact time
-                </summary>
-                <div className="mt-2 flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3"><CalendarClock className="h-4 w-4 text-primary shrink-0" /><input type="datetime-local" value={promisedFor} onChange={event => { setPromisedFor(event.target.value); setPromisedTouched(true); }} className="w-full bg-transparent py-3 text-sm outline-none" /></div>
-              </details>
               {pricing === 'per_piece' && calculated.lines.length > 0 && <div className="rounded-xl border border-border bg-card divide-y divide-border/60">{calculated.lines.map(line => <div key={line.garmentType} className="flex justify-between gap-3 px-3 py-1.5 text-xs"><span className="truncate">{line.quantity} × {line.garmentType} @ ₦{line.unitPrice.toLocaleString()}</span><span className="font-black shrink-0">₦{line.subtotal.toLocaleString()}</span></div>)}</div>}
               <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input value={totalPrice} onChange={event => { setTotalPrice(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(true); }} inputMode="decimal" className="w-full bg-transparent outline-none font-black" placeholder="Total price" /></div>
               {priceTouched && calculated.total !== Number(totalPrice) && <p className="text-[10px] text-muted-foreground">Manually adjusted. Calculated price is ₦{calculated.total.toLocaleString()}.</p>}

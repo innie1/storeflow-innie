@@ -31,16 +31,55 @@ function storeDetails(store: StoreData): string[] {
   ].filter(Boolean);
 }
 
-function garmentSummary(order: any, meta: Record<string, any>): string {
-  if (meta.garment_summary) return String(meta.garment_summary);
+/** One entry per kind of garment, so the message can lay them out itself. */
+function garmentLines(order: any, meta: Record<string, any>): { name: string; quantity: number }[] {
   const lines = Array.isArray(meta.garment_lines) ? meta.garment_lines : [];
   if (lines.length) {
-    return lines.map((item: any) => `${Number(item.quantity || 0)} ${item.garmentType || item.garment_type || 'item'}`).join(', ');
+    return lines.map((item: any) => ({
+      name: String(item.garmentType || item.garment_type || 'Item'),
+      quantity: Math.max(1, Number(item.quantity) || 1),
+    }));
   }
   return (order?.order_items || [])
     .filter((item: any) => !item?.metadata?.charge_line)
-    .map((item: any) => `${Number(item.quantity || 0)} ${item.item_name || item.product_name || 'item'}`)
-    .join(', ');
+    .map((item: any) => ({
+      name: String(item.item_name || item.product_name || 'Item'),
+      quantity: Math.max(1, Number(item.quantity) || 1),
+    }));
+}
+
+/**
+ * The items, as a list a customer can actually check against their bag.
+ *
+ * This used to be one run-on line — "Items (6): 1 Shirt, 1 Trouser, 1 T-shirt,
+ * 1 Nicker / Shorts, 1 Gown / Dress, 1 Skirt" — which wrapped across four
+ * lines on a phone and had to be read word by word to count. WhatsApp has no
+ * columns or tables to lay it out with (proportional font, no table markup),
+ * so a numbered list down the message is the format that scans: the number on
+ * the left is the count, and each garment sits on its own line.
+ *
+ * A quantity is only shown when there is more than one, because "1 ×" on every
+ * line of a six-line list is noise.
+ */
+function formatItemBlock(order: any, meta: Record<string, any>, pieces: number): string[] {
+  const lines = garmentLines(order, meta);
+  const heading = `Items — ${pieces} piece${pieces === 1 ? '' : 's'}`;
+
+  if (!lines.length) {
+    const summary = meta.garment_summary ? String(meta.garment_summary) : '';
+    return summary ? [heading, summary] : [heading];
+  }
+
+  return [
+    heading,
+    ...lines.map((item, index) => (
+      item.quantity > 1
+        ? `${index + 1}. ${item.name} ×${item.quantity}`
+        : `${index + 1}. ${item.name}`
+    )),
+    // A blank line, so the total does not run straight on from the last item.
+    '',
+  ];
 }
 
 function determineKind(order: any): LaundryMessageKind {
@@ -70,7 +109,6 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
     if (item?.metadata?.charge_line) return sum;
     return sum + Math.max(0, Number(item?.quantity) || 0);
   }, 0);
-  const items = garmentSummary(order, meta) || `${pieces} item${pieces === 1 ? '' : 's'}`;
   const total = money(order?.total);
   const lines: string[] = [`Hello ${name},`];
 
@@ -80,7 +118,7 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
       '',
       `Laundry code: ${tag}`,
       `Service: ${service}`,
-      `Items (${pieces}): ${items}`,
+      ...formatItemBlock(order, meta, pieces),
       `Total: ${total}`,
       '',
       'We will keep you updated as your laundry moves through processing.',
@@ -91,7 +129,7 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
       '',
       `Laundry code: ${tag}`,
       `Service: ${service}`,
-      `Items (${pieces}): ${items}`,
+      ...formatItemBlock(order, meta, pieces),
       '',
       'We will message you again when it is ready.',
     );
@@ -100,7 +138,7 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
       `Good news — your laundry is ready for pickup from ${store.storeName}.`,
       '',
       `Laundry code: ${tag}`,
-      `Items (${pieces}): ${items}`,
+      ...formatItemBlock(order, meta, pieces),
       `Total: ${total}`,
       '',
       'Please bring or mention your laundry code when collecting.',
@@ -110,7 +148,7 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
       `This is a friendly reminder from ${store.storeName} that your laundry is still ready for collection.`,
       '',
       `Laundry code: ${tag}`,
-      `Items (${pieces}): ${items}`,
+      ...formatItemBlock(order, meta, pieces),
       '',
       'Please contact us or come by when convenient to arrange collection.',
     );
@@ -119,7 +157,7 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
       `Thank you for using ${store.storeName}. Your laundry job has been completed.`,
       '',
       `Laundry code: ${tag}`,
-      `Items (${pieces}): ${items}`,
+      ...formatItemBlock(order, meta, pieces),
       '',
       'We appreciate your patronage and hope to serve you again.',
     );

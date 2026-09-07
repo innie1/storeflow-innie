@@ -52,9 +52,10 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
     } catch { /* private mode, or something else wrote the key */ }
     return null;
   });
-  const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
   const draggedRef = useRef(false);
+  /** Where the button is right now, tracked without re-rendering. */
+  const liveRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   /** Keep the whole button on screen, whatever the viewport is now. */
   const clampFab = (x: number, y: number) => ({
@@ -75,41 +76,60 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
     const rect = event.currentTarget.getBoundingClientRect();
     dragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
     draggedRef.current = false;
+    liveRef.current = { x: rect.left, y: rect.top };
     event.currentTarget.setPointerCapture(event.pointerId);
     beginHold();
   };
 
+  /**
+   * The drag writes to the element, not to React state.
+   *
+   * Setting state on every pointermove re-rendered this whole component once
+   * per frame, and the button carried `transition-all`, so each new left/top
+   * was *animated* to rather than applied — the button tweened along behind
+   * the finger. Position goes straight onto the node here and is committed to
+   * state once, on release.
+   */
   const onFabPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
     const start = dragRef.current;
     if (!start) return;
-    const nextX = event.clientX - start.dx;
-    const nextY = event.clientY - start.dy;
+    const button = event.currentTarget;
+    const next = clampFab(event.clientX - start.dx, event.clientY - start.dy);
+
     if (!draggedRef.current) {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const moved = Math.hypot(nextX - rect.left, nextY - rect.top);
-      if (moved < FAB_DRAG_THRESHOLD) return;
+      const from = liveRef.current;
+      if (Math.hypot(next.x - from.x, next.y - from.y) < FAB_DRAG_THRESHOLD) return;
       // Past the threshold this is a drag, not a press: stop the hold-to-talk
       // timer before it fires under the merchant's finger.
       draggedRef.current = true;
-      setDragging(true);
       endHold();
+      // No tweening while a finger is on it.
+      button.style.transition = 'none';
+      button.style.willChange = 'left, top';
+      button.style.right = 'auto';
+      button.style.bottom = 'auto';
+      button.style.transform = 'scale(1.08)';
     }
-    setFabPos(clampFab(nextX, nextY));
+
+    liveRef.current = next;
+    button.style.left = `${next.x}px`;
+    button.style.top = `${next.y}px`;
   };
 
   const onFabPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
     dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    const button = event.currentTarget;
+    if (button.hasPointerCapture(event.pointerId)) {
+      button.releasePointerCapture(event.pointerId);
     }
     if (draggedRef.current) {
-      setDragging(false);
-      setFabPos(current => {
-        if (current) {
-          try { localStorage.setItem(FAB_POSITION_KEY, JSON.stringify(current)); } catch { /* private mode */ }
-        }
-        return current;
-      });
+      button.style.transition = '';
+      button.style.willChange = '';
+      button.style.transform = '';
+      const landed = liveRef.current;
+      // One state write, at the end, so the element and React agree.
+      setFabPos(landed);
+      try { localStorage.setItem(FAB_POSITION_KEY, JSON.stringify(landed)); } catch { /* private mode */ }
       return;
     }
     endHold();
@@ -260,7 +280,7 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
         onPointerMove={onFabPointerMove}
         onPointerUp={onFabPointerUp}
         onPointerCancel={onFabPointerUp}
-        className={`fixed z-[45] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center transition-all touch-none ${fabPos ? '' : 'right-4 bottom-24 md:bottom-8'} ${dragging ? 'scale-110 cursor-grabbing shadow-2xl ring-4 ring-primary/30' : 'active:scale-95 cursor-grab'} ${holding ? 'ring-4 ring-primary/25 scale-105' : ''}`}
+        className={`fixed z-[45] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center transition-transform touch-none ${fabPos ? '' : 'right-4 bottom-24 md:bottom-8'} active:scale-95 cursor-grab ${holding ? 'ring-4 ring-primary/25 scale-105' : ''}`}
         style={fabPos
           ? { left: fabPos.x, top: fabPos.y, right: 'auto', bottom: 'auto' }
           : undefined}

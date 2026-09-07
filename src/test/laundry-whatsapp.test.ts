@@ -29,6 +29,12 @@ function order(overrides: any = {}) {
       service_name: 'Full Service',
       garment_count: 3,
       garment_summary: '2 Shirt, 1 Trouser',
+      // What a real intake writes alongside the summary; the message lays the
+      // list out from these rather than from the pre-joined string.
+      garment_lines: [
+        { garmentType: 'Shirt', quantity: 2 },
+        { garmentType: 'Trouser', quantity: 1 },
+      ],
     },
     order_items: [],
     ...overrides,
@@ -46,8 +52,13 @@ describe('laundry WhatsApp messages', () => {
     expect(payload?.kind).toBe('received');
     expect(payload?.phone).toBe('2348012345678');
     expect(payload?.message).toContain('K7M2Q9');
-    expect(payload?.message).toContain('2 Shirt, 1 Trouser');
-    expect(payload?.message).toContain('3)');
+    // The garments used to run together on one line, under an "Items (3):"
+    // bracket. They are a numbered list now, one garment per line, with the
+    // quantity shown only where it is more than one.
+    expect(payload?.message).toContain('Items — 3 pieces');
+    expect(payload?.message).toContain('1. Shirt ×2');
+    expect(payload?.message).toContain('2. Trouser');
+    expect(payload?.message).not.toContain('2 Shirt, 1 Trouser');
     expect(payload?.message).toContain('Washlie Laundry');
     expect(payload?.message).toContain("Chalisco, by God's Own Specialist Hospital");
     expect(payload?.message).toContain('08099998888');
