@@ -117,6 +117,13 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   // the top. Overlapping Flow's own head beats covering the heading below.
   const [bubbleShiftY, setBubbleShiftY] = useState<number>(0);
   const bubbleRef = useRef<HTMLDivElement>(null);
+  /**
+   * Flow is mid-gesture until this moment.
+   *
+   * Set synchronously, unlike the state the ambient loops check, so two timers
+   * firing in the same flush cannot both conclude he is free.
+   */
+  const busyUntilRef = useRef(0);
   const [isMouthTalking, setIsMouthTalking] = useState(false);
   const lastSalesCountRef = useRef<number | null>(null);
 
@@ -619,7 +626,12 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
     const interval = setInterval(() => {
       if (document.hidden) return;
+      // busyUntilRef, not just state: the ambient loops share a tick, and
+      // within one timer flush both read the same pre-render values and both
+      // conclude Flow is free. That let a random animation land on top of the
+      // low-stock peek, leaving its speech bubble over an unrelated pose.
       if (overrideMood || message || tapCount > 0) return;
+      if (Date.now() < busyUntilRef.current) return;
 
       // 45% chance to trigger a random activity
       if (Math.random() < 0.45) {
@@ -767,7 +779,12 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
     const peek = () => {
       if (document.hidden) return;
+      // busyUntilRef, not just state: the ambient loops share a tick, and
+      // within one timer flush both read the same pre-render values and both
+      // conclude Flow is free. That let a random animation land on top of the
+      // low-stock peek, leaving its speech bubble over an unrelated pose.
       if (overrideMood || message || tapCount > 0) return;
+      if (Date.now() < busyUntilRef.current) return;
 
       const threshold = store.managerSettings?.minStockThreshold
         ?? store.managerSettings?.criticalStockThreshold
@@ -784,6 +801,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       if (Date.now() - last < LOW_STOCK_PEEK_COOLDOWN_MS) return;
       try { localStorage.setItem(LOW_STOCK_PEEK_KEY, String(Date.now())); } catch { /* private mode */ }
 
+      busyUntilRef.current = Date.now() + 4500;
       const fewest = low.reduce((a, b) => (a.quantity <= b.quantity ? a : b));
       const others = low.length - 1;
       triggerSpeech(

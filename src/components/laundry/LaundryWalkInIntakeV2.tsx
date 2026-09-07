@@ -75,6 +75,43 @@ function suggestedPromisedLocal(turnaround?: string): string {
   return local.toISOString().slice(0, 16);
 }
 
+/**
+ * When clothes are promised back, as an attendant would say it.
+ *
+ * The only control here was a datetime-local input, which on a phone means
+ * opening a calendar, picking a day, opening a clock and picking a time - four
+ * taps and a lot of squinting, at a counter, with a customer waiting. Almost
+ * every laundry promise is one of a handful of intervals, so those are now one
+ * tap each and the full picker stays for the exception.
+ */
+const DUE_PRESETS: { label: string; hours: number }[] = [
+  { label: '2 hours', hours: 2 },
+  { label: '4 hours', hours: 4 },
+  { label: 'Tomorrow', hours: 24 },
+  { label: '2 days', hours: 48 },
+  { label: '3 days', hours: 72 },
+  { label: '1 week', hours: 168 },
+];
+
+/** An offset from now, in the YYYY-MM-DDTHH:mm shape the input wants. */
+function promisedInHours(hours: number): string {
+  const date = new Date(Date.now() + hours * 60 * 60 * 1000);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+/** Which preset, if any, the current value corresponds to - within a minute. */
+function activePreset(promisedFor: string): number | null {
+  if (!promisedFor) return null;
+  const target = new Date(promisedFor).getTime();
+  if (!Number.isFinite(target)) return null;
+  for (const preset of DUE_PRESETS) {
+    const expected = new Date(promisedInHours(preset.hours)).getTime();
+    if (Math.abs(target - expected) < 60_000) return preset.hours;
+  }
+  return null;
+}
+
 export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const services = useMemo(
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
@@ -476,7 +513,39 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">4. Due &amp; price</p>
-              <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3"><CalendarClock className="h-4 w-4 text-primary shrink-0" /><input type="datetime-local" value={promisedFor} onChange={event => { setPromisedFor(event.target.value); setPromisedTouched(true); }} className="w-full bg-transparent py-3 text-sm outline-none" /></div>
+              <div className="flex flex-wrap gap-1.5">
+                {DUE_PRESETS.map(preset => {
+                  const active = activePreset(promisedFor) === preset.hours;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => { setPromisedFor(promisedInHours(preset.hours)); setPromisedTouched(true); }}
+                      aria-pressed={active}
+                      className={`h-9 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${
+                        active
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {promisedFor && (
+                <p className="text-[11px] text-muted-foreground">
+                  Ready {new Date(promisedFor).toLocaleString(undefined, {
+                    weekday: 'short', hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short',
+                  })}
+                </p>
+              )}
+              <details className="group">
+                <summary className="text-[11px] text-muted-foreground cursor-pointer list-none select-none hover:text-foreground">
+                  Pick an exact time
+                </summary>
+                <div className="mt-2 flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3"><CalendarClock className="h-4 w-4 text-primary shrink-0" /><input type="datetime-local" value={promisedFor} onChange={event => { setPromisedFor(event.target.value); setPromisedTouched(true); }} className="w-full bg-transparent py-3 text-sm outline-none" /></div>
+              </details>
               {pricing === 'per_piece' && calculated.lines.length > 0 && <div className="rounded-xl border border-border bg-card divide-y divide-border/60">{calculated.lines.map(line => <div key={line.garmentType} className="flex justify-between gap-3 px-3 py-1.5 text-xs"><span className="truncate">{line.quantity} × {line.garmentType} @ ₦{line.unitPrice.toLocaleString()}</span><span className="font-black shrink-0">₦{line.subtotal.toLocaleString()}</span></div>)}</div>}
               <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input value={totalPrice} onChange={event => { setTotalPrice(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(true); }} inputMode="decimal" className="w-full bg-transparent outline-none font-black" placeholder="Total price" /></div>
               {priceTouched && calculated.total !== Number(totalPrice) && <p className="text-[10px] text-muted-foreground">Manually adjusted. Calculated price is ₦{calculated.total.toLocaleString()}.</p>}
