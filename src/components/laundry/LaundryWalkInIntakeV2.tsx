@@ -23,7 +23,8 @@ import {
 } from '@/lib/laundry-offline';
 import { openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
-import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MessageCircle, Minus, Plus, Shirt, X } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MessageCircle, Minus, Plus, Search, Shirt, X } from 'lucide-react';
+import { filterGarments, findSimilarGarment } from '@/lib/garment-match';
 
 interface Props {
   store: StoreData;
@@ -172,6 +173,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [garmentCounts, setGarmentCounts] = useState<Record<string, number>>(() => emptyCounts(garmentTypes));
   const [customGarment, setCustomGarment] = useState('');
+  /** Narrows the clothing grid; a long-running shop ends up with forty types. */
+  const [garmentSearch, setGarmentSearch] = useState('');
+  /** A garment the typed name looks like, held while the attendant decides. */
+  const [similarGarment, setSimilarGarment] = useState<{ existing: string; typed: string } | null>(null);
   const [billingQuantity, setBillingQuantity] = useState('1');
   const [totalPrice, setTotalPrice] = useState('');
   const [priceTouched, setPriceTouched] = useState(false);
@@ -320,13 +325,36 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     setPriceTouched(false);
   };
 
+  const countGarment = (name: string) => {
+    setGarmentCounts(current => ({ ...current, [name]: (current[name] || 0) + 1 }));
+    setCustomGarment('');
+    setSimilarGarment(null);
+    setPriceTouched(false);
+  };
+
+  /**
+   * Only an identical name used to count as the same garment, so "Shirt with
+   * Emma" created a second kind of shirt and the price list, the counts and
+   * every report then treated the two as unrelated. A close name now asks
+   * first, and the attendant decides.
+   */
+  const shownGarments = useMemo(
+    () => filterGarments(displayGarments, garmentSearch),
+    [displayGarments, garmentSearch],
+  );
+
   const addCustomGarment = () => {
     const name = customGarment.trim();
     if (!name) return;
-    const existing = Object.keys(garmentCounts).find(key => key.toLowerCase() === name.toLowerCase()) || name;
-    setGarmentCounts(current => ({ ...current, [existing]: (current[existing] || 0) + 1 }));
-    setCustomGarment('');
-    setPriceTouched(false);
+    const exact = Object.keys(garmentCounts).find(key => key.toLowerCase() === name.toLowerCase());
+    if (exact) return countGarment(exact);
+
+    const similar = findSimilarGarment(Object.keys(garmentCounts), name);
+    if (similar) {
+      setSimilarGarment({ existing: similar, typed: name });
+      return;
+    }
+    countGarment(name);
   };
 
   const saveIntake = async () => {
@@ -552,7 +580,35 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
                 <p className="text-[11px] uppercase font-black text-muted-foreground">3. Clothes</p>
                 <span className="text-xs font-black text-primary">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</span>
               </div>
-              <div className="grid grid-cols-2 gap-1.5">{displayGarments.map(garment => {
+              {/* A shop that has been running a while has thirty or forty
+                  clothing types, and every one of them was on screen at once. */}
+              {displayGarments.length > 6 && (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input
+                    value={garmentSearch}
+                    onChange={event => setGarmentSearch(event.target.value)}
+                    placeholder="Search clothing type"
+                    className="w-full h-10 pl-9 pr-9 rounded-xl bg-surface-2 border border-border text-sm outline-none focus:border-primary"
+                  />
+                  {garmentSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setGarmentSearch('')}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+              {shownGarments.length === 0 && (
+                <p className="text-[11px] text-muted-foreground py-1">
+                  Nothing matches “{garmentSearch}”. Add it below.
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-1.5">{shownGarments.map(garment => {
                 const quantity = garmentCounts[garment] || 0;
                 const unitPrice = selectedService && pricing === 'per_piece' ? getLaundryGarmentPrice(store, selectedService, garment) : 0;
                 return (
@@ -570,6 +626,29 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
                 );
               })}</div>
               <div className="flex gap-2"><input value={customGarment} onChange={event => setCustomGarment(event.target.value)} onKeyDown={event => event.key === 'Enter' && addCustomGarment()} placeholder="Other clothing type" className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /><button onClick={addCustomGarment} type="button" className="px-4 h-11 rounded-xl border border-primary text-primary font-black text-xs shrink-0">Add</button></div>
+              {similarGarment && (
+                <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 space-y-2">
+                  <p className="text-xs text-foreground leading-snug">
+                    You already have <b>{similarGarment.existing}</b>. Is “{similarGarment.typed}” the same thing?
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => countGarment(similarGarment.existing)}
+                      className="h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black"
+                    >
+                      Yes, count as {similarGarment.existing}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => countGarment(similarGarment.typed)}
+                      className="h-9 px-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-black"
+                    >
+                      No, keep “{similarGarment.typed}”
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             {isCountedUnit(pricing) && <section className="text-left space-y-1"><label className="text-[10px] uppercase font-black text-muted-foreground">Quantity {pricingLabel.unitLabel}</label><input value={billingQuantity} onChange={event => { setBillingQuantity(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(false); }} inputMode="decimal" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /></section>}
