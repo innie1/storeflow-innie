@@ -1,15 +1,17 @@
 import { StoreData, TabId } from '@/types/store';
 import { getBusinessTemplate, isBusinessTabAllowed } from '@/lib/business-runtime';
 import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
-import { CalendarClock, ClipboardList, DollarSign, Gamepad2, Package, Receipt, Settings2, Shirt, Sparkles, Tag, Users } from 'lucide-react';
+import { CalendarClock, ClipboardList, DollarSign, Gamepad2, Package, Receipt, Settings2, Shirt, Sparkles, Tag, Users, Briefcase } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 interface Props {
   store: StoreData;
   onNavigate: (tab: TabId) => void;
+  /** Only an owner can add staff, so only an owner is offered the shortcut. */
+  currentUser?: { role?: string } | null;
 }
 
-export default function BusinessSimpleHome({ store, onNavigate }: Props) {
+export default function BusinessSimpleHome({ store, onNavigate, currentUser }: Props) {
   const template = getBusinessTemplate(store);
   const today = new Date().toISOString().split('T')[0];
   const todayRevenue = (store.sales || []).filter(s => s.date.startsWith(today)).reduce((sum, s) => sum + s.total, 0);
@@ -25,6 +27,12 @@ export default function BusinessSimpleHome({ store, onNavigate }: Props) {
     { label: noun + (noun.endsWith('s') ? '' : 's'), icon: <Tag className="w-6 h-6" />, tab: 'inventory' },
     { label: isAppointment ? 'Appointments' : isSession ? 'Sessions' : 'Customers', icon: isAppointment ? <CalendarClock className="w-6 h-6" /> : isSession ? <Gamepad2 className="w-6 h-6" /> : <Users className="w-6 h-6" />, tab: isAppointment ? 'orders' : isSession ? 'games-dashboard' : 'customers' },
     ...(isLaundry ? [{ label: 'Laundry Records', icon: <Receipt className="w-6 h-6" />, tab: 'laundry-records' as TabId }] : [{ label: 'Sales', icon: <DollarSign className="w-6 h-6" />, tab: 'sales' as TabId }]),
+    // Adding a worker is a first-week job in every one of these trades, and
+    // the only route to it was Staff Accounts, sixth in a flat list of
+    // sixteen under More. Owners only: nobody else can add staff anyway.
+    ...(currentUser?.role === 'owner'
+      ? [{ label: 'Staff', icon: <Briefcase className="w-6 h-6" />, tab: 'staff' as TabId }]
+      : []),
   ];
   const actions = candidateActions.filter(action => isBusinessTabAllowed(store, action.tab));
 

@@ -16,7 +16,20 @@ interface StaffManagementProps {
   currentUser?: any;
 }
 
+/** Trades that run a counter till, and so have a cash drawer to open and tally. */
+const CASH_DRAWER_TRADES = ['provision', 'pharmacy', 'clothing', 'electronics', 'food', 'restaurant', 'gas'];
+
 export default function StaffManagement({ store, onUpdate, currentUser }: StaffManagementProps) {
+  /**
+   * A laundry has no till.
+   *
+   * This screen opened with a Shift Controller, an "Opening drawer cash" box
+   * and an "Open Cashier Shift" button, above the thing the owner came for. A
+   * laundry, a barber, a tailor — none of them cash up a drawer, and being
+   * shown a provision shop's till before you can add a worker is what makes
+   * the app feel like it is for somebody else's business.
+   */
+  const runsATill = CASH_DRAWER_TRADES.includes(String(store.storeType || '').toLowerCase());
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -25,7 +38,11 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'attendant' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>('cashier');
+  // Whichever role the shop is most likely to be adding: a till shop hires a
+  // cashier, a laundry or a barber hires someone to take work in.
+  const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'attendant' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>(
+    CASH_DRAWER_TRADES.includes(String(store.storeType || '').toLowerCase()) ? 'cashier' : 'attendant',
+  );
   
   // Permissions states
   const [salesAccess, setSalesAccess] = useState(true);
@@ -143,7 +160,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setName('');
     setPin('');
     setPhone('');
-    setRole('cashier');
+    setRole(CASH_DRAWER_TRADES.includes(String(store.storeType || '').toLowerCase()) ? 'cashier' : 'attendant');
     setSalesAccess(true);
     setInventoryAccess(false);
     setReportsAccess(false);
@@ -173,9 +190,13 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="font-display font-bold text-2xl text-foreground flex items-center gap-2">
-            <Briefcase className="w-6 h-6 text-yellow-500" /> Staff Accounts & Shifts
+            <Briefcase className="w-6 h-6 text-yellow-500" /> {runsATill ? 'Staff Accounts & Shifts' : 'Staff Accounts'}
           </h2>
-          <p className="text-sm text-muted-foreground">Manage employee roles, specify permissions access, and track cashier shifts.</p>
+          <p className="text-sm text-muted-foreground">
+            {runsATill
+              ? 'Add your workers, set what each can reach, and track cashier shifts.'
+              : 'Add your workers and set what each of them can reach.'}
+          </p>
         </div>
         {currentUser?.role === 'owner' && (
           <button 
@@ -189,6 +210,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Active Shift Tracker */}
+        {runsATill && (
         <div className="lg:col-span-1 bg-slate-950 border border-border p-5 rounded-2xl space-y-4 h-fit">
           <h3 className="font-display font-bold text-base text-foreground">Shift Controller</h3>
           
@@ -259,15 +281,20 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
             </div>
           )}
         </div>
+        )}
 
         {/* Right: Accounts list and Shift history */}
         <div className="lg:col-span-2 space-y-6">
           {/* Active Accounts list */}
           <div className="space-y-3.5">
-            <h3 className="font-display font-bold text-base text-foreground">Registered Staff Members</h3>
+            <h3 className="font-display font-bold text-base text-foreground">Your team</h3>
             {staffMembers.length === 0 ? (
               <div className="text-center py-8 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
-                <p className="text-muted-foreground text-xs">No employee accounts registered. Add cashier profiles to enable shift logs.</p>
+                <p className="text-muted-foreground text-xs">
+              {runsATill
+                ? 'Nobody added yet. Add a worker to give them their own login and shift log.'
+                : 'Nobody added yet. Add a worker to give them their own login.'}
+            </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -293,8 +320,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-wrap text-[9px] font-mono text-muted-foreground">
-                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.sales ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Sales</span>
-                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.inventory ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Inventory</span>
+                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.sales ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>{runsATill ? 'Sales' : 'Orders'}</span>
+                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.inventory ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>{runsATill ? 'Inventory' : 'Price list'}</span>
                       <span className={`px-1.5 py-0.5 rounded ${s.permissions.reports ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Reports</span>
                       <span className={`px-1.5 py-0.5 rounded ${s.permissions.settings ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Settings</span>
                     </div>
@@ -304,7 +331,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
             )}
           </div>
 
-          {/* Shift Records Tally */}
+          {/* Shift Records Tally — drawer floats, so only where there is a drawer. */}
+          {runsATill && (
           <div className="space-y-3.5">
             <h3 className="font-display font-bold text-base text-foreground">Completed Shift Tally</h3>
             {shifts.length === 0 ? (
@@ -337,6 +365,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
@@ -349,13 +378,13 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
             onClick={e => e.stopPropagation()}
           >
             <div>
-              <h3 className="font-display font-bold text-lg">{editingStaff ? 'Edit Staff Profile' : 'Add Employee'}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Specify security credentials and app access modules.</p>
+              <h3 className="font-display font-bold text-lg">{editingStaff ? 'Edit worker' : 'Add a worker'}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Give them a login and choose what they can open.</p>
             </div>
 
             <div className="space-y-3.5">
               <div className="space-y-1 text-left">
-                <label className="text-xs text-muted-foreground uppercase font-bold">Employee Name</label>
+                <label className="text-xs text-muted-foreground uppercase font-bold">Name</label>
                 <input 
                   type="text" 
                   value={name} 
@@ -378,26 +407,30 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1 text-left">
-                  <label className="text-xs text-muted-foreground uppercase font-bold">Role Title</label>
+                  <label className="text-xs text-muted-foreground uppercase font-bold">Role</label>
                   <select 
                     value={role} 
                     onChange={e => setRole(e.target.value as any)}
                     className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
                   >
-                    <option value="cashier">Cashier</option>
-                    <option value="attendant">Attendant — takes in and hands out work</option>
-                    <option value="manager">Manager</option>
+                    {/* A laundry has no cashier and no stockroom, so leading
+                        with those two made the list read like somebody else's
+                        business. The trades that do keep them. */}
+                    {!runsATill && <option value="attendant">Attendant — takes work in and hands it back</option>}
+                    {runsATill && <option value="cashier">Cashier — sells and takes payment</option>}
+                    {runsATill && <option value="attendant">Attendant — takes work in and hands it back</option>}
+                    <option value="manager">Manager — everything except settings</option>
+                    <option value="supervisor">Supervisor — oversees staff</option>
+                    {runsATill && <option value="inventory">Inventory Staff — stock and suppliers</option>}
+                    <option value="accountant">Accountant — money and reports</option>
                     <option value="admin">Admin</option>
-                    <option value="inventory">Inventory Staff</option>
-                    <option value="accountant">Accountant</option>
-                    <option value="supervisor">Supervisor</option>
                     <option value="custom">Custom Role</option>
                   </select>
                 </div>
 
                 <div className="space-y-1 text-left">
                   <label className="text-xs text-muted-foreground uppercase font-bold">
-                    Security PIN (4 digits)
+                    PIN (4 digits)
                   </label>
                   <input 
                     type="password" 
@@ -412,7 +445,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
 
               {/* Permissions switches checklist */}
               <div className="space-y-2 text-left">
-                <label className="text-xs text-muted-foreground uppercase font-bold">Module Access Controls</label>
+                <label className="text-xs text-muted-foreground uppercase font-bold">What they can open</label>
                 <div className="grid grid-cols-2 gap-2.5 p-3 rounded-xl bg-surface-2 border border-border">
                   <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
                     <input 
@@ -421,7 +454,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                       onChange={e => setSalesAccess(e.target.checked)}
                       className="rounded accent-yellow-500 w-4 h-4 border border-border"
                     />
-                    Sales access
+                    {runsATill ? 'Sales access' : 'Take orders'}
                   </label>
                   <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
                     <input 
@@ -430,7 +463,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                       onChange={e => setInventoryAccess(e.target.checked)}
                       className="rounded accent-yellow-500 w-4 h-4 border border-border"
                     />
-                    Inventory access
+                    {runsATill ? 'Inventory access' : 'Price list'}
                   </label>
                   <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
                     <input 
@@ -439,7 +472,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                       onChange={e => setReportsAccess(e.target.checked)}
                       className="rounded accent-yellow-500 w-4 h-4 border border-border"
                     />
-                    Reports & ROI access
+                    {runsATill ? 'Reports & ROI access' : 'Reports'}
                   </label>
                   <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
                     <input 
@@ -448,7 +481,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                       onChange={e => setSettingsAccess(e.target.checked)}
                       className="rounded accent-yellow-500 w-4 h-4 border border-border"
                     />
-                    Store settings access
+                    {runsATill ? 'Store settings access' : 'Settings'}
                   </label>
                 </div>
               </div>
@@ -459,7 +492,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                 Cancel
               </button>
               <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
-                {editingStaff ? 'Save Changes' : 'Register Account'}
+                {editingStaff ? 'Save changes' : 'Add worker'}
               </button>
             </div>
           </form>

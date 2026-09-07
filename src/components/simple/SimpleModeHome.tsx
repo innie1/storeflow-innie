@@ -31,7 +31,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
   }
 
   const nonProductBusiness = ['laundry', 'gas_filling', 'barber', 'salon', 'tailoring', 'repair', 'printing', 'car_wash', 'cyber_cafe', 'photography', 'spa', 'cleaning'].includes(businessType);
-  if (nonProductBusiness) return <BusinessSimpleHome store={store} onNavigate={onNavigate} />;
+  if (nonProductBusiness) return <BusinessSimpleHome store={store} onNavigate={onNavigate} currentUser={currentUser} />;
 
   return <ProductSimpleHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={onNavigate} />;
 }
