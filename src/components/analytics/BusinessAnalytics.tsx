@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { ArrowLeft, BarChart3, CheckCircle2, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, XCircle } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 
@@ -37,13 +39,45 @@ function customerKey(order: AnyRecord): string {
   return String(order.customer_uuid || order.customer_id || order.customerId || order.customer_phone || order.customerPhone || order.customer_name || order.customerName || `guest:${order.id || order.order_number || Math.random()}`);
 }
 
+/**
+ * Work taken in over the counter, as order-shaped rows.
+ *
+ * This page read the online storefront and nothing else: QR scans, and orders
+ * placed through the customer app. A laundry doing real business over a
+ * counter saw seven of its eight cards read zero - no customers, no returning
+ * buyers, no orders - because every walk-in bundle lives in its own record
+ * store that nothing here ever opened.
+ */
+function walkInOrders(store: StoreData): AnyRecord[] {
+  const accessCode = String((store as AnyRecord).accessCode || '');
+  if (!accessCode) return [];
+  let records: AnyRecord[] = [];
+  try { records = getLocalLaundryRecords(accessCode) as unknown as AnyRecord[]; } catch { return []; }
+  return records.map(record => ({
+    id: record.clientRef,
+    order_number: record.tagCode,
+    customer_name: record.customerName,
+    customer_phone: record.customerPhone,
+    customer_id: record.customerPhone || record.customerName,
+    total: Number(record.total) || 0,
+    // A bundle handed back is this trade's completed order.
+    status: record.workflowStage === 'collected' ? 'collected' : String(record.workflowStage || 'received'),
+    created_at: record.createdAt,
+    walkIn: true,
+  }));
+}
+
 export default function BusinessAnalytics({ store, onBack }: { store: StoreData; onBack?: () => void }) {
   const [range, setRange] = useState<Range>('30d');
   const [tab, setTab] = useState<'overview' | 'customers' | 'scans'>('overview');
 
   const analytics = useMemo(() => {
     const scans = listFromStore(store, ['scanEvents', 'scan_events', 'qrScans', 'qr_scans']);
-    const orders = listFromStore(store, ['orders', 'customerOrders', 'customer_orders']);
+    const online = listFromStore(store, ['orders', 'customerOrders', 'customer_orders']);
+    const walkIns = walkInOrders(store);
+    // Both count. A shop can take work at the counter, through the storefront,
+    // or both, and the page should describe the whole business either way.
+    const orders = [...online, ...walkIns];
     const customers = listFromStore(store, ['customers']);
     const sales = Array.isArray((store as any).sales) ? (store as any).sales : [];
 
@@ -75,6 +109,9 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
     }
 
     const customerRows = [...customerMap.values()].sort((a, b) => b.spent - a.spent);
+    const outstanding = (store.pendingPayments || [])
+      .filter(payment => payment.status === 'pending')
+      .reduce((sum, payment) => sum + Math.max(0, Number(payment.balance) || 0), 0);
     const returning = customerRows.filter(c => c.successful > 1);
     const revenue = successful.reduce((sum, o) => sum + Number(o.total || o.amount || o.subtotal || 0), 0);
     const salesInRange = sales.filter((s: AnyRecord) => within(dateOf(s), range));
@@ -90,19 +127,48 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       customers: Math.max(customers.length, customerRows.length),
       returning: returning.length,
       customerRows,
+      outstanding,
+      walkIns: filteredOrders.filter(order => order.walkIn).length,
       recentScans: [...filteredScans].sort((a, b) => dateOf(b) - dateOf(a)).slice(0, 20),
     };
   }, [store, range]);
 
-  const cards = [
+  const isService = isServiceFirstBusiness(store);
+  const money = (value: number) => `₦${Math.round(value).toLocaleString()}`;
+  const average = analytics.successful > 0 ? analytics.revenue / analytics.successful : 0;
+
+  /**
+   * A shop that never uses the storefront has nothing to say about scans, and
+   * eight cards of zero say only that the app is not watching the right thing.
+   * The storefront cards appear once there is storefront activity to report.
+   */
+  const storefrontCards = [
     { label: 'QR / Storefront scans', value: analytics.scans, icon: Eye },
     { label: 'Unique visitors', value: analytics.uniqueScanners, icon: Globe2 },
+  ];
+
+  const serviceCards = [
+    { label: 'Jobs taken in', value: analytics.orders, icon: ShoppingBag },
+    { label: 'Handed back', value: analytics.successful, icon: CheckCircle2 },
+    { label: 'Customers served', value: analytics.customers, icon: Users },
+    { label: 'Came back again', value: analytics.returning, icon: RefreshCw },
+    { label: 'Collected', value: money(analytics.revenue), icon: BarChart3 },
+    { label: 'Average job', value: money(average), icon: BarChart3 },
+    { label: 'Still owed', value: money(analytics.outstanding), icon: UserRound },
+  ];
+
+  const retailCards = [
     { label: 'Orders received', value: analytics.orders, icon: ShoppingBag },
     { label: 'Successful orders', value: analytics.successful, icon: CheckCircle2 },
     { label: 'Guest buyers', value: analytics.guests, icon: UserRound },
     { label: 'Customers', value: analytics.customers, icon: Users },
     { label: 'Returning buyers', value: analytics.returning, icon: RefreshCw },
-    { label: 'Order revenue', value: `₦${Math.round(analytics.revenue).toLocaleString()}`, icon: BarChart3 },
+    { label: 'Order revenue', value: money(analytics.revenue), icon: BarChart3 },
+  ];
+
+  const cards = [
+    ...(analytics.scans > 0 || !isService ? storefrontCards : []),
+    ...(isService ? serviceCards : retailCards),
   ];
 
   return (
@@ -112,7 +178,11 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
         <div className="flex-1">
           <p className="text-xs uppercase tracking-widest text-primary font-bold">Business intelligence</p>
           <h1 className="font-display font-black text-2xl">Analysis</h1>
-          <p className="text-sm text-muted-foreground">Understand who finds your store, who buys, and who comes back.</p>
+          <p className="text-sm text-muted-foreground">
+            {isService
+              ? 'Who brings you work, what you have handed back, and who comes again.'
+              : 'Understand who finds your store, who buys, and who comes back.'}
+          </p>
         </div>
       </div>
 
@@ -132,7 +202,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-display font-bold">Customer journey</h2>
           <div className="space-y-3 mt-4">
-            {[['Scanned storefront', analytics.scans], ['Placed an order', analytics.orders], ['Successful purchase', analytics.successful], ['Bought more than once', analytics.returning]].map(([label, value]) => <div key={label as string} className="flex items-center justify-between gap-3"><span className="text-sm text-muted-foreground">{label}</span><b className="font-display">{value as number}</b></div>)}
+            {[[isService ? 'Found you online' : 'Scanned storefront', analytics.scans], [isService ? 'Brought work in' : 'Placed an order', analytics.orders], [isService ? 'Handed back' : 'Successful purchase', analytics.successful], ['Bought more than once', analytics.returning]].map(([label, value]) => <div key={label as string} className="flex items-center justify-between gap-3"><span className="text-sm text-muted-foreground">{label}</span><b className="font-display">{value as number}</b></div>)}
           </div>
         </section>
         <section className="rounded-2xl border border-border bg-card p-5">
