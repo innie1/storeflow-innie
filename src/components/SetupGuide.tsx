@@ -143,7 +143,7 @@ export default function SetupGuide({ store, tab, onNavigate }: Props) {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[10px] uppercase font-black tracking-wider text-primary">
-                Step {progress.done + 1} of {progress.total}
+                Step {progress.index + 1} of {progress.total}
               </p>
               <h3 className="font-display font-black text-base text-foreground leading-tight">{step.title}</h3>
             </div>
@@ -164,7 +164,7 @@ export default function SetupGuide({ store, tab, onNavigate }: Props) {
               <span
                 key={i}
                 className={`h-1.5 rounded-full transition-all ${
-                  i < progress.done ? 'w-6 bg-primary' : i === progress.done ? 'w-6 bg-primary/40' : 'w-3 bg-border'
+                  i < progress.index ? 'w-6 bg-primary' : i === progress.index ? 'w-6 bg-primary/40' : 'w-3 bg-border'
                 }`}
               />
             ))}

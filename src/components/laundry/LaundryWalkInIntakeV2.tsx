@@ -453,6 +453,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
         />
       )}
       <button
+        data-guide="record-job"
         onClick={openIntake}
         className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[.99] transition-transform"
       >

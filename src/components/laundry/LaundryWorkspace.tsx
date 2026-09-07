@@ -266,7 +266,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
         </div>
 
         <div className="flex gap-2 shrink-0">
-          <button onClick={() => changeView('record')} className={`px-3 py-2 rounded-xl border text-xs font-display font-bold flex items-center gap-1.5 ${view === 'record' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>
+          <button data-guide="record-job" onClick={() => changeView('record')} className={`px-3 py-2 rounded-xl border text-xs font-display font-bold flex items-center gap-1.5 ${view === 'record' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>
             <Plus className="w-3.5 h-3.5" /> Record Laundry
           </button>
           <button onClick={() => changeView('records')} className={`px-3 py-2 rounded-xl border text-xs font-display font-bold flex items-center gap-1.5 ${view === 'records' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>

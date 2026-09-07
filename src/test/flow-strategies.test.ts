@@ -5,6 +5,7 @@ import {
   snoozeStrategy,
   topStrategy,
 } from '@/lib/flow-strategies';
+import { laundryLocalStorageKey } from '@/lib/laundry-offline';
 
 /**
  * Flow's strategy engine.
@@ -22,9 +23,19 @@ import {
 const DAY = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY).toISOString();
 
+/**
+ * Laundry records live in their own localStorage bucket keyed by access code,
+ * not on the store. Seeding a `laundryRecords` property tested nothing the app
+ * reads - which is exactly how the uncollected strategy shipped dead.
+ */
+function seedRecords(rows: Record<string, unknown>[]) {
+  localStorage.setItem(laundryLocalStorageKey('TEST01'), JSON.stringify(rows));
+}
+
 function store(overrides: Record<string, unknown> = {}) {
   return {
     storeName: 'Shine Laundry',
+    accessCode: 'TEST01',
     customers: [],
     sales: [],
     products: [],
@@ -38,8 +49,8 @@ const regular = (name: string, days: number, phone = '08031234567') => ({
   lastPurchaseDate: daysAgo(days),
 });
 
-beforeEach(() => clearStrategyCooldowns());
-afterEach(() => clearStrategyCooldowns());
+beforeEach(() => { localStorage.clear(); clearStrategyCooldowns(); });
+afterEach(() => { localStorage.clear(); clearStrategyCooldowns(); });
 
 describe('winning back a regular who has gone quiet', () => {
   it('raises the customer by name and by how long it has been', () => {
@@ -114,36 +125,24 @@ describe('the phone-number habit', () => {
 
 describe('uncollected work', () => {
   it('outranks everything else, because it is money already earned', () => {
-    const strategy = topStrategy(store({
-      customers: [regular('Chidi', 40)],
-      laundryRecords: [
-        { id: '1', status: 'ready', promisedFor: daysAgo(4), customerName: 'Ada', customerPhone: '08031234567' },
-      ],
-    }));
+    seedRecords([{ clientRef: '1', workflowStage: 'ready', promisedFor: daysAgo(4), customerName: 'Ada', customerPhone: '08031234567' }]);
+    const strategy = topStrategy(store({ customers: [regular('Chidi', 40)] }));
     expect(strategy?.id).toBe('chase-uncollected');
   });
 
   it('offers to message the customer whose order it is', () => {
-    const strategy = topStrategy(store({
-      laundryRecords: [
-        { id: '1', status: 'ready', promisedFor: daysAgo(4), customerName: 'Ada', customerPhone: '08031234567' },
-      ],
-    }));
-    expect(strategy?.actions[0].label).toBe('WhatsApp Ada');
+    seedRecords([{ clientRef: '1', workflowStage: 'ready', promisedFor: daysAgo(4), customerName: 'Ada', customerPhone: '08031234567' }]);
+    expect(topStrategy(store())?.actions[0].label).toBe('WhatsApp Ada');
   });
 
   it('ignores work already collected', () => {
-    const strategies = activeStrategies(store({
-      laundryRecords: [{ id: '1', status: 'collected', promisedFor: daysAgo(9) }],
-    }));
-    expect(strategies.find(s => s.id === 'chase-uncollected')).toBeUndefined();
+    seedRecords([{ clientRef: '1', workflowStage: 'collected', promisedFor: daysAgo(9) }]);
+    expect(activeStrategies(store()).find(s => s.id === 'chase-uncollected')).toBeUndefined();
   });
 
   it('gives an order one day late the benefit of the doubt', () => {
-    const strategies = activeStrategies(store({
-      laundryRecords: [{ id: '1', status: 'ready', promisedFor: daysAgo(1) }],
-    }));
-    expect(strategies.find(s => s.id === 'chase-uncollected')).toBeUndefined();
+    seedRecords([{ clientRef: '1', workflowStage: 'ready', promisedFor: daysAgo(1) }]);
+    expect(activeStrategies(store()).find(s => s.id === 'chase-uncollected')).toBeUndefined();
   });
 });
 
@@ -167,10 +166,8 @@ describe('it knows when to stop talking', () => {
   });
 
   it('raises one thing at a time, in order of urgency', () => {
-    const data = store({
-      customers: [regular('Chidi', 40)],
-      laundryRecords: [{ id: '1', status: 'ready', promisedFor: daysAgo(5) }],
-    });
+    seedRecords([{ clientRef: '1', workflowStage: 'ready', promisedFor: daysAgo(5) }]);
+    const data = store({ customers: [regular('Chidi', 40)] });
     const all = activeStrategies(data);
     expect(all.length).toBeGreaterThan(1);
     expect(all[0].priority).toBeGreaterThan(all[1].priority);
@@ -181,8 +178,8 @@ describe('it knows when to stop talking', () => {
   it('survives a store full of malformed records', () => {
     const data = store({
       customers: [null, undefined, {}, { name: 'X' }],
-      laundryRecords: [null, {}, { promisedFor: 'not a date' }],
     });
+    seedRecords([null as any, {}, { promisedFor: 'not a date' }]);
     expect(() => activeStrategies(data)).not.toThrow();
   });
 });

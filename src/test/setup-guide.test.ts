@@ -7,6 +7,7 @@ import {
   restartGuide,
   shouldRunGuide,
 } from '@/lib/setup-guide';
+import { laundryLocalStorageKey } from '@/lib/laundry-offline';
 
 /**
  * The walk a brand-new shop is taken on.
@@ -20,8 +21,19 @@ import {
  * land the merchant in the right place.
  */
 
+/**
+ * Laundry records are not a field on the store - they live in their own
+ * localStorage bucket, keyed by access code. Seeding a `laundryRecords`
+ * property tested nothing the app reads.
+ */
+function seedRecords(accessCode: string, count: number) {
+  const rows = Array.from({ length: count }, (_, i) => ({ clientRef: `r${i}`, accessCode }));
+  localStorage.setItem(laundryLocalStorageKey(accessCode), JSON.stringify(rows));
+}
+
 const laundry = (over: Record<string, unknown> = {}) => ({
   storeName: 'Shine Laundry',
+  accessCode: 'TEST01',
   storeType: 'laundry',
   category: 'retail',
   products: [],
@@ -34,12 +46,17 @@ const service = (price = 0) => ({
   id: 's1', name: 'Wash & Iron', isService: true, sellingPrice: price, costPrice: 0, quantity: 0,
 });
 
-beforeEach(() => restartGuide());
-afterEach(() => restartGuide());
+beforeEach(() => { restartGuide(); localStorage.clear(); });
+afterEach(() => { restartGuide(); localStorage.clear(); });
 
 describe('a brand-new laundry', () => {
-  it('is walked through four steps', () => {
-    expect(guideSteps(laundry())).toHaveLength(4);
+  it('is walked through five steps', () => {
+    // Opening a screen and doing the thing on it are separate steps. Aimed at
+    // the tab, the last step spotlighted a tab the merchant was already
+    // standing on, so tapping it changed nothing and the walk never finished.
+    expect(guideSteps(laundry()).map(step => step.id)).toEqual([
+      'open-price-list', 'add-service', 'set-price', 'open-intake', 'first-job',
+    ]);
   });
 
   it('starts by pointing at the price list', () => {
@@ -65,13 +82,21 @@ describe('a brand-new laundry', () => {
     expect(nextStep(store, 'inventory')?.id).toBe('set-price');
   });
 
-  it('asks for the first customer once prices are set', () => {
+  it('sends them to Intake once prices are set', () => {
     const store = laundry({ products: [service(500)] });
-    expect(nextStep(store, 'inventory')?.id).toBe('first-job');
+    expect(nextStep(store, 'inventory')?.id).toBe('open-intake');
+  });
+
+  it('then points at the button that starts a job, not at the tab', () => {
+    const store = laundry({ products: [service(500)] });
+    const step = nextStep(store, 'laundry-records');
+    expect(step?.id).toBe('first-job');
+    expect(step?.target).toBe('record-job');
   });
 
   it('is finished once a job has been recorded', () => {
-    const store = laundry({ products: [service(500)], laundryRecords: [{ id: 'r1' }] });
+    const store = laundry({ products: [service(500)] });
+    seedRecords('TEST01', 1);
     expect(nextStep(store, 'dashboard')).toBeNull();
     expect(shouldRunGuide(store)).toBe(false);
   });
@@ -79,23 +104,27 @@ describe('a brand-new laundry', () => {
   it('accepts a price set through the garment matrix instead of a service', () => {
     const store = laundry({
       products: [service(0)],
-      businessTemplate: { laundryPricing: { matrix: { Shirt: { 'Wash & Iron': 500 } } } },
+      // Keyed by service id, which is how the app writes it.
+      businessTemplate: { laundryPricing: { matrix: { s1: { Shirt: 500 } } } },
     });
-    expect(nextStep(store, 'inventory')?.id).toBe('first-job');
+    expect(nextStep(store, 'inventory')?.id).toBe('open-intake');
   });
 });
 
 describe('it keeps up with a merchant who works out of order', () => {
   it('skips ahead when someone adds a service before being asked', () => {
     const store = laundry({ products: [service(800)] });
-    // Two steps satisfied at once; the guide lands on the third.
-    expect(nextStep(store, 'dashboard')?.id).toBe('first-job');
+    // Three steps satisfied at once; the guide lands on the fourth.
+    expect(nextStep(store, 'dashboard')?.id).toBe('open-intake');
   });
 
   it('reports progress honestly', () => {
     expect(guideProgress(laundry(), 'dashboard').done).toBe(0);
     expect(guideProgress(laundry({ products: [service(800)] }), 'dashboard').done).toBe(3);
-    expect(guideProgress(laundry(), 'dashboard').total).toBe(4);
+    expect(guideProgress(laundry(), 'dashboard').total).toBe(5);
+    // The number shown is where they are, not how many boxes are ticked: a
+    // later step being satisfied early used to inflate it.
+    expect(guideProgress(laundry({ products: [service(800)] }), 'dashboard').index).toBe(3);
   });
 });
 
@@ -107,7 +136,7 @@ describe('a shop that sells goods gets a different walk', () => {
 
   it('is about stock and a sale, not services', () => {
     const ids = guideSteps(shop()).map(step => step.id);
-    expect(ids).toEqual(['open-inventory', 'add-product', 'first-sale']);
+    expect(ids).toEqual(['open-inventory', 'add-product', 'open-sales', 'first-sale']);
   });
 
   it('finishes on the first sale', () => {

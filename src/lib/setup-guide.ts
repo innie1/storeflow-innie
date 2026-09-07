@@ -1,4 +1,5 @@
 import type { StoreData } from '@/types/store';
+import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { getBusinessTemplate, isServiceFirstBusiness } from '@/lib/business-runtime';
 
 /**
@@ -36,15 +37,37 @@ export interface GuideStep {
 const services = (store: StoreData) =>
   (store.products || []).filter(product => product.isService && !product.discontinued);
 
+/**
+ * Whether anything the shop still offers has a price on it.
+ *
+ * The garment matrix is keyed by service id and keeps rows for services that
+ * have since been deleted, so counting its keys reported prices for a shop
+ * with no services at all — and the walk skipped a step it had not done.
+ */
 const hasPrices = (store: StoreData) => {
-  const matrix = store.businessTemplate?.laundryPricing?.matrix;
-  if (matrix && Object.keys(matrix).length > 0) return true;
-  return services(store).some(service => Number(service.sellingPrice || 0) > 0);
+  const live = services(store);
+  if (live.some(service => Number(service.sellingPrice || 0) > 0)) return true;
+  const matrix = store.businessTemplate?.laundryPricing?.matrix || {};
+  return live.some(service => {
+    const row = matrix[service.id];
+    return !!row && Object.values(row).some(price => Number(price || 0) > 0);
+  });
 };
 
-const hasJob = (store: StoreData) =>
-  (store.sales || []).length > 0
-  || ((store as unknown as { laundryRecords?: unknown[] }).laundryRecords || []).length > 0;
+/**
+ * Whether the shop has taken in any work at all.
+ *
+ * Laundry intake does not write to `store.laundryRecords` — there is no such
+ * field. Records live in their own localStorage bucket, keyed by access code,
+ * and a walk-in with no deposit books no sale either. Reading the store alone
+ * meant this never became true for a laundry, so the walk sat on its last step
+ * forever however many bundles were recorded.
+ */
+const hasJob = (store: StoreData) => {
+  if ((store.sales || []).length > 0) return true;
+  const accessCode = String(store.accessCode || '');
+  return accessCode ? getLocalLaundryRecords(accessCode).length > 0 : false;
+};
 
 /** The walk for a shop that sells work rather than goods. */
 function serviceSteps(store: StoreData): GuideStep[] {
@@ -84,12 +107,25 @@ function serviceSteps(store: StoreData): GuideStep[] {
       done: hasPrices,
     },
     {
+      id: 'open-intake',
+      target: isLaundry ? 'tab-laundry-records' : 'tab-orders',
+      title: isLaundry ? 'Open Intake' : 'Open Orders',
+      body: isLaundry
+        ? 'This is where clothes go when someone brings them in. Tap here.'
+        : 'This is where work you take in is logged. Tap here.',
+      done: (store, tab) => tab === (isLaundry ? 'laundry-records' : 'orders') || hasJob(store),
+    },
+    {
+      // Pointed at the button that starts a job, not at the tab. Aimed at the
+      // tab, this step went on spotlighting a tab the merchant was already
+      // standing on: tapping it changed nothing, and the walk could not be
+      // finished.
       id: 'first-job',
-      target: 'tab-laundry-records',
-      tab: undefined,
+      target: 'record-job',
+      tab: isLaundry ? 'laundry-records' : 'orders',
       title: isLaundry ? 'Record your first customer' : 'Record your first job',
       body: isLaundry
-        ? 'When someone brings clothes in, this is where they go. Try it once and you have opened for business.'
+        ? 'Try it once with a real bundle and you have opened for business.'
         : 'Log the first piece of work you take in. That is the shop open.',
       done: hasJob,
     },
@@ -115,8 +151,16 @@ function productSteps(): GuideStep[] {
       done: store => (store.products || []).length > 0,
     },
     {
-      id: 'first-sale',
+      id: 'open-sales',
       target: 'tab-sales',
+      title: 'Open the till',
+      body: 'This is where you ring up a sale. Tap here.',
+      done: (store, tab) => tab === 'sales' || (store.sales || []).length > 0,
+    },
+    {
+      id: 'first-sale',
+      target: 'record-job',
+      tab: 'sales',
       title: 'Make your first sale',
       body: 'Ring up one sale and the shop is open.',
       done: store => (store.sales || []).length > 0,
@@ -133,9 +177,22 @@ export function nextStep(store: StoreData, tab = ''): GuideStep | null {
   return guideSteps(store).find(step => !step.done(store, tab)) || null;
 }
 
-export function guideProgress(store: StoreData, tab = ''): { done: number; total: number } {
+/**
+ * Where the merchant is in the walk.
+ *
+ * `index` is the position of the step they are actually on, not a count of
+ * everything ticked off. Counting told someone adding their first service that
+ * they were on "Step 3 of 5", because a later step happened to be satisfied
+ * already.
+ */
+export function guideProgress(store: StoreData, tab = ''): { done: number; total: number; index: number } {
   const steps = guideSteps(store);
-  return { done: steps.filter(step => step.done(store, tab)).length, total: steps.length };
+  const current = steps.findIndex(step => !step.done(store, tab));
+  return {
+    done: steps.filter(step => step.done(store, tab)).length,
+    total: steps.length,
+    index: current === -1 ? steps.length : current,
+  };
 }
 
 const DISMISSED_KEY = 'storeflow_setup_guide_dismissed';

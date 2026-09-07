@@ -1,4 +1,5 @@
 import type { Customer, StoreData } from '@/types/store';
+import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { getCustomerActivitySignals } from '@/lib/business-insights';
 import { whatsappUrl } from '@/lib/flow-message-orders';
 
@@ -158,10 +159,14 @@ function detectThankRegular(store: StoreData): Strategy | null {
 
 /** Finished work nobody has come back for, with money still owed on it. */
 function detectUncollected(store: StoreData): Strategy | null {
-  const records = ((store as unknown as { laundryRecords?: any[] }).laundryRecords || [])
-    .filter(record => record && record.status !== 'collected');
+  // Records live in their own localStorage bucket, not on the store: there is
+  // no `store.laundryRecords`, so reading it meant this strategy could never
+  // fire however much finished work was sitting on the shelf.
+  const accessCode = String(store.accessCode || '');
+  const records = (accessCode ? getLocalLaundryRecords(accessCode) : [])
+    .filter(record => record && record.workflowStage !== 'collected');
   const overdue = records.filter(record => {
-    const due = daysSince(record.promisedFor || record.promisedAt);
+    const due = daysSince(record.promisedFor);
     return due !== null && due >= 2;
   });
   if (overdue.length === 0) return null;
