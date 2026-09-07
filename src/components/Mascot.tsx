@@ -28,7 +28,12 @@ export type MascotMood =
   | 'resting'
   | 'bathing'
   | 'offline-umbrella'
-  | 'yawn-stretch';
+  | 'yawn-stretch'
+  // Set in six places (notification tones, the camera easter egg) and already
+  // rendered by the glow switch, but never declared here. The merchant build
+  // does not typecheck, so it worked at runtime and only ever showed up as
+  // six type errors.
+  | 'excited';
 
 interface MascotProps {
   size?: number;
