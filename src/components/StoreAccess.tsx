@@ -29,16 +29,29 @@ const QUESTIONS = [
   'What was the name of your primary school?',
 ];
 
-// Shows progress across the 3 steps of the local "Create New Store" flow:
-// 1) Store details  2) Your access code  3) Secure the account
-function CreateFlowProgress({ step }: { step: 1 | 2 | 3 }) {
-  const pct = step === 1 ? 33 : step === 2 ? 66 : 100;
+/**
+ * How far through creating a store the merchant is.
+ *
+ * It measured three steps because the whole of "tell us about your shop" was
+ * one page. Now that page is three questions, so the bar counts five and moves
+ * on every answer rather than sitting still through the longest part of the
+ * flow. It also says the number: a bar alone tells you there is more, not how
+ * much more.
+ */
+function CreateFlowProgress({ step, of = 3 }: { step: number; of?: number }) {
+  const pct = Math.round((step / of) * 100);
   return (
-    <div className="w-full h-1.5 rounded-full bg-surface-2 overflow-hidden">
-      <div
-        className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
-        style={{ width: `${pct}%` }}
-      />
+    <div className="w-full space-y-1">
+      <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground">
+        <span>Step {step} of {of}</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="w-full h-1.5 rounded-full bg-surface-2 overflow-hidden">
+        <div
+          className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -103,6 +116,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [wrongPasswordCount, setWrongPasswordCount] = useState(0);
 
   // Recovery states
+  const [createStep, setCreateStep] = useState<'name' | 'type' | 'logo'>('name');
   const [recoveryMode, setRecoveryMode] = useState<'options' | 'question' | 'key' | 'code' | 'reset-pass'>('options');
   const [answeredQuestion, setAnsweredQuestion] = useState('');
   const [enteredKey, setEnteredKey] = useState('');
@@ -1428,57 +1442,117 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         )}
 
         {mode === 'create' && !newCode && (
+          /*
+           * One decision per screen.
+           *
+           * This was a single page carrying the store name, a grid of nineteen
+           * business types and six logo concepts, with the Create button below
+           * all of it. Everything a merchant had to decide arrived at once,
+           * and the button that finishes the job was off the bottom of the
+           * screen — so the first thing the app ever asked of anyone was to
+           * scroll past a wall of choices.
+           *
+           * Split into three, each answering one question, each advancing on
+           * the tap that answers it. The same decisions, a third of the screen
+           * at a time.
+           */
           <div className="space-y-4 text-left">
-            <CreateFlowProgress step={1} />
-            <div>
-              <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Store Name</label>
-              <input
-                value={storeName}
-                onChange={e => {
-                  setStoreName(e.target.value);
-                  setAccessMood('thinking');
-                }}
-                placeholder="e.g. Blessed Nnamdi Store"
-                className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="block text-xs text-muted-foreground uppercase font-bold">What kind of business do you run?</label>
-              <p className="text-[10px] text-muted-foreground">Choose the closest match. This controls your dashboard, settings and customer experience.</p>
-              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
-                {BUSINESS_CHOICES.map(([id,label,icon]) => <button key={id} type="button" onClick={() => { setBusinessType(id); setCategory(businessCategory(id)); setRetailType(id); setAccessMood('thinking'); }} className={`p-2.5 rounded-xl border text-left transition-all ${businessType === id ? 'bg-primary/10 border-primary ring-1 ring-primary/20' : 'bg-surface-2 border-border hover:border-primary/30'}`}><span className="text-lg">{icon}</span><p className="font-display font-semibold text-xs mt-1">{label}</p></button>)}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Select Store Logo Concept</label>
-              <div className="grid grid-cols-5 gap-2">
-                {LOGO_STYLES.map(style => (
-                  <button
-                    key={style.id}
-                    type="button"
-                    onClick={() => setSelectedLogoStyle(style.id)}
-                    className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                      selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-2 border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} className="w-8 h-8" />
-                    <span className="text-[7.5px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <button onClick={handleCreate} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
-              Create Store
-            </button>
-            <button onClick={() => setMode('create-choice')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground cursor-pointer">
-              ← Back
-            </button>
+            <CreateFlowProgress step={createStep === 'name' ? 1 : createStep === 'type' ? 2 : 3} of={5} />
+
+            {createStep === 'name' && (
+              <>
+                <div>
+                  <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">What is your shop called?</label>
+                  <input
+                    value={storeName}
+                    autoFocus
+                    onChange={e => { setStoreName(e.target.value); setAccessMood('thinking'); }}
+                    onKeyDown={e => { if (e.key === 'Enter' && storeName.trim()) setCreateStep('type'); }}
+                    placeholder="e.g. Blessed Nnamdi Store"
+                    className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <button
+                  onClick={() => storeName.trim() ? setCreateStep('type') : showToast('Give your shop a name first', 'error')}
+                  disabled={!storeName.trim()}
+                  className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold disabled:opacity-40 transition-opacity cursor-pointer"
+                >
+                  Continue
+                </button>
+                <button onClick={() => setMode('create-choice')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground cursor-pointer">
+                  ← Back
+                </button>
+              </>
+            )}
+
+            {createStep === 'type' && (
+              <>
+                <div className="space-y-2">
+                  <label className="block text-xs text-muted-foreground uppercase font-bold">What kind of business is {storeName.trim() || 'it'}?</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {BUSINESS_CHOICES.map(([id,label,icon]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setBusinessType(id);
+                          setCategory(businessCategory(id));
+                          setRetailType(id);
+                          // Answering the question is what moves it on. A
+                          // separate Continue tap after every choice is the
+                          // sort of thing that makes a short flow feel long.
+                          setCreateStep('logo');
+                        }}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          businessType === id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-2 border-border hover:border-primary/30'
+                        }`}
+                      >
+                        <span className="text-lg">{icon}</span>
+                        <span className="block text-xs font-bold mt-1 leading-tight">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={() => setCreateStep('name')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground cursor-pointer">
+                  ← Back
+                </button>
+              </>
+            )}
+
+            {createStep === 'logo' && (
+              <>
+                <div className="space-y-2">
+                  <label className="block text-xs text-muted-foreground uppercase font-bold">Pick a look for {storeName.trim() || 'your shop'}</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {LOGO_STYLES.map(style => (
+                      <button
+                        key={style.id}
+                        type="button"
+                        onClick={() => setSelectedLogoStyle(style.id)}
+                        className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                          selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-2 border-border hover:border-primary/30'
+                        }`}
+                      >
+                        <StoreLogo storeName={storeName || 'Store'} selectedStyle={style.id} className="w-10 h-10" />
+                        <span className="text-[9px] text-center text-muted-foreground font-bold leading-tight">{style.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={handleCreate} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
+                  Create Store
+                </button>
+                <button onClick={() => setCreateStep('type')} className="w-full p-2 text-muted-foreground text-sm hover:text-foreground cursor-pointer">
+                  ← Back
+                </button>
+              </>
+            )}
           </div>
         )}
 
         {mode === 'create' && newCode && (
           <div className="space-y-4 text-center">
-            <CreateFlowProgress step={2} />
+            <CreateFlowProgress step={4} of={5} />
             <p className="text-success text-sm font-semibold">✓ Store created successfully!</p>
             <div>
               <p className="text-muted-foreground text-sm mb-2">Your access code:</p>
@@ -1501,7 +1575,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
         {mode === 'setup-security' && (
           <form onSubmit={handleSaveSecurity} className="space-y-4 text-left">
-            <CreateFlowProgress step={3} />
+            <CreateFlowProgress step={5} of={5} />
             <div className="p-3.5 rounded-xl bg-yellow-500/10 border border-yellow-500/25 flex gap-2.5 items-start">
               <Shield className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
               <div>
