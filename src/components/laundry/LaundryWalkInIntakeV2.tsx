@@ -9,6 +9,7 @@ import {
   getLaundryGarmentPrice,
   getLaundryPricingConfig,
 } from '@/lib/laundry-pricing';
+import { recordLaundryPayment, requiredDeposit } from '@/lib/laundry-money';
 import {
   createLocalLaundryRecord,
   getLocalLaundryRecords,
@@ -82,6 +83,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const garmentTypes = useMemo(() => getLaundryPricingConfig(store).garmentTypes, [store]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  // What the customer pays at drop-off. Nothing was ever captured here, so a
+  // shop could hand back forty bundles and be told it had earned nothing.
+  const [paidNow, setPaidNow] = useState('');
+  const [paidTouched, setPaidTouched] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
@@ -149,6 +154,14 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     if (!selectedService || priceTouched) return;
     setTotalPrice(calculated.total > 0 ? String(calculated.total) : '');
   }, [selectedService, calculated.total, priceTouched]);
+
+  // A shop can require part of the price before the clothes are left, which is
+  // what stops bundles sitting uncollected for weeks. Prefilled so the
+  // attendant does not have to work out the percentage in their head.
+  const deposit = requiredDeposit(store, Number(totalPrice) || 0);
+  useEffect(() => {
+    if (!paidTouched) setPaidNow(deposit > 0 ? String(deposit) : '');
+  }, [deposit, paidTouched]);
 
   useEffect(() => {
     const handleSync = (event: Event) => {
@@ -279,14 +292,31 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
         garments: pricedGarments,
       });
 
+      // Money first, so a failure here cannot leave a bundle recorded as paid
+      // when it was not. recordLaundryPayment books only what was handed over
+      // and opens a pending payment for whatever is left.
+      const taken = Math.max(0, Math.min(total, Number(paidNow) || 0));
+      let nextStore = recordLaundryPayment(store, {
+        clientRef: localRecord.clientRef,
+        tagCode: localRecord.tagCode,
+        customerName: name,
+        customerPhone: phone,
+        serviceId: String(selectedService.id),
+        serviceName: selectedService.name,
+        total,
+        amountPaid: taken,
+        promisedFor,
+      });
+
       if (!customers.some(customer => customer.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''))) {
         try {
-          onUpdate(addCustomer(store, { name, phone, address: customerAddress.trim() || undefined }));
+          nextStore = addCustomer(nextStore, { name, phone, address: customerAddress.trim() || undefined });
         } catch (customerError) {
           console.warn('[Laundry Intake] Customer book update failed:', customerError);
         }
       }
 
+      onUpdate(nextStore);
       setCreated(localRecord);
       showToast(`Laundry saved locally — ${localRecord.tagCode}`, 'success');
       syncLaundryRecord(accessCode, localRecord.clientRef).catch(() => {});
@@ -432,6 +462,42 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
               {pricing === 'per_piece' && calculated.lines.length > 0 && <div className="rounded-xl border border-border bg-card divide-y divide-border/60">{calculated.lines.map(line => <div key={line.garmentType} className="flex justify-between gap-3 px-3 py-1.5 text-xs"><span className="truncate">{line.quantity} × {line.garmentType} @ ₦{line.unitPrice.toLocaleString()}</span><span className="font-black shrink-0">₦{line.subtotal.toLocaleString()}</span></div>)}</div>}
               <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input value={totalPrice} onChange={event => { setTotalPrice(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(true); }} inputMode="decimal" className="w-full bg-transparent outline-none font-black" placeholder="Total price" /></div>
               {priceTouched && calculated.total !== Number(totalPrice) && <p className="text-[10px] text-muted-foreground">Manually adjusted. Calculated price is ₦{calculated.total.toLocaleString()}.</p>}
+              {/* What the customer hands over now.
+                  Nothing was captured here at all, so the price was worked out,
+                  shown, and then forgotten: no takings, and no record of who
+                  still owed. Zero is allowed — plenty of shops are paid on
+                  collection — unless the shop has set a deposit. */}
+              <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border">
+                <span className="font-black">₦</span>
+                <input
+                  inputMode="numeric"
+                  value={paidNow}
+                  onChange={event => { setPaidTouched(true); setPaidNow(event.target.value.replace(/[^0-9]/g, '')); }}
+                  placeholder="Paid now (0 if paying later)"
+                  className="flex-1 bg-transparent outline-none text-sm"
+                />
+              </div>
+              {(() => {
+                const price = Number(totalPrice) || 0;
+                const paid = Math.max(0, Math.min(price, Number(paidNow) || 0));
+                const owing = Math.max(0, price - paid);
+                if (deposit > 0 && paid < deposit) {
+                  return (
+                    <p className="text-[10px] text-destructive font-bold">
+                      This shop asks for ₦{deposit.toLocaleString()} before clothes are left.
+                    </p>
+                  );
+                }
+                if (owing > 0) {
+                  return (
+                    <p className="text-[10px] text-amber-500 font-bold">
+                      ₦{owing.toLocaleString()} owing — it will show in Money Owed.
+                    </p>
+                  );
+                }
+                if (price > 0) return <p className="text-[10px] text-emerald-500 font-bold">Paid in full.</p>;
+                return null;
+              })()}
             </section>
 
             <section className="text-left border-t border-border/60 pt-1">

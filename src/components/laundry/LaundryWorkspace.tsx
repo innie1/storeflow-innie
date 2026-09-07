@@ -10,6 +10,7 @@ import {
   type LaundryWorkspaceView,
 } from '@/lib/laundry-workspace';
 import { describeDue, type DueLabel } from '@/lib/laundry-due';
+import { laundryBalance, recordLaundryPayment } from '@/lib/laundry-money';
 import {
   getLocalLaundryRecords,
   LAUNDRY_LOCAL_CHANGED_EVENT,
@@ -23,6 +24,7 @@ import {
 } from '@/lib/laundry-offline';
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
+import { saveStore } from '@/lib/store-data';
 import { ChevronDown, ChevronUp, ClipboardList, MessageCircle, Plus, Search, X } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { getPromisedTime } from '@/lib/business-insights';
@@ -56,6 +58,9 @@ interface DecoratedRecord {
   stage: LaundryWorkflowStage;
   statusLabel: string;
   due: DueLabel | null;
+  /** Still owed on this bundle, 0 when settled. */
+  balance: number;
+  clientRef: string;
   synced: boolean;
   whatsapp: ReturnType<typeof buildLaundryWhatsAppPayload>;
   total: number;
@@ -73,6 +78,7 @@ function decorateRecord(order: any, store: StoreData): DecoratedRecord {
   const items = order.order_items || [];
   const garments = items.filter((item: any) => !item?.metadata?.charge_line);
   const stageRaw = String(order.workflow_stage || 'received').toLowerCase() as LaundryWorkflowStage;
+  const clientRef = String(order._localClientRef || order.client_ref || order?.service_metadata?.client_ref || '');
   const stage = LAUNDRY_WORKFLOW_STAGES.some(item => item.id === stageRaw) ? stageRaw : 'received';
   const promisedValue = getPromisedTime(order);
   const promisedDate = promisedValue ? new Date(promisedValue) : null;
@@ -102,6 +108,8 @@ function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     // finished, and waiting for someone to come for it. Only work still in
     // progress is counted late, which is why the clock is pinned at the
     // promised moment once a bundle settles.
+    clientRef,
+    balance: laundryBalance(store, clientRef),
     due: LAUNDRY_SETTLED_STAGES.includes(stage)
       ? describeDue(promisedAt, promisedAt !== null ? Math.min(Date.now(), promisedAt) : Date.now())
       : describeDue(promisedAt),
@@ -204,6 +212,33 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
   const sendWhatsApp = useCallback((order: any) => {
     if (!openLaundryWhatsApp(store, order)) showToast('This laundry record does not have a valid phone number', 'error');
   }, [store]);
+
+  /**
+   * Takes what is still owed on a bundle, at the counter.
+   *
+   * The whole balance at once is what actually happens at handover — a
+   * customer collecting their clothes pays the rest. Part payments are still
+   * possible at drop-off, so this does not need to ask for an amount and slow
+   * the queue down.
+   */
+  const collectPayment = useCallback((record: DecoratedRecord) => {
+    if (record.balance <= 0) return;
+    // onUpdate only moves React state; without saveStore the payment is lost
+    // on the next reload, which for money is the worst possible failure.
+    const next = recordLaundryPayment(store, {
+      clientRef: record.clientRef,
+      tagCode: record.tagCode,
+      customerName: record.customerName,
+      customerPhone: record.customerPhone,
+      serviceId: String(record.order?.order_items?.[0]?.product_id || record.serviceName),
+      serviceName: record.serviceName,
+      total: record.total,
+      amountPaid: record.balance,
+    });
+    saveStore(next);
+    onUpdate(next);
+    showToast(`₦${record.balance.toLocaleString()} received for ${record.tagCode}`);
+  }, [store, onUpdate]);
 
   const changeStage = useCallback(async (record: DecoratedRecord, stage: LaundryWorkflowStage) => {
     setStageBusy(record.key);
@@ -334,6 +369,13 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                               {record.due.text}
                             </span>
                           )}
+                          {/* What is still owed, where the attendant looks
+                              before handing clothes over. */}
+                          {record.balance > 0 && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 text-[10px] font-black">
+                              ₦{record.balance.toLocaleString()} owing
+                            </span>
+                          )}
                           {record.synced
                             ? <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-black">Synced</span>
                             : <span className="px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>}
@@ -389,6 +431,16 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                           className="h-10 px-4 rounded-xl border border-primary/40 bg-primary/10 text-primary text-xs font-display font-black disabled:opacity-40"
                         >
                           Ready
+                        </button>
+                      )}
+
+                      {record.balance > 0 && (
+                        <button
+                          onClick={() => collectPayment(record)}
+                          disabled={busy}
+                          className="h-10 px-4 rounded-xl bg-amber-500 text-black text-xs font-display font-black disabled:opacity-40"
+                        >
+                          Take ₦{record.balance.toLocaleString()}
                         </button>
                       )}
 

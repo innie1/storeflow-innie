@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getLaundryDepositRule, setLaundryDepositRule } from '@/lib/laundry-money';
 import type { Product, StoreData } from '@/types/store';
 import { addProduct, deleteProduct, saveStore, updateProduct } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
@@ -41,6 +42,7 @@ const emptyDraft = (): ServiceDraft => ({
 });
 
 export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Props) {
+  const [depositInput, setDepositInput] = useState(String(getLaundryDepositRule(store).percent || 0));
   const allServices = useMemo(() => (store.products || []).filter(product => product.isService), [store.products]);
   const config = getLaundryPricingConfig(store);
   const [selectedServiceId, setSelectedServiceId] = useState(() => String(allServices.find(service => !service.discontinued)?.id || allServices[0]?.id || ''));
@@ -231,6 +233,39 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
           <Plus className="w-4 h-4" /> Service
         </button>
       </div>
+
+      {/* Deposit at drop-off.
+          A shop that takes nothing up front ends up storing clothes nobody
+          comes back for. This is the owner's lever for that, and it only
+          appears here — an attendant should not be able to lower it. */}
+      <div className="rounded-2xl border border-border bg-card p-4 text-left">
+        <p className="font-display font-black text-sm">Deposit at drop-off</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Part of the price you ask for before clothes are left. 0 means no deposit.
+        </p>
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            inputMode="numeric"
+            value={depositInput}
+            onChange={event => {
+              // Saved as it is typed, not on blur. A merchant who types the
+              // number and immediately taps another tab never blurs the
+              // field, and the setting was quietly lost.
+              const next = event.target.value.replace(/[^0-9]/g, '').slice(0, 3);
+              setDepositInput(next);
+              persist(setLaundryDepositRule(store, Number(next) || 0));
+            }}
+            className="w-20 h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm outline-none focus:border-primary"
+          />
+          <span className="font-black text-sm">%</span>
+          {Number(depositInput) > 0 && (
+            <span className="text-xs text-muted-foreground">
+              ₦1,000 job → ₦{Math.ceil((1000 * (Number(depositInput) || 0)) / 100).toLocaleString()} up front
+            </span>
+          )}
+        </div>
+      </div>
+
 
       <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 text-left">
         <p className="font-display font-black text-sm">Service vs item</p>
