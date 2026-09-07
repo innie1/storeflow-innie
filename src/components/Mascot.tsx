@@ -46,6 +46,38 @@ interface MascotProps {
   externalMessageDuration?: number;
 }
 
+/**
+ * How far down the viewport is actually covered by a fixed or sticky header
+ * at horizontal position `x`.
+ *
+ * Bubble placement used to assume a flat 90px of app header. That header is
+ * real on the dashboard but absent on the setup screen, where subtracting it
+ * turned the space above Flow negative, lost "above" every time, and dropped
+ * the bubble into the 12px gap below him -- on top of the StoreFlow wordmark.
+ * Measure the obstruction rather than assuming one.
+ */
+function obstructedTop(x: number, self: HTMLElement): number {
+  if (typeof document.elementFromPoint !== 'function') return 0;
+  const probeX = Math.max(1, Math.min(x, window.innerWidth - 1));
+  let blocked = 0;
+  for (let y = 4; y <= 140; y += 12) {
+    const hit = document.elementFromPoint(probeX, y);
+    if (!hit || hit === self || self.contains(hit) || hit.contains(self)) continue;
+    for (let el: Element | null = hit; el && el !== document.body; el = el.parentElement) {
+      const pos = window.getComputedStyle(el).position;
+      if (pos === 'fixed' || pos === 'sticky') {
+        // Its real bottom edge, not the probe step, or the answer would be
+        // short by up to one step and tuck the bubble under the header.
+        blocked = Math.max(blocked, el.getBoundingClientRect().bottom);
+        break;
+      }
+    }
+  }
+  // A full-screen fixed overlay would otherwise push the bubble off the
+  // bottom of the screen; no header is worth more than this.
+  return Math.min(blocked, window.innerHeight * 0.4);
+}
+
 export default function Mascot({ size = 64, mood = 'idle', className = '', animate = true, store, role, externalMessage, externalMessageKey, externalMessageMood, externalMessageDuration }: MascotProps) {
   const [activeTheme, setActiveTheme] = useState<'graphite' | 'blue' | 'forest'>('graphite');
   const [overrideMood, setOverrideMood] = useState<MascotMood | null>(null);
@@ -68,6 +100,10 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [bubbleShiftX, setBubbleShiftX] = useState<number>(0);
   const [bubblePosition, setBubblePosition] = useState<'above' | 'below'>('above');
+  // Slides the bubble down when "above" is the only safe side but runs off
+  // the top. Overlapping Flow's own head beats covering the heading below.
+  const [bubbleShiftY, setBubbleShiftY] = useState<number>(0);
+  const bubbleRef = useRef<HTMLDivElement>(null);
   const [isMouthTalking, setIsMouthTalking] = useState(false);
   const lastSalesCountRef = useRef<number | null>(null);
 
@@ -426,60 +462,83 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
 
   // Edge-aware speech bubble positioning (above/below and horizontal shifting)
   useEffect(() => {
+    let frame = 0;
+
     const handleLayout = () => {
-      if (message && containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        
-        // 1. Horizontal shift
-        const bubbleWidth = 170; // Midpoint of min-w (130px) and max-w (210px)
-        const padding = 16; // Edge safety offset
-        let shiftX = 0;
-        const absoluteLeft = rect.left + rect.width / 2 - bubbleWidth / 2;
-        const absoluteRight = rect.left + rect.width / 2 + bubbleWidth / 2;
-        
-        if (absoluteLeft < padding) {
-          shiftX = padding - absoluteLeft;
-        } else if (absoluteRight > window.innerWidth - padding) {
-          shiftX = (window.innerWidth - padding) - absoluteRight;
-        }
-        setBubbleShiftX(shiftX);
-
-        // 2. Vertical position (above vs below) — pick whichever side
-        // actually has room. Subtract ~90px to account for the top app header
-        // which obstructs the top of the viewport.
-        const bubbleHeightEstimate = 76; // bubble + connector + margin
-        const safeSpaceAbove = rect.top - 90;
-
-        let spaceBelow = window.innerHeight - rect.bottom;
-        const nextEl = containerRef.current.nextElementSibling;
-        if (nextEl) {
-          const nextTop = nextEl.getBoundingClientRect().top;
-          spaceBelow = Math.min(spaceBelow, nextTop - rect.bottom);
-        }
-
-        if (safeSpaceAbove >= bubbleHeightEstimate) {
-          setBubblePosition('above');
-        } else if (spaceBelow >= bubbleHeightEstimate) {
-          setBubblePosition('below');
-        } else {
-          setBubblePosition(safeSpaceAbove >= spaceBelow ? 'above' : 'below');
-        }
-      } else {
+      if (!message || !containerRef.current) {
         setBubbleShiftX(0);
+        setBubbleShiftY(0);
         setBubblePosition('above');
+        return;
       }
+
+      const container = containerRef.current;
+      const rect = container.getBoundingClientRect();
+      const padding = 16; // Edge safety offset
+
+      // Measure the bubble rather than guessing at it. The old constants were
+      // the midpoint of the min/max widths and a flat 76px tall, so a
+      // one-word line and a three-line one were placed identically.
+      const bubbleEl = bubbleRef.current;
+      const bubbleWidth = bubbleEl?.offsetWidth || 170;
+      const bubbleHeight = (bubbleEl?.offsetHeight || 64) + 12; // + connector gap
+
+      // 1. Horizontal shift, so the bubble stays on screen.
+      const centerX = rect.left + rect.width / 2;
+      let shiftX = 0;
+      const absoluteLeft = centerX - bubbleWidth / 2;
+      const absoluteRight = centerX + bubbleWidth / 2;
+      if (absoluteLeft < padding) {
+        shiftX = padding - absoluteLeft;
+      } else if (absoluteRight > window.innerWidth - padding) {
+        shiftX = (window.innerWidth - padding) - absoluteRight;
+      }
+      setBubbleShiftX(shiftX);
+
+      // 2. Above or below, decided against what is really there.
+      const spaceAbove = rect.top - obstructedTop(centerX, container);
+
+      // Below, what the bubble lands on is the next sibling: the StoreFlow
+      // wordmark during setup, the store name on the dashboard.
+      let spaceBelow = window.innerHeight - rect.bottom;
+      const nextEl = container.nextElementSibling;
+      if (nextEl) {
+        const nextTop = nextEl.getBoundingClientRect().top;
+        spaceBelow = Math.min(spaceBelow, nextTop - rect.bottom);
+      }
+
+      if (spaceAbove >= bubbleHeight) {
+        setBubblePosition('above');
+        setBubbleShiftY(0);
+      } else if (spaceBelow >= bubbleHeight) {
+        setBubblePosition('below');
+        setBubbleShiftY(0);
+      } else {
+        // Neither side fits. Go above and slide down only as far as staying on
+        // screen requires: the bubble then clips Flow's own head, which is his
+        // to cover, instead of the heading directly beneath him.
+        setBubblePosition('above');
+        setBubbleShiftY(Math.max(0, Math.ceil(bubbleHeight - spaceAbove)));
+      }
+    };
+
+    // Scroll fires far faster than the layout can meaningfully change.
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(handleLayout);
     };
 
     handleLayout();
 
     if (message) {
-      window.addEventListener('scroll', handleLayout, { passive: true });
-      window.addEventListener('resize', handleLayout);
+      window.addEventListener('scroll', schedule, { passive: true });
+      window.addEventListener('resize', schedule);
     }
 
     return () => {
-      window.removeEventListener('scroll', handleLayout);
-      window.removeEventListener('resize', handleLayout);
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
     };
   }, [message]);
 
@@ -1588,9 +1647,10 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       {/* Speech Bubble - Screen Boundary Aware */}
       {message && !isWalkingOff && (
         <div 
+          ref={bubbleRef}
           className={`absolute ${bubblePosition === 'above' ? 'bottom-full mb-3' : 'top-full mt-3'} left-1/2 z-50 pointer-events-none`}
           style={{
-            transform: `translateX(calc(-50% + ${bubbleShiftX}px))`,
+            transform: `translate(calc(-50% + ${bubbleShiftX}px), ${bubbleShiftY}px)`,
           }}
         >
           <div className="bg-slate-900 border border-border px-3 py-1.5 rounded-xl text-xs text-foreground font-display font-bold shadow-lg animate-bounce-subtle select-none whitespace-normal text-center min-w-[130px] max-w-[210px] relative">
@@ -1599,7 +1659,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
               <div 
                 className="absolute top-full -mt-1 w-2.5 h-2.5 bg-slate-900 border-r border-b border-border rotate-45" 
                 style={{
-                  left: `calc(50% - ${bubbleShiftX}px)`,
+                  left: `clamp(10px, calc(50% - ${bubbleShiftX}px), calc(100% - 10px))`,
                   transform: 'translateX(-50%) rotate(45deg)'
                 }}
               />
@@ -1607,7 +1667,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
               <div 
                 className="absolute bottom-full -mb-1 w-2.5 h-2.5 bg-slate-900 border-l border-t border-border rotate-45" 
                 style={{
-                  left: `calc(50% - ${bubbleShiftX}px)`,
+                  left: `clamp(10px, calc(50% - ${bubbleShiftX}px), calc(100% - 10px))`,
                   transform: 'translateX(-50%) rotate(45deg)'
                 }}
               />
