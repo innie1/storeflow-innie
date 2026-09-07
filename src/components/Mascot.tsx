@@ -13,6 +13,10 @@ import { readStoreSignal, signalFromStore, invalidateStoreSignal } from '@/lib/m
 // Flow — StoreFlow's interactive mascot.
 // Pure SVG + CSS animations, offline-friendly, highly responsive.
 
+/** Flow glances at a low shelf at most this often. */
+const LOW_STOCK_PEEK_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+const LOW_STOCK_PEEK_KEY = 'storeflow_low_stock_peek_at';
+
 export type MascotMood =
   | 'idle'
   | 'happy'
@@ -33,7 +37,11 @@ export type MascotMood =
   // rendered by the glow switch, but never declared here. The merchant build
   // does not typecheck, so it worked at runtime and only ever showed up as
   // six type errors.
-  | 'excited';
+  | 'excited'
+  // Flow glancing over a shelf at something running out. The drawing and its
+  // keyframes were built and then never reachable: nothing anywhere could set
+  // this mood, so the comparison that renders it was always false.
+  | 'low-stock-peek';
 
 interface MascotProps {
   size?: number;
@@ -739,6 +747,60 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       setOverrideMood(null);
     }, duration);
   };
+
+  /**
+   * Flow looks over at the shelf when stock is genuinely running low.
+   *
+   * The animation, its shelf-peek keyframes and its pulsing warning badge were
+   * all finished and then wired to nothing -- no code path could produce the
+   * mood, so `currentMood === 'low-stock-peek'` never once evaluated true and
+   * no merchant has seen it.
+   *
+   * It stays cheap on purpose. It only speaks when something is actually low,
+   * never over a sleeping, talking or already-busy Flow, never while the tab
+   * is hidden, and at most once every four hours -- a glance at the shelf, not
+   * an alarm.
+   */
+  useEffect(() => {
+    if (!animate || isSleepingState || isMorningBathing || boxStage > 0) return;
+    if (!isManagerEnabled || !store) return;
+
+    const peek = () => {
+      if (document.hidden) return;
+      if (overrideMood || message || tapCount > 0) return;
+
+      const threshold = store.managerSettings?.minStockThreshold
+        ?? store.managerSettings?.criticalStockThreshold
+        ?? 5;
+      // Zero is out of stock, which is a different (louder) problem; this is
+      // for the ones still on the shelf but nearly gone.
+      const low = (store.products || []).filter(
+        product => !product.discontinued && product.quantity > 0 && product.quantity <= threshold,
+      );
+      if (!low.length) return;
+
+      let last = 0;
+      try { last = Number(localStorage.getItem(LOW_STOCK_PEEK_KEY)) || 0; } catch { /* private mode */ }
+      if (Date.now() - last < LOW_STOCK_PEEK_COOLDOWN_MS) return;
+      try { localStorage.setItem(LOW_STOCK_PEEK_KEY, String(Date.now())); } catch { /* private mode */ }
+
+      const fewest = low.reduce((a, b) => (a.quantity <= b.quantity ? a : b));
+      const others = low.length - 1;
+      triggerSpeech(
+        others > 0
+          ? `${fewest.name} is down to ${fewest.quantity}, and ${others} other${others > 1 ? 's' : ''} are low.`
+          : `${fewest.name} is down to ${fewest.quantity}.`,
+        'low-stock-peek',
+        4500,
+      );
+    };
+
+    const interval = setInterval(peek, 60000);
+    return () => clearInterval(interval);
+    // triggerSpeech is recreated each render and is deliberately not a dependency,
+    // matching the other ambient behaviours in this file.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animate, isSleepingState, isMorningBathing, boxStage, isManagerEnabled, store, overrideMood, message, tapCount]);
 
   useEffect(() => {
     if (externalMessage) {
