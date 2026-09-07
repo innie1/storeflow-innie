@@ -10,7 +10,13 @@ export interface OperatingPlan { intent: OperatingIntent; confidence: number; it
 
 const STOP = new Set(['the','a','an','my','me','please','product','products','item','items','store','stock','inventory','now','today','for','of','to','on','is','are','what','whats','show','tell','about','do','i','can','you','give','get','some','something','thing','things','with','and','or','in','at','from','this','that','how','much','many','does','did','was','were']);
 function norm(v:string){return v.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,' and ').replace(/[^a-z0-9%₦]+/g,' ').trim().replace(/\s+/g,' ');}
-function tokens(v:string){return norm(v).split(' ').filter(Boolean).filter(x=>!STOP.has(x));}
+// Single characters are dropped: norm() turns "How's" into "how s", and that
+// bare "s" was matching the S in a name like "Lacasera S/M". With "how",
+// "the" and "store" all stop words, "How's the store?" reduced to exactly
+// ["s"], every() over one token was trivially true, and the question scored
+// 0.97 against a soft drink. A one-letter token carries no identifying
+// information either way, so it is worth nothing on both sides of a match.
+function tokens(v:string){return norm(v).split(' ').filter(Boolean).filter(x=>x.length>1).filter(x=>!STOP.has(x));}
 function distance(a:string,b:string){const aa=norm(a),bb=norm(b),prev=Array.from({length:bb.length+1},(_,i)=>i);for(let i=1;i<=aa.length;i++){const cur=[i];for(let j=1;j<=bb.length;j++)cur[j]=aa[i-1]===bb[j-1]?prev[j-1]:Math.min(prev[j-1]+1,prev[j]+1,cur[j-1]+1);for(let j=0;j<cur.length;j++)prev[j]=cur[j];}return prev[bb.length];}
 function similarity(a:string,b:string){const aa=norm(a),bb=norm(b);if(!aa||!bb)return 0;if(aa===bb)return 1;if(aa.includes(bb)||bb.includes(aa))return .95;const ta=new Set(tokens(aa)),tb=new Set(tokens(bb));const overlap=[...ta].filter(x=>tb.has(x)).length;const union=new Set([...ta,...tb]).size||1;const fuzzy=1-distance(aa,bb)/Math.max(aa.length,bb.length);return Math.max(overlap/union*.94,fuzzy*.84);}
 function aliases(p:Product){return[p.name,...(p.voiceAliases||[])].filter(Boolean);}
@@ -40,7 +46,11 @@ export function understand(store:StoreData,raw:string,lastProduct?:Product|null,
  if(/^(undo|undo that|reverse that|cancel the last (sale|action)|take that back)$/i.test(q))return{intent:'undo',confidence:1,items:[],reason:'undo command'};
  if(/^(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(q))return{intent:'store_overview',confidence:.98,items:[],reason:'greeting'};
  if(/\b(?:dark|light|system)\s+(?:theme|mode)\b|\b(?:turn|switch)\s+(?:on|off)\s+(?:voice|sound|notifications?)\b/.test(q))return{intent:'settings',confidence:.98,items:[],reason:'setting command'};
- if(/\b(?:how\s?s|how is|tell me about|overview)\s+(?:my\s+)?(?:store|business|shop)\b|\bmy store\b.*\b(?:doing|performance|health)\b/.test(q))return{intent:'store_overview',confidence:.99,items:[],reason:'store question'};
+ // "the", "our" and "your" were not accepted here, only "my", so "How is the
+ // store?" fell through this rule to product matching and survived only
+ // because the fuzzy fallback caught it later at 0.9. The natural phrasing
+ // now matches the rule it was written for.
+ if(/\b(?:how\s?s|how is|tell me about|overview of|overview)\s+(?:(?:my|the|our|your)\s+)?(?:store|business|shop)\b|\b(?:my|the|our)\s+(?:store|business|shop)\b.*\b(?:doing|performance|health)\b/.test(q))return{intent:'store_overview',confidence:.99,items:[],reason:'store question'};
  if(/\b(?:why|what caused|what is causing|reason)\b/.test(q))return{intent:'why',confidence:.97,items:[],reason:'reasoning question'};
  if(/\b(?:what should i|what do i need to|what needs to|what can i do|what would you recommend|how can i improve|what else should i)\b/.test(q))return{intent:'recommendations',confidence:.97,items:[],reason:'recommendation question'};
  if(/\b(?:what should i|what do i need to|which items should i|what needs to)\s+restock\b|\b(?:restock|buy)\b.*\b(?:recommend|suggest|need|list)\b/.test(q))return{intent:'inventory',confidence:.98,items:[],reason:'restock recommendation'};

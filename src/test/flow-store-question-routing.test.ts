@@ -10,12 +10,11 @@ import { understand } from '@/lib/flow-operating-engine';
  * ever reached. It has been moved here, onto flow-operating-engine, which is
  * what FlowChat actually calls.
  *
- * One case is deliberately absent: "How's the store?" against a catalog
- * containing a product with a standalone single-letter word (e.g. "Lacasera
- * S/M") still resolves to that product. norm() strips the apostrophe, leaving
- * a bare "s" token; "store" is a stop word so it is dropped; the query reduces
- * to ["how","s"], and the "s" scores against the "S" in the product name well
- * enough to win. See the note in this file's commit.
+ * The case that drove this file: "How's the store?" against a catalog holding
+ * a name with a standalone single letter ("Lacasera S/M") used to resolve to
+ * that product. norm() dropped the apostrophe leaving a bare "s", "store" is a
+ * stop word so it went too, and the query reduced to ["s"] - which every()
+ * matched against the "S" in the name at 0.97.
  */
 
 const store = {
@@ -31,6 +30,11 @@ describe('questions about the whole store', () => {
     'How is the store?',
     'How is my store?',
     "How's my store?",
+    // The case this file was written without: it resolved to "Lacasera S/M",
+    // because norm() left a bare "s" that matched the S in the product name.
+    "How's the store?",
+    "How's our store?",
+    'Tell me about the business',
     'How is the business?',
     "How's business?",
     'How are we doing?',
