@@ -775,7 +775,10 @@ export interface StoreData {
   savingsGoal?: SavingsGoal; // kept in sync as savingsGoals[0] for older code that still reads a single goal — see getSavingsGoals() in store-data.ts
   savingsGoals?: SavingsGoal[]; // the real source of truth once multi-goal support is in use
   salesTarget?: SalesTarget;
-  milestonesReached?: string[]; // ids from SALES_MILESTONES already celebrated, so the popup never repeats
+  milestonesReached?: string[]; // ids already celebrated, so the popup never repeats
+  /** The same ids with the moment they were hit, so the dashboard can keep
+   *  wearing a big win for a few days after the popup has gone. */
+  milestoneLog?: { id: string; at: string }[];
   autoPriceLog?: AutoPriceEvent[]; // history of Auto-Apply price changes, so the owner can see and undo them
   managerSettings?: ManagerSettings;
   pendingPayments?: PendingPayment[];

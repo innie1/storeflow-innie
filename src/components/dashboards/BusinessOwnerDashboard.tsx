@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { StoreData } from '@/types/store';
 import { getBusinessTemplate } from '@/lib/business-templates';
 import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
@@ -124,6 +125,7 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate 
 
   return (
     <div className="space-y-3 animate-fade-in">
+      <CelebrationRibbon store={store} />
       <section className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl">{template.icon}</div>

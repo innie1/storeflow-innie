@@ -1,4 +1,5 @@
 import { StoreData, TabId } from '@/types/store';
+import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { getBusinessTemplate, isBusinessTabAllowed } from '@/lib/business-runtime';
 import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
 import { CalendarClock, ClipboardList, DollarSign, Gamepad2, Package, Receipt, Settings2, Shirt, Sparkles, Tag, Users, Briefcase } from 'lucide-react';
@@ -46,6 +47,7 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
 
   return (
     <div className="animate-fade-in max-w-lg mx-auto space-y-4">
+      <CelebrationRibbon store={store} />
       <div className="rounded-2xl bg-card border border-border p-5">
         <div className="flex items-start justify-between gap-3">
           <div>

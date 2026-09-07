@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { checkNewMilestone, markMilestoneReached, type MilestoneDef } from '@/lib/milestones';
+import MilestoneCelebration from '@/components/MilestoneCelebration';
 import QRCode from 'qrcode';
 import type { StoreData } from '@/types/store';
 import { addCustomer } from '@/lib/store-data';
@@ -140,6 +142,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
   const [notes, setNotes] = useState('');
   const [promisedFor, setPromisedFor] = useState('');
   const [promisedTouched, setPromisedTouched] = useState(false);
+  const [milestone, setMilestone] = useState<MilestoneDef | null>(null);
   const [washMethodId, setWashMethodId] = useState('manual:hand-wash');
   const [dryMethodId, setDryMethodId] = useState('manual:sun-dry');
   const [created, setCreated] = useState<LocalLaundryRecord | null>(null);
@@ -357,6 +360,14 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
         }
       }
 
+      // Milestones were only ever checked after a product sale, so a laundry
+      // could take its first ten thousand - or its first million - in silence.
+      const crossed = checkNewMilestone(nextStore);
+      if (crossed) {
+        nextStore = markMilestoneReached(nextStore, crossed.id);
+        setMilestone(crossed);
+      }
+
       onUpdate(nextStore);
       setCreated(localRecord);
       showToast(`Laundry saved locally — ${localRecord.tagCode}`, 'success');
@@ -390,6 +401,12 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
   return (
     <>
+      {milestone && (
+        <MilestoneCelebration
+          milestone={milestone}
+          onDismiss={() => setMilestone(null)}
+        />
+      )}
       <button
         onClick={openIntake}
         className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[.99] transition-transform"
