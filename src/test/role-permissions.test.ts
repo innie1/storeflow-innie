@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { can, canDelete, canSeeMoney, canSetPrices, isManagement } from '@/lib/permissions';
+import { can, canDelete, canOpenTab, canSeeMoney, canSetPrices, isManagement } from '@/lib/permissions';
 import { readSource } from './helpers/source';
 
 /**
@@ -107,12 +107,12 @@ describe('the screens actually ask', () => {
   });
 
   it('an attendant cannot reach the money ledger at all', () => {
-    const index = readSource('src/pages/Index.tsx');
-    const attendantLine = index
-      .split('\n')
-      .find(line => line.includes("return ['dashboard', 'orders', 'laundry-records'"));
-    expect(attendantLine).toBeTruthy();
-    expect(attendantLine).not.toContain("'history'");
+    // History is the takings for every period with a delete control on each
+    // row. Records covers everything an attendant needs to look up.
+    expect(canOpenTab('history', attendant)).toBe(false);
+    expect(canOpenTab('laundry-records', attendant)).toBe(true);
+    expect(canOpenTab('inventory', attendant)).toBe(false);
+    expect(canOpenTab('settings', attendant)).toBe(false);
   });
 
   it('attendants get their own dashboard rather than the owner default', () => {
@@ -155,17 +155,27 @@ describe('the audit of the staff area', () => {
   it('lets a supervisor see the floor they supervise', () => {
     // They had the staff list and a cash drawer and nothing else, which on a
     // laundry is a read-only list and a till that does not exist.
-    expect(index).toContain("'dashboard', 'orders', 'laundry-records', 'customers', 'staff'");
+    const supervisor = { role: 'supervisor' };
+    for (const tabId of ['orders', 'laundry-records', 'customers', 'staff']) {
+      expect(canOpenTab(tabId, supervisor), tabId).toBe(true);
+    }
+    expect(canOpenTab('settings', supervisor)).toBe(false);
   });
 
   it('gives the accountant the ledger they report on', () => {
-    expect(index).toContain("'expenses', 'roi', 'pending', 'history'");
+    for (const tabId of ['expenses', 'roi', 'pending', 'history']) {
+      expect(canOpenTab(tabId, accountant), tabId).toBe(true);
+    }
   });
 
   it('lets a custom role take work in at a service business', () => {
-    // Without orders/records here, a custom role at a laundry could reach
-    // nothing but the dashboard however its boxes were ticked.
-    expect(index).toContain("'cash-drawer', 'orders', 'laundry-records', 'customers'");
+    // Without these, a custom role at a laundry could reach nothing but the
+    // dashboard however its boxes were ticked.
+    const custom = { role: 'custom', permissions: { sales: true } };
+    for (const tabId of ['orders', 'laundry-records', 'customers']) {
+      expect(canOpenTab(tabId, custom), tabId).toBe(true);
+    }
+    expect(canOpenTab('inventory', custom)).toBe(false);
   });
 
   it('keeps the cash drawer to shops that have a till', () => {
@@ -208,5 +218,28 @@ describe('changing a role reaches the device already using it', () => {
     // Nothing checked, so a tab reached any other way rendered its screen
     // anyway - which is how a worker saw the price list flash up.
     expect(index).toContain("if (tab !== 'dashboard' && !isTabAllowed(tab, currentUser)) setTab('dashboard')");
+  });
+});
+
+describe('the simple home screen asks the role too', () => {
+  const home = readSource('src/components/simple/BusinessSimpleHome.tsx');
+
+  it('filters its tiles by role, not only by business template', () => {
+    // It checked isBusinessTabAllowed alone, so an attendant kept a
+    // "Services" tile for the price list - tapped it, and watched the screen
+    // appear and vanish as the tab guard put them back.
+    expect(home).toContain('canOpenTab(action.tab, currentUser)');
+    expect(home).toContain("canOpenTab('orders', currentUser)");
+    expect(home).toContain("canOpenTab('inventory', currentUser)");
+  });
+
+  it("does not show the day's takings to the shop floor", () => {
+    expect(home).toContain('{canSeeMoney(currentUser) && (');
+  });
+
+  it('keeps the tab rule in one place, where a screen can ask it', () => {
+    // It lived inside Index.tsx, so only the navigation could consult it.
+    expect(readSource('src/lib/permissions.ts')).toContain('export function canOpenTab');
+    expect(readSource('src/pages/Index.tsx')).toContain('canOpenTab(tabId, user)');
   });
 });

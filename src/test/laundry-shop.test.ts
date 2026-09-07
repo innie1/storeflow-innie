@@ -70,7 +70,10 @@ describe('a laundry worker gets the shop floor and nothing else', () => {
   });
 
   it('is wired into the real permission check', () => {
-    const fn = index.slice(index.indexOf('const isTabAllowed'), index.indexOf('const isTabAllowed') + 1600);
+    // The rule moved out of Index.tsx into permissions.ts, so that screens can
+    // ask it and not only the navigation.
+    const perms = readSource('src/lib/permissions.ts');
+    const fn = perms.slice(perms.indexOf('export function canOpenTab'));
     expect(fn).toContain("case 'attendant':");
     expect(fn).toContain("'laundry-records'");
   });

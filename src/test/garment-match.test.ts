@@ -38,6 +38,35 @@ describe('searching the list', () => {
   it('returns nothing rather than guessing when there is no match', () => {
     expect(filterGarments(LIST, 'bicycle')).toEqual([]);
   });
+
+  it('copes with dropped letters, which is how people type at a counter', () => {
+    // "shr" for Shirt returned an empty grid and offered to add a garment
+    // that was already on the list.
+    expect(filterGarments(LIST, 'shr')[0]).toBe('Shirt');
+    expect(filterGarments(LIST, 'trsr')[0]).toBe('Trouser');
+    expect(filterGarments(LIST, 'ntv')[0]).toBe('Native Wear');
+    expect(filterGarments(LIST, 'bdsht')[0]).toBe('Bedsheet');
+  });
+
+  it('copes with a slipped letter', () => {
+    expect(filterGarments(LIST, 'shrit')[0]).toBe('Shirt');
+    expect(filterGarments(LIST, 'trouser')[0]).toBe('Trouser');
+    expect(filterGarments(LIST, 'jaket')[0]).toBe('Jacket');
+  });
+
+  it('puts the closest answer first', () => {
+    const shr = filterGarments(LIST, 'shr');
+    expect(shr[0]).toBe('Shirt');
+    expect(shr.indexOf('Shirt')).toBeLessThan(shr.indexOf('Nicker / Shorts'));
+  });
+
+  it('does not open the floodgates on a single letter', () => {
+    // One letter matches almost anything as a subsequence; only a real prefix
+    // counts.
+    const one = filterGarments(LIST, 's');
+    expect(one.length).toBeLessThan(LIST.length);
+    expect(one).toContain('Skirt');
+  });
 });
 
 describe('spotting a garment already on the list', () => {

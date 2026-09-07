@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
+import { canOpenTab } from '@/lib/permissions';
 import SetupGuide from '@/components/SetupGuide';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
 import { celebrationShown, guideProgress, markCelebrationShown, nextStep } from '@/lib/setup-guide';
@@ -355,53 +356,9 @@ const readActiveUser = (): any => {
   }
 };
 
-const isTabAllowed = (tabId: TabId, user: any) => {
-  if (!user) return false;
-  if (user.role === 'owner') return true;
-  switch (user.role) {
-    case 'manager':
-      return tabId !== 'settings' && tabId !== 'activity-log';
-    case 'cashier':
-      return ['dashboard', 'sales', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
-    // The shop floor: take the work in, move it along, hand it back, and look
-    // up whoever dropped it off. No prices, no takings, no staff, no settings.
-    //
-    // Before this, no role below manager could open Orders or Intake at all,
-    // so anyone recording laundry had to be made a manager — which also hands
-    // them expenses, ROI, reports and the staff list. There was nothing in
-    // between.
-    // 'history' is deliberately absent: it is the money ledger, with the
-    // takings for every period and a delete control on each row. Records
-    // covers everything an attendant actually needs to look up.
-    case 'attendant':
-      return ['dashboard', 'orders', 'laundry-records', 'customers', 'communication-center'].includes(tabId);
-    case 'inventory':
-      return ['dashboard', 'inventory', 'suppliers', 'marketplace', 'wishlist', 'communication-center'].includes(tabId);
-    // The money roles need the ledger they report on. 'history' was missing,
-    // so an accountant could see expenses and ROI but not a single
-    // transaction behind them.
-    case 'accountant':
-      return ['dashboard', 'expenses', 'roi', 'pending', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
-    // A supervisor oversees the shop floor, so they need to see the floor.
-    // They had staff and a cash drawer and nothing else: on a laundry that is
-    // a read-only staff list and a till that does not exist, with no way to
-    // see a single order.
-    case 'supervisor':
-      return ['dashboard', 'orders', 'laundry-records', 'customers', 'staff', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
-    case 'custom':
-      if (tabId === 'dashboard') return true;
-      // "Sales access" has to mean taking work in at a service business too,
-      // or a custom role there could reach nothing but the dashboard.
-      if (['sales', 'history', 'cash-drawer', 'orders', 'laundry-records', 'customers'].includes(tabId) && user.permissions?.sales) return true;
-      if (['inventory', 'suppliers', 'marketplace', 'wishlist'].includes(tabId) && user.permissions?.inventory) return true;
-      if (['roi', 'expenses', 'pending'].includes(tabId) && user.permissions?.reports) return true;
-      if (tabId === 'settings' && user.permissions?.settings) return true;
-      if (tabId === 'communication-center') return true;
-      return false;
-    default:
-      return false;
-  }
-};
+// The rule itself lives in permissions.ts so that screens can ask it too, not
+// only the navigation in this file.
+const isTabAllowed = (tabId: TabId, user: any) => canOpenTab(tabId, user);
 
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);

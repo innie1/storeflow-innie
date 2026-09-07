@@ -81,3 +81,55 @@ export function can(user: ActingUser | null | undefined, capability: Capability)
 export const canDelete = (user: ActingUser | null | undefined) => can(user, 'delete');
 export const canSeeMoney = (user: ActingUser | null | undefined) => can(user, 'money');
 export const canSetPrices = (user: ActingUser | null | undefined) => can(user, 'prices');
+
+/**
+ * Whether a role may open a tab at all.
+ *
+ * This lived inside Index.tsx, so only the navigation could consult it. The
+ * simple home screen could not, and filtered its own tiles by business
+ * template alone — which is how an attendant kept a "Services" tile for a
+ * screen their role forbids, and saw it flash up before being moved off.
+ *
+ * Access is decided by role, not by the permission flags on the account:
+ * those are only ever read for a custom role.
+ */
+export function canOpenTab(tabId: string, user: ActingUser | null | undefined): boolean {
+  if (!user) return false;
+  const role = String((user as { role?: string }).role || '');
+  if (role === 'owner') return true;
+  switch (role) {
+    case 'manager':
+      return tabId !== 'settings' && tabId !== 'activity-log';
+    case 'cashier':
+      return ['dashboard', 'sales', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
+    // The shop floor: take the work in, move it along, hand it back, and look
+    // up whoever dropped it off. No prices, no takings, no staff, no settings.
+    //
+    // 'history' is deliberately absent: it is the money ledger, with the
+    // takings for every period and a delete control on each row. Records
+    // covers everything an attendant actually needs to look up.
+    case 'attendant':
+      return ['dashboard', 'orders', 'laundry-records', 'customers', 'communication-center'].includes(tabId);
+    case 'inventory':
+      return ['dashboard', 'inventory', 'suppliers', 'marketplace', 'wishlist', 'communication-center'].includes(tabId);
+    // The money roles need the ledger they report on.
+    case 'accountant':
+      return ['dashboard', 'expenses', 'roi', 'pending', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
+    // A supervisor oversees the shop floor, so they need to see the floor.
+    case 'supervisor':
+      return ['dashboard', 'orders', 'laundry-records', 'customers', 'staff', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
+    case 'custom': {
+      if (tabId === 'dashboard') return true;
+      // "Sales access" has to mean taking work in at a service business too,
+      // or a custom role there could reach nothing but the dashboard.
+      if (['sales', 'history', 'cash-drawer', 'orders', 'laundry-records', 'customers'].includes(tabId) && user.permissions?.sales) return true;
+      if (['inventory', 'suppliers', 'marketplace', 'wishlist'].includes(tabId) && user.permissions?.inventory) return true;
+      if (['roi', 'expenses', 'pending'].includes(tabId) && user.permissions?.reports) return true;
+      if (tabId === 'settings' && user.permissions?.settings) return true;
+      if (tabId === 'communication-center') return true;
+      return false;
+    }
+    default:
+      return false;
+  }
+}

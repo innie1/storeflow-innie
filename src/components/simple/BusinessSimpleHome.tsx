@@ -1,4 +1,5 @@
 import { StoreData, TabId } from '@/types/store';
+import { canOpenTab, canSeeMoney } from '@/lib/permissions';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { getBusinessTemplate, isBusinessTabAllowed } from '@/lib/business-runtime';
@@ -36,7 +37,17 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
       ? [{ label: 'Staff', icon: <Briefcase className="w-6 h-6" />, tab: 'staff' as TabId }]
       : []),
   ];
-  const actions = candidateActions.filter(action => isBusinessTabAllowed(store, action.tab));
+  /**
+   * Both gates, not just one.
+   *
+   * This screen filtered on the business template alone, so a role that cannot
+   * open a tab was still offered a tile for it: an attendant kept a "Services"
+   * tile for the price list, tapped it, and watched it appear and vanish as
+   * the tab guard put them back.
+   */
+  const actions = candidateActions.filter(action => (
+    isBusinessTabAllowed(store, action.tab) && canOpenTab(action.tab, currentUser)
+  ));
 
   const navigate = (action: { label: string; tab: TabId }) => {
     if (isLaundry) {
@@ -64,10 +75,14 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
       </div>
 
       <div className="grid grid-cols-2 gap-3">
+        {/* Takings belong to whoever runs the shop. An attendant was
+            shown the day's revenue on their own phone. */}
+        {canSeeMoney(currentUser) && (
         <div className="rounded-2xl bg-card border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><DollarSign className="w-4 h-4" /> Today's Revenue</div>
           <p className="font-display font-black text-2xl text-primary mt-2">₦{todayRevenue.toLocaleString()}</p>
         </div>
+        )}
         <div className="rounded-2xl bg-card border border-border p-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><Users className="w-4 h-4" /> Customers</div>
           <p className="font-display font-black text-2xl mt-2">{customers}</p>
@@ -90,8 +105,8 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {isBusinessTabAllowed(store, 'orders') && <button onClick={() => onNavigate('orders')} className="rounded-xl bg-primary text-primary-foreground p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><ClipboardList className="w-4 h-4" /> {template.labels.orderNoun}s</button>}
-        {isBusinessTabAllowed(store, 'inventory') && <button onClick={() => onNavigate('inventory')} className="rounded-xl bg-card border border-border p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><Package className="w-4 h-4" /> {template.modes.includes('services') && !template.modules.includes('inventory') ? 'Services' : 'Inventory'}</button>}
+        {isBusinessTabAllowed(store, 'orders') && canOpenTab('orders', currentUser) && <button onClick={() => onNavigate('orders')} className="rounded-xl bg-primary text-primary-foreground p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><ClipboardList className="w-4 h-4" /> {template.labels.orderNoun}s</button>}
+        {isBusinessTabAllowed(store, 'inventory') && canOpenTab('inventory', currentUser) && <button onClick={() => onNavigate('inventory')} className="rounded-xl bg-card border border-border p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><Package className="w-4 h-4" /> {template.modes.includes('services') && !template.modules.includes('inventory') ? 'Services' : 'Inventory'}</button>}
       </div>
       {isAppointment && <div className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Appointments can be managed from Orders.</div>}
     </div>
