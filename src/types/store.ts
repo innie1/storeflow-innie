@@ -396,7 +396,10 @@ export interface StaffMember {
   name: string;
   pin: string;
   phone?: string;
-  role: 'owner' | 'admin' | 'manager' | 'cashier' | 'inventory' | 'accountant' | 'supervisor' | 'custom';
+  // 'attendant' is the shop-floor role: takes work in, moves it along, hands
+  // it back. It exists because there was nothing between cashier, who cannot
+  // see orders at all, and manager, who can see the books.
+  role: 'owner' | 'admin' | 'manager' | 'cashier' | 'attendant' | 'inventory' | 'accountant' | 'supervisor' | 'custom';
   permissions: {
     sales: boolean;
     inventory: boolean;
@@ -853,4 +856,9 @@ export type TabId =
   | 'dashboard' | 'inventory' | 'sales' | 'history' | 'expenses' | 'settings' | 'roi' | 'manager' | 'pending' | 'marketplace' | 'orders'
   | 'games-dashboard' | 'games-history' | 'games-analytics' | 'games-settings' | 'qr-hub'
   | 'customers' | 'suppliers' | 'goals' | 'diary' | 'documents' | 'academy' | 'achievements' | 'wishlist' | 'staff' | 'cash-drawer' | 'activity-log' | 'communication-center'
-  | 'finance' | 'reports' | 'profile' | 'more';
+  | 'finance' | 'reports' | 'profile' | 'more'
+  // The laundry intake screen. It was reached by casting a string through
+  // `as TabId`, so it was never in this union and never in RENDERABLE_TABS —
+  // which meant the Intake tab drew "That screen isn't available" underneath
+  // the working screen.
+  | 'laundry-records';

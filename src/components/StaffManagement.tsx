@@ -25,7 +25,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>('cashier');
+  const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'attendant' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>('cashier');
   
   // Permissions states
   const [salesAccess, setSalesAccess] = useState(true);
@@ -385,6 +385,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                     className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
                   >
                     <option value="cashier">Cashier</option>
+                    <option value="attendant">Attendant — takes in and hands out work</option>
                     <option value="manager">Manager</option>
                     <option value="admin">Admin</option>
                     <option value="inventory">Inventory Staff</option>

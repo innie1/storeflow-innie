@@ -55,7 +55,7 @@ describe('laundry workspace routing', () => {
     const source = readSource('src/pages/Index.tsx');
     expect(source).toContain("import LaundryWorkspace from '@/components/laundry/LaundryWorkspace';");
     expect(source).toContain("tab === 'orders'");
-    expect(source).toContain("String(tab) === 'laundry-records'");
+    expect(source).toContain("tab === 'laundry-records'");
     expect(source).toContain('<LaundryWorkspace store={store} orders={orders} onUpdate={setStore} />');
   });
 
@@ -65,7 +65,11 @@ describe('laundry workspace routing', () => {
     // phrase truncated on the 6-tab bottom bar. The fuller name still appears
     // on the workspace screen itself and its quick-action entry points.
     expect(source).toContain("label: 'Intake'");
-    expect(source).toContain("id: 'laundry-records' as TabId");
+    // It used to be cast in with `as TabId` because it was not in that union,
+    // which also kept it out of RENDERABLE_TABS — so the tab drew "That screen
+    // isn't available" underneath the working screen. It is a real tab now.
+    expect(source).toContain("id: 'laundry-records' as const");
+    expect(source).not.toContain("'laundry-records' as TabId");
     expect(source).toContain("case 'laundry-records':");
   });
 

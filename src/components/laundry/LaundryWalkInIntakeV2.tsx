@@ -348,7 +348,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
             <div className="rounded-2xl border-2 border-primary/40 bg-primary/5 p-4 text-center">
               {qrDataUrl && <img src={qrDataUrl} alt={`Laundry ${created.tagCode} QR code`} className="w-28 h-28 mx-auto rounded-xl bg-white p-2" />}
               <p className="font-mono font-black text-4xl tracking-[0.18em] mt-3">{created.tagCode}</p>
-              <p className="text-[11px] text-muted-foreground mt-2">Write this code on every cloth tag in this bundle.</p>
+              <p className="text-[11px] text-muted-foreground mt-2">Write this on every tag in the bundle.</p>
               <button onClick={copyTag} className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary/30 text-primary text-xs font-bold"><ClipboardCopy className="w-3.5 h-3.5" /> Copy code</button>
             </div>
 
@@ -370,7 +370,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
               <p className="text-xs font-bold mt-1">{created.garmentSummary}</p>
             </div>
 
-            {created.syncStatus !== 'synced' && <p className="text-[11px] text-primary text-center font-semibold">Safe on this device. StoreFlow syncs it automatically when Supabase is reachable.</p>}
+            {created.syncStatus !== 'synced' && <p className="text-[11px] text-primary text-center font-semibold">Saved on this phone. It will upload when you are back online.</p>}
             </div>
 
             <div className="shrink-0 border-t border-border p-4 flex gap-2">
@@ -396,7 +396,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">2. Service</p>
-              {services.length === 0 ? <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 text-xs text-muted-foreground">No laundry service yet. Open Price List and set your treatments and clothing prices first.</div> : <div className="grid grid-cols-2 gap-2">{services.map(service => { const active = String(service.id) === String(selectedService?.id); const servicePricing = getStoredServicePricing(service); return <button key={service.id} type="button" onClick={() => { setSelectedServiceId(String(service.id)); setPriceTouched(false); }} className={`px-3 py-2.5 rounded-xl border text-left ${active ? 'border-primary bg-primary/10' : 'border-border bg-surface-2'}`}><p className="text-xs font-black truncate">{service.name}</p><p className="text-[10px] text-muted-foreground mt-0.5 truncate">{servicePricing === 'per_piece' ? 'By clothing item' : `₦${Number(service.sellingPrice || 0).toLocaleString()} ${getServicePricingLabel(servicePricing).unitLabel}`}</p></button>; })}</div>}
+              {services.length === 0 ? <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 text-xs text-muted-foreground">No services yet. Add them in Price List first.</div> : <div className="grid grid-cols-2 gap-2">{services.map(service => { const active = String(service.id) === String(selectedService?.id); const servicePricing = getStoredServicePricing(service); return <button key={service.id} type="button" onClick={() => { setSelectedServiceId(String(service.id)); setPriceTouched(false); }} className={`px-3 py-2.5 rounded-xl border text-left ${active ? 'border-primary bg-primary/10' : 'border-border bg-surface-2'}`}><p className="text-xs font-black truncate">{service.name}</p><p className="text-[10px] text-muted-foreground mt-0.5 truncate">{servicePricing === 'per_piece' ? 'By clothing item' : `₦${Number(service.sellingPrice || 0).toLocaleString()} ${getServicePricingLabel(servicePricing).unitLabel}`}</p></button>; })}</div>}
             </section>
 
             <section className="space-y-2 text-left">
@@ -436,7 +436,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
 
             <section className="text-left border-t border-border/60 pt-1">
               <button type="button" onClick={() => setShowMore(current => !current)} className="w-full flex items-center justify-between gap-3 py-2">
-                <span className="text-[11px] uppercase font-black text-muted-foreground">Address, processing &amp; notes</span>
+                <span className="text-[11px] uppercase font-black text-muted-foreground">Address & notes</span>
                 {showMore ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
               </button>
               {showMore && <div className="space-y-2 pt-1">
@@ -445,7 +445,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
                   <div><label className="text-[10px] uppercase font-black text-muted-foreground">Washing</label><select value={washMethodId} onChange={event => setWashMethodId(event.target.value)} className="mt-1 w-full h-11 rounded-xl border border-border bg-surface-2 px-3 text-sm">{washOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
                   <div><label className="text-[10px] uppercase font-black text-muted-foreground">Drying</label><select value={dryMethodId} onChange={event => setDryMethodId(event.target.value)} className="mt-1 w-full h-11 rounded-xl border border-border bg-surface-2 px-3 text-sm">{dryOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
                 </div>
-                {equipment.length === 0 && <p className="text-[10px] text-muted-foreground">Add washers and dryers from Records → Machines &amp; methods to assign exact equipment.</p>}
+                {equipment.length === 0 && <p className="text-[10px] text-muted-foreground">Add machines in Records to pick one here.</p>}
                 <textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Stains, damage, special instructions..." rows={2} className="w-full resize-none p-3 rounded-xl bg-surface-2 border border-border text-sm" />
               </div>}
             </section>

@@ -316,6 +316,7 @@ const RENDERABLE_TABS = new Set<string>([
   'goals',
   'history',
   'inventory',
+  'laundry-records',
   'manager',
   'marketplace',
   'orders',
@@ -337,6 +338,15 @@ const isTabAllowed = (tabId: TabId, user: any) => {
       return tabId !== 'settings' && tabId !== 'activity-log';
     case 'cashier':
       return ['dashboard', 'sales', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
+    // The shop floor: take the work in, move it along, hand it back, and look
+    // up whoever dropped it off. No prices, no takings, no staff, no settings.
+    //
+    // Before this, no role below manager could open Orders or Intake at all,
+    // so anyone recording laundry had to be made a manager — which also hands
+    // them expenses, ROI, reports and the staff list. There was nothing in
+    // between.
+    case 'attendant':
+      return ['dashboard', 'orders', 'laundry-records', 'customers', 'history', 'communication-center'].includes(tabId);
     case 'inventory':
       return ['dashboard', 'inventory', 'suppliers', 'marketplace', 'wishlist', 'communication-center'].includes(tabId);
     case 'accountant':
@@ -1056,7 +1066,7 @@ export default function Index() {
           // Laundry needs BOTH surfaces: Orders is the online customer-app inbox,
           // while Laundry Records is the physical counter/intake workspace.
           if (businessType === 'laundry' && t.id === 'orders') {
-            return [mapped, { id: 'laundry-records' as TabId, label: 'Intake', icon: '🧾' }];
+            return [mapped, { id: 'laundry-records' as const, label: 'Intake', icon: '🧾' }];
           }
           return [mapped];
         });
@@ -1976,7 +1986,7 @@ export default function Index() {
         {/* For laundry this button IS "Record Laundry", so on the intake tab it
             is a shortcut to the screen you are already on — and it sits on top
             of that screen's own record button. */}
-        {!(businessType === 'laundry' && String(tab) === 'laundry-records') && (
+        {!(businessType === 'laundry' && tab === 'laundry-records') && (
           <FlowShirtFab store={store} onUpdate={setStore} onNavigate={handleNavigate} currentUser={currentUser} />
         )}
 
@@ -1997,7 +2007,7 @@ export default function Index() {
             <div className={tab === 'orders' ? 'block' : 'hidden'}>
               <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} focusOrderId={focusOrderId} onFocusHandled={() => setFocusOrderId(null)} notificationAct={notificationAct} onNotificationActHandled={() => setNotificationAct(null)} />
             </div>
-            <div className={String(tab) === 'laundry-records' ? 'block' : 'hidden'}>
+            <div className={tab === 'laundry-records' ? 'block' : 'hidden'}>
               {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (
                 <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} />
               )}

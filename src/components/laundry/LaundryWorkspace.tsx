@@ -217,7 +217,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
           <p className="text-[11px] uppercase tracking-wider text-primary font-black">Laundry workspace</p>
           <h1 className="font-display font-black text-xl mt-0.5">{view === 'record' ? 'Record Laundry' : 'Laundry Records'}</h1>
           {view === 'records' && (
-            <p className="text-xs text-muted-foreground mt-1">Find bundles by tag, customer, service or clothing.</p>
+            <p className="text-xs text-muted-foreground mt-1">Search by tag, customer or item.</p>
           )}
         </div>
 

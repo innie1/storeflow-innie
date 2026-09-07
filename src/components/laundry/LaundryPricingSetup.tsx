@@ -225,7 +225,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-display font-black text-xl text-foreground">Laundry Price List</h2>
-          <p className="text-xs text-muted-foreground mt-1">Set the real price of each clothing item for each type of laundry treatment.</p>
+          <p className="text-xs text-muted-foreground mt-1">What you charge for each item, per service.</p>
         </div>
         <button onClick={openNewService} className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs">
           <Plus className="w-4 h-4" /> Service
@@ -233,9 +233,10 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
       </div>
 
       <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 text-left">
-        <p className="font-display font-black text-sm">What does “Service” mean?</p>
+        <p className="font-display font-black text-sm">Service vs item</p>
         <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-          A service is <b>what you do to the clothes</b> — for example Full Service, Wash & Iron, Wash Only, Iron Only or Dry Cleaning. The clothing item then has its own price under that service. Example: Shirt + Iron Only can have a different price from Trouser + Iron Only.
+          The service is what you do — Wash &amp; Iron, Dry Cleaning. The item is what
+          it is done to. Each item has its own price under each service.
         </p>
       </div>
 
@@ -243,7 +244,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
         <div className="rounded-2xl border border-border bg-card p-8 text-center">
           <Shirt className="w-7 h-7 text-primary mx-auto" />
           <p className="font-display font-black mt-3">Add your first laundry service</p>
-          <p className="text-xs text-muted-foreground mt-1">Start with Full Service, Wash & Iron, Wash Only, Iron Only or Dry Cleaning.</p>
+          <p className="text-xs text-muted-foreground mt-1">e.g. Wash & Iron, Wash Only, Dry Cleaning.</p>
           <button onClick={openNewService} className="mt-4 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black">Add Service</button>
         </div>
       ) : (
@@ -358,7 +359,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
 
           <section className="rounded-2xl border border-border bg-card p-4">
             <p className="font-display font-black text-sm">Add another clothing type</p>
-            <p className="text-[11px] text-muted-foreground mt-1">For example Agbada, Suit, Duvet, Blouse, Jeans or School Uniform.</p>
+            <p className="text-[11px] text-muted-foreground mt-1">e.g. Agbada, Suit, Duvet, Jeans.</p>
             <div className="flex gap-2 mt-3">
               <input value={customGarment} onChange={event => setCustomGarment(event.target.value)} onKeyDown={event => event.key === 'Enter' && addGarment()} placeholder="Clothing type" className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-border bg-surface-2 text-sm outline-none focus:border-primary" />
               <button onClick={addGarment} className="px-4 rounded-xl border border-primary text-primary text-xs font-black">Add</button>
@@ -394,7 +395,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
               <div>
                 <label className="text-[10px] uppercase font-black text-muted-foreground">{draft.pricing === 'per_piece' ? 'Starting price' : draft.pricing === 'per_kg' ? 'Price per KG' : 'Price per load'}</label>
                 <div className="mt-1 flex items-center gap-2 px-3.5 py-3 rounded-xl border border-border bg-surface-2"><span className="text-sm text-muted-foreground">₦</span><input value={draft.defaultPrice} onChange={event => setDraft(current => ({ ...current, defaultPrice: event.target.value.replace(/[^0-9.]/g, '') }))} inputMode="decimal" placeholder="0" className="w-full bg-transparent outline-none text-sm font-black" /></div>
-                {draft.pricing === 'per_piece' && <p className="text-[10px] text-muted-foreground mt-1">For a new service this becomes the starting price for each clothing type; you can then change Shirt, Trouser, T-shirt, etc. individually.</p>}
+                {draft.pricing === 'per_piece' && <p className="text-[10px] text-muted-foreground mt-1">Sets the starting price for every item. You can change each one after.</p>}
               </div>
               <div>
                 <label className="text-[10px] uppercase font-black text-muted-foreground">Turnaround</label>
