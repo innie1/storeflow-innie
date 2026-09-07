@@ -92,3 +92,38 @@ describe('the progress maths', () => {
     for (let step = 1; step < 5; step++) expect(pct(step, 5)).toBeLessThan(100);
   });
 });
+
+describe('Flow guides every question, not just the first', () => {
+  it('speaks per question rather than once per mode', () => {
+    // The whole of "tell us about your shop" is one mode, so keying on mode
+    // alone left Flow silent through the type and logo questions.
+    expect(access).toContain("if (createStep === 'name')");
+    expect(access).toContain("if (createStep === 'type')");
+    expect(access).toContain("if (createStep === 'logo')");
+    expect(access).toContain('createStep, newCode, storeName, pickedType, pickedLogo');
+  });
+
+  it('changes its face with the question', () => {
+    expect(access).toContain("setAccessMood(pickedType ? 'happy' : 'thinking')");
+    expect(access).toContain("setAccessMood(pickedLogo ? 'confident' : 'thinking')");
+  });
+
+  it('repeats the name back once it knows it', () => {
+    expect(access).toContain('good name. Hit continue');
+  });
+
+  it('does not congratulate a choice nobody made', () => {
+    // businessType starts at 'provision' and a logo style is chosen at random
+    // on mount, so neither says anything about what the merchant decided.
+    expect(access).toContain('const [pickedType, setPickedType] = useState(false)');
+    expect(access).toContain('const [pickedLogo, setPickedLogo] = useState(false)');
+    expect(access).toContain('setPickedType(true)');
+    expect(access).toContain('setPickedLogo(true)');
+  });
+
+  it('does not let the idle timer blank it mid-flow', () => {
+    // A 1.5s timer reset the mood to idle after typing, which is most of why
+    // Flow looked lively at the name field and dead after it.
+    expect(access).toContain("if (mode === 'create' && !newCode) return;");
+  });
+});

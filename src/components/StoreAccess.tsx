@@ -117,6 +117,11 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
   // Recovery states
   const [createStep, setCreateStep] = useState<'name' | 'type' | 'logo'>('name');
+  // businessType starts at 'provision' and a logo style is picked at random on
+  // mount, so neither can tell you whether the merchant has actually decided.
+  // Without this Flow congratulated a choice nobody had made.
+  const [pickedType, setPickedType] = useState(false);
+  const [pickedLogo, setPickedLogo] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState<'options' | 'question' | 'key' | 'code' | 'reset-pass'>('options');
   const [answeredQuestion, setAnsweredQuestion] = useState('');
   const [enteredKey, setEnteredKey] = useState('');
@@ -132,9 +137,11 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   // Change mood on mode switches
   useEffect(() => {
     if (mode === 'create') {
+      // Held rather than dropped back to idle after a second and a half: the
+      // create flow drives its own mood per question, and letting this one
+      // overwrite it made Flow go blank halfway through a sentence.
       setAccessMood('thinking');
-      const t = setTimeout(() => setAccessMood('idle'), 1500);
-      return () => clearTimeout(t);
+      return;
     } else if (mode === 'access') {
       setAccessMood('confident');
       const t = setTimeout(() => setAccessMood('idle'), 1500);
@@ -165,18 +172,52 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       'auth-store-select': "Pick a store, or start a fresh one with me.",
       'auth-store-create': "New store, new start — let's build it.",
     };
+    // The whole of "tell us about your shop" is one mode, so keying on mode
+    // alone meant Flow said its piece at the name field and then stood there
+    // through the type and logo questions saying nothing. It follows each
+    // question now, and reacts to what has actually been chosen.
+    if (mode === 'create' && !newCode) {
+      if (createStep === 'name') {
+        setAccessMood('thinking');
+        say(storeName.trim()
+          ? `${storeName.trim()} — good name. Hit continue when you're happy.`
+          : "What are we calling your shop? Type it and I'll take it from there.");
+        return;
+      }
+      if (createStep === 'type') {
+        setAccessMood(pickedType ? 'happy' : 'thinking');
+        say(pickedType
+          ? 'Good pick — I know exactly how that shop runs.'
+          : `What sort of business is ${storeName.trim() || 'it'}? Tap the closest one.`);
+        return;
+      }
+      if (createStep === 'logo') {
+        setAccessMood(pickedLogo ? 'confident' : 'thinking');
+        say(pickedLogo
+          ? "Looks sharp. Create the store and we're in."
+          : 'Last one — pick a look. You can change it later.');
+        return;
+      }
+    }
+
     const line = lines[mode];
     if (line) say(line);
-  }, [mode]);
+  }, [mode, createStep, newCode, storeName, pickedType, pickedLogo]);
 
-  // Revert back to idle after typing pause
+  // Revert back to idle after typing pause.
+  //
+  // Not during store creation: each of those three questions sets its own
+  // mood, and this timer was overwriting it a second and a half later — which
+  // is most of why Flow looked lively at the name field and dead everywhere
+  // after it.
   useEffect(() => {
+    if (mode === 'create' && !newCode) return;
     if (!storeName && !accessCode) return;
     const t = setTimeout(() => {
       setAccessMood('idle');
     }, 1500);
     return () => clearTimeout(t);
-  }, [storeName, accessCode]);
+  }, [storeName, accessCode, mode, newCode]);
 
   // Maps the "Select Retail Type" dropdown to the customer-facing StoreType,
   // so the store actually gets created as what it is (laundry, gas filling,
@@ -1498,6 +1539,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                           setBusinessType(id);
                           setCategory(businessCategory(id));
                           setRetailType(id);
+                          setPickedType(true);
                           // Answering the question is what moves it on. A
                           // separate Continue tap after every choice is the
                           // sort of thing that makes a short flow feel long.
@@ -1528,7 +1570,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                       <button
                         key={style.id}
                         type="button"
-                        onClick={() => setSelectedLogoStyle(style.id)}
+                        onClick={() => { setSelectedLogoStyle(style.id); setPickedLogo(true); }}
                         className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
                           selectedLogoStyle === style.id ? 'bg-primary/10 border-primary ring-1 ring-primary/30' : 'bg-surface-2 border-border hover:border-primary/30'
                         }`}
