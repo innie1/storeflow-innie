@@ -83,16 +83,42 @@ describe('it offers customers as the name is typed', () => {
   });
 });
 
+describe('it is offered everywhere a customer name is typed', () => {
+  it('is one component, not three copies of a floating list', () => {
+    const shared = readSource('src/components/CustomerSuggestions.tsx');
+    expect(shared).toContain('suggestCustomers');
+    expect(shared).toContain('onPick');
+  });
+
+  it('is on a credit sale, where a misspelling hides a debt', () => {
+    // The debt is filed under whatever is typed, so a second spelling is a
+    // second person who never appears to owe anything.
+    const sales = readSource('src/components/Sales.tsx');
+    expect(sales).toContain('<CustomerSuggestions');
+    expect(sales).toContain('setPickedCustomer(true)');
+  });
+
+  it('warns rather than offers on the form for adding someone new', () => {
+    // Picking is the wrong answer on a form whose purpose is to create a new
+    // customer; knowing they already exist is the right one.
+    const customers = readSource('src/components/Customers.tsx');
+    expect(customers).toContain('suggestCustomers(store.customers || [], name)');
+    expect(customers).toContain('Already in your book');
+    expect(customers).toContain('!editingCustomer');
+  });
+});
+
 describe('the intake screen uses it', () => {
   const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+  const shared = readSource('src/components/CustomerSuggestions.tsx');
 
   it('shows matches under the name field', () => {
-    expect(intake).toContain('suggestCustomers(customers, customerName)');
-    expect(intake).toContain('showSuggestions');
+    expect(intake).toContain('<CustomerSuggestions');
+    expect(intake).toContain('query={customerName}');
   });
 
   it('fills the whole customer in when one is picked', () => {
-    expect(intake).toContain('onClick={() => selectCustomer(customer.id)}');
+    expect(intake).toContain('onPick={customer => selectCustomer(customer.id)}');
     const fn = intake.slice(intake.indexOf('const selectCustomer'), intake.indexOf('const changeCount'));
     expect(fn).toContain('setCustomerPhone');
     expect(fn).toContain('setCustomerAddress');
@@ -101,9 +127,11 @@ describe('the intake screen uses it', () => {
   it('closes the list once one is picked', () => {
     const fn = intake.slice(intake.indexOf('const selectCustomer'), intake.indexOf('const changeCount'));
     expect(fn).toContain('setShowSuggestions(false)');
+    expect(intake).toContain('enabled={showSuggestions && !selectedCustomerId}');
   });
 
   it('warns the attendant when that customer already owes money', () => {
-    expect(intake).toContain('customer.outstandingDebt > 0');
+    // Now in the shared list, so every screen says it, not just this one.
+    expect(shared).toContain('customer.outstandingDebt > 0');
   });
 });

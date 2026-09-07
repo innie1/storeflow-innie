@@ -10,7 +10,7 @@ import {
   getLaundryPricingConfig,
 } from '@/lib/laundry-pricing';
 import { recordLaundryPayment, requiredDeposit } from '@/lib/laundry-money';
-import { suggestCustomers } from '@/lib/customer-suggest';
+import CustomerSuggestions from '@/components/CustomerSuggestions';
 import {
   createLocalLaundryRecord,
   getLocalLaundryRecords,
@@ -432,29 +432,12 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
                   owed. */}
               <div className="relative">
               <input value={customerName} onChange={event => { setCustomerName(event.target.value); setSelectedCustomerId(''); setShowSuggestions(true); }} onFocus={() => setShowSuggestions(true)} placeholder="Customer name *" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
-              {showSuggestions && !selectedCustomerId && (() => {
-                const matches = suggestCustomers(customers, customerName);
-                if (matches.length === 0) return null;
-                return (
-                  <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
-                    {matches.map(({ customer, matchedOn }) => (
-                      <button
-                        key={customer.id}
-                        type="button"
-                        onClick={() => selectCustomer(customer.id)}
-                        className="w-full px-3 py-2.5 text-left hover:bg-surface-2 border-b last:border-b-0 border-border/60"
-                      >
-                        <p className="text-sm font-bold">{customer.name}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {customer.phone}
-                          {matchedOn === 'phone' ? ' · matched on phone' : ''}
-                          {customer.outstandingDebt > 0 ? ` · owes ₦${Math.round(customer.outstandingDebt).toLocaleString()}` : ''}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
+              <CustomerSuggestions
+                customers={customers}
+                query={customerName}
+                enabled={showSuggestions && !selectedCustomerId}
+                onPick={customer => selectCustomer(customer.id)}
+              />
               </div>
               <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number * — e.g. 08012345678" inputMode="tel" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
             </section>

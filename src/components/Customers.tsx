@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { suggestCustomers } from '@/lib/customer-suggest';
 import { StoreData, Customer } from '@/types/store';
 import { addCustomer, updateCustomer, deleteCustomer } from '@/lib/store-data';
 import { 
@@ -252,6 +253,23 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
                   placeholder="e.g. Kola Adesina"
                   className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
                 />
+              
+                {/* A duplicate here is not a tidiness problem: the same person
+                    ends up with two records, their history splits between them,
+                    and a debt filed under one is invisible from the other.
+                    This is the moment to catch it, and picking is not the
+                    answer on a form whose whole purpose is to create someone
+                    new. */}
+                {!editingCustomer && (() => {
+                  const clashes = suggestCustomers(store.customers || [], name);
+                  if (clashes.length === 0) return null;
+                  return (
+                    <p className="text-[11px] text-amber-500 font-semibold">
+                      Already in your book: {clashes.slice(0, 2).map(c => `${c.customer.name} (${c.customer.phone})`).join(', ')}
+                      {clashes.length > 2 ? ` +${clashes.length - 2} more` : ''}
+                    </p>
+                  );
+                })()}
               </div>
 
               <div className="space-y-1 text-left">

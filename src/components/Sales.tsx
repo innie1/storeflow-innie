@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import CustomerSuggestions from '@/components/CustomerSuggestions';
 import { StoreData, Sale, PaymentMethod, ManagerSettings, Product } from '@/types/store';
 import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale, logScanEvent } from '@/lib/store-data';
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
@@ -107,6 +108,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   }, [method]);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const [pickedCustomer, setPickedCustomer] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [customerNote, setCustomerNote] = useState('');
@@ -1036,11 +1038,25 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                       </button>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <input placeholder="Name" value={customerName} onChange={e => setCustomerName(e.target.value)}
+                  {/* A credit sale is the one place a name absolutely must
+                      match an existing customer: the debt is filed under
+                      whatever is typed, so a second spelling is a second
+                      person who never appears to owe anything. */}
+                  <div className="grid grid-cols-2 gap-1.5 relative">
+                    <input placeholder="Name" value={customerName} onChange={e => { setCustomerName(e.target.value); setPickedCustomer(false); }}
                       className="p-1.5 rounded bg-card border border-border text-xs w-full" />
-                    <input placeholder="Phone" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
+                    <input placeholder="Phone" value={customerPhone} onChange={e => { setCustomerPhone(e.target.value); setPickedCustomer(false); }}
                       className="p-1.5 rounded bg-card border border-border text-xs w-full" />
+                    <CustomerSuggestions
+                      customers={store.customers || []}
+                      query={customerName}
+                      enabled={!pickedCustomer}
+                      onPick={customer => {
+                        setCustomerName(customer.name);
+                        setCustomerPhone(customer.phone || '');
+                        setPickedCustomer(true);
+                      }}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
