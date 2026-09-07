@@ -50,11 +50,27 @@ describe('the bubble measures instead of assuming', () => {
 });
 
 describe('it never covers the heading beneath it', () => {
-  it('drops to "above" when neither side fits, rather than picking the bigger gap', () => {
+  it('stands beside Flow when neither above nor below fits', () => {
     // The old tie-break chose whichever number was larger, which is how a
-    // negative space-above lost to a 12px space-below.
+    // negative space-above lost to a 12px space-below and landed on the
+    // wordmark. The fix after that slid the bubble down over Flow himself,
+    // which covered his face and whatever he was doing - so now it steps to
+    // one side instead.
     expect(mascot).not.toContain("setBubblePosition(safeSpaceAbove >= spaceBelow ? 'above' : 'below')");
-    expect(mascot).toContain('setBubbleShiftY(Math.max(0, Math.ceil(bubbleHeight - spaceAbove)))');
+    expect(mascot).not.toContain('setBubbleShiftY(Math.max(0, Math.ceil(bubbleHeight - spaceAbove)))');
+    expect(mascot).toContain("setBubblePosition(roomRight >= roomLeft ? 'right' : 'left')");
+    expect(mascot).toContain('const roomRight = window.innerWidth - rect.right - padding');
+    expect(mascot).toContain('const roomLeft = rect.left - padding');
+  });
+
+  it('has a tail for all four sides', () => {
+    for (const side of ["'above'", "'below'", "'right'", "'left'"]) {
+      expect(mascot, side).toContain(`{bubblePosition === ${side} && (`);
+    }
+  });
+
+  it('keeps a side-placed bubble on screen without moving it onto him', () => {
+    expect(mascot).toContain('translateY(calc(-50% + ${bubbleShiftY}px))');
   });
 
   it('still measures what sits directly below before going there', () => {

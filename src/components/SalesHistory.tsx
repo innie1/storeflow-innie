@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { canDelete, canSeeMoney, type ActingUser } from '@/lib/permissions';
 import { startOfDay, startOfWeek, startOfMonth, subDays } from 'date-fns';
 import { StoreData, Sale, Expense, Restock } from '@/types/store';
 import { clearSales, deleteSale, deleteExpense, getTrash } from '@/lib/store-data';
@@ -13,6 +14,14 @@ import ScrollLock from '@/components/ScrollLock';
 interface SalesHistoryProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
+  /**
+   * Who is looking.
+   *
+   * This screen took no user at all, so it showed its takings and its delete
+   * controls to whoever opened it — and "Reports" in the More sheet led an
+   * attendant straight here.
+   */
+  currentUser?: ActingUser | null;
 }
 
 type HistoryFilter = 'all' | 'sales' | 'restocks' | 'expenses';
@@ -50,7 +59,9 @@ function dateRangeWindow(range: DateRange): { start: number | null; end: number 
   }
 }
 
-export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
+export default function SalesHistory({ store, onUpdate, currentUser }: SalesHistoryProps) {
+  const mayDelete = canDelete(currentUser);
+  const maySeeMoney = canSeeMoney(currentUser);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<HistoryFilter>('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
@@ -337,7 +348,8 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
         </div>
       )}
 
-      {/* Time frame + summary */}
+      {/* Time frame + summary. The totals are the shop's takings, so they
+          are management only; the date filter itself stays for everyone. */}
       <div className="p-2.5 rounded-xl bg-card border border-border space-y-2">
         <div className="flex items-end justify-between gap-2">
           <div className="relative">
@@ -370,11 +382,14 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
               </>
             )}
           </div>
-          <p className={`font-display font-black text-lg leading-none ${periodSummary.net >= 0 ? 'text-success' : 'text-destructive'}`}>
-            {periodSummary.net >= 0 ? '+' : '−'}₦{Math.abs(periodSummary.net).toLocaleString()}
-          </p>
+          {maySeeMoney && (
+            <p className={`font-display font-black text-lg leading-none ${periodSummary.net >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {periodSummary.net >= 0 ? '+' : '−'}₦{Math.abs(periodSummary.net).toLocaleString()}
+            </p>
+          )}
         </div>
 
+        {maySeeMoney && (
         <div className="grid grid-cols-2 gap-1.5">
           <div className="px-2 py-1.5 rounded-lg bg-success/10 border border-success/20 min-w-0 flex items-center justify-between gap-1">
             <p className="text-[9px] text-muted-foreground uppercase">In</p>
@@ -385,7 +400,9 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             <p className="font-display font-bold text-xs text-destructive truncate">−₦{Math.abs(periodSummary.outgoing).toLocaleString()}</p>
           </div>
         </div>
+        )}
 
+        {maySeeMoney && (
         <div className="pt-1.5 border-t border-border/60 grid grid-cols-4 gap-1 text-center">
           {[
             { label: 'Today', value: referenceStats.today },
@@ -401,6 +418,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             </div>
           ))}
         </div>
+        )}
       </div>
 
       {/* Search + actions */}
@@ -414,6 +432,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             className="w-full p-2.5 pl-9 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
           />
         </div>
+        {mayDelete && (
         <button
           onClick={() => setShowTrash(true)}
           className="relative px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-sm font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
@@ -426,6 +445,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
             </span>
           )}
         </button>
+        )}
         <button
           onClick={() => exportHistoryPDF(store)}
           className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
@@ -503,7 +523,7 @@ export default function SalesHistory({ store, onUpdate }: SalesHistoryProps) {
                 {entry.amount >= 0 ? '+' : '−'}₦{Math.abs(entry.amount).toLocaleString()}
               </p>
             </div>
-            {(entry.type === 'sale' || entry.type === 'expense') && (
+            {mayDelete && (entry.type === 'sale' || entry.type === 'expense') && (
               <button
                 onClick={() => setConfirmDelId(entry)}
                 title="Delete"

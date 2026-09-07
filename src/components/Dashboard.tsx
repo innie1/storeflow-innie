@@ -1,4 +1,5 @@
 import { StoreData } from '@/types/store';
+import AttendantDashboard from '@/components/dashboards/AttendantDashboard';
 import OwnerDashboard from '@/components/dashboards/OwnerDashboard';
 import ManagerDashboard from '@/components/dashboards/ManagerDashboard';
 import CashierDashboard from '@/components/dashboards/CashierDashboard';
@@ -46,6 +47,11 @@ export default function Dashboard({ store, orders = [], onNavigate, currentUser 
       return <AccountantDashboard store={store} onNavigate={onNavigate} />;
     case 'supervisor':
       return <SupervisorDashboard store={store} onNavigate={onNavigate} />;
+    // Without this branch an attendant fell through to `default` and was
+    // handed the owner's dashboard: store health, lifetime revenue and
+    // "Log Expense", none of which is their job or their business.
+    case 'attendant':
+      return <AttendantDashboard store={store} onNavigate={onNavigate} userName={currentUser?.name} />;
     case 'custom':
       if (currentUser?.permissions?.reports) {
         return <OwnerDashboard store={store} orders={orders} onNavigate={onNavigate} />;

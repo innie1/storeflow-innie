@@ -1,6 +1,6 @@
 import type { StoreData, Product } from '@/types/store';
 
-export type ServicePricing = 'fixed' | 'per_piece' | 'per_kg' | 'per_load' | 'per_page' | 'per_hour' | 'per_session' | 'appointment' | 'quote';
+export type ServicePricing = 'fixed' | 'per_piece' | 'per_kg' | 'per_load' | 'per_bundle' | 'per_page' | 'per_hour' | 'per_session' | 'appointment' | 'quote';
 
 export interface ServicePricingOption {
   id: ServicePricing;
@@ -28,6 +28,9 @@ export function getServicePricingOptions(store: StoreData): ServicePricingOption
       return [
         { id: 'per_piece', label: 'Per piece', unitLabel: '/ piece' },
         { id: 'per_kg', label: 'Per KG', unitLabel: '/ kg' },
+        // What the customer hands over, priced whole: one bag, one basket.
+        // A load is a machine load, which is the shop's unit, not theirs.
+        { id: 'per_bundle', label: 'Per bundle / package', unitLabel: '/ bundle' },
         { id: 'per_load', label: 'Per load', unitLabel: '/ load' },
         { id: 'fixed', label: 'Fixed price', unitLabel: '' },
       ];
@@ -88,6 +91,7 @@ export function serviceUnitForPricing(pricing: ServicePricing): Product['unit'] 
     case 'per_piece': return 'pcs';
     case 'per_kg': return 'kg';
     case 'per_load': return 'load';
+    case 'per_bundle': return 'bundle';
     case 'per_page': return 'pcs';
     default: return undefined;
   }

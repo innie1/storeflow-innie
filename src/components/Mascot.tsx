@@ -112,9 +112,9 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   const [isManagerEnabled, setIsManagerEnabled] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [bubbleShiftX, setBubbleShiftX] = useState<number>(0);
-  const [bubblePosition, setBubblePosition] = useState<'above' | 'below'>('above');
-  // Slides the bubble down when "above" is the only safe side but runs off
-  // the top. Overlapping Flow's own head beats covering the heading below.
+  const [bubblePosition, setBubblePosition] = useState<'above' | 'below' | 'left' | 'right'>('above');
+  // Nudges the bubble vertically when it is standing beside Flow and would
+  // otherwise run off the top or bottom of the screen.
   const [bubbleShiftY, setBubbleShiftY] = useState<number>(0);
   const bubbleRef = useRef<HTMLDivElement>(null);
   /**
@@ -530,16 +530,37 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       if (spaceAbove >= bubbleHeight) {
         setBubblePosition('above');
         setBubbleShiftY(0);
-      } else if (spaceBelow >= bubbleHeight) {
+        return;
+      }
+      if (spaceBelow >= bubbleHeight) {
         setBubblePosition('below');
         setBubbleShiftY(0);
-      } else {
-        // Neither side fits. Go above and slide down only as far as staying on
-        // screen requires: the bubble then clips Flow's own head, which is his
-        // to cover, instead of the heading directly beneath him.
-        setBubblePosition('above');
-        setBubbleShiftY(Math.max(0, Math.ceil(bubbleHeight - spaceAbove)));
+        return;
       }
+
+      // Neither above nor below. This used to slide the bubble down over Flow
+      // himself — covering his face while he was talking, and sitting on top
+      // of whatever he was doing: heading a ball, listening, waving. He is the
+      // reason anyone looks at that corner, so he is the last thing to cover.
+      //
+      // Stand it beside him instead, on whichever side has room.
+      const roomRight = window.innerWidth - rect.right - padding;
+      const roomLeft = rect.left - padding;
+      if (roomRight >= bubbleWidth || roomLeft >= bubbleWidth) {
+        setBubblePosition(roomRight >= roomLeft ? 'right' : 'left');
+        // Centred on him, then pushed back on screen if that overflows.
+        const centred = rect.top + rect.height / 2 - bubbleHeight / 2;
+        const clamped = Math.min(
+          Math.max(centred, padding),
+          Math.max(padding, window.innerHeight - bubbleHeight - padding),
+        );
+        setBubbleShiftY(Math.round(clamped - centred));
+        return;
+      }
+
+      // Nowhere has room. Above, clipped, is still better than over his face.
+      setBubblePosition('above');
+      setBubbleShiftY(0);
     };
 
     // Scroll fires far faster than the layout can meaningfully change.
@@ -563,6 +584,8 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
   }, [message]);
 
   const isTalking = !!message;
+  /** Standing beside Flow rather than over or under him. */
+  const isBeside = bubblePosition === 'left' || bubblePosition === 'right';
 
   const isSleepingState = !isManagerEnabled || ((isSleeping || isClosingTime) && !wakeOverride);
   const isMorningBathing = !isClosingTime && currentMinutesTotal >= 360 && currentMinutesTotal <= 510 && (mood === 'idle' || mood === 'neutral');
@@ -1733,28 +1756,49 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
       {message && !isWalkingOff && (
         <div 
           ref={bubbleRef}
-          className={`absolute ${bubblePosition === 'above' ? 'bottom-full mb-3' : 'top-full mt-3'} left-1/2 z-50 pointer-events-none`}
+          className={`absolute z-50 pointer-events-none ${
+            bubblePosition === 'above' ? 'bottom-full mb-3 left-1/2'
+              : bubblePosition === 'below' ? 'top-full mt-3 left-1/2'
+              : bubblePosition === 'right' ? 'left-full ml-3 top-1/2'
+              : 'right-full mr-3 top-1/2'
+          }`}
           style={{
-            transform: `translate(calc(-50% + ${bubbleShiftX}px), ${bubbleShiftY}px)`,
+            transform: isBeside
+              // Beside him: centred on his middle, nudged only to stay on screen.
+              ? `translateY(calc(-50% + ${bubbleShiftY}px))`
+              : `translate(calc(-50% + ${bubbleShiftX}px), ${bubbleShiftY}px)`,
           }}
         >
           <div className="bg-slate-900 border border-border px-3 py-1.5 rounded-xl text-xs text-foreground font-display font-bold shadow-lg animate-bounce-subtle select-none whitespace-normal text-center min-w-[130px] max-w-[210px] relative">
             <p className="leading-snug">{message}</p>
-            {bubblePosition === 'above' ? (
-              <div 
-                className="absolute top-full -mt-1 w-2.5 h-2.5 bg-slate-900 border-r border-b border-border rotate-45" 
+            {bubblePosition === 'above' && (
+              <div
+                className="absolute top-full -mt-1 w-2.5 h-2.5 bg-slate-900 border-r border-b border-border rotate-45"
                 style={{
                   left: `clamp(10px, calc(50% - ${bubbleShiftX}px), calc(100% - 10px))`,
                   transform: 'translateX(-50%) rotate(45deg)'
                 }}
               />
-            ) : (
-              <div 
-                className="absolute bottom-full -mb-1 w-2.5 h-2.5 bg-slate-900 border-l border-t border-border rotate-45" 
+            )}
+            {bubblePosition === 'below' && (
+              <div
+                className="absolute bottom-full -mb-1 w-2.5 h-2.5 bg-slate-900 border-l border-t border-border rotate-45"
                 style={{
                   left: `clamp(10px, calc(50% - ${bubbleShiftX}px), calc(100% - 10px))`,
                   transform: 'translateX(-50%) rotate(45deg)'
                 }}
+              />
+            )}
+            {bubblePosition === 'right' && (
+              <div
+                className="absolute right-full -mr-1 w-2.5 h-2.5 bg-slate-900 border-l border-b border-border"
+                style={{ top: '50%', transform: 'translateY(-50%) rotate(45deg)' }}
+              />
+            )}
+            {bubblePosition === 'left' && (
+              <div
+                className="absolute left-full -ml-1 w-2.5 h-2.5 bg-slate-900 border-r border-t border-border"
+                style={{ top: '50%', transform: 'translateY(-50%) rotate(45deg)' }}
               />
             )}
           </div>

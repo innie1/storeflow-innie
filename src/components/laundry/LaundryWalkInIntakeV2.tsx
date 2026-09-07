@@ -94,6 +94,18 @@ const DUE_PRESETS: { label: string; hours: number }[] = [
   { label: '1 week', hours: 168 },
 ];
 
+/**
+ * Pricing modes billed by a quantity the attendant types, rather than by
+ * counting garments against the price list.
+ *
+ * Kept in one place because three call sites - the validation, the saved
+ * billing quantity and the field itself - have to agree, and they were three
+ * separate copies of the same condition.
+ */
+function isCountedUnit(pricing: string): boolean {
+  return pricing === 'per_kg' || pricing === 'per_load' || pricing === 'per_bundle';
+}
+
 /** A custom time the merchant picked, kept so it can be tapped again. */
 const CUSTOM_DUE_KEY = 'storeflow_laundry_custom_due_hours';
 
@@ -331,7 +343,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
     if (!validPhone(phone)) return showToast('Enter a valid customer phone number', 'error');
     if (!selectedService) return showToast('Add and select a laundry service first', 'error');
     if (clean.length === 0) return showToast('Record at least one item of clothing', 'error');
-    if ((pricing === 'per_kg' || pricing === 'per_load') && !(billingQty > 0)) return showToast('Enter the laundry quantity', 'error');
+    if (isCountedUnit(pricing) && !(billingQty > 0)) return showToast('Enter the laundry quantity', 'error');
     if (!Number.isFinite(total) || total < 0) return showToast('Enter a valid total price', 'error');
 
     const pricedGarments = pricing === 'per_piece'
@@ -356,7 +368,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
         serviceId: String(selectedService.id),
         serviceName: selectedService.name,
         pricing,
-        billingQuantity: pricing === 'per_kg' || pricing === 'per_load' ? billingQty : 1,
+        billingQuantity: isCountedUnit(pricing) ? billingQty : 1,
         total,
         notes: notes.trim(),
         garments: pricedGarments,
@@ -559,7 +571,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
               <div className="flex gap-2"><input value={customGarment} onChange={event => setCustomGarment(event.target.value)} onKeyDown={event => event.key === 'Enter' && addCustomGarment()} placeholder="Other clothing type" className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /><button onClick={addCustomGarment} type="button" className="px-4 h-11 rounded-xl border border-primary text-primary font-black text-xs shrink-0">Add</button></div>
             </section>
 
-            {(pricing === 'per_kg' || pricing === 'per_load') && <section className="text-left space-y-1"><label className="text-[10px] uppercase font-black text-muted-foreground">Quantity {pricingLabel.unitLabel}</label><input value={billingQuantity} onChange={event => { setBillingQuantity(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(false); }} inputMode="decimal" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /></section>}
+            {isCountedUnit(pricing) && <section className="text-left space-y-1"><label className="text-[10px] uppercase font-black text-muted-foreground">Quantity {pricingLabel.unitLabel}</label><input value={billingQuantity} onChange={event => { setBillingQuantity(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(false); }} inputMode="decimal" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /></section>}
 
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">4. Due &amp; price</p>

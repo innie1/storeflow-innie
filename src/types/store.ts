@@ -27,7 +27,7 @@ export interface Product {
   first_sale_at?: string;
   last_sold_at?: string;
   voiceAliases?: string[]; // alternate spoken names learned from Simple Mode voice corrections (e.g. "gary" -> Garri)
-  unit?: 'pcs' | 'kg' | 'liter' | 'load'; // how this item is sold — pcs (default) or by weight/volume/load for service-type stores
+  unit?: 'pcs' | 'kg' | 'liter' | 'load' | 'bundle'; // how this item is sold — pcs (default) or by weight/volume/load/bundle for service-type stores
   isService?: boolean; // true for laundry-style named services (Wash & Iron, Express Service) — no stock tracking, has a turnaround time instead
   turnaround?: string; // e.g. "Same day", "24 hours", "48 hours", "3 days", "1 week" — only meaningful when isService is true
   needsStockSetup?: boolean; // true when product was auto-created from a sale and hasn't had cost price / stock confirmed by the owner yet

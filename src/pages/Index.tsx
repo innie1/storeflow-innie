@@ -349,8 +349,11 @@ const isTabAllowed = (tabId: TabId, user: any) => {
     // so anyone recording laundry had to be made a manager — which also hands
     // them expenses, ROI, reports and the staff list. There was nothing in
     // between.
+    // 'history' is deliberately absent: it is the money ledger, with the
+    // takings for every period and a delete control on each row. Records
+    // covers everything an attendant actually needs to look up.
     case 'attendant':
-      return ['dashboard', 'orders', 'laundry-records', 'customers', 'history', 'communication-center'].includes(tabId);
+      return ['dashboard', 'orders', 'laundry-records', 'customers', 'communication-center'].includes(tabId);
     case 'inventory':
       return ['dashboard', 'inventory', 'suppliers', 'marketplace', 'wishlist', 'communication-center'].includes(tabId);
     case 'accountant':
@@ -2011,7 +2014,16 @@ export default function Index() {
             control stays lit, and it follows what the merchant actually does
             rather than counting clicks. It stops for good once the shop can
             trade, and never asks twice if it is closed. */}
-        {store && <SetupGuide store={store} tab={tab} onNavigate={next => setTab(next as TabId)} />}
+        {/* Owners only. The walk ends at the price list, which is the one
+            place a worker is not allowed - it dragged an attendant onto a
+            screen their role forbids and then held them there. */}
+        {store && currentUser?.role === 'owner' && (
+          <SetupGuide
+            store={store}
+            tab={tab}
+            onNavigate={next => { if (isTabAllowed(next as TabId, currentUser)) setTab(next as TabId); }}
+          />
+        )}
         {showReady && store && (
           <ReadyForBusiness
             storeName={store.storeName || 'Your store'}
@@ -2092,7 +2104,7 @@ export default function Index() {
               <PendingPayments store={store} onUpdate={setStore} />
             </div>
             <div className={tab === 'history' ? 'block' : 'hidden'}>
-              <SalesHistory store={store} onUpdate={setStore} />
+              <SalesHistory store={store} onUpdate={setStore} currentUser={currentUser} />
             </div>
             <div className={tab === 'roi' ? 'block' : 'hidden'}>
               <ROITracker store={store} onUpdate={setStore} />
