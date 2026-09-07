@@ -41,7 +41,7 @@ const TAB_REQUIREMENTS: Partial<Record<TabId, BusinessModule[]>> = {
   staff: ['staff'],
   expenses: ['finance'],
   pending: ['finance'],
-  'cash-drawer': ['finance'],
+  'cash-drawer': ['sales'],
   roi: ['finance'],
   history: ['reports'],
 };
@@ -99,6 +99,18 @@ export function isBusinessTabAllowed(store: Partial<StoreData> | null | undefine
   if (!required) return true;
   const modules = getBusinessTemplate(store).modules;
   return required.some(module => modules.includes(module));
+}
+
+/**
+ * Whether this shop serves customers over a till.
+ *
+ * A laundry, a barber and a tailor take money at a counter but never open a
+ * cash drawer, float it or tally a shift against it. The 'sales' module is
+ * what separates the two, and several screens were each keeping their own list
+ * of trade names to decide the same thing.
+ */
+export function runsATill(store?: Partial<StoreData> | null): boolean {
+  return hasBusinessModule(store, 'sales');
 }
 
 export function shouldRunRetailRestockEngine(store?: Partial<StoreData> | null): boolean {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { runsATill } from '@/lib/business-runtime';
 import { StoreData, StaffMember, Shift } from '@/types/store';
 import { 
   addStaffMember, deleteStaffMember, updateStaffMember, startShift, endShift 
@@ -16,8 +17,37 @@ interface StaffManagementProps {
   currentUser?: any;
 }
 
-/** Trades that run a counter till, and so have a cash drawer to open and tally. */
-const CASH_DRAWER_TRADES = ['provision', 'pharmacy', 'clothing', 'electronics', 'food', 'restaurant', 'gas'];
+/**
+ * What a named role can open, in the merchant's words.
+ *
+ * The four tick-boxes below the role are only ever read for a custom role —
+ * every named role's access is fixed in isTabAllowed and ignores them
+ * entirely. So ticking "Reports" for an attendant did nothing at all, which is
+ * a worse lie than not offering it. Named roles now show what they get instead
+ * of pretending to be configurable.
+ */
+function roleOpens(role: string, hasTill: boolean): string[] {
+  switch (role) {
+    case 'cashier':
+      return ['Sell and take payment', 'The cash drawer and their shift', 'Sales history, without the totals'];
+    case 'attendant':
+      return [
+        hasTill ? 'Take orders in and hand them back' : 'Record work coming in and hand it back',
+        'Move a job along to ready and collected',
+        'Look up a customer',
+      ];
+    case 'inventory':
+      return ['Stock and stock counts', 'Suppliers and restocking', 'The marketplace and wishlist'];
+    case 'supervisor':
+      return ['See all the work on the floor', 'The team list, without changing it', 'Customers and history'];
+    case 'accountant':
+      return ['Expenses and pending payments', 'Reports, ROI and the ledger', 'No changes to stock or prices'];
+    case 'manager':
+      return ['Everything except store settings', 'Can delete records and see all takings', 'Cannot change staff accounts'];
+    default:
+      return ['The dashboard and messages'];
+  }
+}
 
 export default function StaffManagement({ store, onUpdate, currentUser }: StaffManagementProps) {
   /**
@@ -29,7 +59,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
    * shown a provision shop's till before you can add a worker is what makes
    * the app feel like it is for somebody else's business.
    */
-  const runsATill = CASH_DRAWER_TRADES.includes(String(store.storeType || '').toLowerCase());
+  const hasTill = runsATill(store);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -41,7 +71,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   // Whichever role the shop is most likely to be adding: a till shop hires a
   // cashier, a laundry or a barber hires someone to take work in.
   const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'attendant' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>(
-    CASH_DRAWER_TRADES.includes(String(store.storeType || '').toLowerCase()) ? 'cashier' : 'attendant',
+    runsATill(store) ? 'cashier' : 'attendant',
   );
   
   // Permissions states
@@ -160,7 +190,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setName('');
     setPin('');
     setPhone('');
-    setRole(CASH_DRAWER_TRADES.includes(String(store.storeType || '').toLowerCase()) ? 'cashier' : 'attendant');
+    setRole(runsATill(store) ? 'cashier' : 'attendant');
     setSalesAccess(true);
     setInventoryAccess(false);
     setReportsAccess(false);
@@ -190,10 +220,10 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="font-display font-bold text-2xl text-foreground flex items-center gap-2">
-            <Briefcase className="w-6 h-6 text-yellow-500" /> {runsATill ? 'Staff Accounts & Shifts' : 'Staff Accounts'}
+            <Briefcase className="w-6 h-6 text-yellow-500" /> {hasTill ? 'Staff Accounts & Shifts' : 'Staff Accounts'}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {runsATill
+            {hasTill
               ? 'Add your workers, set what each can reach, and track cashier shifts.'
               : 'Add your workers and set what each of them can reach.'}
           </p>
@@ -210,7 +240,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Active Shift Tracker */}
-        {runsATill && (
+        {hasTill && (
         <div className="lg:col-span-1 bg-slate-950 border border-border p-5 rounded-2xl space-y-4 h-fit">
           <h3 className="font-display font-bold text-base text-foreground">Shift Controller</h3>
           
@@ -291,7 +321,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
             {staffMembers.length === 0 ? (
               <div className="text-center py-8 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
                 <p className="text-muted-foreground text-xs">
-              {runsATill
+              {hasTill
                 ? 'Nobody added yet. Add a worker to give them their own login and shift log.'
                 : 'Nobody added yet. Add a worker to give them their own login.'}
             </p>
@@ -320,8 +350,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-wrap text-[9px] font-mono text-muted-foreground">
-                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.sales ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>{runsATill ? 'Sales' : 'Orders'}</span>
-                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.inventory ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>{runsATill ? 'Inventory' : 'Price list'}</span>
+                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.sales ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>{hasTill ? 'Sales' : 'Orders'}</span>
+                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.inventory ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>{hasTill ? 'Inventory' : 'Price list'}</span>
                       <span className={`px-1.5 py-0.5 rounded ${s.permissions.reports ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Reports</span>
                       <span className={`px-1.5 py-0.5 rounded ${s.permissions.settings ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Settings</span>
                     </div>
@@ -332,7 +362,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
           </div>
 
           {/* Shift Records Tally — drawer floats, so only where there is a drawer. */}
-          {runsATill && (
+          {hasTill && (
           <div className="space-y-3.5">
             <h3 className="font-display font-bold text-base text-foreground">Completed Shift Tally</h3>
             {shifts.length === 0 ? (
@@ -416,15 +446,13 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                     {/* A laundry has no cashier and no stockroom, so leading
                         with those two made the list read like somebody else's
                         business. The trades that do keep them. */}
-                    {!runsATill && <option value="attendant">Attendant — takes work in and hands it back</option>}
-                    {runsATill && <option value="cashier">Cashier — sells and takes payment</option>}
-                    {runsATill && <option value="attendant">Attendant — takes work in and hands it back</option>}
-                    <option value="manager">Manager — everything except settings</option>
-                    <option value="supervisor">Supervisor — oversees staff</option>
-                    {runsATill && <option value="inventory">Inventory Staff — stock and suppliers</option>}
+                    {hasTill && <option value="cashier">Cashier — sells and takes payment</option>}
+                    <option value="attendant">Attendant — takes work in and hands it back</option>
+                    {hasTill && <option value="inventory">Inventory Staff — stock and suppliers</option>}
+                    <option value="supervisor">Supervisor — sees the work and the team</option>
                     <option value="accountant">Accountant — money and reports</option>
-                    <option value="admin">Admin</option>
-                    <option value="custom">Custom Role</option>
+                    <option value="manager">Manager — everything except settings</option>
+                    <option value="custom">Custom role — you choose</option>
                   </select>
                 </div>
 
@@ -446,44 +474,59 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
               {/* Permissions switches checklist */}
               <div className="space-y-2 text-left">
                 <label className="text-xs text-muted-foreground uppercase font-bold">What they can open</label>
-                <div className="grid grid-cols-2 gap-2.5 p-3 rounded-xl bg-surface-2 border border-border">
-                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={salesAccess} 
-                      onChange={e => setSalesAccess(e.target.checked)}
-                      className="rounded accent-yellow-500 w-4 h-4 border border-border"
-                    />
-                    {runsATill ? 'Sales access' : 'Take orders'}
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={inventoryAccess} 
-                      onChange={e => setInventoryAccess(e.target.checked)}
-                      className="rounded accent-yellow-500 w-4 h-4 border border-border"
-                    />
-                    {runsATill ? 'Inventory access' : 'Price list'}
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={reportsAccess} 
-                      onChange={e => setReportsAccess(e.target.checked)}
-                      className="rounded accent-yellow-500 w-4 h-4 border border-border"
-                    />
-                    {runsATill ? 'Reports & ROI access' : 'Reports'}
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={settingsAccess} 
-                      onChange={e => setSettingsAccess(e.target.checked)}
-                      className="rounded accent-yellow-500 w-4 h-4 border border-border"
-                    />
-                    {runsATill ? 'Store settings access' : 'Settings'}
-                  </label>
-                </div>
+                {role === 'custom' ? (
+                  <div className="grid grid-cols-2 gap-2.5 p-3 rounded-xl bg-surface-2 border border-border">
+                    <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={salesAccess}
+                        onChange={e => setSalesAccess(e.target.checked)}
+                        className="rounded accent-yellow-500 w-4 h-4 border border-border"
+                      />
+                      {hasTill ? 'Sales access' : 'Take orders'}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={inventoryAccess}
+                        onChange={e => setInventoryAccess(e.target.checked)}
+                        className="rounded accent-yellow-500 w-4 h-4 border border-border"
+                      />
+                      {hasTill ? 'Inventory access' : 'Price list'}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={reportsAccess}
+                        onChange={e => setReportsAccess(e.target.checked)}
+                        className="rounded accent-yellow-500 w-4 h-4 border border-border"
+                      />
+                      {hasTill ? 'Reports & ROI access' : 'Reports'}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settingsAccess}
+                        onChange={e => setSettingsAccess(e.target.checked)}
+                        className="rounded accent-yellow-500 w-4 h-4 border border-border"
+                      />
+                      {hasTill ? 'Store settings access' : 'Settings'}
+                    </label>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-surface-2 border border-border">
+                    <ul className="space-y-1">
+                      {roleOpens(role, hasTill).map(item => (
+                        <li key={item} className="text-xs text-foreground flex items-start gap-2">
+                          <span className="text-primary mt-0.5">•</span> {item}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
+                      Pick <b>Custom role</b> if you want to choose each one yourself.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

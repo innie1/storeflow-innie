@@ -356,13 +356,28 @@ const isTabAllowed = (tabId: TabId, user: any) => {
       return ['dashboard', 'orders', 'laundry-records', 'customers', 'communication-center'].includes(tabId);
     case 'inventory':
       return ['dashboard', 'inventory', 'suppliers', 'marketplace', 'wishlist', 'communication-center'].includes(tabId);
+    // The money roles need the ledger they report on. 'history' was missing,
+    // so an accountant could see expenses and ROI but not a single
+    // transaction behind them.
     case 'accountant':
-      return ['dashboard', 'expenses', 'roi', 'pending', 'cash-drawer', 'communication-center'].includes(tabId);
+      return ['dashboard', 'expenses', 'roi', 'pending', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
+    // A supervisor oversees the shop floor, so they need to see the floor.
+    // They had staff and a cash drawer and nothing else: on a laundry that is
+    // a read-only staff list and a till that does not exist, with no way to
+    // see a single order.
     case 'supervisor':
-      return ['dashboard', 'staff', 'cash-drawer', 'communication-center'].includes(tabId);
+      return ['dashboard', 'orders', 'laundry-records', 'customers', 'staff', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
+    // Offered in the staff form but never given a case here, so it fell to
+    // `default` and reached nothing at all - an admin signed in to an app with
+    // no tabs. Kept working as a manager for anyone already created with it;
+    // it is no longer offered for new staff.
+    case 'admin':
+      return tabId !== 'settings' && tabId !== 'activity-log';
     case 'custom':
       if (tabId === 'dashboard') return true;
-      if (['sales', 'history', 'cash-drawer'].includes(tabId) && user.permissions?.sales) return true;
+      // "Sales access" has to mean taking work in at a service business too,
+      // or a custom role there could reach nothing but the dashboard.
+      if (['sales', 'history', 'cash-drawer', 'orders', 'laundry-records', 'customers'].includes(tabId) && user.permissions?.sales) return true;
       if (['inventory', 'suppliers', 'marketplace', 'wishlist'].includes(tabId) && user.permissions?.inventory) return true;
       if (['roi', 'expenses', 'pending'].includes(tabId) && user.permissions?.reports) return true;
       if (tabId === 'settings' && user.permissions?.settings) return true;

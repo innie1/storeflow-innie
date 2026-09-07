@@ -1,4 +1,5 @@
 import { StoreData } from '@/types/store';
+import { runsATill } from '@/lib/business-runtime';
 import AttendantDashboard from '@/components/dashboards/AttendantDashboard';
 import OwnerDashboard from '@/components/dashboards/OwnerDashboard';
 import ManagerDashboard from '@/components/dashboards/ManagerDashboard';
@@ -37,6 +38,10 @@ export default function Dashboard({ store, orders = [], onNavigate, currentUser 
   }
 
   switch (role) {
+    // 'admin' is an older name for a manager that no code ever implemented,
+    // so it fell to `default` and got the owner's dashboard. Anyone already
+    // created with it now lands where a manager does.
+    case 'admin':
     case 'manager':
       return <ManagerDashboard store={store} onNavigate={onNavigate} />;
     case 'cashier':
@@ -45,8 +50,13 @@ export default function Dashboard({ store, orders = [], onNavigate, currentUser 
       return <InventoryDashboard store={store} onNavigate={onNavigate} />;
     case 'accountant':
       return <AccountantDashboard store={store} onNavigate={onNavigate} />;
+    // SupervisorDashboard is entirely shift floats and drawer tallies. A shop
+    // with no till has none of those, so it rendered an empty screen to
+    // somebody whose job is watching the floor; they get the work view there.
     case 'supervisor':
-      return <SupervisorDashboard store={store} onNavigate={onNavigate} />;
+      return runsATill(store)
+        ? <SupervisorDashboard store={store} onNavigate={onNavigate} />
+        : <AttendantDashboard store={store} onNavigate={onNavigate} userName={currentUser?.name} />;
     // Without this branch an attendant fell through to `default` and was
     // handed the owner's dashboard: store health, lifetime revenue and
     // "Log Expense", none of which is their job or their business.

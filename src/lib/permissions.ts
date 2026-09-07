@@ -35,14 +35,17 @@ export interface ActingUser {
 }
 
 const OWNER_ONLY: Capability[] = ['delete', 'money', 'prices', 'staff', 'settings'];
-const MANAGER: Capability[] = ['delete', 'money', 'prices', 'staff'];
+// Staff accounts are the owner's alone: StaffManagement gates every add, edit
+// and delete on the owner, so listing 'staff' here claimed a power a manager
+// has never actually had.
+const MANAGER: Capability[] = ['delete', 'money', 'prices'];
 
 /**
  * Roles that run the shop. Everything below this line does a job in it.
  */
 export function isManagement(user: ActingUser | null | undefined): boolean {
   const role = String(user?.role || '').toLowerCase();
-  return role === 'owner' || role === 'manager';
+  return role === 'owner' || role === 'manager' || role === 'admin';
 }
 
 export function can(user: ActingUser | null | undefined, capability: Capability): boolean {
@@ -53,7 +56,7 @@ export function can(user: ActingUser | null | undefined, capability: Capability)
   if (!role) return false;
 
   if (role === 'owner') return OWNER_ONLY.includes(capability);
-  if (role === 'manager') return MANAGER.includes(capability);
+  if (role === 'manager' || role === 'admin') return MANAGER.includes(capability);
 
   // An accountant is trusted with the figures and nothing else: they report on
   // the business, they do not reshape it, and they do not delete its records.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isBusinessTabAllowed } from '@/lib/business-runtime';
+import { isBusinessTabAllowed, runsATill } from '@/lib/business-runtime';
 import { readSource } from './helpers/source';
 
 /**
@@ -23,34 +23,36 @@ const staff = readSource('src/components/StaffManagement.tsx');
 const home = readSource('src/components/simple/BusinessSimpleHome.tsx');
 
 describe('the till only appears where there is a till', () => {
-  it('lists the trades that actually run a counter drawer', () => {
-    expect(staff).toContain('const CASH_DRAWER_TRADES');
-    for (const trade of ['provision', 'pharmacy', 'food', 'gas']) {
-      expect(staff, trade).toContain(`'${trade}'`);
-    }
+  it('asks the business template rather than keeping its own list of trades', () => {
+    // This screen used to carry its own CASH_DRAWER_TRADES array, a second
+    // copy of a judgement the templates already make. A drawer belongs to a
+    // till, and the 'sales' module is what says a shop has one.
+    expect(staff).toContain("import { runsATill } from '@/lib/business-runtime'");
+    expect(staff).toContain('const hasTill = runsATill(store)');
+    expect(staff).not.toContain('CASH_DRAWER_TRADES');
   });
 
-  it('does not count a laundry among them', () => {
-    const list = staff.slice(staff.indexOf('const CASH_DRAWER_TRADES'));
-    expect(list.slice(0, list.indexOf(';'))).not.toContain('laundry');
+  it('counts a provision shop as having a till, and a laundry as not', () => {
+    expect(runsATill({ storeType: 'provision', category: 'retail' } as any)).toBe(true);
+    expect(runsATill({ storeType: 'laundry', category: 'retail' } as any)).toBe(false);
   });
 
   it('hides the shift controller and the drawer tally without one', () => {
     // Both sections are gated on the same flag, so neither can come back on
     // its own the way the tally did.
-    expect(staff).toContain('{runsATill && (');
-    expect(staff.split('{runsATill && (').length - 1).toBe(2);
+    expect(staff).toContain('{hasTill && (');
+    expect(staff.split('{hasTill && (').length - 1).toBe(2);
   });
 
   it('never offers a cashier role to a shop with no till', () => {
-    // The default role is picked from the same list, so a laundry owner is
+    // The default role is picked from the same test, so a laundry owner is
     // not handed "cashier" before they touch the dropdown.
-    expect(staff).toContain("CASH_DRAWER_TRADES.includes");
-    expect(staff).toContain("'cashier' : 'attendant'");
+    expect(staff).toContain("runsATill(store) ? 'cashier' : 'attendant'");
+    expect(staff).toContain('{hasTill && <option value="cashier"');
   });
 
   it('says what the screen is in the words of the trade', () => {
-    expect(staff).toContain("{runsATill ? 'Staff Accounts & Shifts' : 'Staff Accounts'}");
+    expect(staff).toContain("{hasTill ? 'Staff Accounts & Shifts' : 'Staff Accounts'}");
     // Not "Registered Staff Members", not "app access modules".
     expect(staff).not.toContain('Registered Staff Members');
     expect(staff).not.toContain('app access modules');
@@ -58,7 +60,7 @@ describe('the till only appears where there is a till', () => {
   });
 
   it('does not talk about inventory to a shop that keeps none', () => {
-    expect(staff).toContain("{runsATill ? 'Inventory access' : 'Price list'}");
+    expect(staff).toContain("{hasTill ? 'Inventory access' : 'Price list'}");
   });
 });
 

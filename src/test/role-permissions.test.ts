@@ -127,3 +127,54 @@ describe('the screens actually ask', () => {
     expect(index).toContain('if (isTabAllowed(next as TabId, currentUser)) setTab(next as TabId)');
   });
 });
+
+describe('the audit of the staff area', () => {
+  const index = readSource('src/pages/Index.tsx');
+  const staff = readSource('src/components/StaffManagement.tsx');
+
+  it('gives admin a definition, instead of dropping it to no tabs at all', () => {
+    // 'admin' was offered in the staff form and had no case in isTabAllowed,
+    // so it hit `default: return false` and reached nothing whatsoever.
+    expect(index).toContain("case 'admin':");
+    expect(readSource('src/components/Dashboard.tsx')).toContain("case 'admin':");
+  });
+
+  it('no longer offers admin for new staff, since manager already means that', () => {
+    expect(staff).not.toContain('value="admin"');
+  });
+
+  it('lets a supervisor see the floor they supervise', () => {
+    // They had the staff list and a cash drawer and nothing else, which on a
+    // laundry is a read-only list and a till that does not exist.
+    expect(index).toContain("'dashboard', 'orders', 'laundry-records', 'customers', 'staff'");
+  });
+
+  it('gives the accountant the ledger they report on', () => {
+    expect(index).toContain("'expenses', 'roi', 'pending', 'history'");
+  });
+
+  it('lets a custom role take work in at a service business', () => {
+    // Without orders/records here, a custom role at a laundry could reach
+    // nothing but the dashboard however its boxes were ticked.
+    expect(index).toContain("'cash-drawer', 'orders', 'laundry-records', 'customers'");
+  });
+
+  it('keeps the cash drawer to shops that have a till', () => {
+    // A laundry has the finance module but never opens a drawer.
+    expect(readSource('src/lib/business-runtime.ts')).toContain("'cash-drawer': ['sales']");
+    expect(readSource('src/lib/business-runtime.ts')).toContain('export function runsATill');
+  });
+
+  it('stops offering tick-boxes that only a custom role reads', () => {
+    // Every named role's access is fixed in isTabAllowed and ignores
+    // permissions entirely, so ticking "Reports" for an attendant did nothing.
+    expect(staff).toContain("{role === 'custom' ? (");
+    expect(staff).toContain('function roleOpens');
+  });
+
+  it('does not promise a manager the staff list they cannot change', () => {
+    const perms = readSource('src/lib/permissions.ts');
+    expect(perms).toContain("const MANAGER: Capability[] = ['delete', 'money', 'prices'];");
+    expect(staff).toContain("currentUser?.role === 'owner'");
+  });
+});
