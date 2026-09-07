@@ -244,7 +244,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
           <h2 className="font-display font-black text-xl text-foreground">Laundry Price List</h2>
           <p className="text-xs text-muted-foreground mt-1">What you charge for each item, per service.</p>
         </div>
-        <button onClick={openNewService} className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs">
+        <button data-guide="add-service" onClick={openNewService} className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs">
           <Plus className="w-4 h-4" /> Service
         </button>
       </div>

@@ -1,4 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
+import SetupGuide from '@/components/SetupGuide';
+import ReadyForBusiness from '@/components/ReadyForBusiness';
+import { celebrationShown, guideProgress, markCelebrationShown, nextStep } from '@/lib/setup-guide';
 import { StoreData, TabId, Product } from '@/types/store';
 import FlowShirtFab from '@/components/FlowShirtFab';
 import { getBusinessTemplate, isBusinessTabAllowed, isServiceFirstBusiness, resolveBusinessType, shouldRunRetailRestockEngine } from '@/lib/business-runtime';
@@ -1054,6 +1057,18 @@ export default function Index() {
   const isGames = businessType === 'games';
   const isServiceFirst = isServiceFirstBusiness(store);
 
+  /**
+   * The shop crossing from "set up" to "open".
+   *
+   * Watched rather than triggered from the last step's button, so it fires
+   * however the merchant got there — through the guide, or on their own.
+   */
+  const [showReady, setShowReady] = useState(false);
+  useEffect(() => {
+    if (!store || celebrationShown()) return;
+    if (nextStep(store) === null && guideProgress(store).total > 0) setShowReady(true);
+  }, [store]);
+
   const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;
 
   const mainTabs = isGames
@@ -1492,6 +1507,7 @@ export default function Index() {
             return (
               <button
                 key={t.id}
+                data-guide={`tab-${t.id}`}
                 onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors relative ${
                   tab === t.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-surface-2'
@@ -1991,6 +2007,18 @@ export default function Index() {
           <FlowShirtFab store={store} onUpdate={setStore} onNavigate={handleNavigate} currentUser={currentUser} />
         )}
 
+        {/* A brand-new shop is walked through opening: the app dims, one
+            control stays lit, and it follows what the merchant actually does
+            rather than counting clicks. It stops for good once the shop can
+            trade, and never asks twice if it is closed. */}
+        {store && <SetupGuide store={store} tab={tab} onNavigate={next => setTab(next as TabId)} />}
+        {showReady && store && (
+          <ReadyForBusiness
+            storeName={store.storeName || 'Your store'}
+            onDone={() => { markCelebrationShown(); setShowReady(false); }}
+          />
+        )}
+
         <main className={`flex-1 ${store.uiMode === 'simple' && tab === 'dashboard' ? 'px-3 pt-1 pb-16 md:pt-2 space-y-3' : 'p-4 md:p-6 pb-20 md:pb-6 space-y-6'} w-full max-w-5xl lg:max-w-6xl mx-auto`} style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))' }}>
           {/* Back, on every screen that is not the dashboard.
               It used to sit in the header, wedged against the StoreFlow
@@ -2159,6 +2187,7 @@ export default function Index() {
               return (
                 <button
                   key={t.id}
+                  data-guide={`tab-${t.id}`}
                   onClick={() => { setTab(t.id); setFilterLowStock(t.id !== 'inventory' ? false : filterLowStock); setShowMoreMenu(false); }}
                   className={`flex-1 flex flex-col items-center justify-center py-1.5 px-0.5 text-[10px] transition-all relative cursor-pointer min-w-0 ${
                     isActive ? 'text-yellow-500 scale-105 font-bold' : 'text-muted-foreground hover:text-foreground'
