@@ -32,6 +32,10 @@ async function tick() {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // Pinned to mid-morning. With no opening hours configured Flow sleeps from
+  // 21:00, which is correct behaviour and made this file pass all day and
+  // fail every night - a test that only works before nine is not a test.
+  vi.setSystemTime(new Date('2026-09-07T11:00:00'));
   localStorage.clear();
 });
 

@@ -142,6 +142,8 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
   const [showEquipment, setShowEquipment] = useState(false);
   const [localRecords, setLocalRecords] = useState(() => getLocalLaundryRecords(store.accessCode));
   const [stageBusy, setStageBusy] = useState<string | null>(null);
+  /** A bundle about to be handed over with money still owed on it. */
+  const [collectGuard, setCollectGuard] = useState<DecoratedRecord | null>(null);
 
   useEffect(() => {
     const refresh = () => setLocalRecords(getLocalLaundryRecords(store.accessCode));
@@ -251,7 +253,23 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
     showToast(`₦${record.balance.toLocaleString()} received for ${record.tagCode}`);
   }, [store, onUpdate]);
 
-  const changeStage = useCallback(async (record: DecoratedRecord, stage: LaundryWorkflowStage) => {
+  /**
+   * Handing the clothes back is the last moment anyone can ask for the money.
+   *
+   * Nothing checked the balance here. The badge and the "Take" button were on
+   * the row, but at a busy counter nobody reads a row - you hand over the
+   * bundle, tap Collected, and find out days later that it was never paid in
+   * full. So the app asks, once, at the only moment it still matters.
+   *
+   * Deliberately not a hard block: a shop that cannot hand a regular their
+   * clothes because the app refuses is worse than the problem. "Hand over
+   * unpaid" stays available, and the balance stays on the books.
+   */
+  const changeStage = useCallback(async (record: DecoratedRecord, stage: LaundryWorkflowStage, force = false) => {
+    if (stage === 'collected' && record.balance > 0 && !force) {
+      setCollectGuard(record);
+      return;
+    }
     setStageBusy(record.key);
     try {
       const accepted = await updateLaundryOrderStage(store.accessCode, record.order, stage);
@@ -260,13 +278,78 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         return;
       }
       showToast(`${record.tagCode} marked ${LAUNDRY_WORKFLOW_STAGES.find(item => item.id === stage)?.label || stage}`);
+      // Marking it ready is when somebody should remember to ask, before the
+      // customer is standing there with their hand out for the bag.
+      if (stage === 'ready' && record.balance > 0) {
+        showToast(
+          `${record.customerName} still owes ₦${record.balance.toLocaleString()} — ask for it at collection.`,
+          'warning',
+        );
+      }
     } finally {
       setStageBusy(null);
     }
   }, [store.accessCode]);
 
+  const settleAndCollect = (record: DecoratedRecord) => {
+    collectPayment(record);
+    setCollectGuard(null);
+    changeStage(record, 'collected', true);
+  };
+
   return (
     <div className="space-y-4 pt-1">
+      {collectGuard && (
+        <div
+          className="fixed inset-0 z-[90] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+          onClick={() => setCollectGuard(null)}
+          role="dialog"
+          aria-label="Money still owed"
+        >
+          <div
+            className="w-full sm:max-w-sm rounded-3xl bg-card border border-border p-5 space-y-4 text-left"
+            onClick={event => event.stopPropagation()}
+          >
+            <div>
+              <p className="text-[10px] uppercase font-black tracking-wider text-destructive">Before you hand it over</p>
+              <h3 className="font-display font-black text-lg leading-tight mt-0.5">
+                {collectGuard.customerName} still owes ₦{collectGuard.balance.toLocaleString()}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                {collectGuard.tagCode} · {collectGuard.serviceName} · ₦{collectGuard.total.toLocaleString()} total
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => settleAndCollect(collectGuard)}
+                className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm active:scale-95 transition"
+              >
+                Take ₦{collectGuard.balance.toLocaleString()} and collect
+              </button>
+              <button
+                type="button"
+                onClick={() => { const record = collectGuard; setCollectGuard(null); changeStage(record, 'collected', true); }}
+                className="w-full h-11 rounded-xl bg-surface-2 border border-border font-display font-bold text-sm active:scale-95 transition"
+              >
+                Hand over unpaid
+              </button>
+              <button
+                type="button"
+                onClick={() => setCollectGuard(null)}
+                className="w-full h-10 rounded-xl text-xs font-display font-bold text-muted-foreground hover:text-foreground transition"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground leading-snug">
+              Handing it over unpaid keeps the ₦{collectGuard.balance.toLocaleString()} on their account and in Money Owed.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-wider text-primary font-black">Laundry workspace</p>
