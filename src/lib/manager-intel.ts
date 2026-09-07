@@ -1,4 +1,5 @@
 import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { getLowStockThreshold } from '@/lib/settings';
 import { getPendingSummary, isStockPurchase } from '@/lib/store-data';
 import type { AutoFixSpec } from '@/lib/auto-fix';
@@ -1045,6 +1046,9 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
 export function flowGreeting(store: StoreData): string {
   const hour = new Date().getHours();
   const name = store.storeName;
+  // A laundry does not "sell" and does not "log sales": it records work.
+  const isService = isServiceFirstBusiness(store);
+  const workNoun = isService ? 'work' : 'sales';
   const series7 = dailySeries(store, 7);
   const rev7 = series7.reduce((s, d) => s + d.revenue, 0);
   const todaySales = store.sales.filter(s => s.date.startsWith(new Date().toISOString().split('T')[0])).length;
@@ -1052,16 +1056,16 @@ export function flowGreeting(store: StoreData): string {
   const greetings: Record<string, string[]> = {
     morning: [
       `Good morning! Let's make today great for ${name}.`,
-      `Morning! Your store is ready — let's sell.`,
+      isService ? `Morning! ${name} is open — let's get to work.` : `Morning! Your store is ready — let's sell.`,
       `Rise and shine! It's a new day to grow ${name}.`,
     ],
     afternoon: [
       `Good afternoon. How's ${name} doing today?`,
       `Afternoon check-in — keep the momentum going!`,
-      todaySales > 0 ? `Nice work — ${todaySales} sale${todaySales > 1 ? 's' : ''} so far today. Keep it up!` : `Afternoon! No sales logged yet — let's change that.`,
+      todaySales > 0 ? `Nice work — ${todaySales} ${isService ? 'job' : 'sale'}${todaySales > 1 ? 's' : ''} so far today. Keep it up!` : `Afternoon! No ${workNoun} logged yet — let's change that.`,
     ],
     evening: [
-      rev7 > 0 ? `Evening! Your store made ₦${rev7.toLocaleString()} this week.` : `Evening! Record your sales so I can help you track progress.`,
+      rev7 > 0 ? `Evening! Your store made ₦${rev7.toLocaleString()} this week.` : `Evening! Record your ${workNoun} so I can help you track progress.`,
       `Good evening. Let's review how the day went.`,
     ],
     night: [
@@ -2389,9 +2393,59 @@ function matchStoreProducts(store: StoreData, keywords: string[], limit = 3): st
   return matches.slice(0, limit).map(p => p.name);
 }
 
+/**
+ * What a laundry's year actually looks like.
+ *
+ * The retail calendar told a laundry to stock stationery for back-to-school
+ * and offered it "Milk Sachet Roll, Biscuit Packs, Sugar Packet" as suggested
+ * items. The seasons are real; the goods are not its business.
+ */
+function serviceSeasonalPredictions(store: StoreData, month: number): SeasonalPrediction[] | null {
+  const trade = String(store.storeType || '').toLowerCase();
+  if (trade !== 'laundry') return null;
+
+  if (month === 7 || month === 8) {
+    return [{
+      periodName: 'Back-to-School Season',
+      expectedTrend: 'increase',
+      details: 'School uniforms come in together, often several sets per family.',
+      suggestedItems: ['Offer a per-uniform bundle price', 'Ask for phone numbers at drop-off'],
+      itemsFromYourCatalog: false,
+    }];
+  }
+  if (month === 10 || month === 11) {
+    return [{
+      periodName: 'Christmas Festive Period',
+      expectedTrend: 'increase',
+      details: 'Native wear, lace and party clothes arrive in the last two weeks, often at once.',
+      suggestedItems: ['Set a realistic collection date early', 'Take a deposit on big bundles'],
+      itemsFromYourCatalog: false,
+    }];
+  }
+  if (month === 2 || month === 3) {
+    return [{
+      periodName: 'Easter Festive Season',
+      expectedTrend: 'increase',
+      details: 'A smaller rush than Christmas, on the same kind of clothes.',
+      suggestedItems: ['Confirm collection times before the holiday'],
+      itemsFromYourCatalog: false,
+    }];
+  }
+  return [{
+    periodName: 'No Specific Seasonal Pattern Right Now',
+    expectedTrend: 'stable',
+    details: 'A steady stretch. Good time to settle uncollected bundles and chase old balances.',
+    suggestedItems: [],
+    itemsFromYourCatalog: false,
+  }];
+}
+
 export function getSeasonalPredictions(store: StoreData): SeasonalPrediction[] {
   const now = new Date();
   const currentMonth = now.getMonth(); // 0-11
+
+  const service = serviceSeasonalPredictions(store, currentMonth);
+  if (service) return service;
 
   const predictions: SeasonalPrediction[] = [];
 
@@ -2468,8 +2522,44 @@ export interface WeatherInsight {
   suggestedAction: string;
 }
 
+/**
+ * The same seasons, for a shop that sells work rather than goods.
+ *
+ * A laundry was being told that "rain can reduce foot traffic; pantry staples
+ * tend to hold steady" and to keep its coolers stocked. Weather matters
+ * enormously to a laundry — it decides how long clothes take to dry — so the
+ * season was the right thing to raise and entirely the wrong thing to say
+ * about it.
+ */
+function serviceWeatherInsight(store: StoreData, month: number): WeatherInsight | null {
+  const trade = String(store.storeType || '').toLowerCase();
+  if (trade !== 'laundry') return null;
+
+  if (month === 10 || month === 11 || month === 0 || month === 1) {
+    return {
+      weatherCondition: 'Harmattan Season (Nov–Feb)',
+      effect: 'Clothes dry fast, but dust means more of them come back dirty sooner.',
+      suggestedAction: 'Promise quicker turnaround while drying is easy, and expect repeat customers.',
+    };
+  }
+  if (month === 2 || month === 3) {
+    return {
+      weatherCondition: 'Hot Dry Season (Mar–Apr)',
+      effect: 'Drying is quickest now. Same-day work is realistic.',
+      suggestedAction: 'Offer a same-day or express price while the weather allows it.',
+    };
+  }
+  return {
+    weatherCondition: 'Rainy Season (May–Oct)',
+    effect: 'Clothes take much longer to dry, and promised days slip.',
+    suggestedAction: 'Promise later collection times than usual, and lean on machine drying.',
+  };
+}
+
 export function getWeatherInsights(store: StoreData): WeatherInsight {
   const month = new Date().getMonth(); // 0-11
+  const service = serviceWeatherInsight(store, month);
+  if (service) return service;
 
   if (month === 10 || month === 11 || month === 0 || month === 1) {
     // Nov–Feb: Harmattan / cool dry season

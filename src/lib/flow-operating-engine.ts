@@ -1,12 +1,15 @@
-import { Product, StoreData, TabId } from '@/types/store';
+import { Customer, Product, StoreData, TabId } from '@/types/store';
+import { customerBrief, customerRoundup, findCustomer, isServiceShop, serviceHelp, serviceList, serviceOverview, serviceWorkload } from '@/lib/flow-service-brain';
 import { fuzzyIntent } from '@/lib/flow-fuzzy-intent';
 import { inventoryIntelligence } from '@/lib/manager-intel';
 import { loadBrainMemory, resolveBrainAlias } from '@/lib/flow-brain-memory';
 
-export type OperatingIntent = 'sell'|'restock'|'add_product'|'undo'|'store_overview'|'inventory'|'sales'|'profit'|'best_sellers'|'slow_products'|'pricing'|'customers'|'expenses'|'finance'|'orders'|'improvement'|'why'|'recommendations'|'navigation'|'settings'|'product_lookup'|'help'|'unknown';
+export type OperatingIntent = 'sell'|'restock'|'add_product'|'undo'|'store_overview'|'inventory'|'sales'|'profit'|'best_sellers'|'slow_products'|'pricing'|'customers'|'customer_lookup'|'expenses'|'finance'|'orders'|'improvement'|'why'|'recommendations'|'navigation'|'settings'|'product_lookup'|'help'|'unknown';
 export interface ProductMatch { product: Product; score: number; matchedBy: 'exact'|'alias'|'word'|'fuzzy'|'learned'; }
 export interface FlowLineItem { product: ProductMatch; quantity: number; }
-export interface OperatingPlan { intent: OperatingIntent; confidence: number; items: FlowLineItem[]; product?: ProductMatch; quantity?: number; tab?: TabId; reason: string; }
+export interface OperatingPlan {
+  /** Set when the question was about one customer by name. */
+  customer?: Customer; intent: OperatingIntent; confidence: number; items: FlowLineItem[]; product?: ProductMatch; quantity?: number; tab?: TabId; reason: string; }
 
 const STOP = new Set(['the','a','an','my','me','please','product','products','item','items','store','stock','inventory','now','today','for','of','to','on','is','are','what','whats','show','tell','about','do','i','can','you','give','get','some','something','thing','things','with','and','or','in','at','from','this','that','how','much','many','does','did','was','were']);
 function norm(v:string){return v.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,' and ').replace(/[^a-z0-9%₦]+/g,' ').trim().replace(/\s+/g,' ');}
@@ -51,6 +54,13 @@ export function understand(store:StoreData,raw:string,lastProduct?:Product|null,
  // because the fuzzy fallback caught it later at 0.9. The natural phrasing
  // now matches the rule it was written for.
  if(/\b(?:how\s?s|how is|tell me about|overview of|overview)\s+(?:(?:my|the|our|your)\s+)?(?:store|business|shop)\b|\b(?:my|the|our)\s+(?:store|business|shop)\b.*\b(?:doing|performance|health)\b/.test(q))return{intent:'store_overview',confidence:.99,items:[],reason:'store question'};
+ // What the shop offers. A service shop has no "best sellers" to speak of
+ // until it has sales, but it always knows what it does.
+ if(/\b(?:what|which)\b.*\b(?:do i (?:offer|do)|services?|price list|charge for)\b|\bmy services?\b|\bservices? (?:list|i offer)\b/.test(q))return{intent:'best_sellers',confidence:.97,items:[],reason:'services offered'};
+ // Somebody by name. Checked before the product matcher, because a customer
+ // called "Peak" must not resolve to a tin of milk.
+ {const asksAboutPerson=/\b(?:who is|whos|tell me about|how much does|does|has|when did|what about)\b/.test(q)||/\b(?:owe|owes|owing|debt|last (?:came|visit)|history)\b/.test(q);
+  if(asksAboutPerson){const person=findCustomer(store,text);if(person)return{intent:'customer_lookup',confidence:.96,items:[],reason:'customer by name',customer:person};}}
  if(/\b(?:why|what caused|what is causing|reason)\b/.test(q))return{intent:'why',confidence:.97,items:[],reason:'reasoning question'};
  if(/\b(?:what should i|what do i need to|what needs to|what can i do|what would you recommend|how can i improve|what else should i)\b/.test(q))return{intent:'recommendations',confidence:.97,items:[],reason:'recommendation question'};
  if(/\b(?:what should i|what do i need to|which items should i|what needs to)\s+restock\b|\b(?:restock|buy)\b.*\b(?:recommend|suggest|need|list)\b/.test(q))return{intent:'inventory',confidence:.98,items:[],reason:'restock recommendation'};
@@ -92,14 +102,17 @@ export function storeAnalysis(store:StoreData){
 
 export function responseFor(store:StoreData,plan:OperatingPlan){const a=storeAnalysis(store),product=plan.product?.product;
  switch(plan.intent){
- case 'store_overview':{const health=Math.max(0,Math.min(100,Math.round(72+(a.revenue7>0?8:-8)-a.out.length*5-a.underpriced.length*2-a.dead.length)));return`Your store is at about **${health}/100**.\n\nRevenue (7 days): **${money(a.revenue7)}**\nProfit (7 days): **${money(a.profit7)}**\nInventory value: **${money(a.stockValue)}**\n${a.low.length+a.out.length?`⚠️ **${a.low.length+a.out.length} products** need restocking.`:'✅ Inventory looks stable.'}\n${a.salesChange>0?`📈 Sales pace is about **${a.salesChange}% higher** than your 30-day pace.`:a.salesChange<0?`📉 Sales pace is about **${Math.abs(a.salesChange)}% lower** than your 30-day pace.`:'Sales pace is stable.'}\n\n**Priority:** ${(()=>{const top=rankedRestocks(store)[0];return top?`restock ${top.product.name}`:a.underpriced.length?`review ${a.underpriced[0].name}'s price`:'keep monitoring sales and stock';})()}.`;}
- case 'inventory':{const list=[...a.out,...a.low].slice(0,8);return list.length?`Products needing stock attention:\n${list.map((p,i)=>`${i+1}. **${p.name}** — ${p.quantity} left`).join('\n')}\n\n${a.out.length?`🔴 ${a.out.length} out of stock.`:''}`:'Your active products are not currently below the low-stock threshold.';}
- case 'best_sellers':return a.top.length?`Best sellers over the last 30 days:\n${a.top.map((x,i)=>`${i+1}. **${x.product.name}** — ${x.units} units / ${money(x.revenue)}`).join('\n')}`:'I do not have enough sales history yet.';
+ // A laundry has no inventory value and no products to restock; what it has
+ // to account for is work in the shop, promised days and money owed.
+ case 'customer_lookup':return plan.customer?customerBrief(store,plan.customer):customerRoundup(store);
+ case 'store_overview':if(isServiceShop(store))return serviceOverview(store);{const health=Math.max(0,Math.min(100,Math.round(72+(a.revenue7>0?8:-8)-a.out.length*5-a.underpriced.length*2-a.dead.length)));return`Your store is at about **${health}/100**.\n\nRevenue (7 days): **${money(a.revenue7)}**\nProfit (7 days): **${money(a.profit7)}**\nInventory value: **${money(a.stockValue)}**\n${a.low.length+a.out.length?`⚠️ **${a.low.length+a.out.length} products** need restocking.`:'✅ Inventory looks stable.'}\n${a.salesChange>0?`📈 Sales pace is about **${a.salesChange}% higher** than your 30-day pace.`:a.salesChange<0?`📉 Sales pace is about **${Math.abs(a.salesChange)}% lower** than your 30-day pace.`:'Sales pace is stable.'}\n\n**Priority:** ${(()=>{const top=rankedRestocks(store)[0];return top?`restock ${top.product.name}`:a.underpriced.length?`review ${a.underpriced[0].name}'s price`:'keep monitoring sales and stock';})()}.`;}
+ case 'inventory':if(isServiceShop(store))return serviceWorkload(store);{const list=[...a.out,...a.low].slice(0,8);return list.length?`Products needing stock attention:\n${list.map((p,i)=>`${i+1}. **${p.name}** — ${p.quantity} left`).join('\n')}\n\n${a.out.length?`🔴 ${a.out.length} out of stock.`:''}`:'Your active products are not currently below the low-stock threshold.';}
+ case 'best_sellers':if(isServiceShop(store))return serviceList(store);return a.top.length?`Best sellers over the last 30 days:\n${a.top.map((x,i)=>`${i+1}. **${x.product.name}** — ${x.units} units / ${money(x.revenue)}`).join('\n')}`:'I do not have enough sales history yet.';
  case 'slow_products':return a.dead.length?`These products have stock but no recorded sale in 30 days:\n${a.dead.slice(0,8).map(p=>`• **${p.name}** — ${p.quantity} left`).join('\n')}\n\nI would pause new buying until they move.`:'Nothing is completely idle right now.';
  case 'sales':return product?`${product.name} sold **${(a.top.find(x=>x.product.id===product.id)?.units||0)} units** in the last 30 days.`:`Last 7 days: **${money(a.revenue7)} revenue** and **${money(a.profit7)} profit**. Last 30 days: **${money(a.revenue30)} revenue**.`;
  case 'profit':return product?`**${product.name}** sells for ${money(product.sellingPrice)} and costs ${money(product.costPrice)}. Gross profit is **${money(product.sellingPrice-product.costPrice)}** per unit (${product.sellingPrice?Math.round((product.sellingPrice-product.costPrice)/product.sellingPrice*100):0}% margin).`:`Last 7 days gross profit: **${money(a.profit7)}**.`;
  case 'pricing':return product?`**${product.name}** sells for ${money(product.sellingPrice)} with cost ${money(product.costPrice)}. Gross margin: **${product.sellingPrice?Math.round((product.sellingPrice-product.costPrice)/product.sellingPrice*100):0}%**.`:a.underpriced.length?`I found **${a.underpriced.length} thin-margin products**:\n${a.underpriced.slice(0,6).map(p=>`• ${p.name} — ${money(p.sellingPrice)} sell / ${money(p.costPrice)} cost`).join('\n')}`:'I do not see an obvious thin-margin pricing problem.';
- case 'customers':return`You have **${store.customers?.length||0} customers** and about **${money(a.debt)}** in outstanding balances.`;
+ case 'customers':if(isServiceShop(store))return customerRoundup(store);return`You have **${store.customers?.length||0} customers** and about **${money(a.debt)}** in outstanding balances.`;
  case 'expenses':return`Expenses in the last 30 days: **${money(a.expenses30)}**.`;
  case 'finance':{const investments=(store.investments||[]).reduce((n,x)=>n+x.amount,0);const loans=(store.loans||[]).filter(x=>x.status==='active').reduce((n,x)=>n+x.amount,0);const withdrawals=(store.withdrawals||[]).reduce((n,x)=>n+x.amount,0);return`Here's your current financial picture:\n\nRevenue (30 days): **${money(a.revenue30)}**\nGross profit (30 days): **${money(a.profit30)}**\nExpenses (30 days): **${money(a.expenses30)}**\nOutstanding customer balances: **${money(a.debt)}**\nInventory at cost: **${money(a.stockValue)}**\nInvestments recorded: **${money(investments)}**\nActive loans: **${money(loans)}**\nWithdrawals recorded: **${money(withdrawals)}**`;}
  case 'orders':{const orders=(store as any).orders||[];const pending=orders.filter((o:any)=>!['completed','cancelled','rejected'].includes(String(o.status||'').toLowerCase()));return orders.length?`You have **${pending.length} active order${pending.length===1?'':'s'}** and **${orders.length} total recorded orders**.\n\n${pending.slice(0,5).map((o:any,i:number)=>`${i+1}. **${o.customerName||o.customer?.name||'Customer'}** — ${o.status||'pending'}${o.total!=null?` — ${money(Number(o.total))}`:''}`).join('\n')}`:"I don't see any orders recorded in this store yet.";}
@@ -107,7 +120,7 @@ export function responseFor(store:StoreData,plan:OperatingPlan){const a=storeAna
  case 'recommendations':
  case 'improvement':return recommendations(store,a);
  case 'product_lookup':return product?`**${product.name}**\nStock: ${product.quantity}\nSelling: ${money(product.sellingPrice)}\nCost: ${money(product.costPrice)}\nGross profit: ${money(product.sellingPrice-product.costPrice)} per unit.`:'Tell me the product name and I will look it up.';
- case 'help':return`I can operate your store locally. Try:\n• **Sell 2 Indomie**\n• **Add 5 Milo**\n• **Undo that**\n• **How is my store?**\n• **What's low?**\n• **Show my best sellers**\n• **How much did I spend?**\n• **Show my finances**\n• **Do I have new orders?**\n• **Why are sales down?**\n• **What should I fix?**`;
+ case 'help':return serviceHelp(store);
  default:return'I can operate sales, stock, customers, settings and store analysis locally. Tell me what you want done.';
  }
 }

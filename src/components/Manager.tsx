@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { isServiceFirstBusiness, runsATill } from '@/lib/business-runtime';
 import { createPortal } from 'react-dom';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId, AutoPriceEvent } from '@/types/store';
 import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId, sumOperatingExpenses } from '@/lib/store-data';
@@ -1203,6 +1204,10 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
 
           {/* Quick Actions / Shortcuts */}
           <div className="grid grid-cols-2 gap-3">
+            {/* A laundry takes money at a counter but never opens a drawer,
+                floats it or tallies a shift against it. The tab is already
+                gone for those trades; this shortcut into it was left behind. */}
+            {runsATill(store) && (
             <button
               onClick={() => onNavigate?.('cash-drawer')}
               className="p-3 rounded-xl bg-card border border-border hover:border-primary/30 transition-all flex items-center justify-between text-left group shadow-card"
@@ -1216,6 +1221,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
               </div>
               <span className="text-muted-foreground group-hover:text-primary transition-colors font-bold text-sm">›</span>
             </button>
+            )}
 
             <button
               onClick={() => onNavigate?.('pending')}
@@ -1318,7 +1324,9 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
                     </div>
                   ))}
                 </div>
-              ) : <p className="text-xs text-muted-foreground">No requests yet. Tap + Record when a customer asks for something out of stock.</p>}
+              ) : <p className="text-xs text-muted-foreground">{isServiceFirstBusiness(store)
+                ? 'No requests yet. Tap + Record when a customer asks for something you do not offer.'
+                : 'No requests yet. Tap + Record when a customer asks for something out of stock.'}</p>}
             </div>
           )}
 
