@@ -7,6 +7,17 @@ import type { Product, Sale, StoreData } from '@/types/store';
  * wrong, or held a value it had computed, and then showed the merchant nothing.
  */
 
+/** Everything that ships and reads a product's fields. */
+const PRODUCT_READING_SOURCES = [
+  'src/lib/flow-operating-engine.ts',
+  'src/lib/flow-finance-actions.ts',
+  'src/lib/flow-smart-buy-list.ts',
+  'src/lib/manager-intel.ts',
+  'src/lib/store-data.ts',
+  'src/lib/flow-message-orders.ts',
+  'src/lib/flow-checkins.ts',
+];
+
 describe('a failed receipt scan says why it failed', () => {
   it('renders ocrError in the Receipt Scan tab, where the failure happens', () => {
     const src = readSource('src/components/Inventory.tsx');
@@ -69,10 +80,33 @@ describe('a product can carry a photo and a description', () => {
 });
 
 describe('restock suggestions read the field that holds the count', () => {
-  it('uses quantity, not the stock field that does not exist', () => {
-    const src = readSource('src/lib/flow-finance.ts');
-    expect(src).not.toContain('n(product.stock)');
-    expect(src).toContain('n(product.quantity)');
+  /**
+   * This used to read src/lib/flow-finance.ts, a module nothing in the shipped
+   * app imported. It guarded a real bug shape -- a product's count lives in
+   * `quantity`, and reading `stock` yields undefined, so every product looks
+   * out of stock -- but only in code no merchant reached, and it was deleted
+   * with the rest of that orphan cluster.
+   *
+   * Rewritten against everything that ships, and widened from one file to all
+   * of them: the invariant is that no module reads a `stock` field off a
+   * product, because Product has never had one.
+   */
+  it('no shipped module reads a stock field off a product', () => {
+    const offenders: string[] = [];
+    for (const file of PRODUCT_READING_SOURCES) {
+      const src = readSource(file);
+      // `stockValue`, `stockUnits`, `stockCountAudits` and friends are real
+      // names on other types; only a bare `.stock` read is the mistake.
+      for (const m of src.matchAll(/\b(?:product|p|item|prod)\.stock\b(?!\w)/g)) {
+        offenders.push(`${file}: ${m[0]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('the live restock ranking reads quantity', () => {
+    const engine = readSource('src/lib/flow-operating-engine.ts');
+    expect(engine).toContain('.quantity');
   });
 });
 
