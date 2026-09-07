@@ -355,13 +355,33 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                         </button>
                       )}
 
+                      {/* Straight to Ready.
+                          The chain is Received, Washing, Drying, Ironing,
+                          Folding, Ready — five taps to get a bundle to the
+                          point a customer can collect it. A shop that only
+                          washes and irons still had to walk through Drying and
+                          Folding, or find the stage dropdown and work out that
+                          it jumps. This is the stage that changes what anyone
+                          can do next, so it gets its own button. */}
+                      {!LAUNDRY_SETTLED_STAGES.includes(record.stage) && next?.id !== 'ready' && (
+                        <button
+                          onClick={() => changeStage(record, 'ready')}
+                          disabled={busy}
+                          className="h-10 px-4 rounded-xl border border-primary/40 bg-primary/10 text-primary text-xs font-display font-black disabled:opacity-40"
+                        >
+                          Ready
+                        </button>
+                      )}
+
                       {record.whatsapp && (
                         <button onClick={() => sendWhatsApp(record.order)} className="h-10 px-4 rounded-xl bg-emerald-600 text-white text-xs font-display font-black flex items-center justify-center gap-2">
                           <MessageCircle className="w-4 h-4" /> WhatsApp {record.whatsapp.kind === 'ready' ? 'Ready' : record.whatsapp.kind === 'reminder' ? 'Reminder' : record.whatsapp.kind === 'processing' ? 'Update' : record.whatsapp.kind === 'completed' ? 'Thank You' : 'Receipt'}
                         </button>
                       )}
 
-                      <label className="sr-only" htmlFor={`stage-${record.key}`}>Laundry status</label>
+                      {/* Was a bare dropdown showing the current stage, which
+                          reads as a label rather than something to change. */}
+                      <label className="text-[10px] text-muted-foreground font-bold" htmlFor={`stage-${record.key}`}>Stage</label>
                       <select
                         id={`stage-${record.key}`}
                         value={record.stage}
