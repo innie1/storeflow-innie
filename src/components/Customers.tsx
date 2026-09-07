@@ -190,12 +190,12 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="p-2 rounded-xl bg-surface-2 border border-border/80">
                     <p className="text-[10px] text-muted-foreground uppercase font-sans tracking-wide">Total Spent</p>
-                    <p className="font-display font-bold text-sm text-foreground mt-0.5">₦{c.totalPurchases.toLocaleString()}</p>
+                    <p className="font-display font-bold text-sm text-foreground mt-0.5">₦{Number(c.totalPurchases || 0).toLocaleString()}</p>
                   </div>
                   <div className="p-2 rounded-xl bg-surface-2 border border-border/80">
                     <p className="text-[10px] text-muted-foreground uppercase font-sans tracking-wide">Owed Debt</p>
                     <p className={`font-display font-bold text-sm mt-0.5 ${c.outstandingDebt > 0 ? 'text-destructive font-black' : 'text-success'}`}>
-                      ₦{c.outstandingDebt.toLocaleString()}
+                      ₦{Number(c.outstandingDebt || 0).toLocaleString()}
                     </p>
                   </div>
                   <div className="p-2 rounded-xl bg-surface-2 border border-border/80">
