@@ -47,6 +47,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
   const config = getLaundryPricingConfig(store);
   const [selectedServiceId, setSelectedServiceId] = useState(() => String(allServices.find(service => !service.discontinued)?.id || allServices[0]?.id || ''));
   const [customGarment, setCustomGarment] = useState('');
+  const [customGarmentPrice, setCustomGarmentPrice] = useState('');
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [editingGarment, setEditingGarment] = useState<string | null>(null);
@@ -114,15 +115,29 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
       return;
     }
 
+    // A price typed here is what the item costs on every treatment, so a
+    // merchant setting up a shop does not have to add the item, find it in the
+    // grid, and type the price a second time. Blank falls back to the
+    // treatment's own base price, which is what used to happen always.
+    const typed = Number(customGarmentPrice);
+    const hasTyped = customGarmentPrice.trim() !== '' && Number.isFinite(typed) && typed >= 0;
+
     let next = addLaundryGarmentType(store, clean);
     for (const service of allServices) {
-      next = setLaundryGarmentPrice(next, String(service.id), clean, Math.max(0, Number(service.sellingPrice) || 0));
+      const price = hasTyped ? Math.round(typed) : Math.max(0, Number(service.sellingPrice) || 0);
+      next = setLaundryGarmentPrice(next, String(service.id), clean, price);
     }
     next = seedLaundryGarmentPrices(next);
     persist(next);
     setCustomGarment('');
+    setCustomGarmentPrice('');
     setShowGarmentPrices(true);
-    showToast(`${clean} added to every laundry treatment`, 'success');
+    showToast(
+      hasTyped
+        ? `${clean} added at ₦${Math.round(typed).toLocaleString()}`
+        : `${clean} added to every laundry treatment`,
+      'success',
+    );
     window.setTimeout(() => {
       const rowId = 'laundry-garment-' + clean.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       document.getElementById(rowId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -397,8 +412,25 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
             <p className="text-[11px] text-muted-foreground mt-1">e.g. Agbada, Suit, Duvet, Jeans.</p>
             <div className="flex gap-2 mt-3">
               <input value={customGarment} onChange={event => setCustomGarment(event.target.value)} onKeyDown={event => event.key === 'Enter' && addGarment()} placeholder="Clothing type" className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-border bg-surface-2 text-sm outline-none focus:border-primary" />
-              <button onClick={addGarment} className="px-4 rounded-xl border border-primary text-primary text-xs font-black">Add</button>
+              {/* The price used to be a second trip: add the item, hunt for it
+                  in the grid, type the price there. */}
+              <div className="flex items-center gap-1 px-3 rounded-xl border border-border bg-surface-2 w-28 shrink-0">
+                <span className="text-sm font-black">₦</span>
+                <input
+                  inputMode="numeric"
+                  value={customGarmentPrice}
+                  onChange={event => setCustomGarmentPrice(event.target.value.replace(/[^0-9]/g, ''))}
+                  onKeyDown={event => event.key === 'Enter' && addGarment()}
+                  placeholder="Price"
+                  className="w-full min-w-0 bg-transparent py-2.5 text-sm outline-none"
+                />
+              </div>
+              <button onClick={addGarment} className="px-4 rounded-xl border border-primary text-primary text-xs font-black shrink-0">Add</button>
             </div>
+            <p className="text-[10px] text-muted-foreground mt-2">
+              Leave the price blank to use each treatment's own price. How it is charged —
+              per item, per kg or per load — is set on the treatment itself.
+            </p>
           </section>
         </>
       )}

@@ -25,16 +25,21 @@ export default function LaundryEquipmentPanel({ store, orders, onUpdate }: Props
   const equipment = store.laundryEquipment || [];
 
   const usage = useMemo(() => {
-    const result = new Map<string, { jobs: number; active: number; lastUsed: string | null }>();
-    for (const item of equipment) result.set(item.id, { jobs: 0, active: 0, lastUsed: null });
-    result.set('manual:hand-wash', { jobs: 0, active: 0, lastUsed: null });
-    result.set('manual:sun-dry', { jobs: 0, active: 0, lastUsed: null });
+    const result = new Map<string, { jobs: number; active: number; lastUsed: string | null; pieces: number }>();
+    for (const item of equipment) result.set(item.id, { jobs: 0, active: 0, lastUsed: null, pieces: 0 });
+    result.set('manual:hand-wash', { jobs: 0, active: 0, lastUsed: null, pieces: 0 });
+    result.set('manual:sun-dry', { jobs: 0, active: 0, lastUsed: null, pieces: 0 });
     for (const order of orders || []) {
       const meta = order?.service_metadata && typeof order.service_metadata === 'object' ? order.service_metadata : {};
       const assignments = [meta.wash_method_id, meta.dry_method_id].filter(Boolean).map(String);
       for (const id of new Set(assignments)) {
-        const current = result.get(id) || { jobs: 0, active: 0, lastUsed: null };
+        const current = result.get(id) || { jobs: 0, active: 0, lastUsed: null, pieces: 0 };
         current.jobs += 1;
+        // Jobs alone hides the difference between a machine doing single
+        // shirts and one doing duvets by the dozen.
+        current.pieces += Number(meta.garment_count || 0)
+          || (order.order_items || []).filter((line: any) => !line?.metadata?.charge_line)
+               .reduce((sum: number, line: any) => sum + Number(line.quantity || 0), 0);
         if (['washing', 'drying'].includes(String(order.workflow_stage || '').toLowerCase())) current.active += 1;
         const usedAt = String(order.updated_at || order.created_at || '');
         if (usedAt && (!current.lastUsed || new Date(usedAt) > new Date(current.lastUsed))) current.lastUsed = usedAt;
@@ -80,14 +85,39 @@ export default function LaundryEquipmentPanel({ store, orders, onUpdate }: Props
         <button type="button" onClick={add} className="rounded-xl bg-primary p-3 text-sm font-black text-primary-foreground">Save machine</button>
       </div>}
 
+      {/* Which machine is actually carrying the shop. The panel listed every
+          machine with its own counts and left the comparison to the reader. */}
+      {(() => {
+        const ranked = allRows
+          .map(item => ({ item, stats: usage.get(item.id) }))
+          // Machines only. Hand-wash and sun-dry are how work gets done
+          // without a machine, so crowning one of them answers a different
+          // question than "which machine is doing the work".
+          .filter(entry => !entry.item.id.startsWith('manual:') && (entry.stats?.jobs || 0) > 0)
+          .sort((a, b) => (b.stats!.jobs - a.stats!.jobs) || (b.stats!.pieces - a.stats!.pieces));
+        if (ranked.length < 2) return null;
+        const top = ranked[0];
+        const totalJobs = ranked.reduce((sum, entry) => sum + entry.stats!.jobs, 0);
+        const share = Math.round((top.stats!.jobs / totalJobs) * 100);
+        return (
+          <div className="mt-3 rounded-xl border border-primary/25 bg-primary/5 p-3">
+            <p className="text-xs">
+              <b>{top.item.name}</b> is your busiest machine — {top.stats!.jobs} of {totalJobs} jobs ({share}%)
+              {top.stats!.pieces > 0 ? `, ${top.stats!.pieces} pieces` : ''}.
+            </p>
+          </div>
+        );
+      })()}
+
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {allRows.map(item => {
-          const stats = usage.get(item.id) || { jobs: 0, active: 0, lastUsed: null };
+          const stats = usage.get(item.id) || { jobs: 0, active: 0, lastUsed: null, pieces: 0 };
           const builtIn = item.id.startsWith('manual:');
           return <div key={item.id} className={`rounded-xl border p-3 ${item.active ? 'border-border bg-surface-2' : 'border-border opacity-50'}`}>
             <div className="flex items-start justify-between gap-2"><div><p className="text-sm font-black">{item.name}</p><p className="text-[10px] text-muted-foreground">{item.label}{'capacity' in item && item.capacity ? ` · ${item.capacity}` : ''}</p></div>{!builtIn && <button type="button" title={item.active ? 'Disable' : 'Enable'} onClick={() => toggle(item.id)} className="rounded-lg border border-border p-2"><Power className="h-3.5 w-3.5" /></button>}</div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-center"><div className="rounded-lg bg-background p-2"><p className="text-lg font-black">{stats.jobs}</p><p className="text-[9px] uppercase text-muted-foreground">Jobs assigned</p></div><div className="rounded-lg bg-background p-2"><p className="text-lg font-black">{stats.active}</p><p className="text-[9px] uppercase text-muted-foreground">In use now</p></div></div>
-            {stats.lastUsed && <p className="mt-2 text-[10px] text-muted-foreground">Last activity: {new Date(stats.lastUsed).toLocaleString()}</p>}
+            {stats.pieces > 0 && <p className="mt-2 text-[10px] text-muted-foreground">{stats.pieces} pieces handled</p>}
+            {stats.lastUsed && <p className="mt-0.5 text-[10px] text-muted-foreground">Last used {new Date(stats.lastUsed).toLocaleDateString()}</p>}
           </div>;
         })}
       </div>

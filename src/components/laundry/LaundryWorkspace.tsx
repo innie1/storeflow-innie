@@ -479,7 +479,10 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
             </button>
             {showEquipment && (
               <div className="px-4 pb-4">
-                <LaundryEquipmentPanel store={store} orders={visibleRecords.map(record => record.order)} onUpdate={onUpdate} />
+                {/* Every record, not visibleRecords. Machine usage was counted from
+                    whatever the search box and filter tabs happened to be showing,
+                    so filtering to Ready made most machines look idle. */}
+                <LaundryEquipmentPanel store={store} orders={decorated.map(record => record.order)} onUpdate={onUpdate} />
               </div>
             )}
           </div>
