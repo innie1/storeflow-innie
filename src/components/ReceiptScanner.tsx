@@ -451,7 +451,9 @@ export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, 
       );
 
       if (existing && existing.quantity >= item.quantity) {
-        updated = recordSale(updated, existing.id, item.quantity);
+        // The one sale path that dropped the actor: every other caller
+        // passes it, so a scanned receipt was the only sale nobody owned.
+        updated = recordSale(updated, existing.id, item.quantity, currentUser?.name, currentUser?.role);
         sold++;
       } else if (existing) {
         showToast(`Not enough stock for ${item.name}`, 'error');

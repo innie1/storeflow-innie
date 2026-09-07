@@ -2107,7 +2107,7 @@ export default function Index() {
             </div>
             <div className={tab === 'laundry-records' ? 'block' : 'hidden'}>
               {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (
-                <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} />
+                <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} currentUser={currentUser} />
               )}
             </div>
             <div className={tab === 'inventory' ? 'block' : 'hidden'}>

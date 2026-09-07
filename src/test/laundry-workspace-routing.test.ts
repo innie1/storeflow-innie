@@ -56,7 +56,9 @@ describe('laundry workspace routing', () => {
     expect(source).toContain("import LaundryWorkspace from '@/components/laundry/LaundryWorkspace';");
     expect(source).toContain("tab === 'orders'");
     expect(source).toContain("tab === 'laundry-records'");
-    expect(source).toContain('<LaundryWorkspace store={store} orders={orders} onUpdate={setStore} />');
+    // currentUser rides along so every record taken in is stamped with who
+    // took it; without it nothing on the record says who did the work.
+    expect(source).toContain('<LaundryWorkspace store={store} orders={orders} onUpdate={setStore} currentUser={currentUser} />');
   });
 
   it('keeps Orders named Orders and adds a second Laundry Records main-menu tab', () => {

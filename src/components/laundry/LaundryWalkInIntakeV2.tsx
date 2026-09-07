@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { attribution } from '@/lib/recorded-by';
 import { checkNewMilestone, markMilestoneReached, type MilestoneDef } from '@/lib/milestones';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import QRCode from 'qrcode';
@@ -29,6 +30,8 @@ import { filterGarments, findSimilarGarment } from '@/lib/garment-match';
 interface Props {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
+  /** Stamped onto the record, so the shop can tell who took the bundle in. */
+  currentUser?: { name?: string; role?: string } | null;
 }
 
 const OPEN_SIGNAL = 'storeflow:open-laundry-intake';
@@ -151,7 +154,7 @@ function activePreset(promisedFor: string, chips: { hours: number }[]): number |
   return null;
 }
 
-export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
+export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser }: Props) {
   const services = useMemo(
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
     [store.products],
@@ -400,6 +403,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate }: Props) {
         total,
         notes: notes.trim(),
         garments: pricedGarments,
+        ...attribution(currentUser),
       });
 
       // Money first, so a failure here cannot leave a bundle recorded as paid

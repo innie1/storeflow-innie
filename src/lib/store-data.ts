@@ -5,6 +5,7 @@ import {
   CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
   DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent, PurchaseOrderRecord,
   BalanceAdjustment, SavingsGoal } from '@/types/store';
+import { attribution } from '@/lib/recorded-by';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
 import { generateStoreUrl } from '@/lib/qr-code';
@@ -1339,6 +1340,9 @@ export function recordSale(
     date: new Date().toISOString(),
     transactionId,
     channel: 'in_store',
+    // The actor reached this function already; it was spent on a log line and
+    // thrown away, so nothing could say who sold what.
+    ...attribution({ name: actorName, role: actorRole }),
   };
 
   const newQty = Math.max(0, Math.round((product.quantity - qtyDeduction) * 100) / 100);

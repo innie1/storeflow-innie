@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { byContributor, recordedByLabel } from '@/lib/recorded-by';
+import RecordedByFilter from '@/components/RecordedByFilter';
 import type { StoreData } from '@/types/store';
 import LaundryWalkInIntake from '@/components/laundry/LaundryWalkInIntake';
 import {
@@ -33,6 +35,8 @@ interface Props {
   store: StoreData;
   orders: any[];
   onUpdate: (store: StoreData) => void;
+  /** Stamped onto every record taken in, so the shop can tell who did what. */
+  currentUser?: { name?: string; role?: string } | null;
 }
 
 type RecordFilter = 'all' | 'active' | 'ready' | 'overdue' | 'collected';
@@ -90,6 +94,8 @@ function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     key: String(order._localClientRef || order.client_ref || order.id || ''),
     tagCode: String(meta.tag_code || meta.receipt_number || order.order_number || '—').toUpperCase(),
     customerName: order.customer_name || 'Walk-in Customer',
+    recordedByName: meta.recorded_by_name || undefined,
+    recordedByRole: meta.recorded_by_role || undefined,
     customerPhone: order.customer_phone || '',
     serviceName: meta.service_name || items.find((item: any) => item?.metadata?.charge_line)?.item_name || 'Laundry service',
     garmentSummary: meta.garment_summary
@@ -128,7 +134,7 @@ function urgencyRank(record: DecoratedRecord): number {
   return 2;
 }
 
-export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
+export default function LaundryWorkspace({ store, orders, onUpdate, currentUser }: Props) {
   const [view, setView] = useState<LaundryWorkspaceView>(() => consumeLaundryWorkspaceView());
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -181,6 +187,9 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
     collected: decorated.filter(record => record.stage === 'collected').length,
   }), [decorated]);
 
+  /** Whose work to list. null is everyone. */
+  const [recordedBy, setRecordedBy] = useState<string | null>(null);
+
   const visibleRecords = useMemo(() => {
     const matchesFilter = (record: DecoratedRecord) => {
       if (filter === 'overdue') return record.overdue;
@@ -190,7 +199,9 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
       return true;
     };
 
-    return decorated
+    // Person, then stage, then text. Choosing a person narrows the list; it
+    // never decides who is allowed to look.
+    return byContributor(decorated, recordedBy)
       .filter(record => matchesFilter(record) && (!debouncedSearch || record.searchText.includes(debouncedSearch)))
       .sort((a, b) => {
         const rank = urgencyRank(a) - urgencyRank(b);
@@ -202,7 +213,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
         }
         return b.createdAt - a.createdAt;
       });
-  }, [decorated, filter, debouncedSearch]);
+  }, [decorated, filter, debouncedSearch, recordedBy]);
 
   const changeView = (next: LaundryWorkspaceView) => {
     requestLaundryWorkspace(next);
@@ -279,10 +290,11 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
         // No explainer card here: the tag rule is stated on the receipt at the
         // moment it matters, and this screen exists to record a bundle, not to
         // describe one.
-        <LaundryWalkInIntake store={store} onUpdate={onUpdate} />
+        <LaundryWalkInIntake store={store} onUpdate={onUpdate} currentUser={currentUser} />
       ) : (
         <div className="space-y-3">
-          <div className="relative h-11 rounded-xl bg-surface-2 border border-border flex items-center px-3.5">
+          <div className="flex gap-2">
+          <div className="relative h-11 flex-1 min-w-0 rounded-xl bg-surface-2 border border-border flex items-center px-3.5">
             <Search className="w-4 h-4 text-muted-foreground shrink-0" />
             <input
               value={search}
@@ -295,6 +307,8 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                 <X className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             )}
+          </div>
+          <RecordedByFilter records={decorated} selected={recordedBy} onSelect={setRecordedBy} />
           </div>
 
           {/* One row, equal columns. Five separate pills wrapped onto a second
@@ -381,6 +395,12 @@ export default function LaundryWorkspace({ store, orders, onUpdate }: Props) {
                             : <span className="px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>}
                         </div>
                         <p className="font-display font-black text-sm mt-2">{record.customerName}</p>
+                        {recordedByLabel(record) && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Taken in by <span className="text-foreground font-semibold">{recordedByLabel(record)}</span>
+                            {record.recordedByRole ? ` · ${record.recordedByRole}` : ''}
+                          </p>
+                        )}
                         {record.customerPhone && <p className="text-xs text-muted-foreground mt-0.5">{record.customerPhone}</p>}
                       </div>
                       <div className="sm:text-right shrink-0">

@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
 import { canDelete, canSeeMoney, type ActingUser } from '@/lib/permissions';
+import { byContributor, recordedByLabel } from '@/lib/recorded-by';
+import RecordedByFilter from '@/components/RecordedByFilter';
 import { startOfDay, startOfWeek, startOfMonth, subDays } from 'date-fns';
 import { StoreData, Sale, Expense, Restock } from '@/types/store';
 import { clearSales, deleteSale, deleteExpense, getTrash } from '@/lib/store-data';
@@ -37,6 +39,9 @@ interface HistoryEntry {
   amountColor: string;
   icon: React.ReactNode;
   raw: Sale | Sale[] | Restock | Expense;
+  /** Carried up from the record so the list can label and filter by it. */
+  recordedByName?: string;
+  recordedByRole?: string;
 }
 
 const DATE_RANGE_LABELS: Record<DateRange, string> = {
@@ -61,6 +66,8 @@ function dateRangeWindow(range: DateRange): { start: number | null; end: number 
 
 export default function SalesHistory({ store, onUpdate, currentUser }: SalesHistoryProps) {
   const mayDelete = canDelete(currentUser);
+  /** Whose work to show. null is everyone; the list is never hidden by role. */
+  const [recordedBy, setRecordedBy] = useState<string | null>(null);
   const maySeeMoney = canSeeMoney(currentUser);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<HistoryFilter>('all');
@@ -165,6 +172,8 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
           amountColor: 'text-primary',
           icon: isOnlineOrder ? <Package className="w-4 h-4" /> : <Wallet className="w-4 h-4" />,
           raw: group,
+          recordedByName: firstSale.recordedByName,
+          recordedByRole: firstSale.recordedByRole,
         });
       });
 
@@ -179,6 +188,8 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
           amountColor: 'text-primary',
           icon: <Wallet className="w-4 h-4" />,
           raw: s,
+          recordedByName: s.recordedByName,
+          recordedByRole: s.recordedByRole,
         });
       });
     }
@@ -278,13 +289,16 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
     };
   }, [entries]);
 
+  // Person, then date, then text. Choosing a person narrows what is listed,
+  // never who may see it: the whole point is telling the work apart.
+  const peopleEntries = byContributor(periodEntries, recordedBy);
   const filtered = search
-    ? periodEntries.filter(e =>
+    ? peopleEntries.filter(e =>
         e.title.toLowerCase().includes(search.toLowerCase()) ||
         e.subtitle.toLowerCase().includes(search.toLowerCase()) ||
         e.id.toLowerCase().includes(search.toLowerCase())
       )
-    : periodEntries;
+    : peopleEntries;
 
   const handleClear = () => {
     if (store.sales.length === 0) return;
@@ -423,6 +437,7 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
 
       {/* Search + actions */}
       <div className="flex flex-wrap gap-2">
+        <RecordedByFilter records={periodEntries} selected={recordedBy} onSelect={setRecordedBy} />
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <input
@@ -510,6 +525,13 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
               <p className="font-display font-semibold text-sm text-foreground truncate">{entry.title}</p>
               <div className="flex flex-wrap items-center gap-2 mt-0.5">
                 <span className="text-[11px] text-muted-foreground truncate">{entry.subtitle}</span>
+                {/* Who did it. Name and the role they held at the time, so a
+                    promotion later does not rewrite what happened. */}
+                {recordedByLabel(entry) && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-2 border border-border text-muted-foreground shrink-0">
+                    {recordedByLabel(entry)}{entry.recordedByRole ? ` · ${entry.recordedByRole}` : ''}
+                  </span>
+                )}
                 {entry.type === 'sale' && (
                   <span className="text-[9px] font-mono px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded font-semibold">
                     #{entry.id.substring(0, 8).toUpperCase()}

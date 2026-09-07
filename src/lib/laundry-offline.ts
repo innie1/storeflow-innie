@@ -56,6 +56,15 @@ export interface LocalLaundryRecord {
   syncedAt?: string;
   cloudOrderId?: string;
   lastSyncError?: string;
+  /**
+   * Who put this record in, and the role they held at the time.
+   *
+   * The actor was already passed into recordSale and used only for the
+   * activity log, so once a shop had two people working nothing on the record
+   * itself said who did it.
+   */
+  recordedByName?: string;
+  recordedByRole?: string;
 }
 
 export interface NewLocalLaundryRecord {
@@ -75,6 +84,8 @@ export interface NewLocalLaundryRecord {
   total: number;
   notes?: string;
   garments: LaundryGarmentSelection[];
+  recordedByName?: string;
+  recordedByRole?: string;
 }
 
 export const LAUNDRY_LOCAL_CHANGED_EVENT = 'storeflow:laundry-local-changed';
@@ -171,6 +182,8 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     workflowStage: 'received',
     stageUpdatedAt: now,
     syncStatus: 'pending',
+    recordedByName: input.recordedByName,
+    recordedByRole: input.recordedByRole,
   };
 
   writeLocalLaundryRecords(accessCode, [record, ...existing]);
@@ -235,6 +248,10 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     garment_count: record.pieceCount,
     garment_summary: record.garmentSummary,
     garment_lines: record.garments,
+    // Carried into the order shape too, or the workspace - which rebuilds
+    // every row from an order - loses who took the bundle in.
+    recorded_by_name: record.recordedByName,
+    recorded_by_role: record.recordedByRole,
     receipt_number: record.tagCode,
     tag_code: record.tagCode,
     instructions: record.notes,

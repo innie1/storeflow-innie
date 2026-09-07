@@ -83,6 +83,15 @@ export interface Sale {
   paymentMethod?: PaymentMethod;
   transactionId?: string;
   channel?: 'in_store' | 'online_order'; // where the sale came from — powers the Online vs In-Store split in Sales History
+  /**
+   * Who put this record in, and the role they held at the time.
+   *
+   * The actor was already passed into recordSale and used only for the
+   * activity log, so once a shop had two people working nothing on the record
+   * itself said who did it.
+   */
+  recordedByName?: string;
+  recordedByRole?: string;
 }
 
 export interface PendingPaymentItem {
