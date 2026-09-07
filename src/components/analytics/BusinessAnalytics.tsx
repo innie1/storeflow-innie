@@ -128,7 +128,19 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       returning: returning.length,
       customerRows,
       outstanding,
-      walkIns: filteredOrders.filter(order => order.walkIn).length,
+      // Merging the two sources answered "how much work came in" and lost
+      // "where from" - which is the question an owner running a storefront
+      // alongside a counter actually needs.
+      counter: {
+        orders: filteredOrders.filter(order => order.walkIn).length,
+        revenue: successful.filter(order => order.walkIn)
+          .reduce((sum, order) => sum + Number(order.total || order.amount || order.subtotal || 0), 0),
+      },
+      online: {
+        orders: filteredOrders.filter(order => !order.walkIn).length,
+        revenue: successful.filter(order => !order.walkIn)
+          .reduce((sum, order) => sum + Number(order.total || order.amount || order.subtotal || 0), 0),
+      },
       recentScans: [...filteredScans].sort((a, b) => dateOf(b) - dateOf(a)).slice(0, 20),
     };
   }, [store, range]);
@@ -205,6 +217,44 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
             {[[isService ? 'Found you online' : 'Scanned storefront', analytics.scans], [isService ? 'Brought work in' : 'Placed an order', analytics.orders], [isService ? 'Handed back' : 'Successful purchase', analytics.successful], ['Bought more than once', analytics.returning]].map(([label, value]) => <div key={label as string} className="flex items-center justify-between gap-3"><span className="text-sm text-muted-foreground">{label}</span><b className="font-display">{value as number}</b></div>)}
           </div>
         </section>
+        {(analytics.online.orders > 0 || analytics.scans > 0) && (
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <h2 className="font-display font-bold">Where the work comes from</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isService ? 'Brought to the counter, or booked through your storefront.' : 'Sold in the shop, or ordered through your storefront.'}
+            </p>
+            <div className="space-y-3 mt-4">
+              {([
+                [isService ? 'At the counter' : 'In the shop', analytics.counter.orders, analytics.counter.revenue],
+                ['Through your storefront', analytics.online.orders, analytics.online.revenue],
+              ] as [string, number, number][]).map(([label, count, revenue]) => {
+                const total = analytics.counter.orders + analytics.online.orders;
+                const share = total > 0 ? Math.round((count / total) * 100) : 0;
+                return (
+                  <div key={label}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm text-foreground">{label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        <b className="text-foreground">{count}</b> · {money(revenue)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 mt-1.5 rounded-full bg-surface-2 overflow-hidden">
+                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${share}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {analytics.scans > 0 && (
+              <p className="text-[11px] text-muted-foreground mt-4 leading-snug">
+                {analytics.scans} scan{analytics.scans === 1 ? '' : 's'} turned into {analytics.online.orders} order
+                {analytics.online.orders === 1 ? '' : 's'}
+                {analytics.scans > 0 ? ` — ${Math.round((analytics.online.orders / analytics.scans) * 100)}% of the people who looked.` : '.'}
+              </p>
+            )}
+          </section>
+        )}
+
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-display font-bold">What this means</h2>
           <div className="space-y-3 mt-4 text-sm text-muted-foreground">

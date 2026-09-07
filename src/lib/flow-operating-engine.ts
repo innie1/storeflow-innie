@@ -1,10 +1,11 @@
 import { Customer, Product, StoreData, TabId } from '@/types/store';
 import { customerBrief, customerRoundup, findCustomer, isServiceShop, serviceHelp, serviceList, serviceOverview, serviceWorkload } from '@/lib/flow-service-brain';
+import { shopProfileBrief } from '@/lib/flow-shop-profile';
 import { fuzzyIntent } from '@/lib/flow-fuzzy-intent';
 import { inventoryIntelligence } from '@/lib/manager-intel';
 import { loadBrainMemory, resolveBrainAlias } from '@/lib/flow-brain-memory';
 
-export type OperatingIntent = 'sell'|'restock'|'add_product'|'undo'|'store_overview'|'inventory'|'sales'|'profit'|'best_sellers'|'slow_products'|'pricing'|'customers'|'customer_lookup'|'expenses'|'finance'|'orders'|'improvement'|'why'|'recommendations'|'navigation'|'settings'|'product_lookup'|'help'|'unknown';
+export type OperatingIntent = 'sell'|'restock'|'add_product'|'undo'|'store_overview'|'inventory'|'sales'|'profit'|'best_sellers'|'slow_products'|'pricing'|'customers'|'customer_lookup'|'shop_profile'|'expenses'|'finance'|'orders'|'improvement'|'why'|'recommendations'|'navigation'|'settings'|'product_lookup'|'help'|'unknown';
 export interface ProductMatch { product: Product; score: number; matchedBy: 'exact'|'alias'|'word'|'fuzzy'|'learned'; }
 export interface FlowLineItem { product: ProductMatch; quantity: number; }
 export interface OperatingPlan {
@@ -54,6 +55,8 @@ export function understand(store:StoreData,raw:string,lastProduct?:Product|null,
  // because the fuzzy fallback caught it later at 0.9. The natural phrasing
  // now matches the rule it was written for.
  if(/\b(?:how\s?s|how is|tell me about|overview of|overview)\s+(?:(?:my|the|our|your)\s+)?(?:store|business|shop)\b|\b(?:my|the|our)\s+(?:store|business|shop)\b.*\b(?:doing|performance|health)\b/.test(q))return{intent:'store_overview',confidence:.99,items:[],reason:'store question'};
+ // What Flow has worked out about this shop in particular.
+ if(/\b(?:what have you (?:learned|noticed)|what do you know about (?:my|the|this) (?:shop|store|business)|my patterns?|how does (?:my|this) (?:shop|store|business) (?:run|behave))\b/.test(q))return{intent:'shop_profile',confidence:.97,items:[],reason:'shop patterns'};
  // What the shop offers. A service shop has no "best sellers" to speak of
  // until it has sales, but it always knows what it does.
  if(/\b(?:what|which)\b.*\b(?:do i (?:offer|do)|services?|price list|charge for)\b|\bmy services?\b|\bservices? (?:list|i offer)\b/.test(q))return{intent:'best_sellers',confidence:.97,items:[],reason:'services offered'};
@@ -104,6 +107,7 @@ export function responseFor(store:StoreData,plan:OperatingPlan){const a=storeAna
  switch(plan.intent){
  // A laundry has no inventory value and no products to restock; what it has
  // to account for is work in the shop, promised days and money owed.
+ case 'shop_profile':return shopProfileBrief(store);
  case 'customer_lookup':return plan.customer?customerBrief(store,plan.customer):customerRoundup(store);
  case 'store_overview':if(isServiceShop(store))return serviceOverview(store);{const health=Math.max(0,Math.min(100,Math.round(72+(a.revenue7>0?8:-8)-a.out.length*5-a.underpriced.length*2-a.dead.length)));return`Your store is at about **${health}/100**.\n\nRevenue (7 days): **${money(a.revenue7)}**\nProfit (7 days): **${money(a.profit7)}**\nInventory value: **${money(a.stockValue)}**\n${a.low.length+a.out.length?`⚠️ **${a.low.length+a.out.length} products** need restocking.`:'✅ Inventory looks stable.'}\n${a.salesChange>0?`📈 Sales pace is about **${a.salesChange}% higher** than your 30-day pace.`:a.salesChange<0?`📉 Sales pace is about **${Math.abs(a.salesChange)}% lower** than your 30-day pace.`:'Sales pace is stable.'}\n\n**Priority:** ${(()=>{const top=rankedRestocks(store)[0];return top?`restock ${top.product.name}`:a.underpriced.length?`review ${a.underpriced[0].name}'s price`:'keep monitoring sales and stock';})()}.`;}
  case 'inventory':if(isServiceShop(store))return serviceWorkload(store);{const list=[...a.out,...a.low].slice(0,8);return list.length?`Products needing stock attention:\n${list.map((p,i)=>`${i+1}. **${p.name}** — ${p.quantity} left`).join('\n')}\n\n${a.out.length?`🔴 ${a.out.length} out of stock.`:''}`:'Your active products are not currently below the low-stock threshold.';}
