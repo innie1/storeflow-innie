@@ -1091,6 +1091,55 @@ export default function Index() {
   const isServiceFirst = isServiceFirstBusiness(store);
 
   /**
+   * Keep the signed-in session in step with the staff record.
+   *
+   * storeflow_active_user is a snapshot taken at sign-in, so changing
+   * somebody's role in Staff Accounts did nothing to the device they were
+   * already using: a promotion never arrived, and — worse — a demotion never
+   * took effect. The role is re-read from the staff list here, so an owner can
+   * change a role instead of deleting the account and making a new one.
+   *
+   * A staff member whose record has gone is signed out rather than left
+   * holding whatever access their stale snapshot claims.
+   */
+  useEffect(() => {
+    if (!store || !currentUser?.id) return;
+    const record = (store.staffMembers || []).find(member => member.id === currentUser.id);
+
+    if (!record) {
+      localStorage.removeItem('storeflow_active_user');
+      clearSession();
+      setCurrentUser(null);
+      setStore(null);
+      return;
+    }
+
+    const samePermissions = JSON.stringify(record.permissions || {}) === JSON.stringify(currentUser.permissions || {});
+    if (record.role === currentUser.role && record.name === currentUser.name && samePermissions) return;
+
+    const refreshed = {
+      id: record.id,
+      name: record.name,
+      role: record.role,
+      permissions: record.permissions,
+    };
+    localStorage.setItem('storeflow_active_user', JSON.stringify(refreshed));
+    setCurrentUser(refreshed);
+  }, [store, currentUser?.id, currentUser?.role, currentUser?.name]);
+
+  /**
+   * Never sit on a screen this role cannot open.
+   *
+   * Nothing checked. A tab reached any other way — a stale hash, a shortcut, a
+   * role changed underneath someone — rendered its screen anyway, which is how
+   * an attendant could see the price list flash up before anything moved it.
+   */
+  useEffect(() => {
+    if (!store || !currentUser) return;
+    if (tab !== 'dashboard' && !isTabAllowed(tab, currentUser)) setTab('dashboard');
+  }, [tab, currentUser, store]);
+
+  /**
    * The shop crossing from "set up" to "open".
    *
    * Watched rather than triggered from the last step's button, so it fires

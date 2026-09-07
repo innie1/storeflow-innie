@@ -187,3 +187,26 @@ describe('the audit of the staff area', () => {
     expect(staff).toContain("currentUser?.role === 'owner'");
   });
 });
+
+describe('changing a role reaches the device already using it', () => {
+  const index = readSource('src/pages/Index.tsx');
+
+  it('re-reads the role from the staff record instead of trusting the session', () => {
+    // storeflow_active_user is a snapshot taken at sign-in, so changing a role
+    // in Staff Accounts did nothing to the phone already signed in: the
+    // promotion never arrived, and the demotion never took effect.
+    expect(index).toContain('(store.staffMembers || []).find(member => member.id === currentUser.id)');
+    expect(index).toContain("localStorage.setItem('storeflow_active_user', JSON.stringify(refreshed))");
+  });
+
+  it('signs out a staff member whose record has been deleted', () => {
+    expect(index).toContain("localStorage.removeItem('storeflow_active_user')");
+    expect(index).toContain('if (!record) {');
+  });
+
+  it('moves anyone off a screen their role cannot open', () => {
+    // Nothing checked, so a tab reached any other way rendered its screen
+    // anyway - which is how a worker saw the price list flash up.
+    expect(index).toContain("if (tab !== 'dashboard' && !isTabAllowed(tab, currentUser)) setTab('dashboard')");
+  });
+});
