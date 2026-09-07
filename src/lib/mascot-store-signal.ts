@@ -62,7 +62,15 @@ export function readStoreSignal(): MascotStoreSignal {
 
     const key = `storeflow_${String(code).toUpperCase()}`;
     const now = Date.now();
-    if (cached && cached.key === key && now - cached.at < CACHE_TTL_MS) {
+    /*
+     * A clock that moves backwards used to freeze this cache rather than
+     * expire it: the age came out negative, which is "less than a minute", so
+     * the stale signal was served indefinitely. It happens when a phone
+     * corrects its time or changes timezone, and it is why two test files that
+     * pin the clock leaked state into each other.
+     */
+    const age = now - cached?.at;
+    if (cached && cached.key === key && age >= 0 && age < CACHE_TTL_MS) {
       return cached.signal;
     }
 

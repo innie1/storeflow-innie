@@ -124,7 +124,30 @@ export interface PendingPayment {
   saleIds: string[];
 }
 
-export type ExpenseCategory = 'Restock' | 'Rent' | 'Utilities' | 'Salaries' | 'Transport' | 'Other';
+/**
+ * 'Consumables' is soap, bleach, starch, diesel - what a service shop uses up
+ * doing the work. It is deliberately NOT 'Restock': a restock converts cash
+ * into goods the shop still owns, so it is kept out of profit. Detergent is
+ * gone once the wash is done, which makes it a real cost of trading.
+ */
+export type ExpenseCategory = 'Restock' | 'Consumables' | 'Rent' | 'Utilities' | 'Salaries' | 'Transport' | 'Other';
+
+/** A supply a service shop buys and uses up. */
+export interface SupplyItem {
+  id: string;
+  name: string;
+  /** What it is measured in - bag, litre, keg, carton. */
+  unit?: string;
+  /**
+   * Raised by whoever notices the shelf is empty, cleared when it is bought.
+   * Reporting this must never require permission to see money: the attendant
+   * who runs out of starch is rarely the person who pays for it.
+   */
+  lowSince?: string;
+  lowReportedBy?: string;
+  lastPurchasedAt?: string;
+  lastPurchaseCost?: number;
+}
 
 /**
  * A merchant correcting a tracked balance against what they actually hold.
@@ -772,6 +795,8 @@ export interface StoreData {
   products: Product[];
   sales: Sale[];
   restocks?: Restock[];
+  /** Soap, starch, diesel - what a service shop uses up. */
+  supplies?: SupplyItem[];
   plannedRestocks?: PlannedRestock[];
   expenses?: Expense[];
   recurringBills?: RecurringBill[];

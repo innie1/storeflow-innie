@@ -75,14 +75,29 @@ describe('falling back to storage', () => {
       profile: { closingTime: '18:00' } as any,
     })));
 
-    // jsdom exposes getItem on the localStorage instance, not the prototype.
-    const spy = vi.spyOn(localStorage, 'getItem');
-    // Ten mascots asking at once is the real case — a screen can hold several.
-    for (let i = 0; i < 10; i++) readStoreSignal();
-    const storeReads = spy.mock.calls.filter(c => c[0] === 'storeflow_FLOWT1').length;
-    spy.mockRestore();
+    expect(readStoreSignal().closingTime).toBe('18:00');
 
-    expect(storeReads).toBe(1);
+    /*
+     * Counted getItem calls through a spy before, which asserted the mechanism
+     * rather than the behaviour and quietly stopped working: jsdom builds
+     * Storage on a Proxy, so in some environments the spy never intercepts and
+     * the count is zero however many reads happen. It passed locally and
+     * failed on CI.
+     *
+     * Changing the record underneath asks the real question instead. A caller
+     * that re-parses sees 19:00; one served from the shared cache still says
+     * 18:00, and that is the whole point of the cache.
+     */
+    localStorage.setItem('storeflow_FLOWT1', JSON.stringify(storeWith({
+      profile: { closingTime: '19:00' } as any,
+    })));
+
+    // Ten mascots asking at once is the real case — a screen can hold several.
+    for (let i = 0; i < 10; i++) expect(readStoreSignal().closingTime).toBe('18:00');
+
+    // And it is a cache, not a freeze: dropped, the next read is fresh.
+    invalidateStoreSignal();
+    expect(readStoreSignal().closingTime).toBe('19:00');
   });
 
   it('survives a corrupt record instead of taking the screen down', () => {

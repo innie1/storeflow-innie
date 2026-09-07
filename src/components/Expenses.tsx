@@ -3,7 +3,7 @@ import { StoreData, ExpenseCategory, Expense, Restock, RecurringBill } from '@/t
 import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
-import { Banknote, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { Banknote, Droplets, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 
 interface ExpensesProps {
@@ -13,6 +13,7 @@ interface ExpensesProps {
 
 const CATEGORY_ICON: Record<ExpenseCategory, LucideIcon> = {
   Restock: Package,
+  Consumables: Droplets,
   Rent: Home,
   Utilities: Lightbulb,
   Salaries: Users,

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import Mascot from '@/components/Mascot';
+import { invalidateStoreSignal } from '@/lib/mascot-store-signal';
 
 /**
  * Flow's shelf glance, which until now nothing could trigger.
@@ -37,6 +38,8 @@ beforeEach(() => {
   // fail every night - a test that only works before nine is not a test.
   vi.setSystemTime(new Date('2026-09-07T11:00:00'));
   localStorage.clear();
+  // The signal cache lives at module scope and outlives a single file.
+  invalidateStoreSignal();
 });
 
 afterEach(() => {
