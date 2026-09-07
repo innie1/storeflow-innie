@@ -1,9 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle, Mic, Send, Shirt, X } from 'lucide-react';
 import type { Product, StoreData, TabId } from '@/types/store';
 import { generateId, recordSale, saveStore } from '@/lib/store-data';
 import { isBusinessTabAllowed, resolveBusinessType } from '@/lib/business-runtime';
-import { requestLaundryWorkspace } from '@/lib/laundry-workspace';
 import { createFlowShirtCode, parseFlowShirtText, type FlowShirtDraftItem } from '@/lib/flow-shirt';
 import { showToast } from '@/components/Toast';
 import SimpleVoiceSell from '@/components/simple/SimpleVoiceSell';
@@ -20,6 +19,13 @@ interface Props {
 const FLOW_HOLD_MS = 3000;
 const FLOW_MESSAGE_EVENT = 'storeflow:open-flow-messages';
 
+/** Where the merchant last parked the chat button, per device. */
+const FAB_POSITION_KEY = 'storeflow_flow_fab_pos';
+const FAB_SIZE = 56; // w-14
+const FAB_MARGIN = 12;
+/** Below this, a wobble is still a tap. */
+const FAB_DRAG_THRESHOLD = 6;
+
 export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser }: Props) {
   const businessType = resolveBusinessType(store);
   const canSellProducts = businessType !== 'games' && isBusinessTabAllowed(store, 'sales');
@@ -29,6 +35,85 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
   const [draft, setDraft] = useState<FlowShirtDraftItem[]>([]);
   const [holding, setHolding] = useState(false);
   const holdTimerRef = useRef<number | null>(null);
+
+  /**
+   * Where the merchant has parked the button.
+   *
+   * It was pinned to the bottom-right corner, on top of whatever happened to
+   * be there — a total, a row of actions, the last item in a list. Now it can
+   * be dragged anywhere and stays where it is put, per device.
+   */
+  const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const raw = localStorage.getItem(FAB_POSITION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') return parsed;
+    } catch { /* private mode, or something else wrote the key */ }
+    return null;
+  });
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const draggedRef = useRef(false);
+
+  /** Keep the whole button on screen, whatever the viewport is now. */
+  const clampFab = (x: number, y: number) => ({
+    x: Math.min(Math.max(x, FAB_MARGIN), Math.max(FAB_MARGIN, window.innerWidth - FAB_SIZE - FAB_MARGIN)),
+    y: Math.min(Math.max(y, FAB_MARGIN), Math.max(FAB_MARGIN, window.innerHeight - FAB_SIZE - FAB_MARGIN)),
+  });
+
+  // A phone that rotates, or a window that is resized, must not strand it
+  // off-screen where it can never be dragged back.
+  useEffect(() => {
+    if (!fabPos) return;
+    const onResize = () => setFabPos(current => (current ? clampFab(current.x, current.y) : current));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [fabPos]);
+
+  const onFabPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+    draggedRef.current = false;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    beginHold();
+  };
+
+  const onFabPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const start = dragRef.current;
+    if (!start) return;
+    const nextX = event.clientX - start.dx;
+    const nextY = event.clientY - start.dy;
+    if (!draggedRef.current) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const moved = Math.hypot(nextX - rect.left, nextY - rect.top);
+      if (moved < FAB_DRAG_THRESHOLD) return;
+      // Past the threshold this is a drag, not a press: stop the hold-to-talk
+      // timer before it fires under the merchant's finger.
+      draggedRef.current = true;
+      setDragging(true);
+      endHold();
+    }
+    setFabPos(clampFab(nextX, nextY));
+  };
+
+  const onFabPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (draggedRef.current) {
+      setDragging(false);
+      setFabPos(current => {
+        if (current) {
+          try { localStorage.setItem(FAB_POSITION_KEY, JSON.stringify(current)); } catch { /* private mode */ }
+        }
+        return current;
+      });
+      return;
+    }
+    endHold();
+  };
   const holdTriggeredRef = useRef(false);
 
   const activeProducts = useMemo(
@@ -37,7 +122,6 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
   );
 
   if (!floatingShortcutEnabled) return null;
-  if (businessType !== 'laundry' && !canSellProducts) return null;
 
   const commit = (updated: StoreData) => {
     saveStore(updated);
@@ -56,11 +140,9 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
   };
 
   const handleFab = () => {
-    if (businessType === 'laundry') {
-      requestLaundryWorkspace('record');
-      onNavigate?.('laundry-records' as TabId);
-      return;
-    }
+    // A drag is not a tap. Without this, moving the button out of the way
+    // also opened it.
+    if (draggedRef.current) { draggedRef.current = false; return; }
     if (holdTriggeredRef.current) {
       holdTriggeredRef.current = false;
       return;
@@ -69,7 +151,6 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
   };
 
   const beginHold = () => {
-    if (businessType === 'laundry') return;
     holdTriggeredRef.current = false;
     setHolding(true);
     if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current);
@@ -169,22 +250,24 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
     commit(updated);
   };
 
-  const isLaundry = businessType === 'laundry';
 
   return (
     <>
       <button
         type="button"
         onClick={handleFab}
-        onPointerDown={beginHold}
-        onPointerUp={endHold}
-        onPointerCancel={endHold}
-        onPointerLeave={endHold}
-        className={`fixed right-4 bottom-24 md:bottom-8 z-[45] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center active:scale-95 transition-all ${holding ? 'ring-4 ring-primary/25 scale-105' : ''}`}
-        title={isLaundry ? 'Record Laundry' : 'Message with Flow · hold 3 seconds to talk'}
-        aria-label={isLaundry ? 'Record Laundry' : 'Message with Flow. Hold for 3 seconds to speak.'}
+        onPointerDown={onFabPointerDown}
+        onPointerMove={onFabPointerMove}
+        onPointerUp={onFabPointerUp}
+        onPointerCancel={onFabPointerUp}
+        className={`fixed z-[45] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center transition-all touch-none ${fabPos ? '' : 'right-4 bottom-24 md:bottom-8'} ${dragging ? 'scale-110 cursor-grabbing shadow-2xl ring-4 ring-primary/30' : 'active:scale-95 cursor-grab'} ${holding ? 'ring-4 ring-primary/25 scale-105' : ''}`}
+        style={fabPos
+          ? { left: fabPos.x, top: fabPos.y, right: 'auto', bottom: 'auto' }
+          : undefined}
+        title={'Message with Flow · hold 3 seconds to talk · drag to move'}
+        aria-label={'Message with Flow. Hold for 3 seconds to speak. Drag to move the button.'}
       >
-        {isLaundry ? <Shirt className="w-6 h-6" strokeWidth={2.4} /> : holding ? <Mic className="w-6 h-6 animate-pulse" strokeWidth={2.4} /> : <MessageCircle className="w-6 h-6" strokeWidth={2.4} />}
+        {holding ? <Mic className="w-6 h-6 animate-pulse" strokeWidth={2.4} /> : <MessageCircle className="w-6 h-6" strokeWidth={2.4} />}
       </button>
 
       {open && canSellProducts && (

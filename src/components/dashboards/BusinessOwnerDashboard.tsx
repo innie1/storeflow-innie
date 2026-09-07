@@ -75,10 +75,20 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate 
   const today = new Date().toISOString().slice(0, 10);
   const todaySales = (store.sales || []).filter(s => s.date?.slice(0, 10) === today);
   const revenue = todaySales.reduce((sum, s) => sum + Number(s.total || 0), 0);
-  const serviceCount = Math.max(
-    (store.products || []).filter(p => p.isService).length,
-    template.offerings.filter(o => o.mode === 'services').length,
-  );
+  /**
+   * How many services this shop actually offers.
+   *
+   * This used to be Math.max(what the merchant has, what the template ships
+   * with), so a laundry that had entered nothing still read "5" - the five
+   * built-in offerings (Wash & Iron, Wash Only, Ironing, Dry Cleaning, Express
+   * Laundry). It looked like their data and was not, which is exactly the
+   * complaint: it appeared out of nowhere.
+   */
+  const serviceCount = (store.products || []).filter(p => p.isService).length;
+  // Each trade's own word for what it sells, rather than a spa's.
+  const serviceNoun = template.labels.offeringNoun.endsWith('s')
+    ? template.labels.offeringNoun
+    : `${template.labels.offeringNoun}s`;
   const gameCount = (store.games || []).filter(g => g.enabled).length || (store.games || []).length;
   const todaySessions = (store.gameSessions || []).filter(s => s.date?.slice(0, 10) === today).length;
   const todaySessionRevenue = (store.gameSessions || [])
@@ -88,7 +98,7 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate 
   const stats = store.storeType === 'laundry'
     ? [
         { label: 'Today Revenue', value: `₦${revenue.toLocaleString()}`, icon: '💰' },
-        { label: 'Treatments', value: String(serviceCount), icon: '🧺' },
+        { label: serviceNoun, value: String(serviceCount), icon: '🧺' },
         { label: 'Customers', value: String((store.customers || []).length), icon: '👥' },
       ]
     : store.storeType === 'gas_filling'

@@ -29,17 +29,31 @@ describe('Flow Shirt smart sale parser', () => {
     expect(createFlowShirtCode(1_787_872_000_000)).toMatch(/^FS-[A-Z0-9]{8}$/);
   });
 
-  it('keeps the shirt laundry-only and opens Flow Messages directly for product stores', () => {
+  it('shows one chat button, the same in every trade, and lets it be moved', () => {
     const source = fs.readFileSync('src/components/FlowShirtFab.tsx', 'utf8');
-    expect(source).toContain("const isLaundry = businessType === 'laundry'");
     expect(source).toContain("const FLOW_HOLD_MS = 3000");
     expect(source).toContain("storeflow:open-flow-messages");
     expect(source).toContain("openFlowMessages(false)");
     expect(source).toContain("openFlowMessages(true)");
-    expect(source).toContain("onPointerDown={beginHold}");
-    expect(source).toContain("holding ? <Mic");
-    expect(source).toContain("<MessageCircle className=\"w-6 h-6\"");
-    expect(source).toContain("? <Shirt className=\"w-6 h-6\"");
+
+    // One icon everywhere. A shirt on a laundry read as a record button, and
+    // it behaved like one - it jumped to laundry records instead of opening
+    // Flow - so both the icon and the trade branch are gone.
+    expect(source).toContain('holding ? <Mic');
+    expect(source).toContain('<MessageCircle className="w-6 h-6"');
+    expect(source).not.toContain('? <Shirt className="w-6 h-6"');
+    expect(source).not.toContain("const isLaundry = businessType === 'laundry'");
+    expect(source).not.toContain("requestLaundryWorkspace('record')");
+
+    // Draggable, and it remembers where it was put.
+    expect(source).toContain('onPointerDown={onFabPointerDown}');
+    expect(source).toContain('onPointerMove={onFabPointerMove}');
+    expect(source).toContain('FAB_POSITION_KEY');
+    expect(source).toContain('FAB_DRAG_THRESHOLD');
+    // A drag must not also count as a tap.
+    expect(source).toContain('if (draggedRef.current) { draggedRef.current = false; return; }');
+    // touch-none, or a drag on a phone scrolls the page instead.
+    expect(source).toContain('touch-none');
   });
 
   it('hides all floating Flow shortcuts when the setting is switched off', () => {

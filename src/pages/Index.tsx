@@ -1623,21 +1623,6 @@ export default function Index() {
       {/* Main Layout Area */}
       <div className="flex-1 flex flex-col md:pl-64">
         <header className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border px-3 md:px-6 py-1.5 flex items-center justify-between" style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingTop: 'max(0.4rem, env(safe-area-inset-top))', paddingBottom: '0.35rem' }}>
-          {/* Back, on every screen that is not the dashboard.
-              The history model already puts exactly one entry between any tab
-              and the dashboard, so hardware back worked — but on a desktop or
-              an iPhone there is no hardware back, and even on Android nobody
-              should have to guess. Opening a customer from the dashboard left
-              the merchant with the bottom bar as the only way out. */}
-          {tab !== 'dashboard' && (
-            <button
-              onClick={() => setTab('dashboard')}
-              aria-label="Back to dashboard"
-              className="mr-1 -ml-1 w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-          )}
           <div className="flex flex-col text-left">
             <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
             <button
@@ -2007,6 +1992,27 @@ export default function Index() {
         )}
 
         <main className={`flex-1 ${store.uiMode === 'simple' && tab === 'dashboard' ? 'px-3 pt-1 pb-16 md:pt-2 space-y-3' : 'p-4 md:p-6 pb-20 md:pb-6 space-y-6'} w-full max-w-5xl lg:max-w-6xl mx-auto`} style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))' }}>
+          {/* Back, on every screen that is not the dashboard.
+              It used to sit in the header, wedged against the StoreFlow
+              wordmark and the store name, which crowded the one part of the
+              screen that should just say where you are. It reads better as the
+              first thing in the page body, and it is a shorter reach on a
+              phone than the very top of the screen.
+
+              The history model already puts exactly one entry between any tab
+              and the dashboard, so hardware back works too — but on a desktop
+              or an iPhone there is no hardware back, and nobody should have to
+              guess. */}
+          {tab !== 'dashboard' && (
+            <button
+              onClick={() => setTab('dashboard')}
+              aria-label="Back to dashboard"
+              className="mb-1 -ml-1 inline-flex items-center gap-1 h-9 pl-1.5 pr-3 rounded-full text-sm font-display font-semibold text-muted-foreground hover:text-foreground hover:bg-surface-2 active:scale-95 transition"
+            >
+              <ChevronLeft className="w-5 h-5" /> Back
+            </button>
+          )}
+
           <Suspense fallback={
             <div className="flex flex-col items-center justify-center py-24 space-y-3">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
