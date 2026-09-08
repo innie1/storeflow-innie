@@ -109,7 +109,8 @@ export default function GamesDashboard({ store, onUpdate, onGoToSettings }: Prop
           <Gamepad2 className="w-5 h-5 text-primary" />
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        {/* Where the setup walk points: the machines a player can be put on. */}
+        <div data-guide="start-session" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {displayGames.map(g => (
             <div key={g.id} className="rounded-2xl border border-border bg-surface-2/40 p-3.5 hover:border-primary/30 transition-colors">
               <div className="text-3xl">{g.icon}</div>

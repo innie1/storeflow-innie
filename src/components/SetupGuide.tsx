@@ -60,7 +60,28 @@ export default function SetupGuide({ store, tab, onNavigate }: Props) {
       );
       const element = candidates.find(node => {
         const box = node.getBoundingClientRect();
-        return box.width > 0 && box.height > 0;
+        if (box.width <= 0 || box.height <= 0) return false;
+
+        const x = box.left + box.width / 2;
+        const y = box.top + box.height / 2;
+
+        // Scrolled out of view is not the same as covered - it just needs
+        // scrolling to, and dropping it would lose a perfectly good target.
+        if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return true;
+
+        /*
+         * An element behind an open sheet still measures perfectly well.
+         * The intake opens as a full-screen sheet over the workspace, and the
+         * button this step points at stayed in the document underneath it - so
+         * the spotlight lit whatever the sheet happened to be showing at those
+         * coordinates. On a phone that was the Service field, with the card
+         * sitting across the clothes list.
+         *
+         * So ask the document what is actually at that point rather than
+         * trusting the rectangle.
+         */
+        const atPoint = document.elementFromPoint(x, y);
+        return !!atPoint && (node === atPoint || node.contains(atPoint) || atPoint.contains(node));
       });
       if (!element) { setHole(null); return; }
       const rect = element.getBoundingClientRect();
@@ -90,6 +111,16 @@ export default function SetupGuide({ store, tab, onNavigate }: Props) {
   }, [step?.id, step?.tab, tab, onNavigate]);
 
   if (!step) return null;
+
+  /*
+   * Nothing to point at means nothing to say.
+   *
+   * The fallback used to dim the entire screen and float the card in the
+   * middle, which is how a step whose target was covered ended up lying across
+   * the form the merchant was filling in. If the guide cannot find its target
+   * it stands down until it can.
+   */
+  if (!hole) return null;
 
   // Put the card on whichever side of the hole has more room.
   const below = hole ? hole.top + hole.height : 0;

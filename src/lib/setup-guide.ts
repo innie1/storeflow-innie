@@ -132,6 +132,42 @@ function serviceSteps(store: StoreData): GuideStep[] {
   ];
 }
 
+/**
+ * The walk for a gaming centre.
+ *
+ * It used to get the retail walk, which opens "Start with your stock. This is
+ * where what you sell lives" - to a business that sells time on a PlayStation.
+ * Worse, a gaming centre's tabs are Home, History, Analytics and Games: it has
+ * no inventory tab and no sales tab, so all four steps pointed at things that
+ * do not exist. Every one of them dimmed the screen and lit nothing.
+ *
+ * Its own walk is short because most of it is already done: the template seeds
+ * the games, so the only thing a new centre has genuinely not done is put a
+ * player on a machine.
+ */
+function gamesSteps(): GuideStep[] {
+  const priced = (store: StoreData) => (store.games || []).some(game => Number((game as any).price || 0) > 0);
+  const played = (store: StoreData) => ((store as any).gameSessions || []).length > 0;
+
+  return [
+    {
+      id: 'games-priced',
+      target: 'tab-games-settings',
+      title: 'Check what each game costs',
+      body: 'Your machines are listed already. Set what a player pays and the app totals every session.',
+      done: (store, tab) => tab === 'games-settings' || priced(store),
+    },
+    {
+      id: 'first-session',
+      target: 'start-session',
+      tab: 'games-dashboard',
+      title: 'Start your first session',
+      body: 'Tap Play on any machine when someone sits down. That is the floor open.',
+      done: played,
+    },
+  ];
+}
+
 /** The walk for a shop that sells goods. */
 function productSteps(): GuideStep[] {
   return [
@@ -169,6 +205,9 @@ function productSteps(): GuideStep[] {
 }
 
 export function guideSteps(store: StoreData): GuideStep[] {
+  // Checked before the service test: a gaming centre lists 'products' among
+  // its modes, so it fell through to the retail walk despite selling sessions.
+  if (String(store.storeType || store.category || '').toLowerCase() === 'games') return gamesSteps();
   return isServiceFirstBusiness(store) ? serviceSteps(store) : productSteps();
 }
 
