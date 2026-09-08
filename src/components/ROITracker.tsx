@@ -610,7 +610,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
                   />
                 </div>
 
-                <button type="submit" className="w-full p-3 bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold text-sm rounded-xl cursor-pointer">
+                <button type="submit" className="w-full p-3 bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold text-sm rounded-xl cursor-pointer">
                   Register Loan
                 </button>
               </form>

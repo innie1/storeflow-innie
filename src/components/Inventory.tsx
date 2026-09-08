@@ -1663,7 +1663,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                 showToast('✓ Stock counts reconciled');
               }}
               disabled={Object.keys(auditCounts).length === 0}
-              className="px-3.5 py-2 rounded-lg bg-warning text-slate-950 hover:opacity-90 disabled:opacity-50 text-xs font-bold"
+              className="px-3.5 py-2 rounded-lg bg-warning text-primary-foreground hover:opacity-90 disabled:opacity-50 text-xs font-bold"
             >
               ✓ Reconcile Audits ({Object.keys(auditCounts).length})
             </button>
@@ -3969,7 +3969,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   setTransferDestCode('');
                   setSelectedDetailProduct(null);
                 }}
-                className="p-2.5 rounded-xl bg-warning text-slate-950 font-display font-bold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer active:scale-95 transition-all"
+                className="p-2.5 rounded-xl bg-warning text-primary-foreground font-display font-bold text-xs text-center flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer active:scale-95 transition-all"
               >
                 🚚 Transfer
               </button>

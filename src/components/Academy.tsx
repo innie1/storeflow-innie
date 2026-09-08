@@ -211,7 +211,7 @@ export default function Academy({ store, onUpdate }: AcademyProps) {
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Academy
         </button>
 
-        <div className="bg-slate-950 border border-border rounded-2xl p-6 space-y-6 max-w-3xl mx-auto shadow-sm">
+        <div className="bg-background border border-border rounded-2xl p-6 space-y-6 max-w-3xl mx-auto shadow-sm">
           {/* Header */}
           <div className="space-y-1.5 border-b border-border pb-4">
             <span className="px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-500 text-[10px] font-bold uppercase tracking-wide border border-yellow-500/20">
@@ -261,7 +261,7 @@ export default function Academy({ store, onUpdate }: AcademyProps) {
               <button 
                 onClick={handleQuizSubmit}
                 disabled={selectedOption === null}
-                className="w-full py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold text-xs shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold text-xs shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all cursor-pointer"
               >
                 Submit Answer
               </button>
@@ -293,7 +293,7 @@ export default function Academy({ store, onUpdate }: AcademyProps) {
       </div>
 
       {/* Rewards card */}
-      <div className="p-4 rounded-2xl bg-slate-900/60 border border-yellow-500/10 flex items-center justify-between gap-4">
+      <div className="p-4 rounded-2xl bg-card/60 border border-yellow-500/10 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Award className="w-5 h-5 text-yellow-500 shrink-0" />
           <div>
@@ -301,7 +301,7 @@ export default function Academy({ store, onUpdate }: AcademyProps) {
             <p className="text-xs text-muted-foreground">{completedLessons.length} of {lessons.length} modules cleared.</p>
           </div>
         </div>
-        <span className="px-3.5 py-1.5 rounded-full bg-slate-950 border border-border text-yellow-500 font-display font-black text-sm">
+        <span className="px-3.5 py-1.5 rounded-full bg-background border border-border text-yellow-500 font-display font-black text-sm">
           🪙 {store.coins || 0} Coins
         </span>
       </div>
@@ -313,7 +313,7 @@ export default function Academy({ store, onUpdate }: AcademyProps) {
           return (
             <div 
               key={l.id} 
-              className={`p-5 rounded-2xl bg-slate-950 border hover:border-yellow-500/25 transition-all flex flex-col justify-between gap-4 shadow-sm ${
+              className={`p-5 rounded-2xl bg-background border hover:border-yellow-500/25 transition-all flex flex-col justify-between gap-4 shadow-sm ${
                 done ? 'border-success/30 bg-gradient-to-br from-success/5 to-transparent' : 'border-border'
               }`}
             >
@@ -338,7 +338,7 @@ export default function Academy({ store, onUpdate }: AcademyProps) {
                   className={`px-3 py-1.5 rounded-lg border font-display font-bold text-xs flex items-center gap-1 transition-all ${
                     done 
                       ? 'bg-success/10 border-success/30 text-success' 
-                      : 'bg-yellow-500 border-yellow-500 text-slate-950 hover:bg-yellow-600'
+                      : 'bg-yellow-500 border-yellow-500 text-primary-foreground hover:bg-yellow-600'
                   }`}
                 >
                   {done ? (

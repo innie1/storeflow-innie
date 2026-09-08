@@ -138,7 +138,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
         {activeTab === 'goals' && (
           <button 
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer shrink-0"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4" /> Create Goal
           </button>
@@ -176,7 +176,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
       ) : (
         <>
           {/* Rewards overview */}
-          <div className="p-4 rounded-2xl bg-slate-900/60 border border-yellow-500/10 flex items-center justify-between gap-4">
+          <div className="p-4 rounded-2xl bg-card/60 border border-yellow-500/10 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-500 text-xl font-bold shrink-0">
                 🪙
@@ -186,14 +186,14 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
                 <p className="text-xs text-muted-foreground">Accomplish challenges and goals to accumulate FLOW coins.</p>
               </div>
             </div>
-            <span className="px-3.5 py-1.5 rounded-full bg-slate-950 border border-border text-yellow-500 font-display font-black text-sm">
+            <span className="px-3.5 py-1.5 rounded-full bg-background border border-border text-yellow-500 font-display font-black text-sm">
               🪙 {store.coins || 0} Coins
             </span>
           </div>
 
           {/* Goals listing */}
           {goals.length === 0 ? (
-            <div className="text-center py-16 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+            <div className="text-center py-16 bg-card/30 rounded-2xl border border-dashed border-border/80">
               <p className="text-muted-foreground text-sm">No business goals active. Create a target to stay motivated!</p>
             </div>
           ) : (
@@ -205,7 +205,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
                 return (
                   <div 
                     key={g.id} 
-                    className={`p-5 rounded-2xl bg-slate-950 border transition-all flex flex-col justify-between gap-4 shadow-sm ${
+                    className={`p-5 rounded-2xl bg-background border transition-all flex flex-col justify-between gap-4 shadow-sm ${
                       isCompleted ? 'border-yellow-500/35 bg-gradient-to-br from-yellow-500/5 to-transparent' : 'border-border'
                     }`}
                   >
@@ -244,7 +244,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
                       </div>
                       
                       {/* Progress track */}
-                      <div className="w-full h-3 rounded-full bg-slate-900 overflow-hidden border border-border/80">
+                      <div className="w-full h-3 rounded-full bg-card overflow-hidden border border-border/80">
                         <div 
                           className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-yellow-500' : 'bg-primary'}`}
                           style={{ width: `${progress}%` }}
@@ -354,7 +354,7 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
               <button type="button" onClick={resetForm} className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 Cancel
               </button>
-              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
+              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-primary-foreground text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 {editingGoal ? 'Save Target' : 'Create Target'}
               </button>
             </div>
@@ -565,7 +565,7 @@ function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: S
               <button 
                 onClick={handleClaimReferral}
                 disabled={claiming || !refCode.trim()}
-                className="px-3 py-1.5 bg-yellow-500 text-slate-950 font-display font-bold text-xs rounded-lg hover:brightness-110 active:scale-95 transition disabled:opacity-50 cursor-pointer"
+                className="px-3 py-1.5 bg-yellow-500 text-primary-foreground font-display font-bold text-xs rounded-lg hover:brightness-110 active:scale-95 transition disabled:opacity-50 cursor-pointer"
               >
                 {claiming ? 'Claiming...' : 'Claim'}
               </button>
@@ -581,7 +581,7 @@ function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: S
             <span className="text-sm">🏆</span>
             <div>
               <h3 className="font-display font-bold text-xs text-white">Weekly Challenges</h3>
-              <p className="text-[9px] text-slate-400">Complete goals to accumulate FLOW reward coins</p>
+              <p className="text-[9px] text-muted-foreground">Complete goals to accumulate FLOW reward coins</p>
             </div>
           </div>
           <span className="text-[10px] font-bold text-yellow-500">
@@ -605,7 +605,7 @@ function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: S
                       style={{ width: `${Math.min(100, (c.current / c.target) * 100)}%` }} 
                     />
                   </div>
-                  <span className="text-[8px] font-mono text-slate-400 shrink-0 font-bold">
+                  <span className="text-[8px] font-mono text-muted-foreground shrink-0 font-bold">
                     {c.current.toLocaleString()} / {c.target.toLocaleString()}
                   </span>
                 </div>

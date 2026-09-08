@@ -525,7 +525,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             <div className="relative inline-block">
               <button
                 onClick={() => setSalesCardPeriodMenuOpen(v => !v)}
-                className="flex items-center gap-1 text-[10px] font-display font-bold text-slate-400 uppercase tracking-wider cursor-pointer"
+                className="flex items-center gap-1 text-[10px] font-display font-bold text-muted-foreground uppercase tracking-wider cursor-pointer"
               >
                 {SALES_CARD_PERIODS.find(p => p.id === salesCardPeriod)!.prefix} Sales (Revenue)
                 <ChevronDown className={`w-3 h-3 transition-transform ${salesCardPeriodMenuOpen ? 'rotate-180' : ''}`} />
@@ -557,7 +557,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           {/* Sales card */}
           <div className="bg-surface-2 border border-border/40 rounded-2xl p-3 flex items-center justify-between shadow-sm">
             <div>
-              <p className="text-[11px] text-slate-400 font-display font-semibold">Sales Count</p>
+              <p className="text-[11px] text-muted-foreground font-display font-semibold">Sales Count</p>
               <p className="text-lg font-display font-black text-foreground mt-0.5">{periodCount}</p>
             </div>
             <div className="w-7 h-7 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-yellow-500 shrink-0">
@@ -567,7 +567,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           {/* Profit card */}
           <div className="bg-surface-2 border border-border/40 rounded-2xl p-3 flex items-center justify-between shadow-sm">
             <div>
-              <p className="text-[11px] text-slate-400 font-display font-semibold">Net Profit</p>
+              <p className="text-[11px] text-muted-foreground font-display font-semibold">Net Profit</p>
               <p className="text-lg font-display font-black text-emerald-400 mt-0.5">₦{periodProfit.toLocaleString()}</p>
             </div>
             <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
@@ -656,7 +656,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       {/* Search and Filters */}
       <div className="relative flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+          <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-muted-foreground pointer-events-none" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -666,7 +666,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           {/* Barcode scanner action inside search bar */}
           <button
             onClick={() => setScanning(true)}
-            className="absolute right-10 top-3 text-slate-400 hover:text-primary active:scale-90 transition-transform"
+            className="absolute right-10 top-3 text-muted-foreground hover:text-primary active:scale-90 transition-transform"
             title="Scan barcode"
             aria-label="Scan barcode"
           >
@@ -680,7 +680,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
               showToast(filterLowStock ? "Showing all products" : "Filtering low stock products");
             }}
             className={`absolute right-3.5 top-3.5 active:scale-90 transition-transform ${
-              filterLowStock ? 'text-primary' : 'text-slate-400 hover:text-foreground'
+              filterLowStock ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
             }`}
             title="Filter low stock"
             aria-label="Filter low stock"
@@ -706,7 +706,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
 
       {search && visibleProducts.length === 0 && (
         <div className="rounded-2xl p-6 bg-destructive/5 border border-destructive/20 text-center space-y-3">
-          <p className="text-sm text-slate-300 font-display font-medium">No products found matching "{search}"</p>
+          <p className="text-sm text-muted-foreground font-display font-medium">No products found matching "{search}"</p>
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
             Did a customer ask for an out-of-stock or unstocked item? Log it as a lost sale so Flow can analyze demand patterns.
           </p>
@@ -820,7 +820,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                     <button
                       onClick={() => handleQuickAdd(p.id)}
                       disabled={!canSell}
-                      className="w-9 h-9 rounded-full bg-yellow-500 text-slate-950 font-black text-lg hover:bg-yellow-400 disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center shadow-sm relative shrink-0"
+                      className="w-9 h-9 rounded-full bg-yellow-500 text-primary-foreground font-black text-lg hover:bg-yellow-400 disabled:opacity-40 active:scale-95 transition-transform flex items-center justify-center shadow-sm relative shrink-0"
                       aria-label="Add to cart"
                     >
                       <Plus className="w-4 h-4 stroke-[3]" />

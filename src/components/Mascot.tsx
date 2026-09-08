@@ -1769,11 +1769,11 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
               : `translate(calc(-50% + ${bubbleShiftX}px), ${bubbleShiftY}px)`,
           }}
         >
-          <div className="bg-slate-900 border border-border px-3 py-1.5 rounded-xl text-xs text-foreground font-display font-bold shadow-lg animate-bounce-subtle select-none whitespace-normal text-center min-w-[130px] max-w-[210px] relative">
+          <div className="bg-card border border-border px-3 py-1.5 rounded-xl text-xs text-foreground font-display font-bold shadow-lg animate-bounce-subtle select-none whitespace-normal text-center min-w-[130px] max-w-[210px] relative">
             <p className="leading-snug">{message}</p>
             {bubblePosition === 'above' && (
               <div
-                className="absolute top-full -mt-1 w-2.5 h-2.5 bg-slate-900 border-r border-b border-border rotate-45"
+                className="absolute top-full -mt-1 w-2.5 h-2.5 bg-card border-r border-b border-border rotate-45"
                 style={{
                   left: `clamp(10px, calc(50% - ${bubbleShiftX}px), calc(100% - 10px))`,
                   transform: 'translateX(-50%) rotate(45deg)'
@@ -1782,7 +1782,7 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
             )}
             {bubblePosition === 'below' && (
               <div
-                className="absolute bottom-full -mb-1 w-2.5 h-2.5 bg-slate-900 border-l border-t border-border rotate-45"
+                className="absolute bottom-full -mb-1 w-2.5 h-2.5 bg-card border-l border-t border-border rotate-45"
                 style={{
                   left: `clamp(10px, calc(50% - ${bubbleShiftX}px), calc(100% - 10px))`,
                   transform: 'translateX(-50%) rotate(45deg)'
@@ -1791,13 +1791,13 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
             )}
             {bubblePosition === 'right' && (
               <div
-                className="absolute right-full -mr-1 w-2.5 h-2.5 bg-slate-900 border-l border-b border-border"
+                className="absolute right-full -mr-1 w-2.5 h-2.5 bg-card border-l border-b border-border"
                 style={{ top: '50%', transform: 'translateY(-50%) rotate(45deg)' }}
               />
             )}
             {bubblePosition === 'left' && (
               <div
-                className="absolute left-full -ml-1 w-2.5 h-2.5 bg-slate-900 border-r border-t border-border"
+                className="absolute left-full -ml-1 w-2.5 h-2.5 bg-card border-r border-t border-border"
                 style={{ top: '50%', transform: 'translateY(-50%) rotate(45deg)' }}
               />
             )}

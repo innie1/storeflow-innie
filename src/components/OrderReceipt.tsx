@@ -249,7 +249,7 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={handlePrint}
-            className="p-2.5 rounded-lg bg-[#E8C34E] text-slate-950 font-display font-bold hover:opacity-90 transition-opacity text-xs flex items-center justify-center gap-1.5"
+            className="p-2.5 rounded-lg bg-[#E8C34E] text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity text-xs flex items-center justify-center gap-1.5"
           >
             🖨️ Print
           </button>
@@ -268,7 +268,7 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
           </button>
           <button
             onClick={onClose}
-            className="p-2.5 rounded-lg bg-slate-700 text-white font-display font-bold hover:opacity-90 transition-opacity text-xs flex items-center justify-center"
+            className="p-2.5 rounded-lg bg-surface-3 text-white font-display font-bold hover:opacity-90 transition-opacity text-xs flex items-center justify-center"
           >
             ✕ Close
           </button>

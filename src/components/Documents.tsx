@@ -100,7 +100,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
       </div>
 
       {/* Storage quota checker */}
-      <div className="p-4 rounded-2xl bg-slate-900/60 border border-yellow-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-4 rounded-2xl bg-card/60 border border-yellow-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <HardDrive className="w-5 h-5 text-yellow-500 shrink-0" />
           <div className="text-left">
@@ -110,7 +110,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
         </div>
         <div className="flex items-center gap-3 font-display font-bold text-xs text-foreground">
           <span>{totalSizeKB.toLocaleString()} KB used / 2,000 KB Max</span>
-          <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden border border-border">
+          <div className="w-24 h-2 bg-surface-2 rounded-full overflow-hidden border border-border">
             <div 
               className={`h-full rounded-full ${totalSizeKB > 1500 ? 'bg-destructive' : 'bg-yellow-500'}`} 
               style={{ width: `${Math.min(100, (totalSizeKB / 2000) * 100)}%` }}
@@ -121,7 +121,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Upload box */}
-        <div className="lg:col-span-1 bg-slate-950 border border-border p-5 rounded-2xl space-y-4 h-fit">
+        <div className="lg:col-span-1 bg-background border border-border p-5 rounded-2xl space-y-4 h-fit">
           <h3 className="font-display font-bold text-base text-foreground text-left">Upload Document</h3>
           
           <form onSubmit={handleUploadDocument} className="space-y-4">
@@ -175,7 +175,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
 
             <button 
               type="submit"
-              className="w-full py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold text-sm shadow-md active:scale-95 transition-all cursor-pointer"
+              className="w-full py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold text-sm shadow-md active:scale-95 transition-all cursor-pointer"
             >
               Upload to Vault
             </button>
@@ -206,13 +206,13 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
           </div>
           
           {filtered.length === 0 ? (
-            <div className="text-center py-20 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+            <div className="text-center py-20 bg-card/30 rounded-2xl border border-dashed border-border/80">
               <p className="text-muted-foreground text-sm">No documents found matching this filter.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filtered.map(d => (
-                <div key={d.id} className="p-4 rounded-xl bg-slate-950 border border-border flex flex-col justify-between gap-3 text-left hover:border-yellow-500/25 transition-all">
+                <div key={d.id} className="p-4 rounded-xl bg-background border border-border flex flex-col justify-between gap-3 text-left hover:border-yellow-500/25 transition-all">
                   <div className="flex items-start gap-2.5">
                     <div className="w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-yellow-500 shrink-0">
                       <FileText className="w-5 h-5" />
@@ -283,7 +283,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
             </div>
 
             {/* Content preview pane */}
-            <div className="flex-1 min-h-[300px] overflow-auto bg-slate-900 border border-border rounded-xl flex items-center justify-center p-2">
+            <div className="flex-1 min-h-[300px] overflow-auto bg-card border border-border rounded-xl flex items-center justify-center p-2">
               {viewingDoc.fileContent.startsWith('data:image/') ? (
                 <img src={viewingDoc.fileContent} alt={viewingDoc.name} className="max-w-full max-h-[60vh] object-contain" />
               ) : viewingDoc.fileContent.startsWith('data:application/pdf') ? (
@@ -294,7 +294,7 @@ export default function Documents({ store, onUpdate }: DocumentsProps) {
                     <a 
                       href={viewingDoc.fileContent} 
                       download={viewingDoc.name}
-                      className="inline-block px-4 py-2 bg-yellow-500 text-slate-950 font-display font-bold text-xs rounded-lg"
+                      className="inline-block px-4 py-2 bg-yellow-500 text-primary-foreground font-display font-bold text-xs rounded-lg"
                     >
                       Download PDF
                     </a>

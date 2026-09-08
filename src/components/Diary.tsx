@@ -156,7 +156,7 @@ export default function Diary({ store, onUpdate }: DiaryProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Form entry */}
-        <div className="lg:col-span-1 bg-slate-950 border border-border p-5 rounded-2xl space-y-4">
+        <div className="lg:col-span-1 bg-background border border-border p-5 rounded-2xl space-y-4">
           <h3 className="font-display font-bold text-base text-foreground text-left">New Diary Entry</h3>
           
           <form onSubmit={handleSaveEntry} className="space-y-4">
@@ -165,7 +165,7 @@ export default function Diary({ store, onUpdate }: DiaryProps) {
               onChange={e => setText(e.target.value)}
               placeholder="Record notes e.g., 'Competitor down the street raised their bread price. Lots of new walk-in clients today...'"
               rows={4}
-              className="w-full p-3 rounded-xl bg-slate-900 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-yellow-500 resize-none text-left"
+              className="w-full p-3 rounded-xl bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-yellow-500 resize-none text-left"
             />
 
             {/* Voice Recorder control block */}
@@ -190,7 +190,7 @@ export default function Diary({ store, onUpdate }: DiaryProps) {
                 className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
                   isRecording 
                     ? 'bg-destructive text-white hover:bg-destructive/80' 
-                    : 'bg-yellow-500 hover:bg-yellow-600 text-slate-950'
+                    : 'bg-yellow-500 hover:bg-yellow-600 text-primary-foreground'
                 } active:scale-95`}
               >
                 {isRecording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -206,7 +206,7 @@ export default function Diary({ store, onUpdate }: DiaryProps) {
 
             <button 
               type="submit"
-              className="w-full py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold text-sm shadow-md active:scale-95 transition-all cursor-pointer"
+              className="w-full py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold text-sm shadow-md active:scale-95 transition-all cursor-pointer"
             >
               Save Entry
             </button>
@@ -218,13 +218,13 @@ export default function Diary({ store, onUpdate }: DiaryProps) {
           <h3 className="font-display font-bold text-base text-foreground text-left">Historical Journal Memos</h3>
           
           {entries.length === 0 ? (
-            <div className="text-center py-20 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+            <div className="text-center py-20 bg-card/30 rounded-2xl border border-dashed border-border/80">
               <p className="text-muted-foreground text-sm">Diary is empty. Log observations to build a historical record.</p>
             </div>
           ) : (
             <div className="space-y-3">
               {entries.map(e => (
-                <div key={e.id} className="p-4 rounded-2xl bg-slate-950 border border-border flex gap-4 justify-between items-start text-left shadow-sm">
+                <div key={e.id} className="p-4 rounded-2xl bg-background border border-border flex gap-4 justify-between items-start text-left shadow-sm">
                   <div className="space-y-2 flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">

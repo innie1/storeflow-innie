@@ -1955,7 +1955,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                   {/* Store ID Display below QR */}
                   <div className="mt-3.5 w-full flex flex-col items-center gap-1 select-all">
                     <span className="text-[8px] font-display font-black uppercase tracking-widest text-neutral-400">Store ID</span>
-                    <span className="font-mono text-sm font-black text-slate-900 bg-neutral-100 px-3 py-0.5 rounded border border-neutral-200 tracking-wider">
+                    <span className="font-mono text-sm font-black text-primary-foreground bg-neutral-100 px-3 py-0.5 rounded border border-neutral-200 tracking-wider">
                       {store.storeId || store.accessCode}
                     </span>
                   </div>
@@ -3810,13 +3810,13 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         <div className={`${card} p-5 space-y-4`}>
           <h3 className="font-display font-bold text-base text-foreground">Action History</h3>
           {logs.length === 0 ? (
-            <div className="text-center py-10 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+            <div className="text-center py-10 bg-card/30 rounded-2xl border border-dashed border-border/80">
               <p className="text-muted-foreground text-xs">No activity logs recorded yet.</p>
             </div>
           ) : (
             <div className="space-y-3.5 max-h-[60vh] overflow-y-auto pr-1 no-scrollbar text-left">
               {logs.map((log) => (
-                <div key={log.id} className="p-4 rounded-xl bg-slate-950 border border-border flex flex-col gap-2">
+                <div key={log.id} className="p-4 rounded-xl bg-background border border-border flex flex-col gap-2">
                   <div className="flex justify-between items-start gap-2">
                     <div>
                       <h4 className="font-display font-bold text-sm text-foreground">{log.user}</h4>

@@ -1058,7 +1058,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
                   <Calendar className="w-4 h-4 text-primary" />
                   <div>
                     <h3 className="font-display font-bold text-sm">Seasonal &amp; Climate Insights</h3>
-                    <p className="text-[10px] text-slate-400 font-semibold">General patterns for this time of year — not personalized predictions</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold">General patterns for this time of year — not personalized predictions</p>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1146,13 +1146,13 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
                     <ClipboardList className="w-4 h-4 shrink-0" />
                     <div className="text-left min-w-0">
                       <h3 className="font-display font-bold text-sm truncate">Smart Restocking List</h3>
-                      <p className="text-[10px] text-slate-400 leading-normal">
+                      <p className="text-[10px] text-muted-foreground leading-normal">
                         {autoSuggest ? 'Capped to Net Income & prioritized by velocity' : 'Estimated capital required to replenish low stock'}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 cursor-pointer select-none">
+                    <label className="text-[10px] font-bold text-muted-foreground flex items-center gap-1 cursor-pointer select-none">
                       <span>Smart Restock</span>
                       <input
                         type="checkbox"
@@ -1253,7 +1253,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
                       {/* Dot */}
                       <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-primary border-2 border-card ring-2 ring-primary/20" />
                       <div>
-                        <p className="text-[10px] text-slate-400">{new Date(e.date).toLocaleDateString('en-GB')} {new Date(e.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className="text-[10px] text-muted-foreground">{new Date(e.date).toLocaleDateString('en-GB')} {new Date(e.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
                         <p className="font-display font-bold text-xs text-foreground mt-0.5">{e.title}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">{e.description}</p>
                       </div>

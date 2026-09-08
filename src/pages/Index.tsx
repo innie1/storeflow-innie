@@ -238,7 +238,7 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
       return <Package className={className} />;
     case 'sales':
       return isActive ? (
-        <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center text-slate-950 font-bold text-xs shrink-0 select-none">
+        <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center text-primary-foreground font-bold text-xs shrink-0 select-none">
           $
         </div>
       ) : (

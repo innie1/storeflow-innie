@@ -150,14 +150,14 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
         </div>
         <button 
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Add Supplier
         </button>
       </div>
 
       {/* Supplier Price recommendations banner from Flow */}
-      <div className="p-4 rounded-2xl bg-slate-900/60 border border-yellow-500/10 flex items-start gap-3.5">
+      <div className="p-4 rounded-2xl bg-card/60 border border-yellow-500/10 flex items-start gap-3.5">
         <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-500 font-bold shrink-0">
           ✨
         </div>
@@ -177,13 +177,13 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
           placeholder="Search by supplier name or products supplied..."
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900 border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-yellow-500"
+          className="w-full pl-10 pr-4 py-3 rounded-xl bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-yellow-500"
         />
       </div>
 
       {/* Supplier Directory List */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+        <div className="text-center py-16 bg-card/30 rounded-2xl border border-dashed border-border/80">
           <p className="text-muted-foreground text-sm">No suppliers registered. Add suppliers to enable price audits!</p>
         </div>
       ) : (
@@ -191,7 +191,7 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
           {filtered.map(s => (
             <div 
               key={s.id} 
-              className="p-5 rounded-2xl bg-slate-950 border border-border hover:border-yellow-500/25 transition-all flex flex-col justify-between gap-4 shadow-sm"
+              className="p-5 rounded-2xl bg-background border border-border hover:border-yellow-500/25 transition-all flex flex-col justify-between gap-4 shadow-sm"
             >
               <div className="flex justify-between items-start gap-2">
                 <div className="space-y-1 text-left">
@@ -327,7 +327,7 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
                   <button 
                     type="button" 
                     onClick={handleAddProductTag}
-                    className="px-3 rounded-lg bg-yellow-500 text-slate-950 text-xs font-display font-bold active:scale-95 transition-all cursor-pointer"
+                    className="px-3 rounded-lg bg-yellow-500 text-primary-foreground text-xs font-display font-bold active:scale-95 transition-all cursor-pointer"
                   >
                     Add
                   </button>
@@ -336,7 +336,7 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
                 {productsSupplied.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1 p-2 rounded-lg bg-surface-2 border border-border/80 max-h-24 overflow-y-auto">
                     {productsSupplied.map((p, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 border border-border text-[10px] text-foreground">
+                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-card border border-border text-[10px] text-foreground">
                         {p}
                         <button type="button" onClick={() => handleRemoveProductTag(p)} className="text-destructive font-black text-xs">×</button>
                       </span>
@@ -350,7 +350,7 @@ export default function Suppliers({ store, onUpdate }: SuppliersProps) {
               <button type="button" onClick={resetForm} className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 Cancel
               </button>
-              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
+              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-primary-foreground text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 {editingSupplier ? 'Update Vendor' : 'Add Vendor'}
               </button>
             </div>

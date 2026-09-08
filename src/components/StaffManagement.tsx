@@ -231,7 +231,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
         {currentUser?.role === 'owner' && (
           <button 
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
           >
             <UserPlus className="w-4 h-4" /> Add Staff Member
           </button>
@@ -241,7 +241,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Active Shift Tracker */}
         {hasTill && (
-        <div className="lg:col-span-1 bg-slate-950 border border-border p-5 rounded-2xl space-y-4 h-fit">
+        <div className="lg:col-span-1 bg-background border border-border p-5 rounded-2xl space-y-4 h-fit">
           <h3 className="font-display font-bold text-base text-foreground">Shift Controller</h3>
           
           {activeShift ? (
@@ -304,9 +304,9 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
 
               <button 
                 onClick={handleStartShift}
-                className="w-full py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold text-xs flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold text-xs flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer"
               >
-                <Play className="w-3.5 h-3.5 fill-slate-950" /> Open Cashier Shift
+                <Play className="w-3.5 h-3.5 fill-primary-foreground" /> Open Cashier Shift
               </button>
             </div>
           )}
@@ -319,7 +319,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
           <div className="space-y-3.5">
             <h3 className="font-display font-bold text-base text-foreground">Your team</h3>
             {staffMembers.length === 0 ? (
-              <div className="text-center py-8 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+              <div className="text-center py-8 bg-card/30 rounded-2xl border border-dashed border-border/80">
                 <p className="text-muted-foreground text-xs">
               {hasTill
                 ? 'Nobody added yet. Add a worker to give them their own login and shift log.'
@@ -329,7 +329,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {staffMembers.map(s => (
-                  <div key={s.id} className="p-4 rounded-xl bg-slate-950 border border-border flex flex-col justify-between gap-3 text-left">
+                  <div key={s.id} className="p-4 rounded-xl bg-background border border-border flex flex-col justify-between gap-3 text-left">
                     <div className="flex justify-between items-start gap-2">
                       <div>
                         <h4 className="font-display font-bold text-sm text-foreground">{s.name}</h4>
@@ -366,13 +366,13 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
           <div className="space-y-3.5">
             <h3 className="font-display font-bold text-base text-foreground">Completed Shift Tally</h3>
             {shifts.length === 0 ? (
-              <div className="text-center py-10 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+              <div className="text-center py-10 bg-card/30 rounded-2xl border border-dashed border-border/80">
                 <p className="text-muted-foreground text-xs">No shift logs stored yet.</p>
               </div>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
                 {shifts.map(sh => (
-                  <div key={sh.id} className="p-3.5 rounded-xl bg-slate-950 border border-border flex justify-between items-center text-xs">
+                  <div key={sh.id} className="p-3.5 rounded-xl bg-background border border-border flex justify-between items-center text-xs">
                     <div className="text-left space-y-1">
                       <p className="font-bold text-foreground">{sh.staffName}</p>
                       <p className="text-[10px] text-muted-foreground font-mono">
@@ -534,7 +534,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
               <button type="button" onClick={resetForm} className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 Cancel
               </button>
-              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
+              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-primary-foreground text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 {editingStaff ? 'Save changes' : 'Add worker'}
               </button>
             </div>

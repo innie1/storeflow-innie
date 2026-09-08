@@ -91,7 +91,7 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
         </div>
         <button 
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Add Wishlist Item
         </button>
@@ -99,7 +99,7 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
 
       {/* Flow Recommendations Section */}
       {flowRecommendations.length > 0 && (
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-yellow-500/10 space-y-3">
+        <div className="p-4 rounded-2xl bg-card/60 border border-yellow-500/10 space-y-3">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-yellow-500 shrink-0 animate-pulse" />
             <h4 className="font-display font-bold text-sm text-yellow-500">Flow's Wishlist Recommendations</h4>
@@ -107,14 +107,14 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
           <p className="text-xs text-muted-foreground">Based on top retail market analytics, you should consider stocking these high-demand items:</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {flowRecommendations.map((rec, i) => (
-              <div key={i} className="p-3 rounded-xl bg-slate-950 border border-border flex justify-between items-center gap-2">
+              <div key={i} className="p-3 rounded-xl bg-background border border-border flex justify-between items-center gap-2">
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-foreground truncate">{rec.name}</p>
                   <p className="text-[10px] text-muted-foreground">Est. Cost: ₦{rec.cost.toLocaleString()}</p>
                 </div>
                 <button 
                   onClick={() => handleAddFromRecommendation(rec.name, rec.cost)}
-                  className="px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold text-[10px] shrink-0"
+                  className="px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold text-[10px] shrink-0"
                 >
                   + Add
                 </button>
@@ -126,13 +126,13 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
 
       {/* Main wishlist */}
       {wishlist.length === 0 ? (
-        <div className="text-center py-20 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+        <div className="text-center py-20 bg-card/30 rounded-2xl border border-dashed border-border/80">
           <p className="text-muted-foreground text-sm">Wishlist is empty. Save products to plan capital expansions.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {wishlist.map(w => (
-            <div key={w.id} className="p-5 rounded-2xl bg-slate-950 border border-border flex justify-between items-center gap-4 hover:border-yellow-500/25 transition-all shadow-sm">
+            <div key={w.id} className="p-5 rounded-2xl bg-background border border-border flex justify-between items-center gap-4 hover:border-yellow-500/25 transition-all shadow-sm">
               <div className="space-y-1.5 flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-yellow-500 shrink-0">
@@ -214,7 +214,7 @@ export default function Wishlist({ store, onUpdate }: WishlistProps) {
               <button type="button" onClick={resetForm} className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 Cancel
               </button>
-              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
+              <button type="submit" className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-primary-foreground text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 Save to Wishlist
               </button>
             </div>

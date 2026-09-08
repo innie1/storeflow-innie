@@ -155,14 +155,14 @@ export default function Achievements({ store }: AchievementsProps) {
           </h2>
           <p className="text-sm text-muted-foreground">Unlock rewards and showcase your milestones in scaling your retail store.</p>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900 border border-border text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border text-xs text-muted-foreground">
           <Sparkles className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
           <span>{completionPercentage}% Badges Unlocked</span>
         </div>
       </div>
 
       {/* Progress track */}
-      <div className="w-full h-2.5 rounded-full bg-slate-900 overflow-hidden border border-border/80">
+      <div className="w-full h-2.5 rounded-full bg-card overflow-hidden border border-border/80">
         <div 
           className="h-full bg-yellow-500 rounded-full transition-all duration-500"
           style={{ width: `${completionPercentage}%` }}
@@ -174,7 +174,7 @@ export default function Achievements({ store }: AchievementsProps) {
         <h3 className="font-display font-bold text-sm text-yellow-500 uppercase tracking-wider">Unlocked Badges ({earnedBadges.length})</h3>
         
         {earnedBadges.length === 0 ? (
-          <div className="text-center py-10 bg-slate-900/30 rounded-2xl border border-dashed border-border/80">
+          <div className="text-center py-10 bg-card/30 rounded-2xl border border-dashed border-border/80">
             <p className="text-muted-foreground text-xs">No badges unlocked yet. Keep logging sales and inventory to clear targets!</p>
           </div>
         ) : (
@@ -182,7 +182,7 @@ export default function Achievements({ store }: AchievementsProps) {
             {earnedBadges.map(b => (
               <div 
                 key={b.id} 
-                className="p-4 rounded-2xl bg-slate-950 border border-yellow-500/35 bg-gradient-to-br from-yellow-500/5 to-transparent flex gap-4 items-center"
+                className="p-4 rounded-2xl bg-background border border-yellow-500/35 bg-gradient-to-br from-yellow-500/5 to-transparent flex gap-4 items-center"
               >
                 <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center text-2xl border border-yellow-500/25 shrink-0 shadow-[0_0_12px_rgba(234,179,8,0.1)]">
                   {b.icon}
@@ -203,7 +203,7 @@ export default function Achievements({ store }: AchievementsProps) {
         <h3 className="font-display font-bold text-sm text-muted-foreground uppercase tracking-wider">Locked Achievements ({lockedBadges.length})</h3>
         
         {lockedBadges.length === 0 ? (
-          <div className="text-center py-6 bg-slate-900/10 rounded-2xl border border-dashed border-border/85">
+          <div className="text-center py-6 bg-card/10 rounded-2xl border border-dashed border-border/85">
             <p className="text-success text-xs font-display font-bold">🎉 Outstanding! You have unlocked all achievements!</p>
           </div>
         ) : (
@@ -211,7 +211,7 @@ export default function Achievements({ store }: AchievementsProps) {
             {lockedBadges.map(b => (
               <div 
                 key={b.id} 
-                className="p-4 rounded-2xl bg-slate-950 border border-border flex gap-4 items-center opacity-65 grayscale"
+                className="p-4 rounded-2xl bg-background border border-border flex gap-4 items-center opacity-65 grayscale"
               >
                 <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center text-muted-foreground shrink-0 border border-border">
                   <Lock className="w-5 h-5" />

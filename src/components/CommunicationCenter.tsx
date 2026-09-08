@@ -252,7 +252,7 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
           setRecipientPhone('');
         }}
         className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-display font-bold transition-all cursor-pointer ${
-          isAct ? 'bg-yellow-500 text-slate-950 font-black shadow-md' : 'bg-surface-2 text-muted-foreground hover:text-foreground'
+          isAct ? 'bg-yellow-500 text-primary-foreground font-black shadow-md' : 'bg-surface-2 text-muted-foreground hover:text-foreground'
         }`}
       >
         {icon} {label}
@@ -507,19 +507,19 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
                   <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden p-0.5">
                     <button
                       onClick={() => applyCustChange('debt')}
-                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${custTemplate === 'debt' ? 'bg-yellow-500 text-slate-950 font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${custTemplate === 'debt' ? 'bg-yellow-500 text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       Debt Reminder
                     </button>
                     <button
                       onClick={() => applyCustChange('loyalty')}
-                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${custTemplate === 'loyalty' ? 'bg-yellow-500 text-slate-950 font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${custTemplate === 'loyalty' ? 'bg-yellow-500 text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       Loyalty Card
                     </button>
                     <button
                       onClick={() => applyCustChange('new_product')}
-                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${custTemplate === 'new_product' ? 'bg-yellow-500 text-slate-950 font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${custTemplate === 'new_product' ? 'bg-yellow-500 text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       New Product
                     </button>
@@ -558,13 +558,13 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
                   <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden p-0.5">
                     <button
                       onClick={() => applySuppChange('price')}
-                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${suppTemplate === 'price' ? 'bg-yellow-500 text-slate-950 font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${suppTemplate === 'price' ? 'bg-yellow-500 text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       Price Request
                     </button>
                     <button
                       onClick={() => applySuppChange('order')}
-                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${suppTemplate === 'order' ? 'bg-yellow-500 text-slate-950 font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${suppTemplate === 'order' ? 'bg-yellow-500 text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       Order Request
                     </button>
@@ -595,19 +595,19 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
                   <div className="flex rounded-lg bg-surface-2 border border-border overflow-hidden p-0.5">
                     <button
                       onClick={() => applyEmpChange('schedule')}
-                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${empTemplate === 'schedule' ? 'bg-yellow-500 text-slate-950 font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${empTemplate === 'schedule' ? 'bg-yellow-500 text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       Shift Schedule
                     </button>
                     <button
                       onClick={() => applyEmpChange('performance')}
-                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${empTemplate === 'performance' ? 'bg-yellow-500 text-slate-950 font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${empTemplate === 'performance' ? 'bg-yellow-500 text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       Performance
                     </button>
                     <button
                       onClick={() => applyEmpChange('deduction')}
-                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${empTemplate === 'deduction' ? 'bg-yellow-500 text-slate-950 font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`flex-1 py-1.5 text-xs font-display font-bold rounded-md ${empTemplate === 'deduction' ? 'bg-yellow-500 text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       Deduction Notice
                     </button>
@@ -716,15 +716,15 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
                         rows={8}
                         value={reviewedText}
                         onChange={e => setReviewedText(e.target.value)}
-                        className="w-full p-3 rounded-lg bg-slate-900 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500 font-mono leading-relaxed"
+                        className="w-full p-3 rounded-lg bg-card border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500 font-mono leading-relaxed"
                       />
                     </div>
 
                     <button
                       onClick={handleSend}
-                      className="w-full p-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-black text-sm flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer"
+                      className="w-full p-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer"
                     >
-                      <Send className="w-4 h-4 fill-slate-950" /> Send via WhatsApp
+                      <Send className="w-4 h-4 fill-primary-foreground" /> Send via WhatsApp
                     </button>
                   </div>
                 </div>
@@ -778,9 +778,9 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
                             window.open(waUrl, '_blank');
                             showToast("Opening WhatsApp with archived message...");
                           }}
-                          className="px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-display font-bold text-[10px] transition-all cursor-pointer flex items-center gap-1"
+                          className="px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold text-[10px] transition-all cursor-pointer flex items-center gap-1"
                         >
-                          <Send className="w-2.5 h-2.5 fill-slate-950" /> Resend
+                          <Send className="w-2.5 h-2.5 fill-primary-foreground" /> Resend
                         </button>
                       </div>
                     </div>
