@@ -286,6 +286,21 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
     return () => { cancelled = true; if (clear) clearTimeout(clear); };
   }, [justRecorded, view]);
 
+  /**
+   * What has been taken in today, newest first.
+   *
+   * Deliberately not the filtered list: this answers "did that save?", which
+   * should not depend on which stage tab or search term is set on a screen the
+   * merchant is not even looking at.
+   */
+  const recordedToday = useMemo(() => {
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    return decorated
+      .filter(record => record.createdAt >= midnight.getTime())
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [decorated]);
+
   const changeView = (next: LaundryWorkspaceView) => {
     requestLaundryWorkspace(next);
     setView(next);
@@ -442,7 +457,55 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         // No explainer card here: the tag rule is stated on the receipt at the
         // moment it matters, and this screen exists to record a bundle, not to
         // describe one.
-        <LaundryWalkInIntake store={store} onUpdate={onUpdate} currentUser={currentUser} onRecorded={setJustRecorded} />
+        <>
+          <LaundryWalkInIntake store={store} onUpdate={onUpdate} currentUser={currentUser} onRecorded={setJustRecorded} />
+
+          {/*
+            Recording a bundle used to leave no trace on this screen. The
+            receipt closed, the form emptied, and the only proof it had worked
+            was on another tab. These are the day's bundles, newest first, so
+            the answer to "did that save?" is already on the screen you land
+            back on.
+          */}
+          {recordedToday.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-[11px] uppercase font-black text-muted-foreground">
+                  Taken in today · {recordedToday.length}
+                </p>
+                <button
+                  onClick={() => changeView('records')}
+                  className="text-[11px] font-display font-black text-primary active:scale-95 transition"
+                >
+                  See all
+                </button>
+              </div>
+              {recordedToday.slice(0, 4).map(record => (
+                <button
+                  key={record.order.id}
+                  onClick={() => { setJustRecorded(record.clientRef); changeView('records'); }}
+                  className={`w-full text-left rounded-xl border bg-card px-3 py-2.5 flex items-center gap-3 active:scale-[0.99] transition ${
+                    justRecorded === record.clientRef ? 'border-primary' : 'border-border'
+                  }`}
+                >
+                  <span className="font-mono font-black text-sm tracking-[0.1em] text-primary shrink-0">{record.tagCode}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-display font-bold truncate">{record.customerName}</span>
+                    <span className="block text-[10px] text-muted-foreground truncate">
+                      {record.pieceCount ? `${record.pieceCount} ${record.pieceCount === 1 ? 'piece' : 'pieces'}` : record.serviceName}
+                      {record.shelfLocation ? ` · ${record.shelfLocation}` : ''}
+                    </span>
+                  </span>
+                  {record.balance > 0 && (
+                    <span className="text-[10px] font-black text-amber-500 shrink-0">
+                      ₦{record.balance.toLocaleString()}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       ) : (
         <div className="space-y-3">
           <div className="flex gap-2">
