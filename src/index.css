@@ -555,3 +555,35 @@
 @media (prefers-reduced-motion: reduce) {
   .spotlight-lit { animation: none; box-shadow: 0 0 0 3px hsl(var(--primary) / 0.5); }
 }
+
+/*
+ * Reduce Motion, asked for on the Appearance screen.
+ *
+ * This app has a mascot that walks off the screen, confetti, pulsing rings and
+ * counters that count. Somebody who turns this on is usually asking because
+ * the movement makes them ill or because their phone cannot keep up, and both
+ * deserve an answer that covers everything rather than the handful of places
+ * that remembered to check. Transitions are left alone - a colour easing over
+ * 200ms is not what anybody means by motion - but nothing travels or spins.
+ */
+.prefers-less-motion *,
+.prefers-less-motion *::before,
+.prefers-less-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+/*
+ * Compact Mode: the same screens with less air between things.
+ *
+ * For the shop working on a small phone who would rather see six rows than
+ * four. Only the outer padding of cards and the gaps between them tighten -
+ * type size and tap targets are untouched, because a smaller button is not
+ * what was asked for and would make the app harder to use, not denser.
+ */
+.compact-mode .p-5 { padding: 0.85rem; }
+.compact-mode .p-4 { padding: 0.7rem; }
+.compact-mode .space-y-4 > * + * { margin-top: 0.6rem; }
+.compact-mode .space-y-3 > * + * { margin-top: 0.45rem; }
+.compact-mode .gap-3 { gap: 0.5rem; }

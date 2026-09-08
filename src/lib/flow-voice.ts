@@ -138,11 +138,34 @@ export interface SpeakOptions {
   rate?: number;
   onEnd?: () => void;
   onError?: () => void;
+  /** Speak even when voice is switched off - only the settings preview. */
+  force?: boolean;
 }
 
 /** Reads text aloud in Flow's voice. Cancels anything already speaking. */
+/*
+ * Whether the shop wants to be spoken to.
+ *
+ * The Voice Features switch on the Flow settings screen moved, saved, and
+ * changed nothing - the app kept talking. The gate is here rather than at the
+ * four places that call this, because four gates is four chances to forget
+ * one, and the fifth caller added next month would forget by default.
+ *
+ * Held in a module variable, set from the app when the setting changes, for
+ * the same reason the theme is a class on the root: a library that needs the
+ * store passed to it gets the store forgotten.
+ */
+let voiceAllowed = true;
+
+export function setFlowVoiceEnabled(enabled: boolean): void {
+  voiceAllowed = enabled;
+}
+
 export function speakAsFlow(text: string, options: SpeakOptions = {}): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  // `force` is for the voice preview on the settings screen: choosing a voice
+  // has to let you hear it, even while voice is switched off.
+  if (!voiceAllowed && !options.force) return;
   const clean = toSpeakable(text);
   if (!clean) return;
 

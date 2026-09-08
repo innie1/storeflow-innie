@@ -2752,7 +2752,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                       const previewText = voiceOpt.id === 'young-male' ? "Hi, I am Flow! Ready to scale your store?" :
                                           voiceOpt.id === 'male' ? "Hello. I am Flow, your business manager companion." :
                                           "Hi there, I am Flow! Let's make some sales today.";
-                      speakAsFlow(previewText, { gender: voiceOpt.id as FlowVoiceGender });
+                      // Forced: choosing a voice has to let you hear it, even with voice off.
+                      speakAsFlow(previewText, { gender: voiceOpt.id as FlowVoiceGender, force: true });
                     }}
                     className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all ${
                       isSelected

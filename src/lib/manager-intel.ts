@@ -1,4 +1,5 @@
 import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
+import { allowedNotifications, wantsNotification } from '@/lib/notification-gate';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { getLowStockThreshold } from '@/lib/settings';
@@ -1253,7 +1254,11 @@ export function checkWeeklyRestockDraft(store: StoreData): StoreData | null {
     actionLabel: 'Review Draft',
     actionTab: 'inventory',
     actionParam: 'openRestock',
+    category: 'recommendation',
   };
+
+  // A shop that switched recommendations off does not get one anyway.
+  if (!wantsNotification(store, 'recommendation')) return null;
 
   return {
     ...store,
@@ -2907,6 +2912,7 @@ export function checkDebtExpenseReminders(store: StoreData): StoreData | null {
       description: `${bill.label} (₦${bill.amount.toLocaleString()}) is ${dueLabel(days)}. Mark it paid from Expenses once settled.`,
       actionLabel: 'View Expenses',
       actionTab: 'expenses',
+      category: 'alert',
     });
     return { ...bill, lastReminderDate: now };
   });
@@ -2927,6 +2933,7 @@ export function checkDebtExpenseReminders(store: StoreData): StoreData | null {
       description: `₦${loan.amount.toLocaleString()} owed to ${loan.source} is ${dueLabel(days)}.`,
       actionLabel: 'View Loans',
       actionTab: 'roi',
+      category: 'alert',
     });
     return { ...loan, lastReminderDate: now };
   });
@@ -2937,7 +2944,7 @@ export function checkDebtExpenseReminders(store: StoreData): StoreData | null {
     ...store,
     recurringBills: bills,
     loans,
-    flowNotifications: [...newNotifications, ...(store.flowNotifications || [])],
+    flowNotifications: [...allowedNotifications(store, newNotifications), ...(store.flowNotifications || [])],
   };
 }
 

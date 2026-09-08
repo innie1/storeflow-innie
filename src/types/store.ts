@@ -331,6 +331,13 @@ export interface FlowNotification {
   actionLabel?: string;
   actionTab?: string;
   actionParam?: string; // optional extra signal for the destination tab, e.g. 'openRestock' to auto-open Smart Restock Engine
+  /*
+   * What kind of notification this is, so the switches on the Notifications
+   * screen can be honoured. See notification-gate. Optional, and an absent
+   * category always goes through - failing towards showing somebody something
+   * is safer than silently swallowing it.
+   */
+  category?: import('@/lib/notification-gate').NotificationCategory;
 }
 
 export interface MemoryEntry {

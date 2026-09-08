@@ -53,9 +53,14 @@ function inWindow(dateish: unknown, window: MonthWindow): boolean {
  *
  * Rent, salaries, the internet: what the shop owes whether it takes in one
  * bundle or none. Read from what was actually spent this month, with the
- * shop's own recurring bills used for anything not yet paid - a rent day that
- * has not arrived is still rent owed, and leaving it out would make the target
- * look easy right up until it is not.
+ * shop's own recurring bills, staff salaries and the rent on its profile used
+ * for anything not yet paid - a rent day that has not arrived is still rent
+ * owed, and leaving it out would make the target look easy right up until it
+ * is not.
+ *
+ * Everything here is counted once. Each source subtracts what has already been
+ * recorded as spending, because charging a shop twice for the same rent is as
+ * wrong as not charging it at all.
  */
 export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthWindow()): number {
   const spent = (store.expenses || [])
@@ -97,7 +102,39 @@ export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthW
     .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
   const wagesOwed = Math.max(0, payroll - salariesPaid);
 
-  return Math.max(0, spent + upcoming + wagesOwed);
+  /*
+   * Rent from the shop's own profile.
+   *
+   * There were two places to enter rent and only one of them counted. A shop
+   * that filled in Store Rent under Edit Profile - landlord, amount, when it
+   * is due - had that money reach a rent affordability panel and nothing else,
+   * so the break-even target, the pricing advice and the month report were all
+   * computed as though the largest bill the shop pays did not exist. The
+   * target came out low and reachable, and it was neither.
+   *
+   * Only when it has not already been recorded as spending. A shop that pays
+   * its rent and books the expense would otherwise be charged for it twice in
+   * the same month, which is the opposite error and just as wrong.
+   */
+  const rent = store.profile?.rent;
+  let profileRent = 0;
+  if (rent?.isRented && Number(rent.amount) > 0) {
+    const amount = Number(rent.amount);
+    // Monthly, quarterly or yearly - the three the profile offers. Anything
+    // unset is treated as monthly, which is how the rest of the app reads it.
+    const monthly = rent.frequency === 'yearly' ? amount / 12
+      : rent.frequency === 'quarterly' ? amount / 3
+      : amount;
+
+    const rentPaid = (store.expenses || [])
+      .filter(expense => inWindow(expense.date, window))
+      .filter(expense => expense.category === 'Rent' || /rent/i.test(String(expense.note || '')))
+      .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+
+    profileRent = Math.max(0, monthly - rentPaid);
+  }
+
+  return Math.max(0, spent + upcoming + wagesOwed + profileRent);
 }
 
 export interface PiecesAndRevenue {

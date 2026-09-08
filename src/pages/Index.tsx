@@ -11,6 +11,9 @@ import { readLinkedTab, readNotificationAct, readOrderDeepLink, stripOrderDeepLi
 import { acknowledgeStockLoss, getStockLossNotice, markStockLossRaised } from '@/lib/stock-loss-notice';
 import { dropBackgroundNotice, enableBackgroundNotices, queueBackgroundNotice, showLocalNotification } from '@/lib/push-notifications';
 import type { NotificationAct } from '@/lib/order-deep-link';
+import { allowedNotifications, wantsNotification } from '@/lib/notification-gate';
+import { applyDisplayPreferences } from '@/lib/display-preferences';
+import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
@@ -363,6 +366,24 @@ const isTabAllowed = (tabId: TabId, user: any) => canOpenTab(tabId, user);
 
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
+
+  /*
+   * Reduce Motion and Compact Mode, applied to the whole app.
+   *
+   * Both switches sat on the Appearance screen doing nothing. They live on the
+   * document root like the theme does, so one switch reaches every screen
+   * without a single component having to ask - and they are re-applied when
+   * the settings change rather than only at startup, so the switch takes
+   * effect while somebody is looking at it.
+   */
+  useEffect(() => {
+    applyDisplayPreferences(store);
+  }, [store?.managerSettings?.reduceMotion, store?.managerSettings?.compactMode]);
+
+  // Voice Features, likewise: one gate inside speakAsFlow, told from here.
+  useEffect(() => {
+    setFlowVoiceEnabled(store?.managerSettings?.voiceFeatures !== false);
+  }, [store?.managerSettings?.voiceFeatures]);
   const [autoOpenRestock, setAutoOpenRestock] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [tab, setTabState] = useState<TabId>('dashboard');
@@ -558,7 +579,7 @@ export default function Index() {
            * of the four the styling knows, too; anything else falls through to
            * plain grey, which is how cancellations came to look like news.
            */
-          const newItems: FlowNotification[] = dbNotifs.map(n => ({
+          const newItems: FlowNotification[] = allowedNotifications(store, dbNotifs.map(n => ({
             id: n.id,
             title: n.title || 'Flow Alert',
             text: n.message || '',
@@ -567,8 +588,9 @@ export default function Index() {
             tone: n.type === 'new_order' ? 'info' : 'info',
             actionTab: n.type === 'new_order' ? 'orders' : undefined,
             actionLabel: n.type === 'new_order' ? 'View Orders' : undefined,
-            icon: n.type === 'new_order' ? '🛒' : '🔔'
-          }));
+            icon: n.type === 'new_order' ? '🛒' : '🔔',
+            category: n.type === 'new_order' ? 'customerRequest' : 'alert',
+          })));
 
           setStore(prev => {
             if (!prev) return prev;
@@ -765,8 +787,11 @@ export default function Index() {
             tone: newNotif.type === 'order_cancelled' ? 'danger' : 'info',
             actionTab: isOrderRel ? 'orders' : undefined,
             actionLabel: isOrderRel ? 'View Orders' : undefined,
-            icon: notifIcon
+            icon: notifIcon,
+            category: isOrderRel ? 'customerRequest' : 'alert',
           };
+          // The switch on the Notifications screen, honoured at the door.
+          if (!wantsNotification(store, newNotification.category)) return;
 
           setStore(prev => {
             if (!prev) return prev;
@@ -1407,6 +1432,8 @@ export default function Index() {
       if (!prev) return prev;
       const existing = prev.flowNotifications || [];
       if (existing.some(n => n.id === notice.id)) return prev;
+      // A shop that switched low-stock alerts off does not get this one.
+      if (!wantsNotification(prev, 'lowStock')) return prev;
       markStockLossRaised(prev);
       return {
         ...prev,
@@ -1419,6 +1446,7 @@ export default function Index() {
           read: false,
           title: notice.title,
           description: notice.body,
+          category: 'lowStock',
           actionLabel: 'Open stock count',
           actionTab: 'inventory',
         } as any, ...existing],

@@ -79,7 +79,14 @@ export default function BreakEvenPip({ store, canSeeMoney, onOpen }: Props) {
       type="button"
       onClick={onOpen}
       className="flex items-center gap-1.5 h-9 px-2 rounded-xl bg-surface-2 border border-border shrink-0"
-      title={title}
+      /*
+       * No `title`. The browser's own tooltip is a strip of unstyled text
+       * placed wherever it likes, and against the right edge of a phone-width
+       * layout it ran off the screen. Nothing is lost by dropping it: tapping
+       * the ring goes to the full figures and lights them up, which explains
+       * far more than a line of hover text, and the label stays for anybody
+       * using a screen reader.
+       */
       aria-label={title}
     >
       <svg viewBox="0 0 24 24" className="w-5 h-5 -rotate-90 shrink-0">

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { isServiceFirstBusiness, runsATill } from '@/lib/business-runtime';
 import { createPortal } from 'react-dom';
+import { allowedNotifications } from '@/lib/notification-gate';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId, AutoPriceEvent } from '@/types/store';
 import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId, sumOperatingExpenses } from '@/lib/store-data';
 import PerformanceCalendar from '@/components/PerformanceCalendar';
@@ -602,7 +603,9 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     const kept = existing.filter(n => !n.read || liveIds.has(n.id));
 
     if (fresh.length > 0 || kept.length !== existing.length) {
-      const updated = { ...store, flowNotifications: [...fresh, ...kept].slice(0, 50) };
+      // Gated as they arrive rather than hidden afterwards: a notification
+      // that exists but is not shown still buzzes a phone.
+      const updated = { ...store, flowNotifications: [...allowedNotifications(store, fresh), ...kept].slice(0, 50) };
       saveStore(updated); onUpdate(updated);
     }
   }, [settings.enabled, store.sales.length, store.products, store.expenses?.length, store.customerRequests?.length]);

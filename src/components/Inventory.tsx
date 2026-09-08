@@ -91,6 +91,9 @@ export interface MassEditItem {
 }
 
 export default function Inventory({ store, onUpdate, filterLowStock, onClearFilter, currentUser, autoOpenRestock, onAutoOpenRestockHandled, focusProduct, onFocusProductHandled }: InventoryProps) {
+  // Show Product Profit, from Settings. Defaults on: a shop that has never
+  // opened the switch is the one that wants to see what it makes.
+  const showProfit = store.managerSettings?.showProductProfit !== false;
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   /** A set of products Flow sent the merchant here to look at, and why. */
   const [focusGroup, setFocusGroup] = useState<{ ids: string[]; label: string } | null>(null);
@@ -3817,7 +3820,15 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     <p className="text-[10px] text-muted-foreground uppercase font-bold">Cost Price</p>
                     <p className="text-base font-display font-bold text-foreground">₦{selectedDetailProduct.costPrice.toLocaleString()}</p>
                   </div>
-                  <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
+                  {/*
+                    Show Product Profit, from the settings screen.
+
+                    The switch existed and nothing read it, so a shop that had
+                    turned it off - usually because a phone gets handed to
+                    staff or a customer leans over the counter - was still
+                    showing what it makes on every item.
+                  */}
+                  {showProfit && <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
                     <p className="text-[10px] text-muted-foreground uppercase font-bold">Profit / unit</p>
                     {(() => {
                       const profit = selectedDetailProduct.sellingPrice - selectedDetailProduct.costPrice;
@@ -3837,7 +3848,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                         </>
                       );
                     })()}
-                  </div>
+                  </div>}
                   <div className="bg-card p-3 rounded-xl border border-border space-y-0.5">
                     <p className="text-[10px] text-muted-foreground uppercase font-bold">Current Stock</p>
                     <p className={`text-base font-display font-black ${selectedDetailProduct.quantity <= lowThreshold ? 'text-destructive' : selectedDetailProduct.quantity <= lowThreshold * 3 ? 'text-warning' : 'text-success'}`}>
