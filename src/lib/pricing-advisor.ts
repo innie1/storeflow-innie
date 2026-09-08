@@ -71,7 +71,16 @@ export interface AdvisorState {
   unitCost: number | null;
 }
 
+/*
+ * Suggestions round up, never to nearest.
+ *
+ * Rounding to nearest landed the suggested price a hair under the threshold it
+ * was calculated to clear: the advisor proposed 204, the owner accepted it,
+ * and it immediately called that same price thin - a complaint with no remedy,
+ * about its own advice. Found by accepting one.
+ */
 const round = (value: number) => Math.round(value);
+const suggestPrice = (cost: number) => Math.ceil(cost / (1 - THIN_MARGIN));
 
 /** Everything the shop currently offers. */
 function sellable(store: StoreData): Product[] {
@@ -175,7 +184,7 @@ export function pricingAdvice(store: StoreData): AdvisorState {
      * it is what covers the cost with a quarter left over.
      */
     if (margin! <= 0) {
-      const suggested = round(cost / (1 - THIN_MARGIN));
+      const suggested = suggestPrice(cost);
       return {
         productId: id, name: product.name, kind: 'losing', price, unitCost: cost,
         margin, volume: sold,
@@ -186,7 +195,7 @@ export function pricingAdvice(store: StoreData): AdvisorState {
     }
 
     if (margin! / price < THIN_MARGIN) {
-      const suggested = round(cost / (1 - THIN_MARGIN));
+      const suggested = suggestPrice(cost);
       return {
         productId: id, name: product.name, kind: 'thin', price, unitCost: cost,
         margin, volume: sold,

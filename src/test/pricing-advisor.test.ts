@@ -149,3 +149,29 @@ describe('simulating without touching anything', () => {
     expect(simulatePrice(item, 600).monthlyChange).toBeNull();
   });
 });
+
+describe('advice it will not then criticise', () => {
+  beforeEach(() => localStorage.clear());
+
+  /**
+   * Found by accepting one. Rounding to nearest landed the suggested price a
+   * hair under the very threshold it was calculated to clear, so the advisor
+   * proposed 204, the owner accepted it, and it immediately called that same
+   * price thin - a complaint about its own advice, with no remedy offered.
+   */
+  it('accepting the suggestion clears the warning', () => {
+    for (let i = 0; i < 4; i += 1) job('svc', 5, 600);
+    const base = laundry({ products: [service('svc', 'Wash & Iron', 120)] as any, expenses: [consumables(8_000)] as any });
+
+    const first = pricingAdvice(base).advice[0];
+    expect(first.kind).toBe('losing');
+    expect(first.suggested).not.toBeNull();
+
+    // The shop takes the advice.
+    const after = laundry({
+      products: [service('svc', 'Wash & Iron', first.suggested!)] as any,
+      expenses: [consumables(8_000)] as any,
+    });
+    expect(pricingAdvice(after).advice[0].kind).toBe('healthy');
+  });
+});

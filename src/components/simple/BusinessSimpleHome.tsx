@@ -1,6 +1,8 @@
 import { StoreData, TabId } from '@/types/store';
 import { canOpenTab, canSeeMoney } from '@/lib/permissions';
 import BreakEvenCard from '@/components/laundry/BreakEvenCard';
+import MonthReportCard from '@/components/laundry/MonthReportCard';
+import BreakEvenWatcher from '@/components/laundry/BreakEvenWatcher';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
@@ -91,10 +93,14 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
         </div>
       </div>
 
-      {/* What the month still needs. Only for a shop that sells work by the
-          piece, where the figure means something. */}
+      {/* What the month still needs, and how the last one went. Only for a
+          shop that sells work by the piece, where the figures mean something. */}
       {isServiceShop(store) && (
-        <BreakEvenCard store={store} canSeeMoney={canSeeMoney(currentUser)} />
+        <>
+          <BreakEvenCard store={store} canSeeMoney={canSeeMoney(currentUser)} />
+          <MonthReportCard store={store} canSeeMoney={canSeeMoney(currentUser)} />
+          <BreakEvenWatcher store={store} canSeeMoney={canSeeMoney(currentUser)} />
+        </>
       )}
 
       <div className="rounded-2xl bg-card border border-border p-4">
