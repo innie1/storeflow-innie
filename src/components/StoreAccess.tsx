@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createStore, loadStore, saveStore, getStoreIndex } from '@/lib/store-data';
 import { getBusinessTemplate } from '@/lib/business-runtime';
-import { applyBusinessTemplate } from '@/lib/business-templates';
+import { applyBusinessTemplate, businessCategoryFor } from '@/lib/business-templates';
 import { StoreData, StoreCategory, StoreType, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotMood } from '@/components/Mascot';
@@ -245,7 +245,9 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     ['printing','Printing / Cyber Cafe','🖨️'], ['cyber_cafe','Cyber Cafe','💻'], ['car_wash','Car Wash','🚗'], ['photography','Photography','📸'], ['cleaning','Cleaning Service','🧹'], ['spa','Spa / Wellness','🧖'],
     ['gas_filling','Gas Filling','⛽'], ['games','Gaming Centre','🎮'], ['restaurant','Restaurant / Food','🍔'],
   ] as const;
-  const businessCategory = (type: string): StoreCategory => type === 'games' ? 'games' : type === 'restaurant' ? 'restaurant' : type === 'other' ? 'other' : 'retail';
+  // Shared with the Switch Store sheet, so the two creation paths cannot
+  // disagree about what a trade is again.
+  const businessCategory = businessCategoryFor;
   const businessStoreType = (type: string): StoreType => type as StoreType;
 
   const handleCreate = () => {

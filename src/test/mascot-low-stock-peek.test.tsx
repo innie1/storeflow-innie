@@ -45,6 +45,24 @@ async function tick(until?: () => boolean) {
     // Let anything those timers resolved settle before looking.
     await act(async () => { await Promise.resolve(); });
     if (!until || until()) return;
+
+    /*
+     * Stop advancing once the peek has actually fired.
+     *
+     * It speaks for four and a half seconds and then will not speak again for
+     * four hours. Advancing another minute in the hope of catching it runs the
+     * speech out and puts the cooldown in the way of every later attempt - so
+     * a run where React had not yet flushed when we first looked could never
+     * recover, which is exactly how this failed about one run in three.
+     * Flush and look again instead of moving time.
+     */
+    if (localStorage.getItem(PEEK_KEY)) {
+      for (let flush = 0; flush < 5; flush += 1) {
+        await act(async () => { await Promise.resolve(); });
+        if (until()) return;
+      }
+      return;
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import type { StoreData, StoreType } from '@/types/store';
+import type { StoreCategory, StoreData, StoreType } from '@/types/store';
 
 /**
  * Lean business templates. These are starter defaults, not a technical
@@ -227,4 +227,67 @@ export function applyBusinessTemplate(store: StoreData, type?: string): StoreDat
       workflow: template.workflow,
     },
   } as StoreData;
+}
+
+/**
+ * The one way a store gets created.
+ *
+ * There were two. The setup wizard offered all twenty trades and applied the
+ * matching template; the Switch Store sheet had its own older picker of four
+ * categories and six retail types, and called createStore without ever
+ * applying a template. Laundry was not among them — so a merchant adding their
+ * second shop from the switcher, which is exactly how somebody with more than
+ * one shop does it, could not create a laundry at all. They would get a store
+ * with none of the laundry screens and no way to say what it was.
+ *
+ * Both paths call this now, so the list of trades and the template that comes
+ * with each cannot drift apart again.
+ */
+export function businessCategoryFor(type: string): StoreCategory {
+  if (type === 'games') return 'games';
+  if (type === 'restaurant') return 'restaurant';
+  if (type === 'other') return 'other';
+  return 'retail';
+}
+
+/**
+ * The order the trades are offered in: commonest first.
+ *
+ * Not the order they happen to be declared in. A merchant picking a trade
+ * scans from the top and stops at the first thing that fits, so the shops
+ * people actually open around here belong there - and 'Other' belongs last,
+ * because it is what you choose when nothing above it fitted.
+ *
+ * Anything not named here still appears, after these and before Other, so
+ * adding a trade to the registry never silently drops it from the picker.
+ */
+const COMMONEST_FIRST = [
+  'provision',
+  'laundry',
+  'restaurant',
+  'food',
+  'barber',
+  'salon',
+  'pharmacy',
+  'clothing',
+  'tailoring',
+  'electronics',
+];
+
+export function listBusinessTypes(): { type: string; name: string; icon: string; description: string }[] {
+  const all = Object.values(BUSINESS_TEMPLATES);
+  const rank = (type: string) => {
+    const index = COMMONEST_FIRST.indexOf(type);
+    if (index >= 0) return index;
+    return type === 'other' ? Number.MAX_SAFE_INTEGER : COMMONEST_FIRST.length;
+  };
+
+  return [...all]
+    .sort((a, b) => rank(a.type) - rank(b.type))
+    .map(template => ({
+      type: template.type,
+      name: template.name,
+      icon: template.icon,
+      description: template.description,
+    }));
 }

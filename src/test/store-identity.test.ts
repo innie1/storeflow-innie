@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { backfillStoreIndexTypes, getStoreIndex } from '@/lib/store-data';
 import { readSource } from './helpers/source';
+import { listBusinessTypes } from '@/lib/business-templates';
 
 /**
  * Somebody running a laundry, a barber shop and a restaurant off one phone had
@@ -83,5 +84,44 @@ describe('saying which shop before opening it', () => {
   it('gives each store in the switcher its own trade and icon', () => {
     expect(switcher).toContain('getBusinessTemplate({ storeType: s.businessType }');
     expect(switcher).toContain('backfillStoreIndexTypes()');
+  });
+});
+
+describe('one way to create a store', () => {
+  const switcher = readSource('src/components/StoreSwitcher.tsx');
+  const wizard = readSource('src/components/StoreAccess.tsx');
+
+  /**
+   * There were two creation paths. The setup wizard offered all twenty trades
+   * and applied the matching template; the Switch Store sheet had its own
+   * older picker of four categories and six retail types, and called
+   * createStore without ever applying a template.
+   *
+   * Laundry was not on that shorter list — so a merchant adding their second
+   * shop from the switcher, which is exactly how somebody with more than one
+   * shop does it, could not create a laundry at all.
+   */
+  it('offers every trade in the switcher, not a shorter list of its own', () => {
+    expect(switcher).toContain('listBusinessTypes()');
+    expect(switcher).not.toContain('const CATEGORIES');
+    expect(switcher).not.toContain('provision_wholesale');
+  });
+
+  it('applies the trade template when creating from the switcher', () => {
+    // Without this the store came out with none of the screens its trade needs.
+    expect(switcher).toContain('applyBusinessTemplate(created, businessType)');
+  });
+
+  it('has both paths agree on what category a trade is', () => {
+    expect(switcher).toContain('businessCategoryFor(businessType)');
+    expect(wizard).toContain('businessCategoryFor');
+  });
+
+  it('covers every trade the app knows about', () => {
+    const types = listBusinessTypes().map(entry => entry.type);
+    for (const trade of ['laundry', 'barber', 'restaurant', 'games', 'provision', 'tailoring']) {
+      expect(types).toContain(trade);
+    }
+    expect(types.length).toBeGreaterThanOrEqual(20);
   });
 });

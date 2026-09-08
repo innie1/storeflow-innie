@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { StoreData, StoreCategory } from '@/types/store';
-import { getStoreIndex, backfillStoreIndexTypes, loadStore, createStore, removeStoreFromIndex } from '@/lib/store-data';
+import { StoreData } from '@/types/store';
+import { getStoreIndex, backfillStoreIndexTypes, loadStore, createStore, saveStore, removeStoreFromIndex } from '@/lib/store-data';
+import { applyBusinessTemplate, businessCategoryFor, listBusinessTypes } from '@/lib/business-templates';
 import { getBusinessTemplate } from '@/lib/business-runtime';
 import { saveSession } from '@/components/Settings';
 import { showToast } from '@/components/Toast';
@@ -8,12 +9,6 @@ import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
 import ConfirmModal from '@/components/ConfirmModal';
 
-const CATEGORIES: { id: StoreCategory; label: string; icon: string }[] = [
-  { id: 'retail', label: 'Retail', icon: '🛒' },
-  { id: 'restaurant', label: 'Restaurant', icon: '🍽️' },
-  { id: 'games', label: 'Games', icon: '🎮' },
-  { id: 'other', label: 'Other', icon: '🏪' },
-];
 
 interface StoreSwitcherProps {
   currentCode: string;
@@ -26,8 +21,8 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
   const [mode, setMode] = useState<'list' | 'add' | 'create'>('list');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<StoreCategory>('retail');
-  const [retailType, setRetailType] = useState('provision_retail');
+  /** The trade, from the same list the setup wizard offers. */
+  const [businessType, setBusinessType] = useState('provision');
   // Entries written before the trade was recorded are filled in from the
   // stores already on this device, so an existing merchant sees what each shop
   // is without having to re-add it.
@@ -53,7 +48,22 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
 
   const handleCreate = () => {
     if (!name.trim()) return showToast('Enter a store name', 'error');
-    const store = createStore(name.trim(), category, category === 'retail' ? retailType : undefined);
+    /*
+     * The same two calls the setup wizard makes.
+     * This used to call createStore alone, with a category from its own
+     * shorter list and no template applied - so a store made here came out
+     * without the screens its trade needs, and a laundry could not be made at
+     * all because laundry was not on that list.
+     */
+    const created = createStore(
+      name.trim(),
+      businessCategoryFor(businessType),
+      businessType,
+      undefined,
+      businessType as any,
+    );
+    const store = applyBusinessTemplate(created, businessType);
+    saveStore(store);
     saveSession(store.accessCode);
     showToast(`Created "${store.storeName}" — code ${store.accessCode}`);
     onSwitch(store);
@@ -162,41 +172,27 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
           <div className="space-y-3">
             <label className="block text-xs text-muted-foreground">Store Name</label>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Side Shop" className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm" autoFocus />
-            <label className="block text-xs text-muted-foreground">Business Category</label>
-            <div className="grid grid-cols-2 gap-2">
-              {CATEGORIES.map(c => (
+            <label className="block text-xs text-muted-foreground">What kind of business?</label>
+            {/*
+              Every trade the setup wizard offers, from the same list.
+              This was four categories and a retail dropdown of its own - no
+              laundry, no barber, no tailor - so a second shop created here
+              could not be told what it was.
+            */}
+            <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-0.5">
+              {listBusinessTypes().map(option => (
                 <button
-                  key={c.id}
-                  onClick={() => setCategory(c.id)}
+                  key={option.type}
+                  onClick={() => setBusinessType(option.type)}
                   className={`p-2.5 rounded-xl border text-left transition-colors ${
-                    category === c.id ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border hover:border-primary/30'
+                    businessType === option.type ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border hover:border-primary/30'
                   }`}
                 >
-                  <div className="text-lg">{c.icon}</div>
-                  <p className="font-display font-semibold text-xs mt-0.5">{c.label}</p>
+                  <div className="text-lg">{option.icon}</div>
+                  <p className="font-display font-semibold text-xs mt-0.5 truncate">{option.name}</p>
                 </button>
               ))}
             </div>
-            {category === 'retail' && (
-              <div className="space-y-1 text-left">
-                <label className="block text-xs text-muted-foreground uppercase font-bold">Select Retail Type</label>
-                <select
-                  value={retailType}
-                  onChange={e => setRetailType(e.target.value)}
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary focus:bg-surface-2 [&>option]:bg-card"
-                >
-                  <option value="provision_retail">Sales of Provision (Retail Provision)</option>
-                  <option value="provision_wholesale">Wholesale for Provision</option>
-                  <option value="pharmacy">Pharmacy / Chemist</option>
-                  <option value="electronics">Electronics Store</option>
-                  <option value="gasoline">Gasoline / Gas Filling Station</option>
-                  <option value="other">Other / General Retail</option>
-                </select>
-                <p className="text-[10px] text-muted-foreground leading-snug">
-                  * Provision retail/wholesale loads preloaded goods. Other types start empty.
-                </p>
-              </div>
-            )}
             <div className="flex gap-2">
               <button onClick={() => setMode('list')} className="flex-1 p-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold">Cancel</button>
               <button onClick={handleCreate} className="flex-1 p-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-bold">Create & Switch</button>
