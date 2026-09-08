@@ -65,9 +65,18 @@ export default function SetupGuide({ store, tab, onNavigate }: Props) {
         const x = box.left + box.width / 2;
         const y = box.top + box.height / 2;
 
-        // Scrolled out of view is not the same as covered - it just needs
-        // scrolling to, and dropping it would lose a perfectly good target.
-        if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return true;
+        /*
+         * Scrolled out of view is not the same as covered - but it is not
+         * usable either. A gaming centre's first session button sits below a
+         * panel of customer requests, so the hole was drawn 837px down a 554px
+         * screen: the merchant saw the app dim and nothing else, with the card
+         * off the bottom too. Bring it into view and let the next measure find
+         * it where it can be seen.
+         */
+        if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+          node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          return false;
+        }
 
         /*
          * An element behind an open sheet still measures perfectly well.

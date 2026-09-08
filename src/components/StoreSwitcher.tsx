@@ -90,8 +90,16 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
               {stores.map(s => (
                 <div
                   key={s.code}
-                  className={`p-3 rounded-xl border flex items-center gap-3 ${
-                    s.code === currentCode ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border'
+                  /*
+                    Every row the same height, whatever it is showing.
+                    The active one carried a badge where the others carry a
+                    Switch button and a remove button, so it sat taller than
+                    the rest and the list stepped in and out down the side. A
+                    fixed row height and a fixed-width slot on the right keeps
+                    them in one line.
+                  */
+                  className={`h-[68px] px-3 rounded-xl border flex items-center gap-3 ${
+                    s.code === currentCode ? 'bg-success/10 border-success/40' : 'bg-surface-2 border-border'
                   }`}
                 >
                   {/*
@@ -110,16 +118,21 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
                       <span className="font-mono"> · {s.code}</span>
                     </p>
                   </div>
-                  {s.code === currentCode ? (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-display font-bold">ACTIVE</span>
-                  ) : (
-                    <>
-                      <button onClick={() => switchTo(s.code)} className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold">
-                        Switch
-                      </button>
-                      <button onClick={() => handleRemove(s.code)} className="w-7 h-7 rounded-lg bg-destructive/10 text-destructive text-xs hover:bg-destructive/20">✕</button>
-                    </>
-                  )}
+                  {/* One slot on the right, the same width either way. */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {s.code === currentCode ? (
+                      <span className="h-8 px-3 rounded-lg bg-success/15 text-success text-[10px] font-display font-black tracking-wide flex items-center">
+                        ACTIVE
+                      </span>
+                    ) : (
+                      <>
+                        <button onClick={() => switchTo(s.code)} className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold">
+                          Switch
+                        </button>
+                        <button onClick={() => handleRemove(s.code)} className="w-8 h-8 rounded-lg bg-destructive/10 text-destructive text-xs hover:bg-destructive/20 flex items-center justify-center">✕</button>
+                      </>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

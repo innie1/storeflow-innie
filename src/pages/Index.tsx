@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { canOpenTab } from '@/lib/permissions';
 import SetupGuide from '@/components/SetupGuide';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
@@ -442,6 +442,7 @@ export default function Index() {
     ]);
     if (validTabs.has(tab)) sessionStorage.setItem('storeflow-active-tab', tab);
   }, [tab]);
+
 
   // Ensure body scroll is never left locked on initial app load, store load, or when switching tabs
   useEffect(() => {
@@ -1013,6 +1014,26 @@ export default function Index() {
       window.history.replaceState({ tab: targetTab, index: 1 }, '', '#' + targetTab);
     }
   }, []);
+  /**
+   * A different shop opens on its own home screen.
+   *
+   * The active tab is remembered in sessionStorage so a refresh keeps you
+   * where you were, which is right within one shop. Across a switch it is
+   * wrong: creating a store, or moving from the laundry to the barber shop,
+   * dropped the merchant wherever they had last been in the other shop -
+   * landing a brand-new laundry on a Customer Book with nobody in it. Each
+   * shop is its own context and starts at its own front door.
+   */
+  const lastStoreCode = useRef<string | null>(null);
+  useEffect(() => {
+    const code = String(store?.accessCode || '');
+    if (!code) return;
+    if (lastStoreCode.current !== null && lastStoreCode.current !== code) {
+      setTab('dashboard');
+    }
+    lastStoreCode.current = code;
+  }, [store?.accessCode, setTab]);
+
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
