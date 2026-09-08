@@ -75,6 +75,8 @@ describe('the lookup that makes this usable', () => {
 
   it('shows what is owed on the row itself', () => {
     expect(workspace).toContain('owing');
-    expect(workspace).toContain('laundryBalance(store, clientRef)');
+    // The balance is worked out in laundry-records now, so the workspace and
+    // the home screen's day board cannot disagree about what is owed.
+    expect(readSource('src/lib/laundry-records.ts')).toContain('laundryBalance(store, clientRef)');
   });
 });

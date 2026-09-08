@@ -198,7 +198,14 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
   const customerPhone = input.customerPhone.trim();
   if (!accessCode) throw new Error('Store access code is missing');
   if (!customerName) throw new Error('Customer name is required');
-  if (!customerPhone) throw new Error('Customer phone number is required');
+  /*
+   * No phone is allowed here on purpose.
+   *
+   * The counter stopped demanding one - a walk-in who will not give a number
+   * has to be recordable, or the attendant reaches for the paper book and
+   * stays there - and this refusing would have made that change fail at the
+   * last step, with an error about a field the form no longer asks for.
+   */
   const garments = sanitizeGarmentSelections(input.garments);
   if (!garments.length) throw new Error('Record at least one clothing item');
 

@@ -2,6 +2,8 @@ import { StoreData, TabId } from '@/types/store';
 import { canOpenTab, canSeeMoney } from '@/lib/permissions';
 import BreakEvenPip from '@/components/BreakEvenPip';
 import BreakEvenWatcher from '@/components/BreakEvenWatcher';
+import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
+import RevenueCard from '@/components/RevenueCard';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
@@ -15,12 +17,12 @@ interface Props {
   onNavigate: (tab: TabId) => void;
   /** Only an owner can add staff, so only an owner is offered the shortcut. */
   currentUser?: { role?: string } | null;
+  /** Cloud orders, so the day board counts bundles taken on another phone. */
+  orders?: any[];
 }
 
-export default function BusinessSimpleHome({ store, onNavigate, currentUser }: Props) {
+export default function BusinessSimpleHome({ store, onNavigate, currentUser, orders }: Props) {
   const template = getBusinessTemplate(store);
-  const today = new Date().toISOString().split('T')[0];
-  const todayRevenue = (store.sales || []).filter(s => s.date.startsWith(today)).reduce((sum, s) => sum + s.total, 0);
   const customers = store.customers?.length || 0;
   const isAppointment = template.modes.includes('appointments');
   const isSession = template.modes.includes('sessions');
@@ -85,19 +87,32 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
         </div>
       </div>
 
+      {/*
+        The work first.
+        
+        What used to open this screen was today's takings beside a lifetime
+        customer count. Neither answers what somebody actually arrives with,
+        which is "what do I have to do today" - and at eight in the morning
+        takings read zero however good the month is, which is a poor reason to
+        open an app twice.
+      */}
+      {isLaundry && (
+        <LaundryDayBoard
+          store={store}
+          orders={orders || []}
+          onNavigate={onNavigate}
+          canSeeMoney={canSeeMoney(currentUser)}
+        />
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         {/* Takings belong to whoever runs the shop. An attendant was
             shown the day's revenue on their own phone. */}
-        {canSeeMoney(currentUser) && (
-        <div className="rounded-2xl bg-card border border-border p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground"><DollarSign className="w-4 h-4" /> Today's Revenue</div>
-          <p className="font-display font-black text-2xl text-primary mt-2">₦{todayRevenue.toLocaleString()}</p>
-        </div>
-        )}
-        <div className="rounded-2xl bg-card border border-border p-4">
+        {canSeeMoney(currentUser) && <RevenueCard store={store} />}
+        <button onClick={() => onNavigate('customers')} className="rounded-2xl bg-card border border-border p-4 text-left">
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><Users className="w-4 h-4" /> Customers</div>
           <p className="font-display font-black text-2xl mt-2">{customers}</p>
-        </div>
+        </button>
       </div>
 
       {/* The moment the month covers itself is still worth catching here,

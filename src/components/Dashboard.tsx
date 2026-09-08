@@ -34,7 +34,7 @@ export default function Dashboard({ store, orders = [], onNavigate, currentUser 
   // normal product/inventory store and can fail on a freshly-created games store.
   // Staff roles keep their existing permission-focused dashboards.
   if ((role === 'owner' || !role) && isBusinessTemplateStore) {
-    return <BusinessOwnerDashboard store={store} orders={orders} onNavigate={onNavigate} />;
+    return <BusinessOwnerDashboard store={store} orders={orders} onNavigate={onNavigate} currentUser={currentUser} />;
   }
 
   switch (role) {

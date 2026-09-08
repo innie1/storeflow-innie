@@ -21,9 +21,11 @@ interface SimpleModeHomeProps {
   setStore: (store: StoreData) => void;
   currentUser?: any;
   onNavigate: (tab: any) => void;
+  /** Cloud orders, so the day board counts bundles taken on another phone. */
+  orders?: any[];
 }
 
-export default function SimpleModeHome({ store, setStore, currentUser, onNavigate }: SimpleModeHomeProps) {
+export default function SimpleModeHome({ store, setStore, currentUser, onNavigate, orders }: SimpleModeHomeProps) {
   const businessType = String((store as any).businessType || store.storeType || 'provision');
 
   if (store.category === 'games' || store.storeType === 'games' || businessType === 'games') {
@@ -31,7 +33,7 @@ export default function SimpleModeHome({ store, setStore, currentUser, onNavigat
   }
 
   const nonProductBusiness = ['laundry', 'gas_filling', 'barber', 'salon', 'tailoring', 'repair', 'printing', 'car_wash', 'cyber_cafe', 'photography', 'spa', 'cleaning'].includes(businessType);
-  if (nonProductBusiness) return <BusinessSimpleHome store={store} onNavigate={onNavigate} currentUser={currentUser} />;
+  if (nonProductBusiness) return <BusinessSimpleHome store={store} onNavigate={onNavigate} currentUser={currentUser} orders={orders || []} />;
 
   return <ProductSimpleHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={onNavigate} />;
 }

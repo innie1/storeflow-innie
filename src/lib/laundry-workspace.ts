@@ -1,6 +1,15 @@
 export type LaundryWorkspaceView = 'record' | 'records' | 'runs';
 
 export const LAUNDRY_WORKSPACE_VIEW_STORAGE = 'storeflow-laundry-workspace-view';
+/*
+ * Which list to land on, when the caller knows.
+ *
+ * The day board on the home screen sends somebody here already knowing what
+ * they tapped - "3 late" should open the late ones, not the whole book and a
+ * hunt. Carried the same way the view is, so there is one mechanism for
+ * "arrive at the workspace looking at something particular" rather than two.
+ */
+export const LAUNDRY_WORKSPACE_FILTER_STORAGE = 'storeflow-laundry-workspace-filter';
 export const LAUNDRY_INTAKE_OPEN_STORAGE = 'storeflow-open-laundry-intake';
 export const LAUNDRY_INTAKE_OPEN_SIGNAL = 'storeflow:open-laundry-intake';
 
@@ -14,9 +23,11 @@ export function resolveLaundryWorkspaceView(value: string | null | undefined): L
   return value === 'record' ? 'record' : 'records';
 }
 
-export function requestLaundryWorkspace(view: LaundryWorkspaceView): void {
+export function requestLaundryWorkspace(view: LaundryWorkspaceView, filter?: string): void {
   if (typeof window === 'undefined') return;
   window.sessionStorage.setItem(LAUNDRY_WORKSPACE_VIEW_STORAGE, view);
+  if (filter) window.sessionStorage.setItem(LAUNDRY_WORKSPACE_FILTER_STORAGE, filter);
+  else window.sessionStorage.removeItem(LAUNDRY_WORKSPACE_FILTER_STORAGE);
   if (view === 'record') {
     window.sessionStorage.setItem(LAUNDRY_INTAKE_OPEN_STORAGE, '1');
   } else {
@@ -28,6 +39,14 @@ export function requestLaundryWorkspace(view: LaundryWorkspaceView): void {
   // too — otherwise every Record Laundry / Laundry Records control would only
   // work on first mount instead of behaving identically everywhere.
   window.dispatchEvent(new CustomEvent(LAUNDRY_INTAKE_OPEN_SIGNAL, { detail: view }));
+}
+
+/** The list to open on, once. Cleared as it is read, like the view. */
+export function consumeLaundryWorkspaceFilter(): string | null {
+  if (typeof window === 'undefined') return null;
+  const filter = window.sessionStorage.getItem(LAUNDRY_WORKSPACE_FILTER_STORAGE);
+  window.sessionStorage.removeItem(LAUNDRY_WORKSPACE_FILTER_STORAGE);
+  return filter;
 }
 
 export function consumeLaundryWorkspaceView(): LaundryWorkspaceView {

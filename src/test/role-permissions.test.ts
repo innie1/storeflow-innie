@@ -233,8 +233,18 @@ describe('the simple home screen asks the role too', () => {
     expect(home).toContain("canOpenTab('inventory', currentUser)");
   });
 
-  it("does not show the day's takings to the shop floor", () => {
-    expect(home).toContain('{canSeeMoney(currentUser) && (');
+  it('does not show takings to the shop floor', () => {
+    // The card behind this gate now offers yesterday, today, fourteen days and
+    // all time rather than today alone, which makes the gate matter more, not
+    // less: an attendant would otherwise be holding the shop's whole history.
+    expect(home).toContain('canSeeMoney(currentUser) && <RevenueCard');
+  });
+
+  it('but does show the shop floor the work', () => {
+    // Late, due today and ready are the attendant's job. Only the money owed
+    // inside the day board is held back, which the board decides for itself.
+    const board = readSource('src/components/laundry/LaundryDayBoard.tsx');
+    expect(board).toContain('canSeeMoney && board.owed > 0');
   });
 
   it('keeps the tab rule in one place, where a screen can ask it', () => {

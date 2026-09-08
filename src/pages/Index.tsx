@@ -2139,7 +2139,7 @@ export default function Index() {
           }>
             <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
               {store.uiMode === 'simple' ? (
-                <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} />
+                <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} orders={orders} />
               ) : (
                 <Dashboard store={store} orders={orders} onNavigate={handleNavigate} currentUser={currentUser} />
               )}

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { readSource } from './helpers/source';
 import {
   createLocalLaundryRecord,
   getLocalLaundryRecords,
@@ -38,19 +39,45 @@ describe('local-first laundry records', () => {
     expect(localStorage.getItem(laundryLocalStorageKey('abc123'))).toContain(record.tagCode);
   });
 
-  it('refuses to create a laundry record without both customer name and phone', () => {
-    const base = {
-      accessCode: 'SHOP1',
-      serviceId: 'iron',
-      serviceName: 'Ironing',
-      pricing: 'fixed',
-      billingQuantity: 1,
-      total: 1500,
-      garments: [{ garmentType: 'Shirt', quantity: 1 }],
-    };
+  const base = {
+    accessCode: 'SHOP1',
+    serviceId: 'iron',
+    serviceName: 'Ironing',
+    pricing: 'fixed' as const,
+    billingQuantity: 1,
+    total: 1500,
+    garments: [{ garmentType: 'Shirt', quantity: 1 }],
+  };
 
+  it('still refuses a record with nobody attached to it', () => {
+    // A bundle with no name against it cannot be handed back to anyone.
     expect(() => createLocalLaundryRecord({ ...base, customerName: '', customerPhone: '08012345678' })).toThrow(/name/i);
-    expect(() => createLocalLaundryRecord({ ...base, customerName: 'Timi', customerPhone: '' })).toThrow(/phone/i);
+  });
+
+  it('takes a bundle from a customer who gave no phone number', () => {
+    /*
+     * This used to throw, and that was the single biggest reason to put the
+     * app down and pick the paper book back up: a walk-in who will not give a
+     * number could not be recorded at all. Paper never asked. Anything the app
+     * refuses to record is a reason to stop using the app, not a reason for
+     * the shop to change how it works.
+     */
+    const record = createLocalLaundryRecord({ ...base, customerName: 'Timi', customerPhone: '' });
+    expect(record.customerName).toBe('Timi');
+    expect(record.customerPhone).toBe('');
+    expect(record.tagCode).toBeTruthy();
+    expect(getLocalLaundryRecords('SHOP1')).toHaveLength(1);
+  });
+
+  it('does not offer to WhatsApp a bundle with nowhere to send it', () => {
+    const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+    expect(intake).toContain('Boolean(created.customerPhone)');
+  });
+
+  it('checks a number that was typed, because a wrong one is worse than none', () => {
+    // A mistyped number sends somebody else's clothes updates to a stranger.
+    const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+    expect(intake).toContain('if (phone && !validPhone(phone))');
   });
 
   it('changes laundry status locally first and exposes it to receipt/WhatsApp consumers', () => {

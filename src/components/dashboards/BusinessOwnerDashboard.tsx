@@ -7,11 +7,16 @@ import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-wor
 import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
 import BusinessPulse from '@/components/BusinessPulse';
 import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
+import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
+import RevenueCard from '@/components/RevenueCard';
+import { canSeeMoney } from '@/lib/permissions';
 
 interface BusinessOwnerDashboardProps {
   store: StoreData;
   orders?: any[];
   onNavigate: (tab: any, lowStock?: boolean) => void;
+  /** Takings and money owed are the owner's business, not the counter's. */
+  currentUser?: { role?: string } | null;
 }
 
 const quickActions: Record<string, { label: string; tab: string; icon: string }[]> = {
@@ -53,7 +58,8 @@ const quickActions: Record<string, { label: string; tab: string; icon: string }[
   ],
 };
 
-export default function BusinessOwnerDashboard({ store, orders = [], onNavigate }: BusinessOwnerDashboardProps) {
+export default function BusinessOwnerDashboard({ store, orders = [], onNavigate, currentUser }: BusinessOwnerDashboardProps) {
+  const isLaundry = String(store.businessType || store.storeType || '').toLowerCase() === 'laundry';
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const template = getBusinessTemplate(store.storeType);
@@ -97,11 +103,14 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate 
     .filter(s => s.date?.slice(0, 10) === today)
     .reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
-  const stats = store.storeType === 'laundry'
+  const stats = isLaundry
     ? [
-        { label: 'Today Revenue', value: `₦${revenue.toLocaleString()}`, icon: '💰' },
+        // No takings here. They have their own card above with a window
+        // control, and repeating one day of them beside a service count made
+        // the strip look like a summary when it was three unrelated numbers.
         { label: serviceNoun, value: String(serviceCount), icon: '🧺' },
         { label: 'Customers', value: String((store.customers || []).length), icon: '👥' },
+        { label: 'Recorded', value: String((store.sales || []).length), icon: '🧾' },
       ]
     : store.storeType === 'gas_filling'
       ? [
@@ -139,6 +148,28 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate 
         </div>
       </section>
 
+      {/*
+        The day's work, before anything else.
+        
+        This screen opened with a strip of three figures - today's takings, how
+        many services the shop offers, how many customers it has ever had - and
+        none of them tell an owner what to do. Takings read zero at eight in
+        the morning however good the month is, the service count changes about
+        twice a year, and the customer count only goes up.
+        
+        What is late, what is promised today, what is finished and waiting, and
+        who owes money: those are the four a paper book physically cannot
+        answer, and they are the reason to open this app instead of the book.
+      */}
+      {isLaundry && (
+        <LaundryDayBoard
+          store={store}
+          orders={orders || []}
+          onNavigate={onNavigate as (tab: any) => void}
+          canSeeMoney={canSeeMoney(currentUser)}
+        />
+      )}
+
       {primaryAction && (
         <button onClick={() => handleQuickAction(primaryAction)} className="w-full rounded-2xl bg-primary px-4 py-4 text-left text-primary-foreground shadow-sm active:scale-[0.99] transition-transform">
           <div className="flex items-center gap-3">
@@ -148,6 +179,10 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate 
           </div>
         </button>
       )}
+
+      {/* Revenue, over whichever stretch is being asked about rather than
+          today alone - and only for whoever is allowed to see money. */}
+      {canSeeMoney(currentUser) && <RevenueCard store={store} />}
 
       <section className="grid grid-cols-3 overflow-hidden rounded-2xl border border-border bg-card">
         {stats.map(stat => (

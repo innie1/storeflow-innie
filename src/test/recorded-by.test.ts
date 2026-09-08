@@ -148,6 +148,6 @@ describe('the filter stays out of the way', () => {
     // Every laundry row is rebuilt from an order, so the fields have to
     // survive that round trip or the label and the filter see nothing.
     expect(readSource('src/lib/laundry-offline.ts')).toContain('recorded_by_name: record.recordedByName');
-    expect(readSource('src/components/laundry/LaundryWorkspace.tsx')).toContain('recordedByName: meta.recorded_by_name');
+    expect(readSource('src/lib/laundry-records.ts')).toContain('recordedByName: meta.recorded_by_name');
   });
 });

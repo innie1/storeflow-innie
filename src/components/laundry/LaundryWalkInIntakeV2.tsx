@@ -437,8 +437,19 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
 
     if (!accessCode) return showToast('Store access code is missing', 'error');
     if (!name) return showToast('Customer name is required', 'error');
-    if (!phone) return showToast('Customer phone number is required', 'error');
-    if (!validPhone(phone)) return showToast('Enter a valid customer phone number', 'error');
+    /*
+     * No phone, no problem.
+     *
+     * This used to refuse to save without a valid number, which meant a
+     * walk-in who would not give one could not be recorded at all - and an
+     * attendant who reaches for the paper book once for that bundle is back on
+     * paper for the next one too. Paper never asked, and anything the app
+     * cannot record is a reason to stop using it.
+     *
+     * A number that was typed is still checked, because a wrong one is worse
+     * than none: it sends the bundle's updates to a stranger.
+     */
+    if (phone && !validPhone(phone)) return showToast('That phone number looks wrong — fix it or leave it empty', 'error');
     if (!selectedService) return showToast('Add and select a laundry service first', 'error');
     if (clean.length === 0) return showToast('Record at least one item of clothing', 'error');
     if (isCountedUnit(pricing) && !(billingQty > 0)) return showToast('Enter the laundry quantity', 'error');
@@ -533,7 +544,11 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
         promisedFor,
       });
 
-      if (!customers.some(customer => customer.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''))) {
+      // A walk-in who gave no number does not go in the customer book. The
+      // book is keyed on the phone, so every anonymous "Musa" would either
+      // fold into one person or pile up as duplicates, and neither is a
+      // customer record anybody can use. The bundle still carries the name.
+      if (phone && !customers.some(customer => customer.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''))) {
         try {
           nextStore = addCustomer(nextStore, { name, phone, address: customerAddress.trim() || undefined });
         } catch (customerError) {
@@ -578,7 +593,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
     }
   };
 
-  const canSave = Boolean(customerName.trim() && validPhone(customerPhone) && selectedService && pieceCount > 0 && Number.isFinite(Number(totalPrice)));
+  const canSave = Boolean(customerName.trim() && (!customerPhone.trim() || validPhone(customerPhone)) && selectedService && pieceCount > 0 && Number.isFinite(Number(totalPrice)));
 
   // The saved custom interval sits alongside the fixed ones, unless it is
   // already one of them.
@@ -696,7 +711,9 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
             <div className="shrink-0 border-t border-border p-4 flex gap-2">
               {/* Not in a rehearsal. Sending it would message a real phone
                   number a receipt for a job that was never recorded. */}
-              {!practice && (
+              {/* And not when there is nowhere to send it. Offering a button
+                  that can only fail is worse than not offering one. */}
+              {!practice && Boolean(created.customerPhone) && (
                 <button onClick={sendWhatsApp} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</button>
               )}
               <button onClick={close} className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
@@ -729,7 +746,15 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
                 onPick={customer => selectCustomer(customer.id)}
               />
               </div>
-              <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number * — e.g. 08012345678" inputMode="tel" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
+              <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number — e.g. 08012345678" inputMode="tel" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
+              {/* Said, rather than enforced. The bundle saves either way; this
+                  is only so nobody is surprised later that no message went. */}
+              {!customerPhone.trim() && (
+                <p className="text-[10px] text-muted-foreground">
+                  No phone is fine — you just will not be able to WhatsApp this
+                  customer when the clothes are ready.
+                </p>
+              )}
             </section>
 
             <section className="space-y-2 text-left">
