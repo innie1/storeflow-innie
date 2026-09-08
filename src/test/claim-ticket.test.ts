@@ -84,18 +84,27 @@ describe('where the customer gets it', () => {
     expect(intake).toContain('<ClaimTicket');
   });
 
-  it('does not need a phone number, unlike WhatsApp', () => {
+  it('does not need a phone number', () => {
+    // Offered flat, with no reference to whether a number was given - a
+    // walk-in who would not give one is exactly who this exists for.
+    const offer = intake.slice(intake.indexOf('Show customer') - 300, intake.indexOf('Show customer'));
+    expect(offer).not.toContain('customerPhone');
+  });
+
+  it('and neither does WhatsApp any more', () => {
     /*
-     * The WhatsApp button is hidden when there is nowhere to send it. If the
-     * ticket were gated the same way, a walk-in who gave no number would still
-     * leave with nothing - which is the case this exists for.
+     * It used to be hidden when there was nowhere to send it. Now a bundle
+     * with no number offers WhatsApp's own contact picker instead, which
+     * covers the driver who dropped the clothes off, the relative collecting
+     * them, and the owner wanting a copy on their own phone.
      */
-    const footer = intake.slice(intake.indexOf('<div className="shrink-0 border-t border-border p-4 flex gap-2">'), intake.indexOf('Done</button>'));
-    // WhatsApp is gated on having somewhere to send it...
-    expect(footer).toContain('Boolean(created.customerPhone)');
-    // ...and the ticket, which comes after it, is not.
-    const showCustomer = footer.slice(footer.indexOf('setShowTicket'));
-    expect(showCustomer).not.toContain('customerPhone');
+    expect(intake).toContain("created.customerPhone ? sendWhatsApp : sendWhatsAppToAnyone");
+    expect(intake).toContain("created.customerPhone ? `WhatsApp ${created.customerName.split(' ')[0]}` : 'Send on WhatsApp'");
+  });
+
+  it('says plainly that the record was created', () => {
+    expect(intake).toContain("{practice ? 'Practice run' : 'Order created'}");
+    expect(intake).toContain("{practice ? 'Receipt / Tag Code' : 'Record created'}");
   });
 
   it('can be shown again from any record, which paper cannot do', () => {

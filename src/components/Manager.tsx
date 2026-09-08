@@ -1,7 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { isServiceFirstBusiness, runsATill } from '@/lib/business-runtime';
 import { createPortal } from 'react-dom';
 import { allowedNotifications } from '@/lib/notification-gate';
+import { SPOTLIGHT_SIGNAL } from '@/lib/spotlight';
+import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId, AutoPriceEvent } from '@/types/store';
 import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId, sumOperatingExpenses } from '@/lib/store-data';
 import PerformanceCalendar from '@/components/PerformanceCalendar';
@@ -555,9 +557,41 @@ export default function Manager({ store, orders = [], onUpdate, onEnable, onNavi
     }
   }, [tab, store]);
 
+  /*
+   * Keep the tabs under the finger when they are tapped.
+   *
+   * This used to be window.scrollTo(0, 0) on every tab change, which yanks the
+   * page to the very top - so the row of tabs the merchant had just tapped
+   * shot away upwards and the screen appeared to jump for no reason. Tapping
+   * "Forecasts" should change what is under the tabs, not move the tabs.
+   *
+   * So: if the tab bar has scrolled off the top, bring it back to the top and
+   * leave it there. If it is already in view, do nothing at all - there is
+   * nothing to correct, and scrolling anyway is the jump being complained
+   * about.
+   */
+  const tabBarRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    window.scrollTo(0, 0);
+    const bar = tabBarRef.current;
+    if (!bar) return;
+    const top = bar.getBoundingClientRect().top;
+    if (top >= 0) return;
+    window.scrollBy({ top, behavior: 'auto' });
   }, [tab]);
+
+  /*
+   * The month ring on the home screen sends people to the break-even figures,
+   * which live on Overview. This screen stays mounted with whatever tab was
+   * last open, so somebody who had been reading Forecasts arrived there
+   * instead and saw nothing of what they tapped.
+   */
+  useEffect(() => {
+    const onSpotlight = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === BREAK_EVEN_SPOTLIGHT) setTab('overview');
+    };
+    window.addEventListener(SPOTLIGHT_SIGNAL, onSpotlight);
+    return () => window.removeEventListener(SPOTLIGHT_SIGNAL, onSpotlight);
+  }, []);
 
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
 
@@ -870,7 +904,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 p-1 rounded-full bg-card border border-border">
+      <div ref={tabBarRef} className="flex gap-1 p-1 rounded-full bg-card border border-border">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`relative flex-1 px-2 py-2 rounded-full text-[11px] font-display font-semibold whitespace-nowrap transition-colors ${tab === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>

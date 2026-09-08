@@ -22,7 +22,7 @@ import {
   syncLaundryRecord,
   type LocalLaundryRecord,
 } from '@/lib/laundry-offline';
-import { openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
+import { openLaundryWhatsApp, openWhatsAppChooser } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
 import { beginWork } from '@/lib/work-in-progress';
 import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MapPin, MessageCircle, Minus, Plus, Search, Shirt, Ticket, X } from 'lucide-react';
@@ -622,6 +622,14 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
     }
   };
 
+  /** The same message, with WhatsApp asking who it goes to. */
+  const sendWhatsAppToAnyone = () => {
+    if (!created) return;
+    if (!openWhatsAppChooser(store, localLaundryRecordToOrder(created))) {
+      showToast('Could not open WhatsApp', 'error');
+    }
+  };
+
   const sendWhatsApp = () => {
     if (!created) return;
     if (!openLaundryWhatsApp(store, localLaundryRecordToOrder(created))) {
@@ -683,7 +691,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className={`text-xs font-bold uppercase ${practice ? 'text-primary' : 'text-success'}`}>
-                    {practice ? 'Practice run' : 'Laundry recorded'}
+                    {practice ? 'Practice run' : 'Order created'}
                   </p>
                   {practice ? null : created.syncStatus === 'synced' ? (
                     <span className="px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-black">Synced</span>
@@ -691,7 +699,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
                     <span className="px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>
                   )}
                 </div>
-                <h3 className="font-display font-black text-lg mt-0.5">Receipt / Tag Code</h3>
+                <h3 className="font-display font-black text-lg mt-0.5">{practice ? 'Receipt / Tag Code' : 'Record created'}</h3>
               </div>
               <button onClick={close} className="p-2 rounded-xl bg-surface-2"><X className="w-4 h-4" /></button>
             </div>
@@ -752,23 +760,43 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
             <div className="shrink-0 border-t border-border p-4 flex gap-2">
               {/* Not in a rehearsal. Sending it would message a real phone
                   number a receipt for a job that was never recorded. */}
-              {/* And not when there is nowhere to send it. Offering a button
-                  that can only fail is worse than not offering one. */}
-              {!practice && Boolean(created.customerPhone) && (
-                <button onClick={sendWhatsApp} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</button>
-              )}
-              {/*
-                The one that always works.
+              {practice ? (
+                <button onClick={close} className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
+              ) : (
+                <div className="w-full space-y-2">
+                  {/*
+                    Sending it is the first thing offered, and it always has a
+                    route out.
 
-                WhatsApp needs a number and needs the shop to remember to press
-                it. This needs neither: it turns the phone round and lets the
-                customer photograph their own ticket, which is the thing paper
-                did for free and the app was not doing at all.
-              */}
-              {!practice && (
-                <button onClick={() => setShowTicket(true)} className="flex-1 py-3 rounded-xl bg-surface-2 border border-border font-display font-black text-sm flex items-center justify-center gap-2"><Ticket className="w-4 h-4" /> Show customer</button>
+                    With a number it goes straight to that customer in one tap.
+                    Without one - a walk-in who would not give a number, a
+                    bundle dropped off by a driver, or the owner wanting a copy
+                    on their own phone - WhatsApp's own contact picker opens
+                    with the message already written, which is one tap and no
+                    typing either.
+                  */}
+                  <button
+                    onClick={created.customerPhone ? sendWhatsApp : sendWhatsAppToAnyone}
+                    className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    {created.customerPhone ? `WhatsApp ${created.customerName.split(' ')[0]}` : 'Send on WhatsApp'}
+                  </button>
+
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowTicket(true)} className="flex-1 py-3 rounded-xl bg-surface-2 border border-border font-display font-black text-sm flex items-center justify-center gap-2"><Ticket className="w-4 h-4" /> Show customer</button>
+                    <button onClick={close} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
+                  </div>
+
+                  {/* Somebody other than the customer: the owner's own phone,
+                      a driver, a relative collecting on their behalf. */}
+                  {Boolean(created.customerPhone) && (
+                    <button onClick={sendWhatsAppToAnyone} className="w-full py-2 text-[11px] font-display font-bold text-muted-foreground">
+                      Send to someone else instead
+                    </button>
+                  )}
+                </div>
               )}
-              <button onClick={close} className={`py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2 ${practice ? 'flex-1' : 'px-5'}`}><Check className="w-4 h-4" /> Done</button>
             </div>
           </> : <>
             <div className="shrink-0 flex items-center justify-between gap-3 border-b border-border p-4 pb-3">

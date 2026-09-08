@@ -179,3 +179,23 @@ export function openLaundryWhatsApp(store: StoreData, order: any): boolean {
   window.open(payload.url, '_blank', 'noopener,noreferrer');
   return true;
 }
+
+/**
+ * The same message, with WhatsApp asking who it goes to.
+ *
+ * `wa.me` with no number opens the contact picker with the text already
+ * written. That covers everything the customer's own number does not: the
+ * owner wanting a copy on their own phone, a bundle dropped off by somebody's
+ * driver, a regular whose number the shop has under a different name - and
+ * every walk-in who gave no number at all, who until now had no way to be
+ * sent anything.
+ *
+ * It is one tap either way. The shop picks the contact instead of typing a
+ * number, which is the part that was slow.
+ */
+export function openWhatsAppChooser(store: StoreData, order: any): boolean {
+  const payload = buildLaundryWhatsAppPayload(store, order);
+  if (!payload || typeof window === 'undefined') return false;
+  window.open(`https://wa.me/?text=${encodeURIComponent(payload.message)}`, '_blank', 'noopener,noreferrer');
+  return true;
+}
