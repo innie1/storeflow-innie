@@ -15,9 +15,9 @@
  * large ones.
  */
 
-import type { Expense, StoreData } from '@/types/store';
+import type { StoreData } from '@/types/store';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
-import { isConsumableExpense } from '@/lib/consumables';
+import { estimateUnitCost, isVariableCost } from '@/lib/cost-estimator';
 import { isStockPurchase } from '@/lib/store-data';
 
 const DAY = 86400000;
@@ -60,7 +60,9 @@ function inWindow(dateish: unknown, window: MonthWindow): boolean {
 export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthWindow()): number {
   const spent = (store.expenses || [])
     .filter(expense => inWindow(expense.date, window))
-    .filter(expense => !isStockPurchase(expense) && !isConsumableExpense(expense))
+    // Anything used up doing the work is taken off the revenue side instead,
+    // so counting it here as well would charge the shop twice for its soap.
+    .filter(expense => !isStockPurchase(expense) && !isVariableCost(store, expense))
     .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
 
   // A recurring bill already paid this month is in `spent` above, so only the
@@ -107,16 +109,10 @@ export function monthToDate(store: StoreData, window: MonthWindow = monthWindow(
  * dividing a drum of detergent by three shirts produces a confident number
  * built on nothing, and a shop could reprice off it.
  */
-export function variableCostPerPiece(store: StoreData, window: MonthWindow = monthWindow()): number | null {
-  const { pieces } = monthToDate(store, window);
-  if (pieces < MIN_PIECES_FOR_UNIT_COST) return null;
-
-  const consumables = (store.expenses || [])
-    .filter(expense => inWindow(expense.date, window) && isConsumableExpense(expense))
-    .reduce((sum: number, expense: Expense) => sum + (Number(expense.amount) || 0), 0);
-
-  if (consumables <= 0) return null;
-  return consumables / pieces;
+export function variableCostPerPiece(store: StoreData): number | null {
+  // One estimator, shared with the pricing advisor, so the two can never
+  // disagree about what a piece costs.
+  return estimateUnitCost(store).perPiece;
 }
 
 export interface BreakEven {
@@ -154,7 +150,7 @@ export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
   const window = monthWindow(at);
   const fixedCosts = monthlyFixedCosts(store, window);
   const { pieces, revenue } = monthToDate(store, window);
-  const perPiece = variableCostPerPiece(store, window);
+  const perPiece = variableCostPerPiece(store);
 
   const consumed = perPiece === null ? 0 : perPiece * pieces;
   const contribution = revenue - consumed;

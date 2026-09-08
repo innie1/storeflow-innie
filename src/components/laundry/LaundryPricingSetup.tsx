@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { COMMON_LAUNDRY_SERVICES } from '@/lib/laundry-intake';
+import PricingAdvisor from '@/components/PricingAdvisor';
 import { getLaundryDepositRule, setLaundryDepositRule } from '@/lib/laundry-money';
 import type { Product, StoreData } from '@/types/store';
 import { addProduct, deleteProduct, saveStore, updateProduct } from '@/lib/store-data';
@@ -286,6 +287,10 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
             : 'No deposit taken.'}
         </p>
       </div>
+
+      {/* What each service actually earns. Sits with the prices, which is
+          where somebody is already thinking about them. */}
+      {allServices.length > 0 && <PricingAdvisor store={store} onUpdate={persist} />}
 
       {allServices.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-8 text-center">
