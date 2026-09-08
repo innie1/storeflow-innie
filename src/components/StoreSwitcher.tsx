@@ -99,7 +99,7 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
                     them in one line.
                   */
                   className={`h-[68px] px-3 rounded-xl border flex items-center gap-3 ${
-                    s.code === currentCode ? 'bg-success/10 border-success/40' : 'bg-surface-2 border-border'
+                    s.code === currentCode ? 'bg-surface-2 border-success/30' : 'bg-surface-2 border-border'
                   }`}
                 >
                   {/*
@@ -118,12 +118,23 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
                       <span className="font-mono"> · {s.code}</span>
                     </p>
                   </div>
-                  {/* One slot on the right, the same width either way. */}
+                  {/*
+                    One slot on the right, laid out the same either way.
+                    ACTIVE sits in the column the Switch buttons occupy, with
+                    an empty space where the remove button would be, so the
+                    word lines up with them down the list instead of sitting
+                    further right on its own.
+                  */}
                   <div className="flex items-center gap-2 shrink-0">
                     {s.code === currentCode ? (
-                      <span className="h-8 px-3 rounded-lg bg-success/15 text-success text-[10px] font-display font-black tracking-wide flex items-center">
-                        ACTIVE
-                      </span>
+                      <>
+                        <span className="h-8 px-3 text-[10px] font-display font-black tracking-wide text-success flex items-center justify-center">
+                          ACTIVE
+                        </span>
+                        {/* The remove button's width, held open. The active
+                            store cannot be removed while it is in use. */}
+                        <span className="w-8 h-8" aria-hidden="true" />
+                      </>
                     ) : (
                       <>
                         <button onClick={() => switchTo(s.code)} className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold">

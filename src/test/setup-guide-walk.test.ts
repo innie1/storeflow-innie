@@ -82,8 +82,16 @@ describe('pointing at something the merchant can actually reach', () => {
     expect(guide).toContain('document.elementFromPoint');
   });
 
-  it('does not treat a scrolled-away target as covered', () => {
-    expect(guide).toContain('if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return true;');
+  /**
+   * A gaming centre's first session button sits below a panel of customer
+   * requests, so the hole was drawn 837px down a 554px screen: the app dimmed
+   * and showed nothing, with the card off the bottom too. Off-screen is not
+   * covered, but it is not usable either.
+   */
+  it('scrolls an off-screen target into view instead of lighting it unseen', () => {
+    const block = guide.slice(guide.indexOf('const element = candidates.find'), guide.indexOf('if (!element)'));
+    expect(block).toContain('x > window.innerWidth || y > window.innerHeight');
+    expect(block).toContain("node.scrollIntoView({ block: 'center'");
   });
 
   /**
