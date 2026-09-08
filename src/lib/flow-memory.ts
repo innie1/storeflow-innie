@@ -8,6 +8,7 @@
  * Stores: suppliers, FLOW rewards, streak.
  */
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface Supplier {
   id: string;
@@ -109,7 +110,9 @@ function scheduleCloudSync(m: FlowMemory) {
     supabase.rpc('merge_store_data_key', {
       store_id_input: syncStoreId,
       key_input: 'flowMemory',
-      value_input: m,
+      // The column is an opaque JSON blob as far as the generated types are
+      // concerned; FlowMemory is the shape we put in it.
+      value_input: m as unknown as Json,
     }).then(({ error }) => {
       if (error) console.warn('[FlowMemory] Background cloud sync failed:', error.message);
     });
@@ -129,8 +132,9 @@ export async function hydrateFlowMemoryFromCloud(storeId: string): Promise<void>
     const alreadyHasLocalData = !!localStorage.getItem(KEY);
     if (alreadyHasLocalData) return;
     const { data, error } = await supabase.from('stores').select('data').eq('id', storeId).maybeSingle();
-    if (error || !data?.data?.flowMemory) return;
-    localStorage.setItem(KEY, JSON.stringify(data.data.flowMemory));
+    const blob = data?.data as { flowMemory?: FlowMemory } | null | undefined;
+    if (error || !blob?.flowMemory) return;
+    localStorage.setItem(KEY, JSON.stringify(blob.flowMemory));
   } catch (e) {
     console.warn('[FlowMemory] Cloud hydration failed:', e);
   }

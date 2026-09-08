@@ -6,21 +6,35 @@ interface ToastMessage {
   type: 'success' | 'error' | 'info' | 'warning';
 }
 
-let toastId = 0;
-let addToastFn: ((msg: string, type?: 'success' | 'error' | 'info') => void) | null = null;
+export type ToastTone = 'success' | 'error' | 'info' | 'warning';
 
-export function showToast(message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') {
-  addToastFn?.(message, type);
+/** Long enough to read a sentence, short enough not to sit in the way. */
+const DEFAULT_MS = 3000;
+
+let toastId = 0;
+let addToastFn: ((msg: string, type?: ToastTone, ms?: number) => void) | null = null;
+
+/**
+ * @param ms How long to leave it up. Some messages genuinely need longer -
+ * a verification code is read off the screen and typed somewhere else, and
+ * three seconds is not enough for that.
+ *
+ * Four call sites were already passing this and had been since before the
+ * typechecker could see them: the argument was accepted by JavaScript,
+ * ignored, and the code vanished in three seconds anyway.
+ */
+export function showToast(message: string, type: ToastTone = 'success', ms: number = DEFAULT_MS) {
+  addToastFn?.(message, type, ms);
 }
 
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   useEffect(() => {
-    addToastFn = (message, type = 'success') => {
+    addToastFn = (message, type = 'success', ms = DEFAULT_MS) => {
       const id = ++toastId;
       setToasts(prev => [...prev, { id, message, type }]);
-      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), Math.max(1000, ms));
     };
     return () => { addToastFn = null; };
   }, []);

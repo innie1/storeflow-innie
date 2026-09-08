@@ -183,9 +183,17 @@ export interface StoreProfile {
    * the shop has picked a trade.
    */
   storeType?: string;
-  location: string;
-  phone: string;
-  email: string;
+  /*
+   * Optional for the same reason, and on the same evidence: every reader
+   * already guards them (`profile.phone && <p>`, `profile.location ? ... :
+   * ''`), because a shop that has not filled in its address has none of
+   * them. Declaring them required meant that any code merging one profile
+   * into another - restoring a backup, saving a logo - produced a value the
+   * compiler rejected while the app handled it correctly.
+   */
+  location?: string;
+  phone?: string;
+  email?: string;
   photo?: string;        // base64 data URL of store logo / profile photo
   logoStyle?: string;    // selected pre-designed logo style
   payment?: PaymentInfo; // how customers can pay this store
@@ -562,47 +570,55 @@ export interface ManagerSettings {
   backorderSellingEnabled?: boolean; // when on, sales can go through even at 0 stock; the shortfall is tracked as backorderedQty on the product. Toggling this requires ownerPassword.
   emergencyRecoveryKey?: string;   // Used to encrypt/decrypt offline backup exports
   lastAutoRestockDraftDate?: string; // Last time the weekly auto restock draft notification was generated
-  revenueForecasts: boolean;
-  profitForecasts: boolean;
-  inventoryForecasts: boolean;
-  expenseAnalysis: boolean;
-  smartPricing: boolean;
-  productSuggestions: boolean;
-  savingsPlanner: boolean;
-  voiceFeatures: boolean;
-  autoVoiceListen: boolean;
-  weeklyRecap: boolean;
+  /*
+   * Every flag from here down is optional, because that is already how all of
+   * them are read: `settings.voiceFeatures ?? true`, or `?? false` for the
+   * ones that default off. Nothing assumes one is present - the point of the
+   * `??` is that a shop which never opened Settings still behaves sensibly.
+   * Declaring them required only broke the places that merge one settings
+   * object into another, which were correct.
+   */
+  revenueForecasts?: boolean;
+  profitForecasts?: boolean;
+  inventoryForecasts?: boolean;
+  expenseAnalysis?: boolean;
+  smartPricing?: boolean;
+  productSuggestions?: boolean;
+  savingsPlanner?: boolean;
+  voiceFeatures?: boolean;
+  autoVoiceListen?: boolean;
+  weeklyRecap?: boolean;
   autoPrintReceipt?: boolean;
-  customerRequests: boolean;
-  businessAdvice: boolean;
-  businessExpansion: boolean;
-  businessQuestions: boolean;
-  defaultMargin: number;
-  autoSuggestPrices: boolean;
-  autoApplyPrices: boolean;
+  customerRequests?: boolean;
+  businessAdvice?: boolean;
+  businessExpansion?: boolean;
+  businessQuestions?: boolean;
+  defaultMargin?: number;
+  autoSuggestPrices?: boolean;
+  autoApplyPrices?: boolean;
   autoApplyMaxChangeAmount?: number; // ₦ safety cap — a suggested price change bigger than this always needs a manual Accept instead of auto-applying
-  showProductProfit: boolean;
+  showProductProfit?: boolean;
   // Inventory
-  criticalStockThreshold: number;
-  restockSuggestions: boolean;
-  inventoryAlerts: boolean;
+  criticalStockThreshold?: number;
+  restockSuggestions?: boolean;
+  inventoryAlerts?: boolean;
   // Notifications
-  notifyInsights: boolean;
-  notifyRecommendations: boolean;
-  notifyAlerts: boolean;
-  notifyWeeklyRecap: boolean;
-  notifyMonthlyReports: boolean;
-  notifySavingsReminders: boolean;
-  notifyCustomerRequests: boolean;
-  notifyLowStock: boolean;
+  notifyInsights?: boolean;
+  notifyRecommendations?: boolean;
+  notifyAlerts?: boolean;
+  notifyWeeklyRecap?: boolean;
+  notifyMonthlyReports?: boolean;
+  notifySavingsReminders?: boolean;
+  notifyCustomerRequests?: boolean;
+  notifyLowStock?: boolean;
   // Appearance
-  mascotAnimations: boolean;
-  numericAnimations: boolean;
-  reduceMotion: boolean;
-  compactMode: boolean;
+  mascotAnimations?: boolean;
+  numericAnimations?: boolean;
+  reduceMotion?: boolean;
+  compactMode?: boolean;
   // Security
-  biometricLock: boolean;
-  pinLock: boolean;
+  biometricLock?: boolean;
+  pinLock?: boolean;
   // Graph settings
   graphInterval?: 10 | 30 | 60;
   autoBackupsEnabled?: boolean;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, Clock3, Loader2, Pause, Play, Plus, RefreshCw, Square, UserRound } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, rpcAheadOfTypes } from '@/integrations/supabase/client';
 import { showToast } from '@/components/Toast';
 
 interface Props { storeId: string; }
@@ -79,7 +79,7 @@ export default function ServiceOrders({ storeId }: Props) {
         const fn: Record<string, string> = { start: 'service_order_start', pause: 'service_order_pause', resume: 'service_order_resume', add: 'service_order_add_time', complete: 'service_order_complete' };
         const args: any = { p_order_id: order.id };
         if (action === 'add') args.p_minutes = 30;
-        ({ error } = await supabase.rpc(fn[action], args));
+        ({ error } = await rpcAheadOfTypes(fn[action], args));
       }
       if (error) throw error;
       await load();

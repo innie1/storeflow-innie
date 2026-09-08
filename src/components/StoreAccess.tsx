@@ -439,7 +439,16 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   };
 
   // Simple retry wrapper for Supabase client calls
-  const runWithRetry = async <T,>(fn: () => Promise<{ data: T | null; error: any }>, retries = 3, delay = 1000): Promise<{ data: T | null; error: any }> => {
+  /*
+   * PromiseLike, not Promise.
+   *
+   * Supabase's query builder is a thenable - it has `then` but no `catch` or
+   * `finally` - so it never satisfied `Promise`, and TypeScript quietly gave
+   * up on T. Everything the retry returned came back as `unknown`, which is
+   * why reading `.length` off a list of stores was an error a few lines
+   * later. Describing what is actually passed makes the results typed again.
+   */
+  const runWithRetry = async <T,>(fn: () => PromiseLike<{ data: T | null; error: any }>, retries = 3, delay = 1000): Promise<{ data: T | null; error: any }> => {
     let lastError: any = null;
     for (let i = 0; i < retries; i++) {
       try {

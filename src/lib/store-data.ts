@@ -1135,7 +1135,7 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actor
       type: 'additional',
     });
   }
-  let updated = {
+  let updated: StoreData = {
     ...store,
     products: [...store.products, {
       ...product,
@@ -1172,7 +1172,7 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
   const oldProd = store.products.find(p => p.id === id);
   const oldQty = oldProd ? oldProd.quantity : 0;
   const pName = oldProd?.name || 'Product';
-  let updated = {
+  let updated: StoreData = {
     ...store,
     products: store.products.map(p => {
       if (p.id === id) {
@@ -1209,7 +1209,7 @@ export function deleteProduct(store: StoreData, id: string, actorName?: string, 
   if (!product) return store;
 
   // Wipe all associated sales, planned restocks, learned mappings, and product entry
-  let updated = {
+  let updated: StoreData = {
     ...store,
     products: store.products.filter(p => p.id !== id),
     sales: (store.sales || []).filter(s => s.productId !== id),
@@ -1409,7 +1409,7 @@ export function recordSale(
   const newTotalRevenue = Math.round(((product.total_revenue || 0) + sale.total) * 100) / 100;
   const newTotalProfit = Math.round(((product.total_profit || 0) + sale.profit) * 100) / 100;
 
-  let updated = {
+  let updated: StoreData = {
     ...store,
     products: store.products.map(p => p.id === productId ? {
       ...p,
@@ -1539,7 +1539,7 @@ export function importProducts(
     }
   }
 
-  let updated = {
+  let updated: StoreData = {
     ...store,
     products: [...store.products, ...newProducts],
     investments: newInvestments,
@@ -2306,7 +2306,7 @@ export function addStaffMember(store: StoreData, staff: Omit<StaffMember, 'id'>,
     ...staff,
     id: generateId()
   };
-  let updated = {
+  let updated: StoreData = {
     ...store,
     staffMembers: [newStaff, ...(store.staffMembers || [])]
   };
@@ -2320,7 +2320,7 @@ export function addStaffMember(store: StoreData, staff: Omit<StaffMember, 'id'>,
 export function updateStaffMember(store: StoreData, id: string, updates: Partial<StaffMember>, actorName?: string, actorRole?: string): StoreData {
   const staff = (store.staffMembers || []).find(s => s.id === id);
   const staffName = staff?.name || 'Staff Member';
-  let updated = {
+  let updated: StoreData = {
     ...store,
     staffMembers: (store.staffMembers || []).map(s => s.id === id ? { ...s, ...updates } : s)
   };
@@ -2336,7 +2336,7 @@ export function updateStaffMember(store: StoreData, id: string, updates: Partial
 export function deleteStaffMember(store: StoreData, id: string, actorName?: string, actorRole?: string): StoreData {
   const staff = (store.staffMembers || []).find(s => s.id === id);
   const staffName = staff?.name || 'Staff Member';
-  let updated = {
+  let updated: StoreData = {
     ...store,
     staffMembers: (store.staffMembers || []).filter(s => s.id !== id)
   };
@@ -2475,7 +2475,7 @@ export function transferStock(
   const now = new Date().toISOString();
 
   // Decrease source stock
-  let updatedSource = {
+  let updatedSource: StoreData = {
     ...sourceStore,
     products: sourceStore.products.map(p => p.id === productId ? { ...p, quantity: Math.round((p.quantity - quantity) * 100) / 100 } : p),
     transfers: [

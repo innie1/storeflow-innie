@@ -1,4 +1,4 @@
-import { StoreData, Product, Sale, Expense, PendingPayment } from '@/types/store';
+import { StoreData, Product, Sale, Expense, PendingPayment, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { saveLocalBackup, getLocalBackups, deleteLocalBackup } from './backup-db';
 
 const BACKUP_PREFIX = 'storeflow_';
@@ -269,8 +269,18 @@ export function restoreBackupPayload(payload: BackupPayload): {
         flowNotifications: mergedNotifications,
         coins: Math.max(localStore.coins || 0, backupStore.coins || 0),
         savingsGoal: localStore.savingsGoal || backupStore.savingsGoal,
-        profile: { ...(backupStore.profile || {}), ...(localStore.profile || {}) },
-        managerSettings: { ...(backupStore.managerSettings || {}), ...(localStore.managerSettings || {}) },
+        /*
+         * Merged onto a base, not onto nothing.
+         *
+         * A restore of a store that had never filled in its profile produced
+         * `{}` - and `{}` is truthy, so every `store.managerSettings ||
+         * DEFAULT_MANAGER_SETTINGS` fallback in the app stopped falling back
+         * and read undefined off an empty object instead. Restoring a backup
+         * quietly switched the Manager's features off. Starting from the
+         * defaults keeps a restore from being a downgrade.
+         */
+        profile: { location: '', phone: '', email: '', ...(backupStore.profile || {}), ...(localStore.profile || {}) },
+        managerSettings: { ...DEFAULT_MANAGER_SETTINGS, ...(backupStore.managerSettings || {}), ...(localStore.managerSettings || {}) },
       };
 
       localStorage.setItem(storeKey, JSON.stringify(updatedStore));

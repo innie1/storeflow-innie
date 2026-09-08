@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { StoreData, Product } from '@/types/store';
+import { StoreData, Product, StoreType } from '@/types/store';
 import { showToast } from '@/components/Toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, rpcAheadOfTypes } from '@/integrations/supabase/client';
 import { saveStore } from '@/lib/store-data';
 import { prepareStoreForMarketplacePublish, publishStorefrontToCloud } from '@/lib/marketplace-publish';
 import { getPushSubscriptionState, subscribeToOrderPush, unsubscribeFromOrderPush } from '@/lib/push-notifications';
@@ -155,7 +155,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       setCloudPublishState('not-published');
       return;
     }
-    supabase.rpc('get_public_storefront', { p_key: key }).then(({ data, error }) => {
+    rpcAheadOfTypes('get_public_storefront', { p_key: key }).then(({ data, error }) => {
       if (cancelled) return;
       const publicSettings = (data as any)?.data?.marketplaceSettings;
       setCloudPublishState(!error && publicSettings ? 'published' : 'not-published');
@@ -182,7 +182,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
     onUpdate(updatedStore);
   };
 
-  const [pendingStoreType, setPendingStoreType] = useState<string | null>(null);
+  const [pendingStoreType, setPendingStoreType] = useState<StoreType | null>(null);
   const [storeTypeCodeInput, setStoreTypeCodeInput] = useState('');
 
   const confirmStoreTypeChange = () => {
@@ -191,7 +191,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
       showToast('Incorrect store code', 'error');
       return;
     }
-    const updatedStore = { ...store, storeType: pendingStoreType };
+    const updatedStore: StoreData = { ...store, storeType: pendingStoreType };
     saveStore(updatedStore);
     onUpdate(updatedStore);
     setPendingStoreType(null);
@@ -217,7 +217,7 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
 
     setForm(updatedSettings);
 
-    const updatedStore = {
+    const updatedStore: StoreData = {
       ...store,
       marketplaceSettings: updatedSettings,
       managerSettings: {
@@ -673,12 +673,12 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                     <p className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider mb-2">Featured Products</p>
                     <div className="grid grid-cols-2 gap-2">
                       {(store.products || []).slice(0, 2).map((p: Product) => {
-                        const whPrice = p.sellingPrice ?? p.selling_price ?? 0;
+                        const whPrice = p.sellingPrice ?? 0;
                         const rtPrice = p.isCartonSingleEnabled ? (p.singleSellingPrice ?? whPrice) : whPrice;
                         return (
                           <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 space-y-1.5 text-left">
                             <div className="w-full h-16 bg-zinc-800 rounded-lg flex items-center justify-center text-lg">📦</div>
-                            <h5 className="text-[11px] font-semibold truncate leading-tight">{p.name || p.productName}</h5>
+                            <h5 className="text-[11px] font-semibold truncate leading-tight">{p.name}</h5>
                             <div className="flex justify-between items-center">
                               <div>
                                 {form.pricingMode !== 'wholesale' && (

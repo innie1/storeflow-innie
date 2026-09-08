@@ -19,3 +19,14 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 console.log("Supabase Connection Status:");
 console.log("URL:", SUPABASE_URL);
 console.log("Key Prefix:", SUPABASE_PUBLISHABLE_KEY ? SUPABASE_PUBLISHABLE_KEY.substring(0, 20) + "..." : "undefined");
+/**
+ * For database functions the checked-in types have not caught up with.
+ *
+ * `types.ts` was last generated on 2026-08-28; migrations have landed since,
+ * and the functions they define are real and deployed - `supabase.rpc` simply
+ * does not know their names. Calling them through here says that out loud
+ * rather than scattering `as any` over the call sites, and greping for it
+ * gives the list of what a regenerated types.ts would fix.
+ */
+export const rpcAheadOfTypes = (fn: string, args?: Record<string, unknown>) =>
+  (supabase.rpc as unknown as (name: string, params?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>)(fn, args);
