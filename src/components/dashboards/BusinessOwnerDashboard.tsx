@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { ClipboardList, DollarSign, Fuel, Gamepad2, Package, Receipt, Shirt, Sparkles, Tag, TrendingUp, Users, type LucideIcon } from 'lucide-react';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { StoreData } from '@/types/store';
@@ -19,42 +20,53 @@ interface BusinessOwnerDashboardProps {
   currentUser?: { role?: string } | null;
 }
 
-const quickActions: Record<string, { label: string; tab: string; icon: string }[]> = {
+/*
+ * The same icons the simple-mode home uses.
+ *
+ * These were emoji here and lucide components there, so Customers was a pair
+ * of silhouettes on one screen and a grey outline on the other, Record Laundry
+ * was a basket in one place and a shirt in the other, and the price list was a
+ * t-shirt against a tag. Two vocabularies for one app, and whichever screen a
+ * shop learned first made the other look like somebody else's software.
+ */
+const icon = (Glyph: LucideIcon) => <Glyph className="w-5 h-5" />;
+
+const quickActions: Record<string, { label: string; tab: string; icon: ReactNode }[]> = {
   laundry: [
-    { label: 'Record Laundry', tab: 'laundry-records', icon: '🧺' },
-    { label: 'Price List', tab: 'inventory', icon: '👕' },
-    { label: 'Customers', tab: 'customers', icon: '👥' },
-    { label: 'Laundry Records', tab: 'laundry-records', icon: '🧾' },
+    { label: 'Record Laundry', tab: 'laundry-records', icon: icon(Shirt) },
+    { label: 'Price List', tab: 'inventory', icon: icon(Tag) },
+    { label: 'Customers', tab: 'customers', icon: icon(Users) },
+    { label: 'Laundry Records', tab: 'laundry-records', icon: icon(Receipt) },
   ],
   gas_filling: [
-    { label: 'New Gas Sale', tab: 'sales', icon: '⛽' },
-    { label: 'Gas Stock', tab: 'inventory', icon: '🛢️' },
-    { label: 'Orders', tab: 'orders', icon: '📋' },
-    { label: 'Customers', tab: 'customers', icon: '👥' },
+    { label: 'New Gas Sale', tab: 'sales', icon: icon(Fuel) },
+    { label: 'Gas Stock', tab: 'inventory', icon: icon(Package) },
+    { label: 'Orders', tab: 'orders', icon: icon(ClipboardList) },
+    { label: 'Customers', tab: 'customers', icon: icon(Users) },
   ],
   games: [
-    { label: 'Start Session', tab: 'games-dashboard', icon: '🎮' },
-    { label: 'Games & Prices', tab: 'games-settings', icon: '🕹️' },
-    { label: 'Session History', tab: 'games-history', icon: '📋' },
-    { label: 'Analytics', tab: 'games-analytics', icon: '📈' },
+    { label: 'Start Session', tab: 'games-dashboard', icon: icon(Gamepad2) },
+    { label: 'Games & Prices', tab: 'games-settings', icon: icon(Tag) },
+    { label: 'Session History', tab: 'games-history', icon: icon(Receipt) },
+    { label: 'Analytics', tab: 'games-analytics', icon: icon(TrendingUp) },
   ],
   restaurant: [
-    { label: 'New Order', tab: 'orders', icon: '🍔' },
-    { label: 'Menu / Products', tab: 'inventory', icon: '📋' },
-    { label: 'Sales', tab: 'sales', icon: '💰' },
-    { label: 'Customers', tab: 'customers', icon: '👥' },
+    { label: 'New Order', tab: 'orders', icon: icon(Sparkles) },
+    { label: 'Menu / Products', tab: 'inventory', icon: icon(Tag) },
+    { label: 'Sales', tab: 'sales', icon: icon(DollarSign) },
+    { label: 'Customers', tab: 'customers', icon: icon(Users) },
   ],
   food: [
-    { label: 'New Order', tab: 'orders', icon: '🍲' },
-    { label: 'Products', tab: 'inventory', icon: '📦' },
-    { label: 'Sales', tab: 'sales', icon: '💰' },
-    { label: 'Customers', tab: 'customers', icon: '👥' },
+    { label: 'New Order', tab: 'orders', icon: icon(Sparkles) },
+    { label: 'Products', tab: 'inventory', icon: icon(Package) },
+    { label: 'Sales', tab: 'sales', icon: icon(DollarSign) },
+    { label: 'Customers', tab: 'customers', icon: icon(Users) },
   ],
   provision: [
-    { label: 'Sell', tab: 'sales', icon: '💰' },
-    { label: 'Inventory', tab: 'inventory', icon: '📦' },
-    { label: 'Orders', tab: 'orders', icon: '🛍️' },
-    { label: 'Customers', tab: 'customers', icon: '👥' },
+    { label: 'Sell', tab: 'sales', icon: icon(DollarSign) },
+    { label: 'Inventory', tab: 'inventory', icon: icon(Package) },
+    { label: 'Orders', tab: 'orders', icon: icon(ClipboardList) },
+    { label: 'Customers', tab: 'customers', icon: icon(Users) },
   ],
 };
 
@@ -64,10 +76,10 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
   const [showInsights, setShowInsights] = useState(false);
   const template = getBusinessTemplate(store.storeType);
   const actions = quickActions[store.storeType] || [
-    { label: template.labels.primaryAction, tab: 'orders', icon: '✨' },
-    { label: 'Products / Services', tab: 'inventory', icon: '📦' },
-    { label: 'Sales', tab: 'sales', icon: '💰' },
-    { label: 'Customers', tab: 'customers', icon: '👥' },
+    { label: template.labels.primaryAction, tab: 'orders', icon: icon(Sparkles) },
+    { label: 'Products / Services', tab: 'inventory', icon: icon(Tag) },
+    { label: 'Sales', tab: 'sales', icon: icon(DollarSign) },
+    { label: 'Customers', tab: 'customers', icon: icon(Users) },
   ];
 
   const handleQuickAction = (action: { label: string; tab: string }) => {
@@ -134,20 +146,22 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
   const secondaryActions = actions.slice(1);
 
   return (
-    <div className="space-y-3 animate-fade-in">
+    // pb-20: the Flow button floats over the bottom-right corner, and
+    // without room to scroll past it the last card's own controls sit
+    // underneath it - the Analysis button was half-covered.
+    <div className="space-y-3 animate-fade-in pb-20">
       <CelebrationRibbon store={store} />
       <FlowStrategyCard store={store} onNavigate={onNavigate} />
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl">{template.icon}</div>
-          <div className="min-w-0 flex-1">
-            <h1 className="font-display font-black text-lg truncate">{store.storeName}</h1>
-            <p className="text-[11px] text-muted-foreground">{template.name}</p>
-          </div>
-          <button onClick={() => setShowAnalysis(true)} className="shrink-0 rounded-xl border border-border px-3 py-2 text-[11px] font-display font-bold">Analysis</button>
-        </div>
-      </section>
-
+      {/*
+        The shop's own name is not news to the shop.
+        
+        A whole card carrying the name, the trade and one button sat directly
+        under an app header already showing the name and the trade. It was the
+        second-largest thing on a screen that had just gained the day's work,
+        and it told nobody anything. Analysis moved down to Business insights,
+        which is the same errand - going to look at the numbers - and already
+        had a row of its own.
+      */}
       {/*
         The day's work, before anything else.
         
@@ -173,7 +187,7 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
       {primaryAction && (
         <button onClick={() => handleQuickAction(primaryAction)} className="w-full rounded-2xl bg-primary px-4 py-4 text-left text-primary-foreground shadow-sm active:scale-[0.99] transition-transform">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-black/10 text-2xl">{primaryAction.icon}</span>
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-black/10 [&>svg]:w-6 [&>svg]:h-6">{primaryAction.icon}</span>
             <span className="flex-1"><span className="block text-[10px] font-black uppercase tracking-wider opacity-70">Start here</span><span className="font-display text-lg font-black">{primaryAction.label}</span></span>
             <span className="text-xl" aria-hidden="true">→</span>
           </div>
@@ -197,7 +211,7 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
         <div className="grid grid-cols-3 gap-2">
           {secondaryActions.map(action => (
             <button key={action.label} onClick={() => handleQuickAction(action)} className="min-h-20 rounded-xl border border-border bg-card p-3 text-left hover:border-primary/50 active:scale-[0.99] transition-all">
-              <div className="text-lg">{action.icon}</div>
+              <div className="text-muted-foreground">{action.icon}</div>
               <div className="font-display font-bold text-[11px] mt-1.5 leading-tight">{action.label}</div>
             </button>
           ))}
@@ -205,10 +219,15 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-border bg-card">
-        <button type="button" onClick={() => setShowInsights(value => !value)} className="flex w-full items-center justify-between gap-3 p-4 text-left">
-          <span><span className="block font-display text-sm font-black">Business insights</span><span className="mt-0.5 block text-[10px] text-muted-foreground">Earnings, customers and promised times</span></span>
-          <span className="text-sm text-muted-foreground">{showInsights ? 'Hide' : 'View'}</span>
-        </button>
+        <div className="flex items-center gap-2 p-4">
+          <button type="button" onClick={() => setShowInsights(value => !value)} className="flex flex-1 items-center justify-between gap-3 text-left min-w-0">
+            <span className="min-w-0"><span className="block font-display text-sm font-black">Business insights</span><span className="mt-0.5 block text-[10px] text-muted-foreground truncate">Earnings, customers and promised times</span></span>
+            <span className="text-sm text-muted-foreground shrink-0">{showInsights ? 'Hide' : 'View'}</span>
+          </button>
+          <button type="button" onClick={() => setShowAnalysis(true)} className="shrink-0 rounded-xl border border-border px-3 py-2 text-[11px] font-display font-bold">
+            Analysis
+          </button>
+        </div>
         {showInsights && <div className="border-t border-border p-3"><FeatureErrorBoundary name="Business insights"><BusinessPulse store={store} orders={orders} onNavigate={onNavigate} /></FeatureErrorBoundary></div>}
       </section>
 

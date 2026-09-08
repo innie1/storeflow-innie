@@ -73,7 +73,9 @@ describe('laundry operations and business insights', () => {
     expect(boundary).toContain('sales, orders, laundry records');
     expect(businessOwner).toContain('Start here');
     expect(businessOwner).toContain('showInsights &&');
-    expect(businessOwner.indexOf('primaryAction.label')).toBeLessThan(businessOwner.indexOf('Business insights'));
+    // Anchored on the rendered heading, not the words: a comment mentioning
+    // the section earlier in the file is not the section moving.
+    expect(businessOwner.indexOf('primaryAction.label')).toBeLessThan(businessOwner.indexOf('>Business insights<'));
   });
 
   it('uses remount-safe realtime channel names on merchant order screens', () => {

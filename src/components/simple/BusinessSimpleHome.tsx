@@ -9,7 +9,7 @@ import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { getBusinessTemplate, isBusinessTabAllowed } from '@/lib/business-runtime';
 import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
-import { CalendarClock, ClipboardList, DollarSign, Gamepad2, Package, Receipt, Settings2, Shirt, Sparkles, Tag, Users, Briefcase } from 'lucide-react';
+import { CalendarClock, DollarSign, Gamepad2, Receipt, Shirt, Sparkles, Tag, Users, Briefcase } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 interface Props {
@@ -33,7 +33,19 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
   const candidateActions: { label: string; icon: ReactNode; tab: TabId }[] = [
     { label: primary, icon: isLaundry ? <Shirt className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />, tab: isLaundry ? ('laundry-records' as TabId) : isSession ? 'games-dashboard' : 'orders' },
     { label: noun + (noun.endsWith('s') ? '' : 's'), icon: <Tag className="w-6 h-6" />, tab: 'inventory' },
-    { label: isAppointment ? 'Appointments' : isSession ? 'Sessions' : 'Customers', icon: isAppointment ? <CalendarClock className="w-6 h-6" /> : isSession ? <Gamepad2 className="w-6 h-6" /> : <Users className="w-6 h-6" />, tab: isAppointment ? 'orders' : isSession ? 'games-dashboard' : 'customers' },
+    /*
+     * Appointments and Sessions only.
+     *
+     * Customers used to be the third option here, and it was the second
+     * Customers on the screen - there is already a card above showing the
+     * count and going to the same place. Two doors to one room, one of them
+     * carrying less information than the other.
+     */
+    ...(isAppointment
+      ? [{ label: 'Appointments', icon: <CalendarClock className="w-6 h-6" />, tab: 'orders' as TabId }]
+      : isSession
+        ? [{ label: 'Sessions', icon: <Gamepad2 className="w-6 h-6" />, tab: 'games-dashboard' as TabId }]
+        : []),
     ...(isLaundry ? [{ label: 'Laundry Records', icon: <Receipt className="w-6 h-6" />, tab: 'laundry-records' as TabId }] : [{ label: 'Sales', icon: <DollarSign className="w-6 h-6" />, tab: 'sales' as TabId }]),
     // Adding a worker is a first-week job in every one of these trades, and
     // the only route to it was Staff Accounts, sixth in a flat list of
@@ -63,30 +75,18 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
   };
 
   return (
-    <div className="animate-fade-in max-w-lg mx-auto space-y-4">
+    <div className="animate-fade-in max-w-lg mx-auto space-y-4 pb-20">
       <CelebrationRibbon store={store} />
       <FlowStrategyCard store={store} onNavigate={onNavigate} />
-      <div className="rounded-2xl bg-card border border-border p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-primary font-bold">{template.icon} {template.name}</p>
-            <h1 className="font-display font-black text-2xl mt-1">{store.storeName}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{template.customerExperience.intro}</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* How far through the month, in the corner. The full figure had a
-                card of its own here and it was too much for something checked
-                now and then rather than every visit; it lives on Flow now. */}
-            {isServiceShop(store) && (
-              <BreakEvenPip store={store} canSeeMoney={canSeeMoney(currentUser)} onOpen={() => onNavigate('manager')} />
-            )}
-            <button onClick={() => onNavigate('settings')} className="w-9 h-9 rounded-xl bg-surface-2 border border-border flex items-center justify-center" title="Settings">
-              <Settings2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
+      {/*
+        The shop's own name, trade and a sentence introducing it to itself used
+        to open this screen, under an app header already carrying the name and
+        the trade. It was the tallest thing here and told nobody anything, so
+        it is gone. Settings was in it and is still two taps away in More,
+        where the rest of the app's settings already live. The break-even ring
+        moved down to sit with Revenue, which is the only other money on this
+        screen.
+      */}
       {/*
         The work first.
         
@@ -103,6 +103,13 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
           onNavigate={onNavigate}
           canSeeMoney={canSeeMoney(currentUser)}
         />
+      )}
+
+      {/* The month's progress, beside the month's takings. */}
+      {isServiceShop(store) && canSeeMoney(currentUser) && (
+        <div className="flex justify-end">
+          <BreakEvenPip store={store} canSeeMoney onOpen={() => onNavigate('manager')} />
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
@@ -136,10 +143,13 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {isBusinessTabAllowed(store, 'orders') && canOpenTab('orders', currentUser) && <button onClick={() => onNavigate('orders')} className="rounded-xl bg-primary text-primary-foreground p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><ClipboardList className="w-4 h-4" /> {template.labels.orderNoun}s</button>}
-        {isBusinessTabAllowed(store, 'inventory') && canOpenTab('inventory', currentUser) && <button onClick={() => onNavigate('inventory')} className="rounded-xl bg-card border border-border p-3 text-sm font-display font-bold flex items-center justify-center gap-2"><Package className="w-4 h-4" /> {template.modes.includes('services') && !template.modules.includes('inventory') ? 'Services' : 'Inventory'}</button>}
-      </div>
+      {/*
+        A pair of buttons for Orders and Services used to sit here, directly
+        under a grid that already offered Services, and above a bottom
+        navigation that already offers Orders. Three routes to two screens on
+        one page, which is not choice - it is the screen not knowing what it
+        is for.
+      */}
       {isAppointment && <div className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> Appointments can be managed from Orders.</div>}
     </div>
   );

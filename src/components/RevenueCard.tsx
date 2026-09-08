@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { DollarSign } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 
 /**
@@ -67,30 +67,39 @@ export default function RevenueCard({ store }: Props) {
 
   return (
     <div className="rounded-2xl bg-card border border-border p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <DollarSign className="w-4 h-4" /> Revenue
+      <div className="flex items-center justify-between gap-2">
+        {/*
+          No currency icon. The figure underneath already starts with a naira
+          sign, so a dollar next to the word "Revenue" in a Nigerian shop was
+          both redundant and the wrong currency.
+        */}
+        <span className="text-xs text-muted-foreground">Revenue</span>
+
+        {/*
+          A real select, not a row of chips.
+          
+          Four chips took a whole line and still only fit by scrolling. This is
+          one control the width of its longest label, and on a phone it opens
+          the system's own picker - bigger targets than anything drawn here.
+        */}
+        <div className="relative shrink-0">
+          <select
+            value={range}
+            onChange={event => setRange(event.target.value as Range)}
+            aria-label="Period"
+            className="appearance-none bg-surface-2 border border-border rounded-lg h-7 pl-2.5 pr-7 text-[11px] font-display font-bold text-foreground outline-none cursor-pointer"
+          >
+            {RANGES.map(option => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
       </div>
+
       <p className="font-display font-black text-2xl text-primary mt-2">
         ₦{Math.round(total).toLocaleString()}
       </p>
-
-      {/* Scrolls rather than wraps, so four choices do not become two rows on
-          a narrow phone and push everything below it down. */}
-      <div className="flex gap-1.5 mt-3 -mx-1 px-1 overflow-x-auto no-scrollbar">
-        {RANGES.map(option => (
-          <button
-            key={option.id}
-            onClick={() => setRange(option.id)}
-            className={`shrink-0 px-2.5 h-7 rounded-lg text-[11px] font-display font-bold border transition-colors ${
-              range === option.id
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-surface-2 text-muted-foreground border-border'
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

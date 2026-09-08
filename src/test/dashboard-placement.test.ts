@@ -22,12 +22,17 @@ describe('where the month’s figures live', () => {
     expect(flow).toContain('<MonthReportCard');
   });
 
-  it('leaves a percentage in the corner, beside the settings icon', () => {
+  it('leaves a percentage on the home screen, small', () => {
+    /*
+     * It used to sit beside a settings icon, in a card carrying the shop's own
+     * name and trade back to it. That card is gone - it was the tallest thing
+     * on the screen and told nobody anything - and settings is in More with
+     * the rest of the settings. The ring stays, next to Revenue, which is the
+     * only other money on this screen.
+     */
     expect(home).toContain('<BreakEvenPip');
-    // Both in the same row, so the pip sits where the settings icon already is.
-    const corner = home.slice(home.indexOf('<BreakEvenPip'), home.indexOf('<Settings2') + 20);
-    expect(corner).toContain('<Settings2');
-    expect(corner.length).toBeLessThan(700);
+    expect(home).not.toContain('<Settings2');
+    expect(home.indexOf('<BreakEvenPip')).toBeLessThan(home.indexOf('<RevenueCard'));
   });
 
   /** The moment the month covers itself is still worth catching at home. */

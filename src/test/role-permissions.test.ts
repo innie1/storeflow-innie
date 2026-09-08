@@ -229,8 +229,15 @@ describe('the simple home screen asks the role too', () => {
     // "Services" tile for the price list - tapped it, and watched the screen
     // appear and vanish as the tab guard put them back.
     expect(home).toContain('canOpenTab(action.tab, currentUser)');
-    expect(home).toContain("canOpenTab('orders', currentUser)");
-    expect(home).toContain("canOpenTab('inventory', currentUser)");
+    /*
+     * One gate, because there is now one grid.
+     *
+     * A separate pair of Orders and Services buttons used to sit under the
+     * tiles, each with its own role check - and under a bottom navigation that
+     * already offered both. Three routes to two screens. The pair is gone, so
+     * the only check left to make is the one covering every tile.
+     */
+    expect(home).not.toContain("canOpenTab('orders', currentUser)");
   });
 
   it('does not show takings to the shop floor', () => {

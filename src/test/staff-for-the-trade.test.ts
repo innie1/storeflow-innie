@@ -77,9 +77,11 @@ describe('a laundry owner can find it', () => {
 
   it('gives it its own icon rather than reusing the Customers one', () => {
     // Both sat in the same four-tile grid; two identical icons read as one
-    // repeated tile.
+    // repeated tile. Customers has since left the grid entirely - there was
+    // already a card above it showing the count and going to the same place -
+    // so what matters now is only that Staff is not wearing the Users icon.
     expect(home).toContain("label: 'Staff', icon: <Briefcase");
-    expect(home).toContain('<Users className="w-6 h-6" />');
+    expect(home).not.toContain("label: 'Customers'");
   });
 
   it('is reachable at all for a laundry', () => {

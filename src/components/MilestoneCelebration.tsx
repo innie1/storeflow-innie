@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import { MilestoneDef } from '@/lib/milestones';
 
 interface MilestoneCelebrationProps {
@@ -106,6 +107,24 @@ export default function MilestoneCelebration({ milestone, onDismiss }: Milestone
         }}
         onClick={e => e.stopPropagation()}
       >
+        {/*
+          A way out that can be seen.
+          
+          Tapping the backdrop already closed this, but the card stops clicks -
+          so the only thing that worked was tapping the one part of the screen
+          that looks like nothing, and there was no sign that it would. A
+          celebration nobody can put down stops being a celebration the second
+          time it appears over something somebody was in the middle of.
+        */}
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); handleDismiss(); }}
+          aria-label="Close"
+          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white/60 hover:text-white bg-black/25 border border-white/10 z-10"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
         {(milestone.tier === 'large' || milestone.tier === 'epic') && (
           <div
             className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none"
