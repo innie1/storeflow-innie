@@ -42,14 +42,30 @@ export const MAX_QUIET_DAYS = 45;
 
 export type CustomerStanding = 'new' | 'regular' | 'quiet';
 
+/**
+ * The distinct days this customer came in.
+ *
+ * By day, not by timestamp, for two reasons. Someone who brings two bundles in
+ * one morning has visited once, and counting it twice inserts a zero-length
+ * gap that drags the median down and makes them look far more frequent than
+ * they are. And lastPurchaseDate usually repeats the newest history entry — it
+ * was being de-duplicated by exact millisecond, so the same visit recorded a
+ * moment apart counted as two, which was enough to make a customer with two
+ * visits look like one with a known habit.
+ */
 function visitDates(customer: Pick<Customer, 'purchaseHistory' | 'lastPurchaseDate'>): number[] {
   const history = Array.isArray(customer.purchaseHistory) ? customer.purchaseHistory : [];
-  const times = history
-    .map(entry => new Date(entry?.date || '').getTime())
+  const stamps = [...history.map(entry => entry?.date), customer.lastPurchaseDate]
+    .map(value => new Date(value || '').getTime())
     .filter(time => Number.isFinite(time));
-  const last = new Date(customer.lastPurchaseDate || '').getTime();
-  if (Number.isFinite(last) && !times.includes(last)) times.push(last);
-  return times.sort((a, b) => a - b);
+
+  const byDay = new Map<number, number>();
+  for (const time of stamps) {
+    const day = Math.floor(time / DAY);
+    // Keep the earliest moment on a day, so a gap is measured day to day.
+    if (!byDay.has(day) || time < byDay.get(day)!) byDay.set(day, time);
+  }
+  return Array.from(byDay.values()).sort((a, b) => a - b);
 }
 
 /**

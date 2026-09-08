@@ -57,6 +57,20 @@ describe('saying which shop before opening it', () => {
   });
 
   /**
+   * What makes naming the shop safe. The preview reads this device's own index
+   * and nothing else, so a code has to have been opened on this phone before
+   * it can be named — someone guessing six characters at a stranger's shop
+   * gets nothing back, because a shop they have never opened is not there to
+   * be found.
+   */
+  it('can only name a shop this device has already opened', () => {
+    const block = access.slice(access.indexOf('const codePreview'), access.indexOf('const handleAccess'));
+    expect(block).toContain('getStoreIndex()');
+    expect(block).not.toContain('supabase');
+    expect(block).toContain('if (!entry) return null;');
+  });
+
+  /**
    * Read, not loaded: loadStore mutates and persists, which typing six
    * characters has no business doing.
    */

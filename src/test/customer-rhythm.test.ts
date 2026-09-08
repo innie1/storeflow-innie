@@ -101,3 +101,38 @@ describe('saying why', () => {
     expect(explainStanding(rhythmic(7, 2, 5))).toContain('Not enough visits');
   });
 });
+
+describe('counting a visit once', () => {
+  /**
+   * lastPurchaseDate normally repeats the newest history entry. It was
+   * de-duplicated by exact millisecond, so the same visit recorded a moment
+   * apart counted as two — enough to give a customer with two visits a
+   * "known" habit built on a gap of nearly nothing.
+   */
+  it('does not count the last purchase twice when history already has it', () => {
+    const sameDay = new Date(Date.now() - 5 * 86400000);
+    const customer = {
+      purchaseHistory: [
+        { date: daysAgo(12), amount: 1, items: '' },
+        { date: sameDay.toISOString(), amount: 1, items: '' },
+      ],
+      // The same visit, a moment later, as the app actually records it.
+      lastPurchaseDate: new Date(sameDay.getTime() + 40).toISOString(),
+    };
+    expect(usualGapDays(customer)).toBeNull();
+  });
+
+  /** Two bundles in one morning is one visit, not a zero-day habit. */
+  it('treats several drop-offs in one day as one visit', () => {
+    const customer = {
+      purchaseHistory: [
+        { date: daysAgo(28), amount: 1, items: '' },
+        { date: daysAgo(14), amount: 1, items: '' },
+        { date: daysAgo(14), amount: 1, items: '' },
+        { date: daysAgo(0), amount: 1, items: '' },
+      ],
+      lastPurchaseDate: daysAgo(0),
+    };
+    expect(Math.round(usualGapDays(customer)!)).toBe(14);
+  });
+});

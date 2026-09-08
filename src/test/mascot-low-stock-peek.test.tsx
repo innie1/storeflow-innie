@@ -26,9 +26,26 @@ function storeWith(products: Array<{ name: string; quantity: number; discontinue
   } as any;
 }
 
-/** Run the mascot's one-minute ambient tick. */
-async function tick() {
-  await act(async () => { vi.advanceTimersByTime(61000); });
+/**
+ * Run the mascot's ambient tick, optionally until it has said something.
+ *
+ * A single advance is not reliable for a positive assertion. The peek runs off
+ * nested timers and promises, and advancing fake timers does not flush the
+ * microtasks those resolve on - so under parallel load the assertion sometimes
+ * ran between the timer firing and the state landing, and the test passed or
+ * failed by machine speed rather than by behaviour.
+ *
+ * With a condition it advances until that holds, which is deterministic. With
+ * none it advances once, as before: a test asserting the mascot stays silent
+ * must not wait around hoping it speaks.
+ */
+async function tick(until?: () => boolean) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await act(async () => { vi.advanceTimersByTime(61000); });
+    // Let anything those timers resolved settle before looking.
+    await act(async () => { await Promise.resolve(); });
+    if (!until || until()) return;
+  }
 }
 
 beforeEach(() => {
@@ -56,7 +73,7 @@ describe('the shelf glance fires on real low stock', () => {
         { name: 'Coke 50cl', quantity: 40 },
       ])} />,
     );
-    await tick();
+    await tick(() => view.container.textContent.includes('Peak Milk is down to 2'));
     expect(view.container.textContent).toContain('Peak Milk is down to 2');
     // The part that was dormant: the shelf drawing itself, not just the line.
     expect(view.container.querySelector('[class*="shelf-peek"]')).not.toBeNull();
@@ -70,7 +87,7 @@ describe('the shelf glance fires on real low stock', () => {
         { name: 'Sugar', quantity: 4 },
       ])} />,
     );
-    await tick();
+    await tick(() => view.container.textContent.includes('Peak Milk is down to 1'));
     expect(view.container.textContent).toContain('Peak Milk is down to 1');
     expect(view.container.textContent).toContain('2 others are low');
   });
@@ -115,7 +132,7 @@ describe('and stays quiet otherwise', () => {
   it('glances again once the cooldown has passed', async () => {
     localStorage.setItem(PEEK_KEY, String(Date.now() - 5 * 60 * 60 * 1000));
     const view = render(<Mascot store={storeWith([{ name: 'Peak Milk', quantity: 2 }])} />);
-    await tick();
+    await tick(() => view.container.textContent.includes('Peak Milk is down to 2'));
     expect(view.container.textContent).toContain('Peak Milk is down to 2');
   });
 

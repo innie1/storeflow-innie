@@ -565,6 +565,12 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   /**
    * The shop a typed code belongs to, if this device already has it.
    *
+   * It reads this device's own index and nothing else, which is what makes
+   * showing the name safe: a code has to have been opened on this phone before
+   * it can be named. Someone guessing six characters at a stranger's shop gets
+   * nothing back, because a shop they have never opened is not in the index to
+   * be found.
+   *
    * Read rather than loaded: loadStore mutates and persists, which typing six
    * characters has no business doing.
    */
@@ -1777,35 +1783,47 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           <div className="space-y-4 text-left">
             <div>
               <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Access Code</label>
-              <input
-                value={accessCode}
-                onChange={e => {
-                  setAccessCode(e.target.value.toUpperCase());
-                  setAccessMood('thinking');
-                }}
-                placeholder="Enter 6-character code"
-                maxLength={6}
-                className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground text-center font-mono text-2xl tracking-widest placeholder:text-sm placeholder:tracking-normal focus:outline-none focus:border-primary"
-              />
-
               {/*
-                Which shop this code opens, before it opens it.
-                Somebody running a laundry, a barber shop and a restaurant off
-                one phone was typing six characters and finding out afterwards.
-                Shown rather than confirmed, so it costs no extra tap: the
-                answer is simply on screen by the time the button is pressed.
-                A code the device has never seen shows nothing, which is
-                honest - it cannot be known until it is fetched.
+                The trade sits inside the field, against its right edge.
+                Below it, it was a second box appearing under the one being
+                typed in, which pushed the button down as the sixth character
+                landed. Inside, it reads as the field answering rather than the
+                page growing. The input keeps its right padding whether or not
+                the badge is there, so the code does not shift when it appears.
               */}
-              {codePreview && (
-                <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-primary/30 bg-primary/5 p-2.5">
-                  <span className="text-xl shrink-0">{codePreview.icon}</span>
-                  <span className="min-w-0">
-                    <span className="block font-display font-black text-sm truncate">{codePreview.name}</span>
-                    <span className="block text-[11px] text-muted-foreground truncate">{codePreview.kind}</span>
+              <div className="relative rounded-lg bg-surface-2 border border-border focus-within:border-primary transition-colors">
+                <input
+                  value={accessCode}
+                  onChange={e => {
+                    setAccessCode(e.target.value.toUpperCase());
+                    setAccessMood('thinking');
+                  }}
+                  placeholder="Enter 6-character code"
+                  maxLength={6}
+                  className="w-full p-3 pr-11 pl-11 bg-transparent text-foreground text-center font-mono text-2xl tracking-widest placeholder:text-sm placeholder:tracking-normal focus:outline-none border-0"
+                />
+                {/* Flush in the corner, inside the field's own edge. */}
+                {codePreview && (
+                  <span className="absolute right-3 top-[1.55rem] -translate-y-1/2 text-xl leading-none">
+                    {codePreview.icon}
                   </span>
-                </div>
-              )}
+                )}
+
+                {/*
+                  The shop, on its own line inside the same box.
+                  A separate card below pushed the button down the moment the
+                  sixth character landed. Held inside the field's border it
+                  reads as the field answering rather than the page growing.
+                */}
+                {codePreview && (
+                  <span className="block border-t border-border/70 px-3 py-1.5 text-center">
+                    <span className="text-xs font-display font-black truncate block">{codePreview.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{codePreview.kind}</span>
+                  </span>
+                )}
+              </div>
+
+
             </div>
             <button onClick={handleAccess} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Access Store
