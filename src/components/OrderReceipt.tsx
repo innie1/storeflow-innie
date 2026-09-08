@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StoreData } from '@/types/store';
+import { StoreData, ManagerSettings } from '@/types/store';
 import { printReceipt } from '@/lib/print-engine';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
@@ -19,7 +19,7 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
   // Overlay: hold the page behind it still while this is open.
   useBodyScrollLock();
   const profile = store.profile;
-  const settings = store.managerSettings || {};
+  const settings: ManagerSettings = store.managerSettings || {};
   const date = new Date(order?.created_at || Date.now());
   const [buyerPhone, setBuyerPhone] = useState(order?.customer_phone || '');
 

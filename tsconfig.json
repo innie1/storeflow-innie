@@ -1,4 +1,5 @@
 {
+  "//": "This file checks NOTHING on its own: \"files\" is empty and it only holds references, so `tsc -p tsconfig.json` always exits clean. Use `npm run typecheck`, which points at tsconfig.app.json.",
   "compilerOptions": {
     "allowJs": true,
     "noImplicitAny": false,

@@ -68,6 +68,15 @@ interface DecoratedRecord {
   clientRef: string;
   /** Free-text shelf or rack, as the attendant wrote it at drop-off. */
   shelfLocation?: string;
+  /*
+   * decorateRecord has always set these, but the interface never declared
+   * them, so DecoratedRecord did not structurally satisfy RecordedBy. That
+   * collapsed byContributor's generic to RecordedBy and every field the sort
+   * and filter needed went missing from the result type - one omission, most
+   * of this file's type errors. The filter itself worked; types are erased.
+   */
+  recordedByName?: string;
+  recordedByRole?: string;
   synced: boolean;
   whatsapp: ReturnType<typeof buildLaundryWhatsAppPayload>;
   total: number;

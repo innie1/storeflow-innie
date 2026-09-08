@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { StoreData, Sale } from '@/types/store';
+import { StoreData, Sale, ManagerSettings } from '@/types/store';
 import { printReceipt } from '@/lib/print-engine';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
@@ -24,7 +24,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   const [buyerPhone, setBuyerPhone] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [generatingQR, setGeneratingQR] = useState(false);
-  const settings = store.managerSettings || {};
+  const settings: ManagerSettings = store.managerSettings || {};
 
   const subtotalBeforeDiscount = salesList.reduce((sum, s) => sum + s.quantity * s.unitPrice, 0);
   const totalAfterDiscount = salesList.reduce((sum, s) => sum + s.total, 0);

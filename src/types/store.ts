@@ -176,7 +176,13 @@ export interface Expense {
 }
 
 export interface StoreProfile {
-  storeType: string;
+  /*
+   * Optional for the same reason as ManagerSettings.enabled: every reader
+   * already falls back (`profile.storeType || store.category || 'Retail
+   * Store'`), and StoreAccess builds a profile without it during setup, before
+   * the shop has picked a trade.
+   */
+  storeType?: string;
   location: string;
   phone: string;
   email: string;
@@ -517,7 +523,15 @@ export interface BusinessChallenge {
 }
 
 export interface ManagerSettings {
-  enabled: boolean;
+  /*
+   * Optional, because that is how every reader already treats it: Mascot and
+   * mascot-store-signal ask `enabled !== false` and StoreAccess writes
+   * `enabled ?? true`, all meaning "on unless switched off". Declaring it
+   * required made `store.managerSettings || {}` an error, and since the
+   * receipt screens build every update by spreading that, one lie in the type
+   * produced sixty-odd complaints across files that were behaving correctly.
+   */
+  enabled?: boolean;
   ownerPassword?: string;          // Owner login password, checked on role switch and backup export
   // Account recovery. StoreAccess writes all four when a store is secured and
   // Settings reads them back; none of them were declared, so the recovery
