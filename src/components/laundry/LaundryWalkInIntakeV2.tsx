@@ -34,6 +34,11 @@ interface Props {
   onUpdate: (store: StoreData) => void;
   /** Stamped onto the record, so the shop can tell who took the bundle in. */
   currentUser?: { name?: string; role?: string } | null;
+  /**
+   * The bundle that was just taken in, so the list can show where it landed.
+   * Sorted by due date, a new bundle usually appears well down the list.
+   */
+  onRecorded?: (clientRef: string) => void;
 }
 
 const OPEN_SIGNAL = 'storeflow:open-laundry-intake';
@@ -156,7 +161,7 @@ function activePreset(promisedFor: string, chips: { hours: number }[]): number |
   return null;
 }
 
-export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser }: Props) {
+export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, onRecorded }: Props) {
   const services = useMemo(
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
     [store.products],
@@ -418,6 +423,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser }: 
       });
 
       reassignLaundryPhotos(draftRef, localRecord.clientRef).catch(() => {});
+      onRecorded?.(localRecord.clientRef);
 
       // Money first, so a failure here cannot leave a bundle recorded as paid
       // when it was not. recordLaundryPayment books only what was handed over

@@ -27,7 +27,7 @@ import {
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
-import { ChevronDown, ChevronUp, ClipboardList, MapPin, MessageCircle, Plus, Search, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { getPromisedTime } from '@/lib/business-insights';
@@ -140,6 +140,8 @@ function decorateRecord(order: any, store: StoreData): DecoratedRecord {
 }
 
 /** Overdue first, then whatever the counter is most likely to be asked about. */
+const SORT_KEY = 'storeflow_laundry_sort';
+
 function urgencyRank(record: DecoratedRecord): number {
   if (record.overdue) return 0;
   if (record.stage === 'ready') return 1;
@@ -157,6 +159,18 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
   const [stageBusy, setStageBusy] = useState<string | null>(null);
   /** A bundle about to be handed over with money still owed on it. */
   const [collectGuard, setCollectGuard] = useState<DecoratedRecord | null>(null);
+  /*
+   * The list is ordered by what needs attention, which is right at the counter
+   * but means a bundle you have just taken in lands wherever its due date puts
+   * it - often far enough down that you cannot see it saved. 'newest' is for
+   * that moment; 'urgent' stays the default because a late bundle should not
+   * slide under everything recorded today.
+   */
+  const [sortMode, setSortMode] = useState<'urgent' | 'newest'>(() => {
+    try { return localStorage.getItem(SORT_KEY) === 'newest' ? 'newest' : 'urgent'; } catch { return 'urgent'; }
+  });
+  /** Just recorded, so it can be found in a list it does not sit at the top of. */
+  const [justRecorded, setJustRecorded] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = () => setLocalRecords(getLocalLaundryRecords(store.accessCode));
@@ -219,6 +233,10 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
     return byContributor(decorated, recordedBy)
       .filter(record => matchesFilter(record) && (!debouncedSearch || record.searchText.includes(debouncedSearch)))
       .sort((a, b) => {
+        // Newest is a flat recency order on purpose: banding it by urgency
+        // first would put the bundle just recorded back down the list, which
+        // is the whole thing this mode exists to avoid.
+        if (sortMode === 'newest') return b.createdAt - a.createdAt;
         const rank = urgencyRank(a) - urgencyRank(b);
         if (rank !== 0) return rank;
         if (a.promisedAt !== b.promisedAt) {
@@ -228,7 +246,45 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         }
         return b.createdAt - a.createdAt;
       });
-  }, [decorated, filter, debouncedSearch, recordedBy]);
+  }, [decorated, filter, debouncedSearch, recordedBy, sortMode]);
+
+  /*
+   * Find the bundle just recorded, and mark it for six seconds.
+   *
+   * Two things had to be got right, and both were wrong first time.
+   *
+   * The effect must not depend on the record list: the workspace re-reads
+   * local records on a timer, so that array gets a fresh identity every poll,
+   * which re-ran the effect, cancelled the countdown and started a new one.
+   * The mark never cleared. Waiting for the row is a retry, not a dependency.
+   *
+   * And the six seconds must start when the row is on screen, not when the
+   * bundle was saved. The receipt sits in between, and a merchant reading it
+   * is not looking at the list - by the time they opened it the mark had
+   * already expired.
+   */
+  useEffect(() => {
+    if (!justRecorded || view !== 'records') return;
+    let cancelled = false;
+    let tries = 0;
+    let clear: ReturnType<typeof setTimeout> | undefined;
+
+    const findAndShow = () => {
+      if (cancelled) return;
+      const row = document.querySelector(`[data-client-ref="${justRecorded}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        clear = setTimeout(() => setJustRecorded(null), 6000);
+        return;
+      }
+      // The list may still be rendering. Give it a few frames, then let go
+      // rather than searching for a row that is filtered out of view.
+      if (tries++ < 40) requestAnimationFrame(findAndShow);
+    };
+
+    requestAnimationFrame(findAndShow);
+    return () => { cancelled = true; if (clear) clearTimeout(clear); };
+  }, [justRecorded, view]);
 
   const changeView = (next: LaundryWorkspaceView) => {
     requestLaundryWorkspace(next);
@@ -386,7 +442,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         // No explainer card here: the tag rule is stated on the receipt at the
         // moment it matters, and this screen exists to record a bundle, not to
         // describe one.
-        <LaundryWalkInIntake store={store} onUpdate={onUpdate} currentUser={currentUser} />
+        <LaundryWalkInIntake store={store} onUpdate={onUpdate} currentUser={currentUser} onRecorded={setJustRecorded} />
       ) : (
         <div className="space-y-3">
           <div className="flex gap-2">
@@ -405,6 +461,23 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
             )}
           </div>
           <RecordedByFilter records={decorated} selected={recordedBy} onSelect={setRecordedBy} />
+          <button
+            onClick={() => {
+              const next = sortMode === 'urgent' ? 'newest' : 'urgent';
+              setSortMode(next);
+              try { localStorage.setItem(SORT_KEY, next); } catch { /* a preference is not worth an error */ }
+            }}
+            className="h-11 px-2.5 rounded-xl bg-surface-2 border border-border flex items-center gap-1 shrink-0 active:scale-95 transition"
+            title={sortMode === 'urgent' ? 'Sorted by what needs attention. Tap for newest first.' : 'Sorted newest first. Tap for what needs attention.'}
+            aria-label={sortMode === 'urgent' ? 'Sorted by urgency' : 'Sorted newest first'}
+          >
+            {sortMode === 'urgent'
+              ? <AlertTriangle className="w-3.5 h-3.5 text-primary shrink-0" />
+              : <Clock className="w-3.5 h-3.5 text-primary shrink-0" />}
+            <span className="text-[10px] font-display font-black text-muted-foreground">
+              {sortMode === 'urgent' ? 'Urgent' : 'New'}
+            </span>
+          </button>
           </div>
 
           {/* One row, equal columns. Five separate pills wrapped onto a second
@@ -458,7 +531,15 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                 const busy = stageBusy === record.key;
 
                 return (
-                  <div key={record.order.id} className={`rounded-2xl border bg-card p-4 text-left ${record.overdue ? 'border-destructive/40' : 'border-border'}`}>
+                  <div
+                    key={record.order.id}
+                    data-client-ref={record.clientRef}
+                    className={`rounded-2xl border bg-card p-4 text-left transition-colors duration-500 ${
+                      justRecorded && record.clientRef === justRecorded
+                        ? 'border-primary ring-2 ring-primary/40'
+                        : record.overdue ? 'border-destructive/40' : 'border-border'
+                    }`}
+                  >
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
