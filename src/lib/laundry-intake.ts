@@ -1,6 +1,17 @@
 import type { Product } from '@/types/store';
 import { getStoredServicePricing, type ServicePricing } from '@/lib/service-pricing';
 
+/**
+ * What a laundry is actually handed.
+ *
+ * The list stopped at clothing plus a bedsheet, so the household washing a
+ * Nigerian laundry earns most of its money on - duvets, blankets, curtains,
+ * rugs - had to be typed in by hand every time, by every shop.
+ *
+ * A bedsheet and its pillow cases usually arrive together and are priced as
+ * one job, so that set is offered as well as the pieces on their own; a shop
+ * that prices them separately still has both.
+ */
 export const DEFAULT_LAUNDRY_GARMENTS = [
   'Shirt',
   'Trouser',
@@ -9,9 +20,22 @@ export const DEFAULT_LAUNDRY_GARMENTS = [
   'Gown / Dress',
   'Skirt',
   'Native Wear',
+  'Agbada',
+  'Suit (2-piece)',
   'Jacket',
+  'Bedsheet & Pillow Case',
   'Bedsheet',
+  'Pillow Case',
+  'Pillow',
+  'Duvet',
+  'Duvet Cover',
+  'Blanket',
+  'Curtain',
+  'Rug / Carpet',
+  'Table Cloth',
   'Towel',
+  'Cap',
+  'Socks',
   'Underwear',
 ] as const;
 

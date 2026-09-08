@@ -6,7 +6,7 @@ import QRCode from 'qrcode';
 import type { StoreData } from '@/types/store';
 import { addCustomer } from '@/lib/store-data';
 import { getServicePricingLabel, getStoredServicePricing } from '@/lib/service-pricing';
-import { countLaundryPieces, sanitizeGarmentSelections, type LaundryGarmentSelection } from '@/lib/laundry-intake';
+import { countLaundryPieces, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
 import {
   calculateLaundryPriceLines,
   getLaundryGarmentPrice,
@@ -30,6 +30,7 @@ import { reassignLaundryPhotos } from '@/lib/laundry-photos';
 import { FULFILLMENT_LABELS, totalWithDelivery, type LaundryFulfillment } from '@/lib/laundry-runs';
 import { LAUNDRY_MODIFIERS, describeModifiers, toggleModifier } from '@/lib/laundry-modifiers';
 import { orderedDueChips, recordDueChoice } from '@/lib/laundry-due-usage';
+import { markPractised } from '@/lib/setup-guide';
 import { filterGarments, findSimilarGarment } from '@/lib/garment-match';
 
 interface Props {
@@ -42,6 +43,16 @@ interface Props {
    * Sorted by due date, a new bundle usually appears well down the list.
    */
   onRecorded?: (clientRef: string) => void;
+  /**
+   * A rehearsal, not a job.
+   *
+   * The setup walk teaches this screen by having the merchant fill it in, and
+   * that used to create a real bundle: a job in the records, a customer in the
+   * book, money in the day's takings. Somebody learning the app at home was
+   * left with an invented customer and takings that never happened. In this
+   * mode nothing is written anywhere.
+   */
+  practice?: boolean;
 }
 
 const OPEN_SIGNAL = 'storeflow:open-laundry-intake';
@@ -61,17 +72,33 @@ function emptyCounts(garments: string[]): Record<string, number> {
  */
 export function rankGarmentsByUsage(accessCode: string, garmentTypes: string[]): string[] {
   const used = new Map<string, number>();
+  const lastUsed = new Map<string, number>();
+
   for (const record of getLocalLaundryRecords(accessCode)) {
+    const at = new Date(record.createdAt || '').getTime();
     for (const garment of record.garments || []) {
       const name = String(garment.garmentType || '');
       if (!name) continue;
       used.set(name, (used.get(name) || 0) + (Number(garment.quantity) || 0));
+      if (Number.isFinite(at)) lastUsed.set(name, Math.max(lastUsed.get(name) || 0, at));
     }
   }
 
+  /*
+   * Most handled first, then most recently handled, then the shop's own order.
+   *
+   * Frequency alone left two items a shop uses equally often in whatever order
+   * the list happened to be written, and buried something taken in this
+   * morning below things not seen in months. Recency is the tie-break, so what
+   * the counter is dealing with now sits under what it deals with always.
+   */
   return [...garmentTypes].sort((a, b) => {
     const byUsage = (used.get(b) || 0) - (used.get(a) || 0);
     if (byUsage !== 0) return byUsage;
+
+    const byRecency = (lastUsed.get(b) || 0) - (lastUsed.get(a) || 0);
+    if (byRecency !== 0) return byRecency;
+
     return garmentTypes.indexOf(a) - garmentTypes.indexOf(b);
   });
 }
@@ -164,7 +191,7 @@ function activePreset(promisedFor: string, chips: { hours: number }[]): number |
   return null;
 }
 
-export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, onRecorded }: Props) {
+export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, onRecorded, practice = false }: Props) {
   const services = useMemo(
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
     [store.products],
@@ -426,6 +453,41 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
 
     setSaving(true);
     try {
+      /*
+       * A rehearsal stops here.
+       *
+       * Everything below writes: the record, the money, the customer book, the
+       * milestone check, the sync. None of it runs. The receipt is built from
+       * what was typed so the merchant sees exactly what would have happened,
+       * and says plainly that nothing was kept - because a bundle that
+       * silently vanished would be worse than the problem this solves.
+       */
+      if (practice) {
+        setCreated({
+          clientRef: `practice_${Date.now().toString(36)}`,
+          accessCode,
+          tagCode: 'PRACTICE',
+          customerName: name,
+          customerPhone: phone,
+          serviceId: String(selectedService.id),
+          serviceName: selectedService.name,
+          pricing,
+          billingQuantity: isCountedUnit(pricing) ? billingQty : 1,
+          total,
+          notes: notes.trim(),
+          garments: pricedGarments,
+          pieceCount: countLaundryPieces(pricedGarments),
+          garmentSummary: summarizeLaundryGarments(pricedGarments),
+          promisedFor,
+          workflowStage: 'received',
+          syncStatus: 'pending',
+          createdAt: new Date().toISOString(),
+        } as any);
+        markPractised(accessCode);
+        setSaving(false);
+        return;
+      }
+
       const localRecord = createLocalLaundryRecord({
         accessCode,
         customerName: name,
@@ -564,8 +626,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
             <div className="shrink-0 flex justify-between items-start gap-3 border-b border-border p-4 pb-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs text-success font-bold uppercase">Laundry recorded</p>
-                  {created.syncStatus === 'synced' ? (
+                  <p className={`text-xs font-bold uppercase ${practice ? 'text-primary' : 'text-success'}`}>
+                    {practice ? 'Practice run' : 'Laundry recorded'}
+                  </p>
+                  {practice ? null : created.syncStatus === 'synced' ? (
                     <span className="px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-black">Synced</span>
                   ) : (
                     <span className="px-2 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black">Not synced</span>
@@ -577,6 +641,28 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/*
+              Said plainly, and first.
+              A bundle that quietly disappeared would be worse than the problem
+              this solves, so anybody who was actually serving a customer is
+              told at once - and offered the way to do it for real.
+            */}
+            {practice && (
+              <div className="rounded-2xl border border-primary/40 bg-primary/5 p-3.5 text-left">
+                <p className="font-display font-black text-sm">Nothing was saved</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                  This was practice, so no job, no customer and no money were
+                  recorded. Your prices and services are real and stay.
+                </p>
+                <button
+                  onClick={() => { setCreated(null); showToast('Fill it in again and it will be recorded', 'info'); }}
+                  className="mt-2.5 h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black"
+                >
+                  Record it for real
+                </button>
+              </div>
+            )}
+
             <div className="rounded-2xl border-2 border-primary/40 bg-primary/5 p-4 text-center">
               {qrDataUrl && <img src={qrDataUrl} alt={`Laundry ${created.tagCode} QR code`} className="w-28 h-28 mx-auto rounded-xl bg-white p-2" />}
               <p className="font-mono font-black text-4xl tracking-[0.18em] mt-3">{created.tagCode}</p>

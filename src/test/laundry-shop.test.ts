@@ -100,7 +100,11 @@ describe('the screens speak to a laundry worker', () => {
 
   it('explains a service in one line, not a paragraph', () => {
     expect(pricing).not.toContain('A service is <b>what you do to the clothes</b>');
-    expect(pricing).toContain('Service vs item');
+    // Was a bordered card with a heading and three lines of its own. The
+    // distinction still needs saying - it is the one that confuses people -
+    // but it says it where the subtitle already was.
+    expect(pricing).not.toContain('Service vs item');
+    expect(pricing).toContain('A service is what you do; an item is what you do it to.');
   });
 
   it('keeps the hints short', () => {

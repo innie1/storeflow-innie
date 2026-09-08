@@ -242,7 +242,10 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-display font-black text-xl text-foreground">Laundry Price List</h2>
-          <p className="text-xs text-muted-foreground mt-1">What you charge for each item, per service.</p>
+          {/* The one distinction that actually confuses people, said once,
+              where the subtitle already was. It used to be a bordered card
+              with its own heading and a three-line paragraph. */}
+          <p className="text-xs text-muted-foreground mt-1">A service is what you do; an item is what you do it to.</p>
         </div>
         <button data-guide="add-service" onClick={openNewService} className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-display font-bold text-xs">
           <Plus className="w-4 h-4" /> Service
@@ -253,12 +256,10 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
           A shop that takes nothing up front ends up storing clothes nobody
           comes back for. This is the owner's lever for that, and it only
           appears here — an attendant should not be able to lower it. */}
-      <div className="rounded-2xl border border-border bg-card p-4 text-left">
-        <p className="font-display font-black text-sm">Deposit at drop-off</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Part of the price you ask for before clothes are left. 0 means no deposit.
-        </p>
-        <div className="mt-3 flex items-center gap-2">
+      <div className="rounded-2xl border border-border bg-card p-3.5 text-left">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-display font-black text-sm">Deposit at drop-off</p>
+          <div className="flex items-center gap-2 shrink-0">
           <input
             inputMode="numeric"
             value={depositInput}
@@ -270,23 +271,18 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
               setDepositInput(next);
               persist(setLaundryDepositRule(store, Number(next) || 0));
             }}
-            className="w-20 h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm outline-none focus:border-primary"
-          />
-          <span className="font-black text-sm">%</span>
-          {Number(depositInput) > 0 && (
-            <span className="text-xs text-muted-foreground">
-              ₦1,000 job → ₦{Math.ceil((1000 * (Number(depositInput) || 0)) / 100).toLocaleString()} up front
-            </span>
-          )}
+              className="w-16 h-10 px-3 rounded-xl bg-surface-2 border border-border text-sm text-center outline-none focus:border-primary"
+            />
+            <span className="font-black text-sm">%</span>
+          </div>
         </div>
-      </div>
-
-
-      <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 text-left">
-        <p className="font-display font-black text-sm">Service vs item</p>
-        <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-          The service is what you do — Wash &amp; Iron, Dry Cleaning. The item is what
-          it is done to. Each item has its own price under each service.
+        {/* The worked example only when there is something to work out. It was
+            a permanent paragraph explaining a percentage to a shop that had
+            already typed one. */}
+        <p className="text-[11px] text-muted-foreground mt-1.5">
+          {Number(depositInput) > 0
+            ? `₦1,000 job → ₦${Math.ceil((1000 * (Number(depositInput) || 0)) / 100).toLocaleString()} up front`
+            : 'No deposit taken.'}
         </p>
       </div>
 

@@ -123,11 +123,13 @@ function serviceSteps(store: StoreData): GuideStep[] {
       id: 'first-job',
       target: 'record-job',
       tab: isLaundry ? 'laundry-records' : 'orders',
-      title: isLaundry ? 'Record your first customer' : 'Record your first job',
+      title: isLaundry ? 'Try taking a bundle in' : 'Record your first job',
       body: isLaundry
-        ? 'Try it once with a real bundle and you have opened for business.'
+        ? 'Walk through it once. Nothing is saved — this is only to show you how.'
         : 'Log the first piece of work you take in. That is the shop open.',
-      done: hasJob,
+      // Practised, or actually traded. Either finishes the walk, because a
+      // shop that has already taken real work in does not need the rehearsal.
+      done: store => hasJob(store) || hasPractised(store.accessCode),
     },
   ];
 }
@@ -246,6 +248,20 @@ export function guideProgress(store: StoreData, tab = ''): { done: number; total
  *
  * Each shop earns its own.
  */
+/*
+ * The last step is a rehearsal, so it cannot be judged by what it leaves
+ * behind.
+ *
+ * Recording a bundle during the walk used to create a real one: a real job in
+ * the records, a real customer, real money in the day's takings. Somebody
+ * sitting at home learning the app ended up with an invented customer in their
+ * books and takings that never happened. The service they set up is real setup
+ * and stays; the bundle is only practice.
+ *
+ * Which means completion has to be recorded rather than inferred - there is
+ * nothing left over to look for.
+ */
+const PRACTISED_PREFIX = 'storeflow_setup_guide_practised_';
 const DISMISSED_PREFIX = 'storeflow_setup_guide_dismissed_';
 const FINISHED_PREFIX = 'storeflow_setup_guide_finished_';
 
@@ -270,6 +286,14 @@ function readFlag(prefix: string, legacy: string, accessCode?: string): boolean 
   }
 }
 
+export function markPractised(accessCode?: string): void {
+  try { localStorage.setItem(shopKey(PRACTISED_PREFIX, accessCode), '1'); } catch { /* private mode */ }
+}
+
+export function hasPractised(accessCode?: string): boolean {
+  try { return localStorage.getItem(shopKey(PRACTISED_PREFIX, accessCode)) === '1'; } catch { return false; }
+}
+
 export function guideDismissed(accessCode?: string): boolean {
   return readFlag(DISMISSED_PREFIX, LEGACY_DISMISSED, accessCode);
 }
@@ -282,6 +306,7 @@ export function restartGuide(accessCode?: string): void {
   try {
     localStorage.removeItem(shopKey(DISMISSED_PREFIX, accessCode));
     localStorage.removeItem(shopKey(FINISHED_PREFIX, accessCode));
+    localStorage.removeItem(shopKey(PRACTISED_PREFIX, accessCode));
     // The global ones would otherwise keep the walk switched off for ever.
     localStorage.removeItem(LEGACY_DISMISSED);
     localStorage.removeItem(LEGACY_FINISHED);

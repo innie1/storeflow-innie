@@ -33,6 +33,7 @@ import LaundryRuns from '@/components/laundry/LaundryRuns';
 import { can } from '@/lib/permissions';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
 import { bundleModifiers } from '@/lib/laundry-modifiers';
+import { nextStep } from '@/lib/setup-guide';
 import { Bike } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { getPromisedTime } from '@/lib/business-insights';
@@ -526,7 +527,15 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         // moment it matters, and this screen exists to record a bundle, not to
         // describe one.
         <>
-          <LaundryWalkInIntake store={store} onUpdate={onUpdate} currentUser={currentUser} onRecorded={setJustRecorded} />
+          <LaundryWalkInIntake
+            store={store}
+            onUpdate={onUpdate}
+            currentUser={currentUser}
+            onRecorded={setJustRecorded}
+            /* The setup walk's last step is a rehearsal: it teaches the screen
+               without leaving an invented customer in the books. */
+            practice={nextStep(store, 'laundry-records')?.id === 'first-job'}
+          />
 
           {/*
             Recording a bundle used to leave no trace on this screen. The
