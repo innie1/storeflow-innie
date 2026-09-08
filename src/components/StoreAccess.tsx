@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createStore, loadStore, saveStore, getStoreIndex } from '@/lib/store-data';
 import { getBusinessTemplate } from '@/lib/business-runtime';
-import { applyBusinessTemplate, businessCategoryFor } from '@/lib/business-templates';
+import { applyBusinessTemplate, businessCategoryFor, listBusinessTypes } from '@/lib/business-templates';
 import { StoreData, StoreCategory, StoreType, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotMood } from '@/components/Mascot';
@@ -239,12 +239,16 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   };
 
 
-  const BUSINESS_CHOICES = [
-    ['provision','Provision / Supermarket','🛒'], ['pharmacy','Pharmacy / Chemist','💊'], ['clothing','Clothing / Fashion','👕'], ['electronics','Electronics','📱'], ['food','Food Business','🍲'],
-    ['laundry','Laundry / Dry Cleaning','🧺'], ['barber','Barber Shop','💈'], ['salon','Salon / Beauty','💇‍♀️'], ['tailoring','Tailoring / Fashion Design','🧵'], ['repair','Repair Shop','🛠️'],
-    ['printing','Printing / Cyber Cafe','🖨️'], ['cyber_cafe','Cyber Cafe','💻'], ['car_wash','Car Wash','🚗'], ['photography','Photography','📸'], ['cleaning','Cleaning Service','🧹'], ['spa','Spa / Wellness','🧖'],
-    ['gas_filling','Gas Filling','⛽'], ['games','Gaming Centre','🎮'], ['restaurant','Restaurant / Food','🍔'],
-  ] as const;
+  /*
+   * From the registry, not a copy of it.
+   *
+   * This was a hand-written list beside the one the templates already define -
+   * the same duplication that let the Switch Store sheet drift until it could
+   * not create a laundry at all. Renaming a trade in one place and not the
+   * other is how the two disagree, so there is only one place now, and it
+   * carries the commonest-first order with it.
+   */
+  const BUSINESS_CHOICES = listBusinessTypes().map(entry => [entry.type, entry.name, entry.icon] as const);
   // Shared with the Switch Store sheet, so the two creation paths cannot
   // disagree about what a trade is again.
   const businessCategory = businessCategoryFor;

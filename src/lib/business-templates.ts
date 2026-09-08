@@ -59,7 +59,19 @@ const serviceCommerce: BusinessModule[] = ['orders', ...commerce, 'queue'];
 
 export const BUSINESS_TEMPLATES: Record<string, BusinessTemplate> = {
   provision: {
-    type: 'provision', name: 'Provision / Supermarket', icon: '🛒', description: 'Sell everyday products with inventory, sales, customers and suppliers.',
+    /*
+     * "Retail Business", not "Provision / Supermarket".
+     *
+     * The name described one kind of shop while the template serves every shop
+     * that buys goods and sells them: provisions, electronics, hardware, phone
+     * accessories. A merchant selling phone chargers read the list, saw
+     * nothing that was them, and picked Other - which is the template with the
+     * least in it.
+     *
+     * The type stays 'provision' so no existing shop changes underneath its
+     * owner; only what it is called has moved.
+     */
+    type: 'provision', name: 'Retail Business', icon: '🛒', description: 'Buy goods and sell them: provisions, electronics, hardware, anything on a shelf.',
     modes: ['products'], modules: ['inventory', 'sales', 'orders', 'suppliers', ...commerce], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Sale', offeringNoun: 'Product' }, customerFeatures: { quantity: true },
     customerExperience: { primaryAction: 'Shop', intro: 'Choose what you want to buy.', intake: ['quantity'] }, workflow: ['cart', 'checkout', 'complete']

@@ -271,16 +271,49 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
   };
 
 
+  /*
+   * True while the page is being scrolled, for a moment after.
+   *
+   * Passive listener and a plain timeout rather than anything clever: this
+   * runs on every scroll of every screen, and a decorative button is not worth
+   * a frame of the merchant's phone.
+   */
+  const [scrolling, setScrolling] = useState(false);
+  useEffect(() => {
+    let timer: number | undefined;
+    const onScroll = () => {
+      setScrolling(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setScrolling(false), 700);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   return (
     <>
       <button
         type="button"
         onClick={handleFab}
+        data-flow-fab
         onPointerDown={onFabPointerDown}
         onPointerMove={onFabPointerMove}
         onPointerUp={onFabPointerUp}
         onPointerCancel={onFabPointerUp}
-        className={`fixed z-[45] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center transition-transform touch-none ${fabPos ? '' : 'right-4 bottom-24 md:bottom-8'} active:scale-95 cursor-grab ${holding ? 'ring-4 ring-primary/25 scale-105' : ''}`}
+        /*
+         * Gets out of the way while the page is moving.
+         *
+         * It floats over whatever is underneath, and on a phone that is the
+         * bottom-right of every screen - it covered a price, a total and a
+         * question in turn while this was being built. Dragging it is the
+         * merchant's answer, but nobody knows to drag something they have not
+         * yet been annoyed by. While the page scrolls it shrinks and fades to
+         * a hint, and comes back as soon as the reading stops.
+         */
+        className={`fixed z-[45] w-14 h-14 rounded-full bg-primary text-primary-foreground border border-primary/60 shadow-xl flex items-center justify-center touch-none ${fabPos ? '' : 'right-4 bottom-24 md:bottom-8'} active:scale-95 cursor-grab ${holding ? 'ring-4 ring-primary/25 scale-105' : ''} transition-[transform,opacity] duration-200 ${scrolling && !holding ? 'opacity-25 scale-75' : 'opacity-100 scale-100'}`}
         style={fabPos
           ? { left: fabPos.x, top: fabPos.y, right: 'auto', bottom: 'auto' }
           : undefined}

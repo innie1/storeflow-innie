@@ -1,7 +1,6 @@
 import { StoreData, TabId } from '@/types/store';
 import { canOpenTab, canSeeMoney } from '@/lib/permissions';
-import BreakEvenCard from '@/components/laundry/BreakEvenCard';
-import MonthReportCard from '@/components/laundry/MonthReportCard';
+import BreakEvenPip from '@/components/laundry/BreakEvenPip';
 import BreakEvenWatcher from '@/components/laundry/BreakEvenWatcher';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
@@ -72,9 +71,17 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
             <h1 className="font-display font-black text-2xl mt-1">{store.storeName}</h1>
             <p className="text-sm text-muted-foreground mt-1">{template.customerExperience.intro}</p>
           </div>
-          <button onClick={() => onNavigate('settings')} className="w-9 h-9 rounded-xl bg-surface-2 border border-border flex items-center justify-center" title="Settings">
-            <Settings2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* How far through the month, in the corner. The full figure had a
+                card of its own here and it was too much for something checked
+                now and then rather than every visit; it lives on Flow now. */}
+            {isServiceShop(store) && (
+              <BreakEvenPip store={store} canSeeMoney={canSeeMoney(currentUser)} onOpen={() => onNavigate('manager')} />
+            )}
+            <button onClick={() => onNavigate('settings')} className="w-9 h-9 rounded-xl bg-surface-2 border border-border flex items-center justify-center" title="Settings">
+              <Settings2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -93,14 +100,10 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
         </div>
       </div>
 
-      {/* What the month still needs, and how the last one went. Only for a
-          shop that sells work by the piece, where the figures mean something. */}
+      {/* The moment the month covers itself is still worth catching here,
+          even though the figures behind it have moved to Flow. */}
       {isServiceShop(store) && (
-        <>
-          <BreakEvenCard store={store} canSeeMoney={canSeeMoney(currentUser)} />
-          <MonthReportCard store={store} canSeeMoney={canSeeMoney(currentUser)} />
-          <BreakEvenWatcher store={store} canSeeMoney={canSeeMoney(currentUser)} />
-        </>
+        <BreakEvenWatcher store={store} canSeeMoney={canSeeMoney(currentUser)} />
       )}
 
       <div className="rounded-2xl bg-card border border-border p-4">

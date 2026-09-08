@@ -34,6 +34,9 @@ import ScrollLock from '@/components/ScrollLock';
 import FlowAdviceReport from '@/components/FlowAdviceReport';
 import type { ProductFocus } from '@/lib/product-focus';
 import { speakAsFlow, stopFlowVoice, type FlowVoiceGender } from '@/lib/flow-voice';
+import BreakEvenCard from '@/components/laundry/BreakEvenCard';
+import MonthReportCard from '@/components/laundry/MonthReportCard';
+import { isServiceShop } from '@/lib/flow-service-brain';
 
 interface ManagerProps {
   store: StoreData;
@@ -877,6 +880,16 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
       {/* ─── OVERVIEW ─────────────────────────────────────────────────────── */}
       {tab === 'overview' && (
         <div className="space-y-4 animate-fade-in text-left">
+          {/* What the month must take, and how it went. Here rather than on
+              the home screen: this is where somebody has come to think about
+              the business, not to take a bundle in. */}
+          {isServiceShop(store) && (
+            <>
+              <BreakEvenCard store={store} canSeeMoney />
+              <MonthReportCard store={store} canSeeMoney />
+            </>
+          )}
+
           <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} animate={settings.numericAnimations !== false} />
 
           {/* Weekly Recap */}
