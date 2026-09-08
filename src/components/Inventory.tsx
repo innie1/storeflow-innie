@@ -271,6 +271,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     category: string;
     image?: string;
     description?: string;
+    barcode?: string;
     isCartonSingleEnabled: boolean;
     singlesPerCarton: string;
     singleSellingPrice: string;
@@ -288,6 +289,10 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     quantity: '',
     category: '',
     unit: 'pcs' as 'pcs' | 'kg' | 'liter' | 'load',
+    // The form has always had a barcode field; the state never declared it,
+    // so the value went in and the save never looked for it. See
+    // handleActualAdd.
+    barcode: '',
     isCartonSingleEnabled: false,
     singlesPerCarton: '12',
     singleSellingPrice: '',
@@ -690,6 +695,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       category: p.category,
       image: p.image,
       description: p.description,
+      barcode: p.barcode,
       isCartonSingleEnabled: p.isCartonSingleEnabled === true,
       singlesPerCarton: p.singlesPerCarton != null ? String(p.singlesPerCarton) : '',
       singleSellingPrice: p.singleSellingPrice != null ? String(p.singleSellingPrice) : '',
@@ -840,6 +846,15 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       singlesPerCarton: singlesPerCartonVal,
       singleSellingPrice: singlePriceVal,
       sellAsSinglesByDefault: newProduct.sellAsSinglesByDefault,
+      /*
+       * The barcode was typed and then dropped here.
+       *
+       * That hurt most in the flow built for it: scanning a code that is not
+       * recognised offers to add it as a new product and pre-fills the code,
+       * and the save discarded it - so scanning the same tin again still
+       * found nothing, and the shop learned not to bother.
+       */
+      barcode: newProduct.barcode.trim() || undefined,
     }, currentUser?.name, currentUser?.role);
     onUpdate(updated);
     setNewProduct({
@@ -849,6 +864,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       quantity: '',
       category: '',
       unit: 'pcs',
+      barcode: '',
       isCartonSingleEnabled: false,
       singlesPerCarton: '12',
       singleSellingPrice: '',
@@ -1015,6 +1031,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
       category: editDraft.category,
       image: editDraft.image,
       description: editDraft.description,
+      barcode: editDraft.barcode?.trim() || undefined,
       isCartonSingleEnabled: editDraft.isCartonSingleEnabled,
       singlesPerCarton: singlesPerCartonVal,
       singleSellingPrice: singlePriceVal,
@@ -1485,7 +1502,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
           onClick={() => {
             setShowAddModal(true);
             setShowAddConfirm(false);
-            setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries', isCartonSingleEnabled: false, singlesPerCarton: '12', singleSellingPrice: '', sellAsSinglesByDefault: false });
+            // unit belongs in every reset: leaving it out let the next product
+            // save with no unit at all instead of pcs.
+            setNewProduct({ name: '', costPrice: '', sellingPrice: '', quantity: '', category: 'Groceries', unit: 'pcs', barcode: '', isCartonSingleEnabled: false, singlesPerCarton: '12', singleSellingPrice: '', sellAsSinglesByDefault: false });
             setCustomCategoryActive(false);
             setCustomCategoryVal('');
           }}
@@ -4056,6 +4075,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                     sellingPrice: '',
                     quantity: '',
                     category: 'Groceries',
+                    unit: 'pcs',
                     isCartonSingleEnabled: false,
                     singlesPerCarton: '12',
                     singleSellingPrice: '',

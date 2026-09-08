@@ -107,6 +107,10 @@ export function getServicePricingLabel(pricing: ServicePricing): ServicePricingO
     per_piece: { id: 'per_piece', label: 'Per piece', unitLabel: '/ piece' },
     per_kg: { id: 'per_kg', label: 'Per KG', unitLabel: '/ kg' },
     per_load: { id: 'per_load', label: 'Per load', unitLabel: '/ load' },
+    // Missing here, so every per-bundle service fell through to `fixed`
+    // and called itself "Fixed price" with no unit - in an app that is
+    // otherwise careful that a bundle is not a piece.
+    per_bundle: { id: 'per_bundle', label: 'Per bundle', unitLabel: '/ bundle' },
     per_page: { id: 'per_page', label: 'Per page', unitLabel: '/ page' },
     per_hour: { id: 'per_hour', label: 'Per hour', unitLabel: '/ hour' },
     per_session: { id: 'per_session', label: 'Per session', unitLabel: '/ session' },

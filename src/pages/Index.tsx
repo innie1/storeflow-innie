@@ -3,7 +3,8 @@ import { canOpenTab } from '@/lib/permissions';
 import SetupGuide from '@/components/SetupGuide';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
 import { celebrationShown, guideProgress, hasPractised, markCelebrationShown, nextStep, PRACTISED_SIGNAL } from '@/lib/setup-guide';
-import { StoreData, TabId, Product } from '@/types/store';
+import { StoreData, TabId, Product, FlowNotification } from '@/types/store';
+import type { Json } from '@/integrations/supabase/types';
 import FlowShirtFab from '@/components/FlowShirtFab';
 import { getBusinessTemplate, isBusinessTabAllowed, isServiceFirstBusiness, resolveBusinessType, shouldRunRetailRestockEngine } from '@/lib/business-runtime';
 import { readLinkedTab, readNotificationAct, readOrderDeepLink, stripOrderDeepLink } from '@/lib/order-deep-link';
@@ -548,13 +549,22 @@ export default function Index() {
           .order('created_at', { ascending: false });
 
         if (!notifsError && dbNotifs && dbNotifs.length > 0 && active) {
-          const newItems = dbNotifs.map(n => ({
+          /*
+           * `text`, not `message`.
+           *
+           * Both notification drawers render `{n.description || n.text}`, and
+           * this wrote neither - so an order landed in the tray with its title
+           * and a blank line where the details belong. The tone has to be one
+           * of the four the styling knows, too; anything else falls through to
+           * plain grey, which is how cancellations came to look like news.
+           */
+          const newItems: FlowNotification[] = dbNotifs.map(n => ({
             id: n.id,
             title: n.title || 'Flow Alert',
-            message: n.message || '',
+            text: n.message || '',
             date: n.created_at || new Date().toISOString(),
             read: n.is_read || false,
-            tone: (n.type === 'new_order' ? 'info' : (n.type || 'info')) as any,
+            tone: n.type === 'new_order' ? 'info' : 'info',
             actionTab: n.type === 'new_order' ? 'orders' : undefined,
             actionLabel: n.type === 'new_order' ? 'View Orders' : undefined,
             icon: n.type === 'new_order' ? '🛒' : '🔔'
@@ -743,13 +753,16 @@ export default function Index() {
           else if (newNotif.type === 'order_cancelled' || newNotif.type === 'order_rejected') notifIcon = '🚫';
           else if (newNotif.type === 'order_update') notifIcon = '📝';
 
-          const newNotification = {
+          const newNotification: FlowNotification = {
             id: newNotif.id || 'notif-' + Date.now(),
             title: newNotif.title || 'Flow Alert',
-            message: newNotif.message || '',
+            text: newNotif.message || '',
             date: newNotif.created_at || new Date().toISOString(),
             read: newNotif.is_read || false,
-            tone: (newNotif.type === 'order_cancelled' ? 'destructive' : newNotif.type === 'new_order' ? 'info' : (newNotif.type || 'info')) as any,
+            // 'danger' is the tone the drawer styles red. 'destructive' was
+            // not one of the four, so a cancelled order was painted the same
+            // grey as a routine update.
+            tone: newNotif.type === 'order_cancelled' ? 'danger' : 'info',
             actionTab: isOrderRel ? 'orders' : undefined,
             actionLabel: isOrderRel ? 'View Orders' : undefined,
             icon: notifIcon
@@ -945,7 +958,7 @@ export default function Index() {
         const { error: storeErr } = await supabase
           .rpc('merge_store_data', {
             p_store_id: store.id,
-            p_patch: { products: updatedStore.products, sales: updatedStore.sales, customers: updatedStore.customers }
+            p_patch: { products: updatedStore.products, sales: updatedStore.sales, customers: updatedStore.customers } as unknown as Json
           });
         if (storeErr) throw storeErr;
 

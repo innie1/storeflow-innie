@@ -432,7 +432,11 @@ export function healthScore(store: StoreData): HealthScore {
 export interface SalesAnalysis {
   fastMovers: { name: string; qty: number; revenue: number }[];
   slowMovers: { name: string; qty: number; daysInStock: number }[];
-  neverSold: { id: string; name: string; daysInStock: number }[];
+  // costPrice and quantity are here because the "stop reordering this"
+  // opportunity multiplies them to show what is tied up in stock that has
+  // never moved. Without them that figure was always zero, so the one
+  // number that makes the advice worth acting on never appeared.
+  neverSold: { id: string; name: string; daysInStock: number; costPrice: number; quantity: number }[];
   coPurchases: { a: string; b: string; count: number }[];
   topDay: string;
   topDayRevenue: number;
@@ -457,7 +461,7 @@ export function analyzeSales(store: StoreData): SalesAnalysis {
   store.products.filter(p => !p.discontinued).forEach(p => {
     const daysInStock = p.addedAt ? Math.floor((Date.now() - new Date(p.addedAt).getTime()) / 86400000) : 0;
     if (!soldIds.has(p.id)) {
-      if (daysInStock > 7) neverSold.push({ id: p.id, name: p.name, daysInStock });
+      if (daysInStock > 7) neverSold.push({ id: p.id, name: p.name, daysInStock, costPrice: p.costPrice, quantity: p.quantity });
     } else {
       const qty = tally.get(p.id)?.qty || 0;
       if (qty < 3) slowMovers.push({ name: p.name, qty, daysInStock });

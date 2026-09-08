@@ -76,23 +76,31 @@ export default function QRScannerPage({ onScanSuccess, onClose }: QRScannerPageP
     }, 1200);
   };
 
+  /*
+   * The torch had never come on.
+   *
+   * This called getActiveTrack(), which html5-qrcode does not have - so every
+   * press threw immediately, the catch below turned it into "Flash operation
+   * failed", and the failure looked like a phone that did not support a torch
+   * rather than a call to a method that was not there. The library's own
+   * surface is getRunningTrackCapabilities() and applyVideoConstraints().
+   */
   const toggleFlash = async () => {
     if (!html5QrCodeRef.current || !cameraActive) return;
     try {
-      const track = html5QrCodeRef.current.getActiveTrack();
-      if (track) {
-        const capabilities = track.getCapabilities();
-        // Check if torch/flash constraint exists
-        if ('torch' in capabilities) {
-          const nextState = !flashOn;
-          await track.applyConstraints({
-            advanced: [{ torch: nextState }]
-          } as any);
-          setFlashOn(nextState);
-        } else {
-          showToast('Torch flashlight is not supported on this device', 'info');
-        }
+      const capabilities = html5QrCodeRef.current.getRunningTrackCapabilities();
+      if (!('torch' in capabilities)) {
+        showToast('Torch flashlight is not supported on this device', 'info');
+        return;
       }
+      const nextState = !flashOn;
+      // `torch` is not in the standard MediaTrackConstraints, which is why the
+      // capability is checked above rather than assumed. Android Chrome, where
+      // the shop actually scans, implements it.
+      await html5QrCodeRef.current.applyVideoConstraints({
+        advanced: [{ torch: nextState }],
+      } as unknown as MediaTrackConstraints);
+      setFlashOn(nextState);
     } catch (err) {
       showToast('Flash operation failed', 'error');
     }
