@@ -2096,6 +2096,16 @@ export default function Index() {
             screen their role forbids and then held them there. */}
         {store && currentUser?.role === 'owner' && (
           <SetupGuide
+            /*
+             * Keyed on the shop, so switching stores starts the walk over.
+             *
+             * The guide keeps "I closed this" in local state, and this
+             * component is never unmounted - so closing it on one shop closed
+             * it on every shop opened afterwards on that device. The stored
+             * flag was always per shop; only the live component's memory of it
+             * was not.
+             */
+            key={store.accessCode}
             store={store}
             tab={tab}
             onNavigate={next => { if (isTabAllowed(next as TabId, currentUser)) setTab(next as TabId); }}

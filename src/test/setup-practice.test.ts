@@ -62,8 +62,19 @@ describe('finishing the walk without a real job', () => {
   });
 
   /** A shop already trading does not need to be taught. */
-  it('is already finished for a shop that has taken real work in', () => {
-    const trading = laundry({ accessCode: 'TRADED', sales: [{ id: 's1', total: 3000 }] as any });
+  it('is not finished by a single job, which is when the walk is most needed', () => {
+    const oneJob = laundry({ accessCode: 'TRADED', sales: [{ id: 's1', total: 3000, date: '2026-09-08T10:00:00.000Z' }] as any });
+    expect(guideSteps(oneJob).at(-1)!.done(oneJob, 'laundry-records')).toBe(false);
+  });
+
+  it('is already finished for a shop trading across more than one day', () => {
+    const trading = laundry({
+      accessCode: 'TRADED',
+      sales: [
+        { id: 's1', total: 3000, date: '2026-09-07T10:00:00.000Z' },
+        { id: 's2', total: 2000, date: '2026-09-08T10:00:00.000Z' },
+      ] as any,
+    });
     expect(guideSteps(trading).at(-1)!.done(trading, 'laundry-records')).toBe(true);
   });
 });

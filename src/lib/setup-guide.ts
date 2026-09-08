@@ -69,6 +69,43 @@ const hasJob = (store: StoreData) => {
   return accessCode ? getLocalLaundryRecords(accessCode).length > 0 : false;
 };
 
+/** The day a timestamp falls on, for counting distinct trading days. */
+function tradingDay(value: unknown): string {
+  const at = new Date(String(value || ''));
+  return Number.isFinite(at.getTime()) ? at.toISOString().slice(0, 10) : '';
+}
+
+/**
+ * A shop that is plainly past its opening day.
+ *
+ * The walk is about opening: what to price, where work goes in, how to take a
+ * job. A shop that has recorded work on more than one day has answered all of
+ * that by doing it, and dimming its screen to teach it would be insulting.
+ *
+ * More than one day, specifically - not more than one job. A single job is
+ * exactly the case this used to get wrong: it ended the walk on the spot, so a
+ * merchant who recorded one bundle before the guide had shown them anything
+ * never saw it at all.
+ */
+export function tradingBeyondFirstDay(store: StoreData): boolean {
+  const days = new Set<string>();
+
+  for (const sale of store.sales || []) {
+    const day = tradingDay((sale as any).date);
+    if (day) days.add(day);
+    if (days.size > 1) return true;
+  }
+
+  const accessCode = String(store.accessCode || '');
+  for (const record of accessCode ? getLocalLaundryRecords(accessCode) : []) {
+    const day = tradingDay(record.createdAt);
+    if (day) days.add(day);
+    if (days.size > 1) return true;
+  }
+
+  return false;
+}
+
 /** The walk for a shop that sells work rather than goods. */
 function serviceSteps(store: StoreData): GuideStep[] {
   const template = getBusinessTemplate(store);
@@ -136,9 +173,21 @@ function serviceSteps(store: StoreData): GuideStep[] {
       body: isLaundry
         ? 'Walk through it once. Nothing is saved — this is only to show you how.'
         : 'Log the first piece of work you take in. That is the shop open.',
-      // Practised, or actually traded. Either finishes the walk, because a
-      // shop that has already taken real work in does not need the rehearsal.
-      done: store => hasJob(store) || hasPractised(store.accessCode),
+      /*
+       * Practised, or plainly past opening day.
+       *
+       * This used to end on `hasJob` - one real order, and the whole walk was
+       * over. Reported from the field: a merchant records their first order
+       * and the guide vanishes, having taught them nothing. Which is exactly
+       * backwards, because somebody who has just recorded one order is the
+       * person the walk is for.
+       *
+       * The step's own words are "walk through it once, nothing is saved,
+       * this is only to show you how". A real bundle is not that. So it ends
+       * when they have actually been shown - or when the shop has been
+       * trading across more than one day and obviously does not need showing.
+       */
+      done: store => hasPractised(store.accessCode) || tradingBeyondFirstDay(store),
     },
   ];
 }

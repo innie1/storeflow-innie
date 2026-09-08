@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readSource } from './helpers/source';
 import {
   dismissGuide,
   guideProgress,
@@ -30,6 +31,12 @@ import { laundryLocalStorageKey } from '@/lib/laundry-offline';
  */
 function seedRecords(accessCode: string, count: number) {
   const rows = Array.from({ length: count }, (_, i) => ({ clientRef: `r${i}`, accessCode }));
+  localStorage.setItem(laundryLocalStorageKey(accessCode), JSON.stringify(rows));
+}
+
+/** Records stamped on given days, for the "past opening day" rule. */
+function seedRecordsAcrossDays(accessCode: string, createdAt: string[]) {
+  const rows = createdAt.map((at, i) => ({ clientRef: `r${i}`, accessCode, createdAt: at }));
   localStorage.setItem(laundryLocalStorageKey(accessCode), JSON.stringify(rows));
 }
 
@@ -96,9 +103,23 @@ describe('a brand-new laundry', () => {
     expect(step?.target).toBe('record-job');
   });
 
-  it('is finished once a job has been recorded', () => {
+  /*
+   * One job used to finish the walk. Reported from the field: a merchant
+   * records their first order and the guide vanishes having taught them
+   * nothing - which is backwards, because somebody who has just recorded one
+   * order is exactly who the walk is for. It ends on a rehearsal, or on the
+   * shop having traded across more than one day.
+   */
+  it('is not finished by one job on one day', () => {
     const store = laundry({ products: [service(500)] });
     seedRecords('TEST01', 1);
+    expect(nextStep(store, 'dashboard')?.id).toBe('first-job');
+    expect(shouldRunGuide(store)).toBe(true);
+  });
+
+  it('is finished once the shop has traded on more than one day', () => {
+    const store = laundry({ products: [service(500)] });
+    seedRecordsAcrossDays('TEST01', ['2026-09-07T10:00:00.000Z', '2026-09-08T10:00:00.000Z']);
     expect(nextStep(store, 'dashboard')).toBeNull();
     expect(shouldRunGuide(store)).toBe(false);
   });
@@ -184,13 +205,50 @@ describe('it does not nag', () => {
     expect(shouldRunGuide(laundry({ accessCode: 'OLDONE' }), 'dashboard')).toBe(false);
   });
 
-  it('does not run for a shop that is already trading', () => {
-    const store = laundry({ products: [service(500)], sales: [{ id: 's', total: 3000 }] });
+  it('does not run for a shop that has been trading more than a day', () => {
+    const store = laundry({
+      products: [service(500)],
+      sales: [
+        { id: 's', total: 3000, date: '2026-09-07T10:00:00.000Z' },
+        { id: 's2', total: 1500, date: '2026-09-08T10:00:00.000Z' },
+      ],
+    });
     expect(shouldRunGuide(store, 'dashboard')).toBe(false);
+  });
+
+  it('still runs for a shop on its very first day of trading', () => {
+    // The one it exists for: they have taken a job and have no idea what the
+    // rest of the app does.
+    const store = laundry({
+      products: [service(500)],
+      sales: [{ id: 's', total: 3000, date: '2026-09-08T10:00:00.000Z' }],
+    });
+    expect(shouldRunGuide(store, 'dashboard')).toBe(true);
   });
 
   it('does not run without a store', () => {
     expect(shouldRunGuide(null)).toBe(false);
     expect(shouldRunGuide(undefined)).toBe(false);
+  });
+});
+
+describe('switching to another shop starts its own walk', () => {
+  /*
+   * The guide keeps "I closed this" in component state, and it is never
+   * unmounted - so closing it on one shop closed it on every shop opened after
+   * it on that device. The stored flag was always per shop; only the live
+   * component's memory of it was not, which is why a merchant switching store
+   * saw no walk at all on a shop that had never dismissed one.
+   */
+  const index = readSource('src/pages/Index.tsx');
+
+  it('remounts the guide when the shop changes', () => {
+    const mount = index.slice(index.indexOf('<SetupGuide'), index.indexOf('onNavigate={next =>'));
+    expect(mount).toContain('key={store.accessCode}');
+  });
+
+  it('and the dismissal it reads is per shop, not per device', () => {
+    const guide = readSource('src/lib/setup-guide.ts');
+    expect(guide).toContain('shopKey(DISMISSED_PREFIX, accessCode)');
   });
 });
