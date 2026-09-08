@@ -598,6 +598,11 @@ export interface ManagerSettings {
   autoPrintReceipt?: boolean;
   customerRequests?: boolean;
   businessAdvice?: boolean;
+  /*
+   * Kept on the type, gone from the screen: shops already have these saved,
+   * and nothing reads them or offers them any more. See the note where they
+   * used to be in Settings.
+   */
   businessExpansion?: boolean;
   businessQuestions?: boolean;
   defaultMargin?: number;

@@ -206,3 +206,71 @@ describe('a setting only appears where its trade can use it', () => {
     expect(settings).toContain('{keepsStock && <ToggleRow\n              label="Enable Retail Pricing Mode"');
   });
 });
+
+describe('one back button, and it goes up rather than out', () => {
+  const settings = readSource('src/components/Settings.tsx');
+  const index = readSource('src/pages/Index.tsx');
+
+  it('the sub-page no longer draws a second one', () => {
+    // Two arrows a centimetre apart that looked alike and did different
+    // things: the outer one left Settings entirely and landed on Home.
+    const subPage = settings.slice(settings.indexOf('function SubPage'), settings.indexOf('function ProductQRRow'));
+    expect(subPage).not.toContain('aria-label="Back"');
+  });
+
+  it('the page back steps up a level while there is one', () => {
+    expect(index).toContain('if (settingsSubView) window.history.back(); else setTab(\'dashboard\');');
+  });
+
+  it('and Settings says when there is one', () => {
+    expect(settings).toContain("onSubViewChange?.(view !== 'home')");
+  });
+});
+
+describe('the shop picture is the same picture everywhere', () => {
+  it('is one component rather than two copies that disagreed', () => {
+    /*
+     * The menu tile fell back to a shop emoji and the profile screen you
+     * reached by tapping it fell back to a drawn icon, so a shop with neither
+     * a photo nor a logo saw one picture, tapped it, and found another.
+     */
+    const settings = readSource('src/components/Settings.tsx');
+    // Both the menu tile and the profile screen draw it through the one
+    // component now. (The emoji still appears in the printable receipt
+    // templates, which are a different thing entirely.)
+    expect(settings.match(/<StoreAvatar/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(readSource('src/components/StoreAvatar.tsx')).toContain('<Store className');
+  });
+});
+
+describe('help that describes this app', () => {
+  const settings = readSource('src/components/Settings.tsx');
+
+  it('covers the screens a service shop actually uses', () => {
+    // The help had fourteen articles and every one was about stock.
+    for (const topic of ['Taking a bundle in', 'The customer ticket', 'What to do today', 'Closing the day', 'What the month must take']) {
+      expect(settings).toContain(topic);
+    }
+  });
+
+  it('keeps the service articles off a retailer\'s help screen', () => {
+    expect(settings).toContain('...(serviceBusiness ? [');
+  });
+
+  it('does not overclaim what the app lock does', () => {
+    expect(settings).toContain('It does not encrypt the records');
+  });
+});
+
+describe('the profile names the trade, not the bucket', () => {
+  it('reads the business template rather than store.category', () => {
+    /*
+     * A laundry's own profile told it that it was a Retail business. Retail is
+     * one of four buckets the app sorts shops into; it is not what the shop
+     * is, and its owner has no reason to know the bucket exists.
+     */
+    const settings = readSource('src/components/Settings.tsx');
+    expect(settings).toContain('const tradeTemplate = getBusinessTemplate(store);');
+    expect(settings).not.toContain("{store.category || 'Retail'}");
+  });
+});

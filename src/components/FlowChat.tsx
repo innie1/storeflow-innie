@@ -716,6 +716,27 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     flow(responseFor(store, plan));
   };
 
+  /*
+   * Auto voice listening, from the Flow settings screen.
+   *
+   * The switch was there and nothing read it. What it promises is that opening
+   * Flow opens the microphone, so somebody with both hands full of somebody
+   * else's clothes can just talk - which is the whole reason the setting is
+   * worth having in a laundry.
+   *
+   * Off by default, and it stays off unless voice features are on too: a
+   * microphone that opens itself in a shop, unasked, is not a feature.
+   */
+  useEffect(() => {
+    const settings = store.managerSettings;
+    if (settings?.autoVoiceListen !== true) return;
+    if (settings?.voiceFeatures === false) return;
+    // A beat, so the panel is on screen before the phone asks for the mic.
+    const timer = setTimeout(() => startFlowVoiceInput(), 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const startFlowVoiceInput = () => {
     if (isListening) { try { recognitionRef.current?.stop?.(); } catch {} setIsListening(false); return; }
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;

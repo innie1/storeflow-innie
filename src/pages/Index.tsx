@@ -375,6 +375,8 @@ export default function Index() {
    * is a lock that almost never applies.
    */
   const [locked, setLocked] = useState(() => appLockActive());
+  /** Whether Settings is showing a sub-view, so Back steps up rather than out. */
+  const [settingsSubView, setSettingsSubView] = useState(false);
   const hiddenSince = useRef<number | null>(null);
 
   useEffect(() => {
@@ -2197,8 +2199,20 @@ export default function Index() {
               guess. */}
           {tab !== 'dashboard' && (
             <button
-              onClick={() => setTab('dashboard')}
-              aria-label="Back to dashboard"
+              /*
+               * Up one level while there is one, out to the dashboard at the
+               * top.
+               *
+               * This always went straight to the dashboard, which is what made
+               * Settings jump home: a merchant three levels into Settings
+               * tapped Back and was thrown out of the screen entirely rather
+               * than stepping up. Settings pushes a history entry per level,
+               * so going back through history is what "up one level" means
+               * there - and the hardware back button already did the right
+               * thing, which is why the two disagreed.
+               */
+              onClick={() => { if (settingsSubView) window.history.back(); else setTab('dashboard'); }}
+              aria-label={settingsSubView ? 'Back' : 'Back to dashboard'}
               className="mb-1 -ml-1 inline-flex items-center gap-1 h-9 pl-1.5 pr-3 rounded-full text-sm font-display font-semibold text-muted-foreground hover:text-foreground hover:bg-surface-2 active:scale-95 transition"
             >
               <ChevronLeft className="w-5 h-5" /> Back
@@ -2262,7 +2276,7 @@ export default function Index() {
               <ROITracker store={store} onUpdate={setStore} />
             </div>
             <div className={tab === 'settings' ? 'block' : 'hidden'}>
-              <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} isActive={tab === 'settings'} />
+              <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} isActive={tab === 'settings'} onSubViewChange={setSettingsSubView} />
             </div>
             <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
               <Marketplace store={store} onUpdate={setStore} />
