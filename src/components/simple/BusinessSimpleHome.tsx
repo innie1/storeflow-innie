@@ -1,6 +1,8 @@
 import { StoreData, TabId } from '@/types/store';
 import { canOpenTab, canSeeMoney } from '@/lib/permissions';
 import BreakEvenPip from '@/components/BreakEvenPip';
+import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
+import { requestSpotlight } from '@/lib/spotlight';
 import BreakEvenWatcher from '@/components/BreakEvenWatcher';
 import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
 import DayClose from '@/components/laundry/DayClose';
@@ -116,17 +118,21 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
         />
       )}
 
-      {/* The month's progress, beside the month's takings. */}
-      {isServiceShop(store) && canSeeMoney(currentUser) && (
-        <div className="flex justify-end">
-          <BreakEvenPip store={store} canSeeMoney onOpen={() => onNavigate('manager')} />
-        </div>
-      )}
-
       <div className="grid grid-cols-2 gap-3">
         {/* Takings belong to whoever runs the shop. An attendant was
             shown the day's revenue on their own phone. */}
-        {canSeeMoney(currentUser) && <RevenueCard store={store} />}
+        {/* The month's progress sits with the month's takings, the same way
+            it does on the full dashboard. */}
+        {canSeeMoney(currentUser) && (
+          <RevenueCard
+            store={store}
+            trailing={<BreakEvenPip
+              store={store}
+              canSeeMoney
+              onOpen={() => { requestSpotlight(BREAK_EVEN_SPOTLIGHT); onNavigate('manager'); }}
+            />}
+          />
+        )}
         <button onClick={() => onNavigate('customers')} className="rounded-2xl bg-card border border-border p-4 text-left">
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><Users className="w-4 h-4" /> Customers</div>
           <p className="font-display font-black text-2xl mt-2">{customers}</p>

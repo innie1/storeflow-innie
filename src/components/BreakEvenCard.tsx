@@ -1,7 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Target } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { breakEven, breakEvenSentence } from '@/lib/service-breakeven';
+import { claimSpotlight, scrollSpotlightIntoView, SPOTLIGHT_CLASS, SPOTLIGHT_MS, SPOTLIGHT_SIGNAL } from '@/lib/spotlight';
+
+/** What the month ring asks for when it sends somebody here. */
+export const BREAK_EVEN_SPOTLIGHT = 'break-even';
 
 /**
  * What the shop still has to take this month.
@@ -30,10 +34,53 @@ const PACE_TONE: Record<string, string> = {
 export default function BreakEvenCard({ store, canSeeMoney }: Props) {
   const state = useMemo(() => breakEven(store), [store]);
 
+  /*
+   * Lit, briefly, when the ring on the home screen sent somebody here.
+   *
+   * Arriving on a page of cards with no idea which one you were sent to is not
+   * an answer, it is a second question - and the ring is a small thing in a
+   * corner whose meaning has to be learned once.
+   */
+  const [lit, setLit] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const light = () => {
+      setLit(true);
+      // Lighting a card the merchant cannot see is the same as not lighting
+      // it, and this page is long enough that the answer is often below the
+      // fold. Given a beat so the tab it lives on is showing first.
+      setTimeout(() => scrollSpotlightIntoView(cardRef.current), 80);
+      clearTimeout(timer);
+      timer = setTimeout(() => setLit(false), SPOTLIGHT_MS);
+    };
+
+    // Already asked for before this mounted.
+    if (claimSpotlight(BREAK_EVEN_SPOTLIGHT)) light();
+
+    /*
+     * And asked for while it was sitting here hidden, which is the usual case:
+     * every tab is mounted at once and hidden with CSS, so this card has been
+     * on the page since the app opened and its mount-time check ran long
+     * before the merchant tapped the ring.
+     */
+    const onRequest = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== BREAK_EVEN_SPOTLIGHT) return;
+      claimSpotlight(BREAK_EVEN_SPOTLIGHT);
+      light();
+    };
+    window.addEventListener(SPOTLIGHT_SIGNAL, onRequest);
+    return () => {
+      window.removeEventListener(SPOTLIGHT_SIGNAL, onRequest);
+      clearTimeout(timer);
+    };
+  }, []);
+
   if (!canSeeMoney) return null;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 text-left">
+    <div ref={cardRef} className={`rounded-2xl border border-border bg-card p-4 text-left ${lit ? SPOTLIGHT_CLASS : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] uppercase font-black text-muted-foreground flex items-center gap-1.5">

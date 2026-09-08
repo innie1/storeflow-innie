@@ -11,6 +11,9 @@ import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
 import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
 import DayClose from '@/components/laundry/DayClose';
 import RevenueCard from '@/components/RevenueCard';
+import BreakEvenPip from '@/components/BreakEvenPip';
+import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
+import { requestSpotlight } from '@/lib/spotlight';
 import { canSeeMoney } from '@/lib/permissions';
 
 interface BusinessOwnerDashboardProps {
@@ -205,9 +208,25 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
         </button>
       )}
 
-      {/* Revenue, over whichever stretch is being asked about rather than
-          today alone - and only for whoever is allowed to see money. */}
-      {canSeeMoney(currentUser) && <RevenueCard store={store} />}
+      {/*
+        Revenue, over whichever stretch is being asked about rather than today
+        alone - and beside it, how the month is going.
+
+        The ring only existed on the simple home screen, so anybody on the full
+        dashboard - which is the default - had never seen it. It is the one
+        thing that says whether the shop is covering itself, which is worth a
+        corner of every screen and was in the corner of none.
+      */}
+      {canSeeMoney(currentUser) && (
+        <RevenueCard
+          store={store}
+          trailing={<BreakEvenPip
+              store={store}
+              canSeeMoney
+              onOpen={() => { requestSpotlight(BREAK_EVEN_SPOTLIGHT); onNavigate('manager'); }}
+            />}
+        />
+      )}
 
       <section className="grid grid-cols-3 overflow-hidden rounded-2xl border border-border bg-card">
         {stats.map(stat => (

@@ -532,3 +532,26 @@
 .animate-ember-2 {
   animation: ember-float 2.4s infinite ease-out 0.6s;
 }
+
+/*
+ * The card you were just sent to.
+ *
+ * A static ring was too easy to miss on a page of cards - the merchant taps
+ * the month ring on the home screen, lands on Flow, and still has to work out
+ * which card answered them. A pulse moves, and movement is what the eye finds.
+ */
+@keyframes spotlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.55); }
+  50%      { box-shadow: 0 0 0 10px hsl(var(--primary) / 0); }
+}
+.spotlight-lit {
+  /* A pulse to catch the eye, and a solid ring underneath it - a pulse alone
+     is invisible at the instant it happens to be at its faintest. */
+  animation: spotlight-pulse 1.15s ease-out 3;
+  border-color: hsl(var(--primary)) !important;
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-lit { animation: none; box-shadow: 0 0 0 3px hsl(var(--primary) / 0.5); }
+}

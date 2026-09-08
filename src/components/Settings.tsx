@@ -77,6 +77,7 @@ import {
 import ScrollLock from '@/components/ScrollLock';
 import { downscaleImageToDataUrl } from '@/lib/downscale-image';
 import { speakAsFlow, type FlowVoiceGender } from '@/lib/flow-voice';
+import { hasBusinessModule } from '@/lib/business-runtime';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
 
@@ -570,6 +571,17 @@ function ProductQRRow({ product, store }: { product: Product; store: StoreData }
 export default function Settings({ store, onUpdate, onLock, currentUser, isActive = true }: SettingsProps) {
   const [view, setViewState] = useState<View>('home');
   const serviceBusiness = isServiceBusiness(store);
+  /*
+   * Whether this shop keeps stock, which is the only question the stock
+   * settings were ever really asking.
+   *
+   * They asked a list of trade names kept in this file - the third copy of a
+   * judgement the business templates already make, and one that has to be
+   * remembered every time a trade is added. The module is the thing itself: a
+   * shop either has stock to configure or it does not, and the template
+   * already says which.
+   */
+  const keepsStock = hasBusinessModule(store, 'inventory');
   const barcodeQrCanvasRef = useRef<HTMLCanvasElement>(null);
   const storeBarcodeCanvasRef = useRef<HTMLCanvasElement>(null);
   const [showAllProductsQR, setShowAllProductsQR] = useState(false);
@@ -647,11 +659,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   }, [isActive]);
 
   useEffect(() => {
-    if (serviceBusiness && view === 'inventory') {
+    if (!keepsStock && view === 'inventory') {
       setViewState('home');
       setViewStack(['home']);
     }
-  }, [serviceBusiness, view]);
+  }, [keepsStock, view]);
   const [searchQuery, setSearchQuery] = useState('');
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
   const [theme, setTheme] = useState<ThemeId>(getTheme());
@@ -2597,7 +2609,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           <div className={`${card} px-4 divide-y divide-border`}>
             <ToggleRow label="Revenue Forecasts" checked={mgr.revenueForecasts} onChange={v => updateMgr({ revenueForecasts: v })} />
             <ToggleRow label="Profit Forecasts" checked={mgr.profitForecasts} onChange={v => updateMgr({ profitForecasts: v })} />
-            {!serviceBusiness && <ToggleRow label="Inventory Forecasts" checked={mgr.inventoryForecasts} onChange={v => updateMgr({ inventoryForecasts: v })} />}
+            {keepsStock && <ToggleRow label="Inventory Forecasts" checked={mgr.inventoryForecasts} onChange={v => updateMgr({ inventoryForecasts: v })} />}
             <ToggleRow label="Expense Analysis" checked={mgr.expenseAnalysis} onChange={v => updateMgr({ expenseAnalysis: v })} />
           </div>
 
@@ -2607,7 +2619,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           </div>
           <div className={`${card} px-4 divide-y divide-border`}>
             <ToggleRow label="Smart Pricing" checked={mgr.smartPricing} onChange={v => updateMgr({ smartPricing: v })} />
-            <ToggleRow label="Product Suggestions" checked={mgr.productSuggestions} onChange={v => updateMgr({ productSuggestions: v })} />
+            {/* What to stock next, which is not a question a laundry has. */}
+            {keepsStock && <ToggleRow label="Product Suggestions" checked={mgr.productSuggestions} onChange={v => updateMgr({ productSuggestions: v })} />}
             <ToggleRow label="Business Advice" checked={mgr.businessAdvice} onChange={v => updateMgr({ businessAdvice: v })} />
             <ToggleRow label="Business Expansion" checked={mgr.businessExpansion} onChange={v => updateMgr({ businessExpansion: v })} />
           </div>
@@ -3192,7 +3205,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         <ToggleRow label="Monthly Reports" checked={mgr.notifyMonthlyReports} onChange={v => updateMgr({ notifyMonthlyReports: v })} />
         <ToggleRow label="Savings Reminders" checked={mgr.notifySavingsReminders} onChange={v => updateMgr({ notifySavingsReminders: v })} />
         <ToggleRow label="Customer Request Alerts" checked={mgr.notifyCustomerRequests} onChange={v => updateMgr({ notifyCustomerRequests: v })} />
-        {!serviceBusiness && <ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />}
+        {keepsStock && <ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />}
       </div>
     </SubPage>
   );
@@ -4498,8 +4511,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             }
             onClick={() => setView('pricing')}
           />
-          {!serviceBusiness && <SettingTile icon={<Package className="w-5 h-5" />} color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />}
-          {!serviceBusiness && <SettingTile icon={<Star className="w-5 h-5" />} color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView('wishlist')} />}
+          {keepsStock && <SettingTile icon={<Package className="w-5 h-5" />} color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />}
+          {keepsStock && <SettingTile icon={<Star className="w-5 h-5" />} color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView('wishlist')} />}
           <SettingTile icon={<PiggyBank className="w-5 h-5" />} color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}
             right={<div className="text-right space-y-1">
               <p className="text-[10px] text-muted-foreground">Goal</p>

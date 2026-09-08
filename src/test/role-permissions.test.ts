@@ -244,7 +244,10 @@ describe('the simple home screen asks the role too', () => {
     // The card behind this gate now offers yesterday, today, fourteen days and
     // all time rather than today alone, which makes the gate matter more, not
     // less: an attendant would otherwise be holding the shop's whole history.
-    expect(home).toContain('canSeeMoney(currentUser) && <RevenueCard');
+    // The revenue card, wherever it sits in the markup, is behind the gate.
+    const gate = home.indexOf('canSeeMoney(currentUser) && (');
+    expect(gate).toBeGreaterThan(-1);
+    expect(home.slice(gate, gate + 200)).toContain('<RevenueCard');
   });
 
   it('but does show the shop floor the work', () => {

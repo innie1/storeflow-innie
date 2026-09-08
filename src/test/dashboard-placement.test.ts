@@ -32,7 +32,9 @@ describe('where the month’s figures live', () => {
      */
     expect(home).toContain('<BreakEvenPip');
     expect(home).not.toContain('<Settings2');
-    expect(home.indexOf('<BreakEvenPip')).toBeLessThan(home.indexOf('<RevenueCard'));
+    // Inside the revenue card now rather than beside it: the month's progress
+    // belongs with the month's takings, not on a stray right-aligned row.
+    expect(home).toContain('trailing={<BreakEvenPip');
   });
 
   /** The moment the month covers itself is still worth catching at home. */

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { RANGES, revenueInRange, type Range } from '@/lib/revenue-window';
@@ -24,47 +24,51 @@ import { RANGES, revenueInRange, type Range } from '@/lib/revenue-window';
 
 interface Props {
   store: StoreData;
+  /** Sits in the card's top-right. The month ring goes here on both screens. */
+  trailing?: ReactNode;
 }
 
-export default function RevenueCard({ store }: Props) {
+export default function RevenueCard({ store, trailing }: Props) {
   const [range, setRange] = useState<Range>('today');
   const total = useMemo(() => revenueInRange(store, range), [store, range]);
+  const label = RANGES.find(option => option.id === range)?.label || '';
 
   return (
     <div className="rounded-2xl bg-card border border-border p-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-start justify-between gap-3">
         {/*
-          No currency icon. The figure underneath already starts with a naira
-          sign, so a dollar next to the word "Revenue" in a Nigerian shop was
-          both redundant and the wrong currency.
-        */}
-        <span className="text-xs text-muted-foreground">Revenue</span>
+          The word is the control.
 
-        {/*
-          A real select, not a row of chips.
-          
-          Four chips took a whole line and still only fit by scrolling. This is
-          one control the width of its longest label, and on a phone it opens
-          the system's own picker - bigger targets than anything drawn here.
+          The period used to sit in its own box on the right, which put the
+          thing being measured and the thing measuring it at opposite ends of
+          the card. The arrow belongs against "Revenue" - that is what it
+          changes - and which stretch you are looking at belongs under the
+          figure, small, where it reads as a caption rather than a button.
+
+          It is a real select underneath, so a phone opens its own picker.
         */}
-        <div className="relative shrink-0">
+        <div className="relative inline-flex items-center gap-1 shrink-0">
+          <span className="text-xs text-muted-foreground">Revenue</span>
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
           <select
             value={range}
             onChange={event => setRange(event.target.value as Range)}
             aria-label="Period"
-            className="appearance-none bg-surface-2 border border-border rounded-lg h-7 pl-2.5 pr-7 text-[11px] font-display font-bold text-foreground outline-none cursor-pointer"
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           >
             {RANGES.map(option => (
               <option key={option.id} value={option.id}>{option.label}</option>
             ))}
           </select>
-          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
+
+        {trailing}
       </div>
 
-      <p className="font-display font-black text-2xl text-primary mt-2">
+      <p className="font-display font-black text-2xl text-primary mt-1.5">
         ₦{Math.round(total).toLocaleString()}
       </p>
+      <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
     </div>
   );
 }
