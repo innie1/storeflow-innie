@@ -28,6 +28,7 @@ import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MapPin, Me
 import BundlePhotos from '@/components/laundry/BundlePhotos';
 import { reassignLaundryPhotos } from '@/lib/laundry-photos';
 import { FULFILLMENT_LABELS, totalWithDelivery, type LaundryFulfillment } from '@/lib/laundry-runs';
+import { LAUNDRY_MODIFIERS, describeModifiers, toggleModifier } from '@/lib/laundry-modifiers';
 import { filterGarments, findSimilarGarment } from '@/lib/garment-match';
 
 interface Props {
@@ -203,6 +204,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
   const [runAddress, setRunAddress] = useState('');
   const [runLandmark, setRunLandmark] = useState('');
   const [deliveryFee, setDeliveryFee] = useState('');
+  /** Per garment type: how this one is to be treated. */
+  const [garmentModifiers, setGarmentModifiers] = useState<Record<string, string[]>>({});
+  /** Which item's instructions are open. One at a time. */
+  const [modifyingGarment, setModifyingGarment] = useState<string | null>(null);
   /**
    * Photos are taken before the bundle has a client ref of its own, so they
    * are held against a draft key and moved onto the real ref once it saves.
@@ -226,8 +231,14 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
   const pricing = selectedService ? getStoredServicePricing(selectedService) : 'per_piece';
   const pricingLabel = getServicePricingLabel(pricing);
   const selections = useMemo<LaundryGarmentSelection[]>(
-    () => Object.entries(garmentCounts).map(([garmentType, quantity]) => ({ garmentType, quantity })).filter(item => item.quantity > 0),
-    [garmentCounts],
+    () => Object.entries(garmentCounts)
+      .map(([garmentType, quantity]) => ({
+        garmentType,
+        quantity,
+        modifiers: garmentModifiers[garmentType]?.length ? garmentModifiers[garmentType] : undefined,
+      }))
+      .filter(item => item.quantity > 0),
+    [garmentCounts, garmentModifiers],
   );
   const pieceCount = countLaundryPieces(selections);
   // Most-used clothing first, then anything typed into "Other clothing type"
@@ -300,6 +311,8 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
     setSelectedServiceId(services[0] ? String(services[0].id) : '');
     setGarmentCounts(emptyCounts(garmentTypes));
     setShelfLocation('');
+    setGarmentModifiers({});
+    setModifyingGarment(null);
     setFulfillment('walk_in');
     setRunAddress('');
     setRunLandmark('');
@@ -660,9 +673,53 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
                       <span className="text-sm font-black tabular-nums">{quantity}</span>
                       <button type="button" onClick={() => changeCount(garment, 1)} className="w-8 h-8 shrink-0 rounded-lg bg-primary text-primary-foreground flex items-center justify-center" aria-label={`Add one ${garment}`}><Plus className="w-3.5 h-3.5" /></button>
                     </div>
+
+                    {/* Only once the item is actually in the bundle. An
+                        instruction row on every garment in the catalogue would
+                        be a wall of taps for something most items never need. */}
+                    {quantity > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setModifyingGarment(modifyingGarment === garment ? null : garment)}
+                        className="w-full mt-1.5 text-left text-[10px] font-bold truncate text-primary"
+                      >
+                        {garmentModifiers[garment]?.length
+                          ? describeModifiers(garmentModifiers[garment])
+                          : '+ how to treat it'}
+                      </button>
+                    )}
                   </div>
                 );
               })}</div>
+
+              {modifyingGarment && (
+                <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-display font-black">{modifyingGarment}</p>
+                    <button type="button" onClick={() => setModifyingGarment(null)} className="text-[10px] font-black text-muted-foreground">Done</button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {LAUNDRY_MODIFIERS.map(modifier => {
+                      const on = garmentModifiers[modifyingGarment]?.includes(modifier);
+                      return (
+                        <button
+                          key={modifier}
+                          type="button"
+                          onClick={() => setGarmentModifiers(current => ({
+                            ...current,
+                            [modifyingGarment]: toggleModifier(current[modifyingGarment], modifier),
+                          }))}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-display font-bold border transition-colors ${
+                            on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'
+                          }`}
+                        >
+                          {modifier}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2"><input value={customGarment} onChange={event => setCustomGarment(event.target.value)} onKeyDown={event => event.key === 'Enter' && addCustomGarment()} placeholder="Other clothing type" className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /><button onClick={addCustomGarment} type="button" className="px-4 h-11 rounded-xl border border-primary text-primary font-black text-xs shrink-0">Add</button></div>
               {similarGarment && (
                 <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 space-y-2">

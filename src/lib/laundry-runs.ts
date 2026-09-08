@@ -27,6 +27,36 @@ export type LaundryFulfillment = 'walk_in' | 'pickup' | 'delivery';
  */
 export type LaundryRunStatus = 'awaiting_pickup' | 'picked_up' | 'out_for_delivery' | 'delivered';
 
+/**
+ * One thing that happened, and when.
+ *
+ * A status on its own says where a bundle is now and nothing about how it got
+ * there — which cannot answer "when did we deliver it?", the question that
+ * actually comes up when a customer says they never received their clothes.
+ * The trail is what makes a run trackable rather than merely labelled.
+ */
+export interface RunEvent {
+  status: LaundryRunStatus;
+  at: string;
+  /** Who moved it, so a disputed delivery has a name against it. */
+  by?: string;
+}
+
+/** Append an event, keeping the trail in the order things happened. */
+export function appendRunEvent(events: RunEvent[] | undefined, status: LaundryRunStatus, by?: string): RunEvent[] {
+  const trail = Array.isArray(events) ? events : [];
+  return [...trail, { status, at: new Date().toISOString(), by: by || undefined }];
+}
+
+/** "Picked up 9:14 am by Hanna" — the line a shop reads back. */
+export function describeRunEvent(event: RunEvent): string {
+  const when = new Date(event.at);
+  const time = Number.isFinite(when.getTime())
+    ? when.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+    : '';
+  return [runStatusLabel(event.status), time, event.by ? `by ${event.by}` : ''].filter(Boolean).join(' · ');
+}
+
 export interface RunStop {
   clientRef: string;
   tagCode: string;
@@ -40,6 +70,8 @@ export interface RunStop {
   promisedFor?: string;
   /** Still owed, so a rider knows to ask before handing the bag over. */
   balance: number;
+  /** Everything that has happened to this run, oldest first. */
+  events?: RunEvent[];
 }
 
 export const FULFILLMENT_LABELS: Record<LaundryFulfillment, string> = {

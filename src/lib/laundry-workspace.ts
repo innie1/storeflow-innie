@@ -56,6 +56,10 @@ export function parseLaundryRecordMetadata(order: any): Record<string, any> {
 export function getLaundryRecordSearchText(order: any): string {
   const meta = parseLaundryRecordMetadata(order);
   const itemNames = (order?.order_items || []).map((item: any) => item?.item_name || item?.product_name || '').join(' ');
+  // So "no bleach" finds every bundle that must not be bleached.
+  const itemModifiers = (order?.order_items || [])
+    .flatMap((item: any) => (Array.isArray(item?.metadata?.modifiers) ? item.metadata.modifiers : []))
+    .join(' ');
   return [
     order?.order_number,
     order?.customer_name,
@@ -69,5 +73,8 @@ export function getLaundryRecordSearchText(order: any): string {
     meta?.wash_method_name,
     meta?.dry_method_name,
     itemNames,
+    itemModifiers,
+    meta?.run_address,
+    meta?.run_landmark,
   ].filter(Boolean).join(' ').toLowerCase();
 }

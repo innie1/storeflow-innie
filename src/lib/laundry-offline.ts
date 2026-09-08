@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
+import { appendRunEvent, type LaundryFulfillment, type LaundryRunStatus, type RunEvent } from '@/lib/laundry-runs';
 import { generateLaundryReceiptNumber, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
 
 export type LaundrySyncStatus = 'pending' | 'synced';
@@ -57,6 +57,8 @@ export interface LocalLaundryRecord {
   runStatus?: LaundryRunStatus;
   /** Charged for the run, and part of what the customer owes. */
   deliveryFee?: number;
+  /** What has happened to the run and when, oldest first. */
+  runEvents?: RunEvent[];
   promisedFor?: string;
   washMethodId?: string;
   washMethodName?: string;
@@ -115,6 +117,8 @@ export interface NewLocalLaundryRecord {
   runStatus?: LaundryRunStatus;
   /** Charged for the run, and part of what the customer owes. */
   deliveryFee?: number;
+  /** What has happened to the run and when, oldest first. */
+  runEvents?: RunEvent[];
   promisedFor?: string;
   washMethodId?: string;
   washMethodName?: string;
@@ -281,9 +285,14 @@ export function setLocalLaundryRunStatus(
   accessCode: string,
   clientRef: string,
   runStatus: LaundryRunStatus,
+  by?: string,
 ): LocalLaundryRecord | null {
+  const existing = getLocalLaundryRecords(accessCode).find(record => record.clientRef === clientRef);
   return updateLocalRecord(accessCode, clientRef, {
     runStatus,
+    // The status says where it is; the trail says how it got there, which is
+    // what answers "when did we deliver it?" when a customer says otherwise.
+    runEvents: appendRunEvent(existing?.runEvents, runStatus, by),
     syncStatus: 'pending',
     lastSyncError: undefined,
   });
@@ -325,6 +334,7 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     run_address: record.runAddress,
     run_landmark: record.runLandmark,
     run_status: record.runStatus,
+    run_events: record.runEvents,
     delivery_fee: record.deliveryFee,
     recorded_by_name: record.recordedByName,
     recorded_by_role: record.recordedByRole,
@@ -347,7 +357,7 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
       quantity: item.quantity,
       price: unitPrice,
       subtotal,
-      metadata: { source: 'walk_in_laundry', garment_price_snapshot: true },
+      metadata: { source: 'walk_in_laundry', garment_price_snapshot: true, modifiers: item.modifiers },
     };
   });
 

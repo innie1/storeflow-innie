@@ -32,6 +32,7 @@ import BundlePhotos from '@/components/laundry/BundlePhotos';
 import LaundryRuns from '@/components/laundry/LaundryRuns';
 import { can } from '@/lib/permissions';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
+import { bundleModifiers } from '@/lib/laundry-modifiers';
 import { Bike } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { getPromisedTime } from '@/lib/business-insights';
@@ -85,6 +86,8 @@ interface DecoratedRecord {
   fulfillment?: LaundryFulfillment;
   /** The journey, which is not the wash stage. */
   runStatus?: LaundryRunStatus;
+  /** Every instruction in the bundle, said once. */
+  modifiers: string[];
   synced: boolean;
   whatsapp: ReturnType<typeof buildLaundryWhatsAppPayload>;
   total: number;
@@ -117,6 +120,7 @@ function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     shelfLocation: meta.shelf_location || undefined,
     fulfillment: meta.fulfillment || undefined,
     runStatus: meta.run_status || undefined,
+    modifiers: bundleModifiers(garments.map((item: any) => item?.metadata || {})),
     recordedByName: meta.recorded_by_name || undefined,
     recordedByRole: meta.recorded_by_role || undefined,
     customerPhone: order.customer_phone || '',
@@ -325,6 +329,16 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
   const changeView = (next: LaundryWorkspaceView) => {
     requestLaundryWorkspace(next);
     setView(next);
+    /*
+     * Land at the top of the new tab.
+     *
+     * Switching used to keep whatever scroll position the last tab had, so
+     * moving from a long record list to the intake form dropped you into the
+     * middle of it and the page appeared to lurch. Skipped when a bundle has
+     * just been recorded, because that view is about to scroll deliberately to
+     * the row it belongs to.
+     */
+    if (!justRecorded) window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
   const sendWhatsApp = useCallback((order: any) => {
@@ -459,9 +473,13 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         <div>
           <p className="text-[11px] uppercase tracking-wider text-primary font-black">Laundry workspace</p>
           <h1 className="font-display font-black text-xl mt-0.5">{view === 'record' ? 'Record Laundry' : view === 'runs' ? 'Runs' : 'Laundry Records'}</h1>
-          {view === 'records' && (
-            <p className="text-xs text-muted-foreground mt-1">Search by tag, customer or item.</p>
-          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {view === 'record'
+              ? 'Take in a bundle and give the customer their tag.'
+              : view === 'runs'
+                ? 'Today’s collections and deliveries.'
+                : 'Search by tag, customer or item.'}
+          </p>
         </div>
 
         <div className="flex gap-2 shrink-0">
@@ -533,7 +551,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
           )}
         </>
       ) : view === 'runs' ? (
-        <LaundryRuns store={store} canSeeMoney={can(currentUser, 'money')} />
+        <LaundryRuns store={store} canSeeMoney={can(currentUser, 'money')} currentUser={currentUser} />
       ) : (
         <div className="space-y-3">
           <div className="flex gap-2">
@@ -690,6 +708,16 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                       {record.pieceCount ? ` · ${record.pieceCount} ${record.pieceCount === 1 ? 'piece' : 'pieces'}` : ''}
                       {record.garmentSummary ? ` · ${record.garmentSummary}` : ''}
                     </p>
+
+                    {record.modifiers.length > 0 && (
+                      <p className="mt-1.5 flex flex-wrap gap-1">
+                        {record.modifiers.map(modifier => (
+                          <span key={modifier} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black">
+                            {modifier}
+                          </span>
+                        ))}
+                      </p>
+                    )}
 
                     <div className="mt-2">
                       <BundlePhotos clientRef={record.clientRef} accessCode={String((store as any).accessCode || '')} hint={false} />

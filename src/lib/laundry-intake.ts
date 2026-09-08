@@ -18,6 +18,12 @@ export const DEFAULT_LAUNDRY_GARMENTS = [
 export interface LaundryGarmentSelection {
   garmentType: string;
   quantity: number;
+  /**
+   * How this item is to be treated - heavy starch, no bleach, fold.
+   * Per item, because the instruction usually belongs to one garment and the
+   * bundle note is no place to say "not the white one".
+   */
+  modifiers?: string[];
   /** Price copied at intake time so later price-list edits never change old receipts. */
   unitPrice?: number;
   subtotal?: number;
@@ -67,7 +73,19 @@ export function sanitizeGarmentSelections(selections: LaundryGarmentSelection[])
       const unitPrice = Number(item.unitPrice);
       const explicitPrice = Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : undefined;
       const subtotal = explicitPrice === undefined ? undefined : explicitPrice * quantity;
-      return { garmentType: item.garmentType.trim(), quantity, unitPrice: explicitPrice, subtotal };
+      // Rebuilt field by field, so anything not named here is silently
+      // dropped — which is what happened to the treatment instructions on
+      // their way to the record.
+      const modifiers = Array.isArray(item.modifiers)
+        ? item.modifiers.map(entry => String(entry).trim()).filter(Boolean)
+        : undefined;
+      return {
+        garmentType: item.garmentType.trim(),
+        quantity,
+        modifiers: modifiers && modifiers.length ? modifiers : undefined,
+        unitPrice: explicitPrice,
+        subtotal,
+      };
     })
     .filter(item => item.garmentType && item.quantity > 0);
 }

@@ -332,12 +332,30 @@
   * {
     @apply border-border;
   }
+  html {
+    /*
+     * Keep the space the scrollbar occupies, whether or not there is one.
+     *
+     * Without it, moving between a tab whose content overflows and one whose
+     * content does not adds and removes the scrollbar, and the whole page
+     * shifts sideways each time. It is the small lurch that makes an app feel
+     * unsteady when nothing is actually wrong.
+     */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
     overflow-y: auto;
+    /*
+     * A short page under a tall one used to leave the browser holding a scroll
+     * position the new page cannot reach, so it snapped to the bottom and then
+     * jumped. A minimum height means every screen is at least a screen tall
+     * and the position is always valid.
+     */
+    min-height: 100dvh;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);

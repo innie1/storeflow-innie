@@ -11,6 +11,7 @@ import {
   nextRunStatus,
   runActionLabel,
   runMessage,
+  describeRunEvent,
   runStatusLabel,
   splitRuns,
   telLink,
@@ -31,6 +32,8 @@ interface Props {
   store: StoreData;
   /** Amounts are hidden from anyone without permission to see money. */
   canSeeMoney: boolean;
+  /** Stamped on each step, so a disputed delivery has a name against it. */
+  currentUser?: { name?: string; role?: string } | null;
 }
 
 function stopsFromStore(store: StoreData): RunStop[] {
@@ -56,10 +59,11 @@ function stopsFromStore(store: StoreData): RunStop[] {
       runStatus: record.runStatus,
       promisedFor: record.promisedFor,
       balance: laundryBalance(store, record.clientRef),
+      events: record.runEvents,
     }));
 }
 
-export default function LaundryRuns({ store, canSeeMoney }: Props) {
+export default function LaundryRuns({ store, canSeeMoney, currentUser }: Props) {
   const [tick, setTick] = useState(0);
   const { pickups, deliveries } = useMemo(() => {
     const runs = splitRuns(stopsFromStore(store));
@@ -70,7 +74,7 @@ export default function LaundryRuns({ store, canSeeMoney }: Props) {
   const advance = (stop: RunStop) => {
     const next = nextRunStatus(stop.kind, stop.runStatus);
     if (!next) return;
-    setLocalLaundryRunStatus(String(store.accessCode || ''), stop.clientRef, next);
+    setLocalLaundryRunStatus(String(store.accessCode || ''), stop.clientRef, next, currentUser?.name || undefined);
     setTick(value => value + 1);
     showToast(`${stop.tagCode} — ${runStatusLabel(next)}`, 'success');
   };
@@ -132,6 +136,17 @@ export default function LaundryRuns({ store, canSeeMoney }: Props) {
             </a>
           )}
         </div>
+
+        {/* What has happened, so "when did we deliver it?" has an answer. */}
+        {stop.events && stop.events.length > 0 && (
+          <div className="rounded-xl bg-surface-2 border border-border px-2.5 py-2 space-y-0.5">
+            {stop.events.map((event, index) => (
+              <p key={`${event.at}-${index}`} className="text-[10px] text-muted-foreground">
+                {describeRunEvent(event)}
+              </p>
+            ))}
+          </div>
+        )}
 
         {action && (
           <button
