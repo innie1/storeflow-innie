@@ -438,6 +438,16 @@ export interface StaffMember {
   // it back. It exists because there was nothing between cashier, who cannot
   // see orders at all, and manager, who can see the books.
   role: 'owner' | 'admin' | 'manager' | 'cashier' | 'attendant' | 'inventory' | 'accountant' | 'supervisor' | 'custom';
+  /**
+   * What this person is paid a month.
+   *
+   * Wages are usually a shop's largest fixed cost after rent, and break-even
+   * cannot be right without them - a shop was being told it had covered its
+   * month while a salary it had not yet paid was still owed. Optional, because
+   * a family member helping out may not be on a wage, and zero is a real
+   * answer rather than a missing one.
+   */
+  monthlySalary?: number;
   permissions: {
     sales: boolean;
     inventory: boolean;

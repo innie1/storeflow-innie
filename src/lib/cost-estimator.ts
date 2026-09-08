@@ -10,10 +10,17 @@
  * that were washed.
  *
  * Which costs count is the whole judgement here. Detergent, bleach, starch and
- * nylon bags are used up doing the work. So, for a laundry, is most of the
- * power and water - the machines are the bill. Rent and salaries are not: they
- * are owed whether or not a single bundle arrives, which is what makes them
- * the thing break-even has to clear rather than part of the cost of a piece.
+ * nylon bags are used up doing the work. So, for a laundry, is the electricity
+ * - the machines are the bill.
+ *
+ * Water is not, and this is worth saying because the obvious model is wrong
+ * here: a Nigerian laundry pumps its own, so the water itself costs nothing
+ * and what it does cost is the power to pump it, which is already counted as
+ * electricity. Charging for water as well would count the same pump twice.
+ *
+ * Rent and salaries are neither: they are owed whether or not a single bundle
+ * arrives, which is what makes them the thing break-even has to clear rather
+ * than part of the cost of a piece.
  *
  * Counted in pieces, never in drop-offs. One shirt is one piece; a bundle of
  * twenty is twenty. Spreading a month of detergent across "jobs" would make a
@@ -117,12 +124,12 @@ export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
   };
 }
 
-/** "₦38 a piece — soap, power and water over the last 30 days, across 214 pieces." */
+/** "₦38 a piece — soap and electricity over the last 30 days, across 214 pieces." */
 export function explainUnitCost(estimate: CostEstimate): string {
   if (estimate.learning) {
     const short = Math.max(0, estimate.needed - estimate.pieces);
     if (estimate.spend <= 0) {
-      return 'Record what you spend on soap, power and water and I can work out what a piece costs you.';
+      return 'Record what you spend on soap and electricity and I can work out what a piece costs you.';
     }
     return `Still working out what a piece costs you — ${short} more ${short === 1 ? 'piece' : 'pieces'} and I will know.`;
   }

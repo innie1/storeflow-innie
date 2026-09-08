@@ -153,3 +153,37 @@ describe('where the month stands', () => {
     expect(breakEven(store({ expenses: [expense(50_000, 'Rent')] as any })).perDayNeeded).toBe(0);
   });
 });
+
+describe('wages the shop still owes', () => {
+  beforeEach(() => localStorage.clear());
+
+  const withStaff = (salary: number, over: Partial<StoreData> = {}) => store({
+    staffMembers: [{ id: 'st1', name: 'Hanna', pin: '1234', role: 'attendant', monthlySalary: salary, permissions: {} }] as any,
+    ...over,
+  });
+
+  /**
+   * Wages are usually the largest cost after rent. Without them a shop was
+   * told it had covered its month while a salary it had not yet paid was
+   * still due - the target looked reachable right up until payday.
+   */
+  it('counts a salary that has not been paid yet', () => {
+    expect(monthlyFixedCosts(withStaff(60_000))).toBe(60_000);
+  });
+
+  it('does not count it twice once it has been paid', () => {
+    const s = withStaff(60_000, { expenses: [expense(60_000, 'Salaries')] as any });
+    expect(monthlyFixedCosts(s)).toBe(60_000);
+  });
+
+  it('counts only the part still owed when some has been paid', () => {
+    const s = withStaff(60_000, { expenses: [expense(20_000, 'Salaries')] as any });
+    expect(monthlyFixedCosts(s)).toBe(60_000);
+  });
+
+  /** A family member helping out may not be on a wage, and that is not a gap. */
+  it('is untroubled by staff with no salary set', () => {
+    const s = store({ staffMembers: [{ id: 'st1', name: 'Cousin', pin: '1', role: 'attendant', permissions: {} }] as any });
+    expect(monthlyFixedCosts(s)).toBe(0);
+  });
+});

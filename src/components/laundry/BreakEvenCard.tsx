@@ -73,7 +73,7 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
       */}
       {state.variableCostPerPiece !== null && (
         <p className="text-[10px] text-muted-foreground mt-1.5">
-          {money(state.variableCostPerPiece)} of soap and the rest per piece, from this month's {state.pieces} pieces.
+          {money(state.variableCostPerPiece)} of soap and electricity per piece, from this month's {state.pieces} pieces.
         </p>
       )}
     </div>

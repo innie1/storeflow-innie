@@ -68,6 +68,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [phone, setPhone] = useState('');
+  /** What they are paid a month. Feeds the shop's fixed costs. */
+  const [salary, setSalary] = useState('');
   // Whichever role the shop is most likely to be adding: a till shop hires a
   // cashier, a laundry or a barber hires someone to take work in.
   const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'attendant' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>(
@@ -102,6 +104,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
       name: name.trim(),
       pin: pin.trim(),
       phone: phone.trim(),
+      monthlySalary: Math.max(0, Number(salary) || 0),
       role,
       permissions: {
         sales: salesAccess,
@@ -128,6 +131,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
       name: name.trim(),
       pin: pin.trim(),
       phone: phone.trim(),
+      monthlySalary: Math.max(0, Number(salary) || 0),
       role,
       permissions: {
         sales: salesAccess,
@@ -190,6 +194,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setName('');
     setPin('');
     setPhone('');
+    setSalary('');
     setRole(runsATill(store) ? 'cashier' : 'attendant');
     setSalesAccess(true);
     setInventoryAccess(false);
@@ -204,6 +209,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setName(s.name);
     setPin(s.pin);
     setPhone(s.phone || '');
+    setSalary(s.monthlySalary ? String(s.monthlySalary) : '');
     setRole(s.role);
     setSalesAccess(s.permissions.sales);
     setInventoryAccess(s.permissions.inventory);
@@ -433,6 +439,28 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                   placeholder="e.g. 07025517388"
                   className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
                 />
+              </div>
+
+              {/*
+                What they are paid, because break-even cannot be right without
+                it. Wages are usually a shop's largest cost after rent, and a
+                shop was being told it had covered its month while a salary it
+                had not yet paid was still owed. Blank is fine - a family
+                member helping out may not be on a wage.
+              */}
+              <div className="space-y-1 text-left">
+                <label className="text-xs text-muted-foreground uppercase font-bold">Monthly salary</label>
+                <div className="flex items-center gap-2 w-full p-2.5 rounded-lg bg-surface-2 border border-border">
+                  <span className="text-sm text-muted-foreground">₦</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={salary}
+                    onChange={e => setSalary(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="Leave blank if not on a wage"
+                    className="w-full bg-transparent text-foreground text-sm focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

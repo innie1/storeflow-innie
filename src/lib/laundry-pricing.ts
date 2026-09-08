@@ -1,5 +1,6 @@
 import type { Product, StoreData } from '@/types/store';
 import {
+  defaultGarmentPrice,
   DEFAULT_LAUNDRY_GARMENTS,
   sanitizeGarmentSelections,
   type LaundryGarmentSelection,
@@ -62,6 +63,18 @@ export function getExplicitLaundryGarmentPrice(store: StoreData, serviceId: stri
 export function getLaundryGarmentPrice(store: StoreData, service: Product, garmentType: string): number {
   const explicit = getExplicitLaundryGarmentPrice(store, String(service.id), garmentType);
   if (explicit !== null) return explicit;
+
+  /*
+   * The usual going rate before the shop has said otherwise.
+   *
+   * Falling straight through to the service's starting price charged the same
+   * for a vest as for a king duvet, which is not a rounding error - it is the
+   * shop losing money on every large item until somebody notices. A shop that
+   * charges differently edits it, and from then on the explicit price wins.
+   */
+  const usual = defaultGarmentPrice(garmentType);
+  if (usual !== null) return usual;
+
   return Math.max(0, Number(service.sellingPrice) || 0);
 }
 

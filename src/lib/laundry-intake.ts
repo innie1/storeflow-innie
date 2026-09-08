@@ -2,42 +2,59 @@ import type { Product } from '@/types/store';
 import { getStoredServicePricing, type ServicePricing } from '@/lib/service-pricing';
 
 /**
- * What a laundry is actually handed.
+ * What a laundry is handed, and what it usually charges for it.
  *
- * The list stopped at clothing plus a bedsheet, so the household washing a
- * Nigerian laundry earns most of its money on - duvets, blankets, curtains,
- * rugs - had to be typed in by hand every time, by every shop.
+ * The list stopped at clothing plus a bedsheet with no prices at all, so every
+ * shop typed its own from nothing - the household washing a Nigerian laundry
+ * earns most of its money on was not even on it.
  *
- * A bedsheet and its pillow cases usually arrive together and are priced as
- * one job, so that set is offered as well as the pieces on their own; a shop
- * that prices them separately still has both.
+ * These prices are a starting point, not a rule. A shop that charges
+ * differently changes them, and a shop that calls something else edits the
+ * name; both are the merchant's from the moment they touch them.
+ *
+ * Sizes are separate entries where the work is genuinely different. A king
+ * bedsheet is not a single bedsheet, and one price for "bedsheet" makes a shop
+ * lose on every large one.
  */
-export const DEFAULT_LAUNDRY_GARMENTS = [
-  'Shirt',
-  'Trouser',
-  'T-shirt',
-  'Nicker / Shorts',
-  'Gown / Dress',
-  'Skirt',
-  'Native Wear',
-  'Agbada',
-  'Suit (2-piece)',
-  'Jacket',
-  'Bedsheet & Pillow Case',
-  'Bedsheet',
-  'Pillow Case',
-  'Pillow',
-  'Duvet',
-  'Duvet Cover',
-  'Blanket',
-  'Curtain',
-  'Rug / Carpet',
-  'Table Cloth',
-  'Towel',
-  'Cap',
-  'Socks',
-  'Underwear',
-] as const;
+export const DEFAULT_LAUNDRY_PRICES: { name: string; price: number }[] = [
+  { name: 'Singlet / Vest', price: 300 },
+  { name: 'T-Shirt', price: 400 },
+  { name: 'Shirt', price: 500 },
+  { name: 'Polo Shirt', price: 400 },
+  { name: 'Trousers', price: 500 },
+  { name: 'Jeans', price: 600 },
+  { name: 'Shorts', price: 400 },
+  { name: 'Skirt', price: 500 },
+  { name: 'Blouse / Top', price: 500 },
+  { name: 'Gown / Dress', price: 700 },
+  { name: 'Native Wear - 1 Piece', price: 600 },
+  { name: 'Native Wear - 2 Piece', price: 1100 },
+  { name: 'Wrapper', price: 400 },
+  { name: 'Towel - Small', price: 400 },
+  { name: 'Towel - Large / Bath', price: 600 },
+  { name: 'Pillowcase', price: 300 },
+  { name: 'Single Bedsheet', price: 900 },
+  { name: 'Double Bedsheet', price: 1100 },
+  { name: 'King Bedsheet', price: 1300 },
+  { name: 'Blanket - Small', price: 1500 },
+  { name: 'Blanket - Large', price: 2000 },
+  { name: 'Small Duvet', price: 2500 },
+  { name: 'Large Duvet', price: 3000 },
+  { name: 'Tracksuit - 2 Piece', price: 1000 },
+  { name: 'Hoodie / Sweatshirt', price: 700 },
+  { name: 'Jacket', price: 800 },
+  { name: 'Senator - 2 Piece', price: 1100 },
+  { name: 'Agbada - 3 Piece', price: 2500 },
+];
+
+export const DEFAULT_LAUNDRY_GARMENTS = DEFAULT_LAUNDRY_PRICES.map(entry => entry.name);
+
+/** The starting price for an item nobody has priced yet, or null if unknown. */
+export function defaultGarmentPrice(garmentType: string): number | null {
+  const wanted = String(garmentType || '').trim().toLowerCase();
+  const found = DEFAULT_LAUNDRY_PRICES.find(entry => entry.name.toLowerCase() === wanted);
+  return found ? found.price : null;
+}
 
 /**
  * What almost every laundry offers, so setup is a tap rather than typing.

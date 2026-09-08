@@ -77,7 +77,27 @@ export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthW
       return sum + (bill.frequency === 'weekly' ? amount * 4 : amount);
     }, 0);
 
-  return Math.max(0, spent + upcoming);
+  /*
+   * Wages still owed this month.
+   *
+   * A salary set on the staff record is a real monthly obligation, and it is
+   * usually the largest after rent. Without it a shop was told it had covered
+   * its month while a wage it had not yet paid was still due - the target
+   * looked reachable right up until payday.
+   *
+   * Only what has not already been paid: a Salaries expense recorded this
+   * month is in `spent` above, and counting both would double the wage bill.
+   */
+  const payroll = (store.staffMembers || []).reduce(
+    (sum, member) => sum + Math.max(0, Number((member as any).monthlySalary) || 0),
+    0,
+  );
+  const salariesPaid = (store.expenses || [])
+    .filter(expense => inWindow(expense.date, window) && expense.category === 'Salaries')
+    .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+  const wagesOwed = Math.max(0, payroll - salariesPaid);
+
+  return Math.max(0, spent + upcoming + wagesOwed);
 }
 
 export interface PiecesAndRevenue {
