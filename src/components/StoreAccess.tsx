@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { createStore, loadStore, saveStore } from '@/lib/store-data';
+import { useState, useEffect, useMemo } from 'react';
+import { createStore, loadStore, saveStore, getStoreIndex } from '@/lib/store-data';
+import { getBusinessTemplate } from '@/lib/business-runtime';
 import { applyBusinessTemplate } from '@/lib/business-templates';
 import { StoreData, StoreCategory, StoreType, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
@@ -560,6 +561,21 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       return [];
     }
   };
+
+  /**
+   * The shop a typed code belongs to, if this device already has it.
+   *
+   * Read rather than loaded: loadStore mutates and persists, which typing six
+   * characters has no business doing.
+   */
+  const codePreview = useMemo(() => {
+    const code = accessCode.trim().toUpperCase();
+    if (code.length < 6) return null;
+    const entry = getStoreIndex().find(item => String(item.code || '').toUpperCase() === code);
+    if (!entry) return null;
+    const template = getBusinessTemplate({ storeType: entry.businessType } as any);
+    return { name: entry.name, kind: template.name, icon: template.icon || '🏪' };
+  }, [accessCode]);
 
   const handleAccess = async () => {
     const code = accessCode.trim().toUpperCase();
@@ -1771,6 +1787,25 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                 maxLength={6}
                 className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground text-center font-mono text-2xl tracking-widest placeholder:text-sm placeholder:tracking-normal focus:outline-none focus:border-primary"
               />
+
+              {/*
+                Which shop this code opens, before it opens it.
+                Somebody running a laundry, a barber shop and a restaurant off
+                one phone was typing six characters and finding out afterwards.
+                Shown rather than confirmed, so it costs no extra tap: the
+                answer is simply on screen by the time the button is pressed.
+                A code the device has never seen shows nothing, which is
+                honest - it cannot be known until it is fetched.
+              */}
+              {codePreview && (
+                <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-primary/30 bg-primary/5 p-2.5">
+                  <span className="text-xl shrink-0">{codePreview.icon}</span>
+                  <span className="min-w-0">
+                    <span className="block font-display font-black text-sm truncate">{codePreview.name}</span>
+                    <span className="block text-[11px] text-muted-foreground truncate">{codePreview.kind}</span>
+                  </span>
+                </div>
+              )}
             </div>
             <button onClick={handleAccess} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
               Access Store

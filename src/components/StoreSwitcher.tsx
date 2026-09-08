@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StoreData, StoreCategory } from '@/types/store';
-import { getStoreIndex, loadStore, createStore, removeStoreFromIndex } from '@/lib/store-data';
+import { getStoreIndex, backfillStoreIndexTypes, loadStore, createStore, removeStoreFromIndex } from '@/lib/store-data';
+import { getBusinessTemplate } from '@/lib/business-runtime';
 import { saveSession } from '@/components/Settings';
 import { showToast } from '@/components/Toast';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
@@ -27,7 +28,10 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
   const [name, setName] = useState('');
   const [category, setCategory] = useState<StoreCategory>('retail');
   const [retailType, setRetailType] = useState('provision_retail');
-  const [stores, setStores] = useState(getStoreIndex());
+  // Entries written before the trade was recorded are filled in from the
+  // stores already on this device, so an existing merchant sees what each shop
+  // is without having to re-add it.
+  const [stores, setStores] = useState(backfillStoreIndexTypes());
   const [pendingRemoveCode, setPendingRemoveCode] = useState<string | null>(null);
 
   const switchTo = (storeCode: string) => {
@@ -90,10 +94,21 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
                     s.code === currentCode ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-lg">🏪</div>
+                  {/*
+                    The trade, not a generic shop.
+                    Every store showed the same 🏪 and its name, so somebody
+                    running a laundry, a barber shop and a restaurant off one
+                    phone had nothing to tell them apart but memory.
+                  */}
+                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-lg shrink-0">
+                    {getBusinessTemplate({ storeType: s.businessType } as any).icon || '🏪'}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-display font-semibold text-sm truncate">{s.name}</p>
-                    <p className="text-[10px] font-mono text-muted-foreground">{s.code}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {getBusinessTemplate({ storeType: s.businessType } as any).name}
+                      <span className="font-mono"> · {s.code}</span>
+                    </p>
                   </div>
                   {s.code === currentCode ? (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-display font-bold">ACTIVE</span>
