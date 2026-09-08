@@ -22,5 +22,11 @@ jobs:
             test -n "$value" || { echo "Missing required ${key}"; exit 1; }
           done
       - run: npm ci
+      # `npm run build` is vite only - it strips the types without checking
+      # them, so nothing here ever read them. The root tsconfig cannot do it
+      # either: it has `files: []` and only project references, so `tsc -p
+      # tsconfig.json` exits clean over any number of real errors. It was
+      # sitting on 255 of them, several of which were live bugs.
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build
