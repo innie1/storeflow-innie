@@ -28,8 +28,9 @@ import {
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
-import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, Ticket, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
+import ClaimTicket from '@/components/laundry/ClaimTicket';
 import LaundryRuns from '@/components/laundry/LaundryRuns';
 import { can } from '@/lib/permissions';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
@@ -103,6 +104,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
   const [stageBusy, setStageBusy] = useState<string | null>(null);
   /** A bundle about to be handed over with money still owed on it. */
   const [collectGuard, setCollectGuard] = useState<DecoratedRecord | null>(null);
+  const [ticket, setTicket] = useState<DecoratedRecord | null>(null);
   /*
    * The list is ordered by what needs attention, which is right at the counter
    * but means a bundle you have just taken in lands wherever its due date puts
@@ -359,6 +361,25 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
 
   return (
     <div className="space-y-4 pt-1">
+      {ticket && (
+        <ClaimTicket
+          store={store}
+          record={{
+            tagCode: ticket.tagCode,
+            customerName: ticket.customerName,
+            serviceName: ticket.serviceName,
+            pieceCount: ticket.pieceCount,
+            garmentSummary: ticket.garmentSummary,
+            total: ticket.total,
+            // The balance the record carries, so the customer's copy and the
+            // counter's screen cannot disagree about what is left to pay.
+            amountPaid: ticket.total - ticket.balance,
+            promisedFor: ticket.promisedAt ? new Date(ticket.promisedAt).toISOString() : undefined,
+          }}
+          onClose={() => setTicket(null)}
+        />
+      )}
+
       {collectGuard && (
         <div
           className="fixed inset-0 z-[90] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
@@ -732,6 +753,23 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                           <MessageCircle className="w-4 h-4" /> WhatsApp {record.whatsapp.kind === 'ready' ? 'Ready' : record.whatsapp.kind === 'reminder' ? 'Reminder' : record.whatsapp.kind === 'processing' ? 'Update' : record.whatsapp.kind === 'completed' ? 'Thank You' : 'Receipt'}
                         </button>
                       )}
+
+                      {/*
+                        The ticket again, on demand.
+
+                        This is the one thing paper cannot do. A customer who
+                        has lost their half of a paper ticket has lost it, and
+                        the argument that follows is why shops keep a second
+                        book. Here the shop turns the phone round and the
+                        ticket is back, with the same code and the same
+                        balance on it.
+                      */}
+                      <button
+                        onClick={() => setTicket(record)}
+                        className="h-10 px-4 rounded-xl bg-surface-2 border border-border text-xs font-display font-black flex items-center justify-center gap-2"
+                      >
+                        <Ticket className="w-4 h-4" /> Ticket
+                      </button>
 
                       {/* Was a bare dropdown showing the current stage, which
                           reads as a label rather than something to change. */}

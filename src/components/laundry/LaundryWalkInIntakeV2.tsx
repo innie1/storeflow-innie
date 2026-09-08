@@ -24,8 +24,9 @@ import {
 } from '@/lib/laundry-offline';
 import { openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
-import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MapPin, MessageCircle, Minus, Plus, Search, Shirt, X } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MapPin, MessageCircle, Minus, Plus, Search, Shirt, Ticket, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
+import ClaimTicket from '@/components/laundry/ClaimTicket';
 import { reassignLaundryPhotos } from '@/lib/laundry-photos';
 import { FULFILLMENT_LABELS, totalWithDelivery, type LaundryFulfillment } from '@/lib/laundry-runs';
 import { LAUNDRY_MODIFIERS, describeModifiers, toggleModifier } from '@/lib/laundry-modifiers';
@@ -246,6 +247,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
   const [dryMethodId, setDryMethodId] = useState('manual:sun-dry');
   const [created, setCreated] = useState<LocalLaundryRecord | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
+  const [showTicket, setShowTicket] = useState(false);
   // Address, processing methods and notes are needed on a minority of jobs, so
   // they stay folded away and out of the counter's fastest path.
   const [showMore, setShowMore] = useState(false);
@@ -627,6 +629,9 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
           onDismiss={() => setMilestone(null)}
         />
       )}
+      {showTicket && created && (
+        <ClaimTicket store={store} record={created} onClose={() => setShowTicket(false)} />
+      )}
       <button
         data-guide="record-job"
         onClick={openIntake}
@@ -716,7 +721,18 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
               {!practice && Boolean(created.customerPhone) && (
                 <button onClick={sendWhatsApp} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</button>
               )}
-              <button onClick={close} className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
+              {/*
+                The one that always works.
+
+                WhatsApp needs a number and needs the shop to remember to press
+                it. This needs neither: it turns the phone round and lets the
+                customer photograph their own ticket, which is the thing paper
+                did for free and the app was not doing at all.
+              */}
+              {!practice && (
+                <button onClick={() => setShowTicket(true)} className="flex-1 py-3 rounded-xl bg-surface-2 border border-border font-display font-black text-sm flex items-center justify-center gap-2"><Ticket className="w-4 h-4" /> Show customer</button>
+              )}
+              <button onClick={close} className={`py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2 ${practice ? 'flex-1' : 'px-5'}`}><Check className="w-4 h-4" /> Done</button>
             </div>
           </> : <>
             <div className="shrink-0 flex items-center justify-between gap-3 border-b border-border p-4 pb-3">
