@@ -1406,7 +1406,9 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
     : { transition: 'transform 2.5s ease-in-out' };
 
   const isWalkingOff = activity === 'walking-off-left' || activity === 'walking-off-right';
-  const walkZIndexStyle = isWalkingOff ? { zIndex: 0 } : {};
+  // Over the top on his way out, not underneath it. zIndex 0 here was half of
+  // why leaving looked like sinking into the background.
+  const walkZIndexStyle = isWalkingOff ? { zIndex: 60 } : {};
 
   return (
     <div 
@@ -1515,23 +1517,36 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           30% { opacity: 0.8; }
           100% { transform: translateY(-20px) scale(1.2); opacity: 0; }
         }
+        /*
+         * He leaves the screen. He does not fade into the distance.
+         *
+         * This used to shrink him to half size, blur him and dim him while
+         * nudging him a little way sideways, so an errand looked like the
+         * mascot sinking backwards into the wallpaper - and the z-index was
+         * dropped to 0 underneath, which put him behind the app while it
+         * happened.
+         *
+         * The soccer ball already had the exit worth copying: full size, full
+         * brightness, one hard shove past the edge, gone. Same distance here
+         * (-320% of a 56px mascot is the ball's -180px), same feeling. What is
+         * left is the pause - the stretch where nothing is on screen at all is
+         * what sells him being somewhere else.
+         */
         @keyframes walk-off-left {
-          0% { transform: translateX(0) scale(1, 1); filter: brightness(1) blur(0px); }
-          18% { transform: translateX(-80%) scale(0.75, 0.75); filter: brightness(0.8) blur(0.5px); }
-          22%, 45% { transform: translateX(-140%) scale(0.5, 0.5); filter: brightness(0.5) blur(2px); }
-          50%, 75% { transform: translateX(-90%) rotate(8deg) scale(0.6, 0.6); filter: brightness(0.6) blur(1px); }
-          80% { transform: translateX(-140%) scale(0.5, 0.5); filter: brightness(0.5) blur(2px); }
-          85% { transform: translateX(-80%) scale(-0.75, 0.75); filter: brightness(0.8) blur(0.5px); }
-          100% { transform: translateX(0) scale(1, 1); filter: brightness(1) blur(0px); }
+          0% { transform: translateX(0) scale(1, 1); }
+          6% { transform: translateX(14%) scale(1, 1); }
+          24%, 68% { transform: translateX(-320%) rotate(-6deg) scale(1, 1); }
+          86% { transform: translateX(6%) scale(-1, 1); }
+          94% { transform: translateX(0) scale(-1, 1); }
+          100% { transform: translateX(0) scale(1, 1); }
         }
         @keyframes walk-off-right {
-          0% { transform: translateX(0) scale(-1, 1); filter: brightness(1) blur(0px); }
-          18% { transform: translateX(80%) scale(-0.75, 0.75); filter: brightness(0.8) blur(0.5px); }
-          22%, 45% { transform: translateX(140%) scale(-0.5, 0.5); filter: brightness(0.5) blur(2px); }
-          50%, 75% { transform: translateX(90%) rotate(-8deg) scale(-0.6, 0.6); filter: brightness(0.6) blur(1px); }
-          80% { transform: translateX(140%) scale(-0.5, 0.5); filter: brightness(0.5) blur(2px); }
-          85% { transform: translateX(80%) scale(0.75, 0.75); filter: brightness(0.8) blur(0.5px); }
-          100% { transform: translateX(0) scale(1, 1); filter: brightness(1) blur(0px); }
+          0% { transform: translateX(0) scale(-1, 1); }
+          6% { transform: translateX(-14%) scale(-1, 1); }
+          24%, 68% { transform: translateX(320%) rotate(6deg) scale(-1, 1); }
+          86% { transform: translateX(-6%) scale(1, 1); }
+          94% { transform: translateX(0) scale(1, 1); }
+          100% { transform: translateX(0) scale(1, 1); }
         }
         @keyframes soccer-ball-timeline {
           /* 0% to 56.8%: Bouncing on head */
@@ -1593,8 +1608,10 @@ export default function Mascot({ size = 64, mood = 'idle', className = '', anima
           0%, 100% { transform: translateY(0) scaleY(1); }
           50% { transform: translateY(-2.5px) scaleY(1.04); }
         }
-        .animate-walk-left { animation: walk-off-left 5s ease-in-out forwards; }
-        .animate-walk-right { animation: walk-off-right 5s ease-in-out forwards; }
+        /* ease-out on the way through, so the shove off the edge is fast and
+           the return settles rather than skidding. */
+        .animate-walk-left { animation: walk-off-left 5s ease-out forwards; }
+        .animate-walk-right { animation: walk-off-right 5s ease-out forwards; }
         .animate-zzz-1 { animation: float-zzz 3s ease-in-out infinite; animation-delay: 0s; }
         .animate-zzz-2 { animation: float-zzz 3s ease-in-out infinite; animation-delay: 1s; }
         .animate-zzz-3 { animation: float-zzz 3s ease-in-out infinite; animation-delay: 2s; }
