@@ -162,3 +162,47 @@ describe('the rent on the profile reaches the figures', () => {
     expect(monthlyFixedCosts(owned, window)).toBe(0);
   });
 });
+
+describe('a setting only appears where its trade can use it', () => {
+  /*
+   * Reported: the settings page is full of things that belong to a provision
+   * shop. It was - the screen was written for a retailer and shown to every
+   * trade, so a laundry got a low-stock threshold, restock suggestions,
+   * backorder selling, retail and wholesale price tiers, and a default profit
+   * margin on a business that has no cost price to take a margin over.
+   *
+   * The test each one has to pass is not "is this a service business" - which
+   * is a list of trade names somebody has to remember to update - but "does
+   * this shop have the thing the setting configures".
+   */
+  const settings = readSource('src/components/Settings.tsx');
+
+  it('asks the business template rather than keeping its own list of trades', () => {
+    expect(settings).toContain("hasBusinessModule(store, 'inventory')");
+  });
+
+  it('keeps stock settings for shops with stock', () => {
+    for (const gated of ['<SettingTile', '<ToggleRow label="Product Suggestions"']) {
+      expect(settings).toContain(`{keepsStock && ${gated}`);
+    }
+  });
+
+  it('does not offer margin arithmetic to a business with no cost price', () => {
+    // A laundry does not buy a wash in and sell it on. What it needs is the
+    // pricing advisor on its own price list, which is a different thing.
+    const pricing = settings.slice(settings.indexOf("view === 'pricing'"));
+    const section = pricing.slice(0, pricing.indexOf('Automatic Checkout Discounts'));
+    expect(section).toContain('{keepsStock && <>');
+  });
+
+  it('still offers discounts to everybody, because any shop runs a promotion', () => {
+    const pricing = settings.slice(settings.indexOf("view === 'pricing'"));
+    const discounts = pricing.slice(pricing.indexOf('Automatic Checkout Discounts'));
+    expect(discounts).toContain('Enable Automatic Discount');
+    expect(discounts.slice(0, discounts.indexOf('Enable Automatic Discount'))).not.toContain('keepsStock');
+  });
+
+  it('does not offer two price tiers on one item to a service', () => {
+    expect(settings).toContain('{keepsStock && <ToggleRow\n              label="Enable Retail Pricing Mode"');
+  });
+});

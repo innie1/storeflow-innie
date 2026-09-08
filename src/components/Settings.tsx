@@ -2696,18 +2696,20 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             <SectionLabel>Customer Marketplace Settings</SectionLabel>
           </div>
           <div className={`${card} px-4 divide-y divide-border`}>
-            <ToggleRow
+            {/* Two price tiers on the same item is a goods idea: a laundry has
+                one price for a shirt, not a retail and a wholesale one. */}
+            {keepsStock && <ToggleRow
               label="Enable Retail Pricing Mode"
               description="Allow customers to browse and purchase items at retail prices."
               checked={mgr.retailPricingEnabled !== false}
               onChange={v => setPricingModes(v, mgr.wholesalePricingEnabled !== false)}
-            />
-            <ToggleRow
+            />}
+            {keepsStock && <ToggleRow
               label="Enable Wholesale Pricing Mode"
               description="Allow customers to browse and purchase items at wholesale prices."
               checked={mgr.wholesalePricingEnabled !== false}
               onChange={v => setPricingModes(mgr.retailPricingEnabled !== false, v)}
-            />
+            />}
             <ToggleRow
               label="Order Alert Sound Notifications"
               description="Play a synthesized alert chime whenever a customer order is received."
@@ -2805,7 +2807,14 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
   if (view === 'pricing' || view === 'discount') return (
     <SubPage title="Pricing & Discounts" subtitle="Configure profit margins, smart pricing rules, and automatic checkout discounts" onBack={() => setView('home')}>
-      {/* SECTION 1: Profit Margin & Smart Pricing */}
+      {/*
+        Margin, smart pricing and profit-per-unit are all arithmetic on a cost
+        price, and a service has no cost price - a laundry does not buy a wash
+        in and sell it on. What a service shop needs instead is the pricing
+        advisor on its own price list, which works from what the work actually
+        consumes. None of this belongs on a laundry's settings screen.
+      */}
+      {keepsStock && <>
       <div className="px-1">
         <SectionLabel>Profit Margin & Smart Pricing</SectionLabel>
       </div>
@@ -2862,7 +2871,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         </div>
       )}
 
-      {/* SECTION 2: Automatic Checkout Discounts */}
+      </>}
+
+      {/* Discounts are for anybody. A laundry runs a promotion like any shop. */}
       <div className="px-1 mt-4">
         <SectionLabel>Automatic Checkout Discounts</SectionLabel>
       </div>
@@ -4500,11 +4511,16 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
             icon={<Tag className="w-5 h-5" />}
             color="#F2C94C"
             title="Pricing & Discounts"
-            desc="Margins, pricing rules & discounts."
+            desc={keepsStock ? 'Margins, pricing rules & discounts.' : 'Checkout discounts and promotions.'}
             right={
               <div>
-                <p className="text-[10px] text-muted-foreground">Default Margin</p>
-                <p className="text-sm font-display font-bold text-primary">{mgr.defaultMargin}%</p>
+                {/* The margin figure is cost-price arithmetic, so it is as
+                    meaningless on this tile for a laundry as the section it
+                    summarises is inside. */}
+                {keepsStock && <>
+                  <p className="text-[10px] text-muted-foreground">Default Margin</p>
+                  <p className="text-sm font-display font-bold text-primary">{mgr.defaultMargin}%</p>
+                </>}
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   Discount: {mgr.autoDiscountEnabled ? (mgr.autoDiscountType === 'percentage' ? `${mgr.autoDiscountValue}%` : `₦${(mgr.autoDiscountValue || 0).toLocaleString()}`) : 'Off'}
                 </p>
