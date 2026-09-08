@@ -232,7 +232,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
   const finishAdd = (draft: AddDraft) => {
     if (draft.costPrice == null || draft.sellingPrice == null || draft.quantity == null || !draft.category) { flow('I still need cost, selling price, quantity and category.'); return; }
-    rememberUndo(); const next = addProduct(store, draft); onUpdate(next); setLastProductId(next.products[next.products.length - 1]?.id || null); setAddDraft(null); flow(`Added **${draft.name}** to Inventory.\nStock: ${draft.quantity}\nSelling: ${money(draft.sellingPrice)}\nCost: ${money(draft.costPrice)}.`); showToast('Product added', 'success');
+    rememberUndo(); const next = addProduct(store, { name: draft.name, costPrice: draft.costPrice, sellingPrice: draft.sellingPrice, quantity: draft.quantity, category: draft.category }); onUpdate(next); setLastProductId(next.products[next.products.length - 1]?.id || null); setAddDraft(null); flow(`Added **${draft.name}** to Inventory.\nStock: ${draft.quantity}\nSelling: ${money(draft.sellingPrice)}\nCost: ${money(draft.costPrice)}.`); showToast('Product added', 'success');
   };
 
   const handleAddWizard = (text: string) => {

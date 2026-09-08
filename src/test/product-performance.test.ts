@@ -16,8 +16,9 @@ function createMockStore(): StoreData {
   return {
     id: 'store-123',
     accessCode: 'MOCK',
-    name: 'Mock Store',
-    category: 'Groceries',
+    createdAt: new Date('2026-01-01').toISOString(),
+    storeName: 'Mock Store',
+    category: 'retail',
     products: [],
     sales: [],
     expenses: [],

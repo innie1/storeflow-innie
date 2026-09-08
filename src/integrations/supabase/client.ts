@@ -30,3 +30,19 @@ console.log("Key Prefix:", SUPABASE_PUBLISHABLE_KEY ? SUPABASE_PUBLISHABLE_KEY.s
  */
 export const rpcAheadOfTypes = (fn: string, args?: Record<string, unknown>) =>
   (supabase.rpc as unknown as (name: string, params?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>)(fn, args);
+
+/**
+ * The same, for tables and columns.
+ *
+ * `store_analytics_events`, and `orders.customer_uuid` / `orders.is_guest`,
+ * were all created by supabase/migrations/20260812150000 - months before the
+ * checked-in types were generated, yet none of them appear there. Whatever
+ * produced types.ts did not see that migration.
+ *
+ * Worth saying plainly: this helper makes the compiler stop asking, it does
+ * not prove the columns are live. If the analytics panel ever reports
+ * "column does not exist", that migration is the thing to check.
+ */
+export const fromAheadOfTypes = supabase.from as unknown as (
+  table: string,
+) => ReturnType<typeof supabase.from<never, never>>;

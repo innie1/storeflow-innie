@@ -1012,7 +1012,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           setCheckingCloudStatus(false);
 
           const cloudUrl = cloudStore.qr_code || generateStoreUrl(cloudStore.store_id || storeId);
-          const cloudVersion = cloudStore.data?.qrDesignVersion || 1;
+          const cloudVersion = (cloudStore.data as { qrDesignVersion?: number } | null)?.qrDesignVersion || 1;
           const cloudStoreId = cloudStore.store_id || storeId;
 
           const needsUpdate =
@@ -1095,7 +1095,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           return;
         }
 
-        const serverData = cloudStore.data as StoreData | null;
+        const serverData = cloudStore.data as unknown as StoreData | null;
         if (!serverData) return;
 
         // Perform diff and update only changed values
@@ -1157,11 +1157,11 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     const storeUrl = generateStoreUrl(storeId);
     showToast("Refreshing QR Code...", "info");
 
-    supabase
+    Promise.resolve(supabase
       .from('stores')
       .select('id, store_id, qr_code, data')
       .eq('access_code', store.accessCode)
-      .maybeSingle()
+      .maybeSingle())
       .then(({ data: cloudStore, error }) => {
         if (error) {
           showToast("Failed to check server: " + error.message, "error");
@@ -1169,7 +1169,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         }
 
         const cloudUrl = cloudStore?.qr_code || storeUrl;
-        const cloudVersion = (cloudStore?.data?.qrDesignVersion || 1) + 1; // force increment version
+        const cloudVersion = ((cloudStore?.data as { qrDesignVersion?: number } | null)?.qrDesignVersion || 1) + 1; // force increment version
         const cloudStoreId = cloudStore?.store_id || storeId;
 
         const tempCanvas = document.createElement('canvas');

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isBusinessTabAllowed, runsATill } from '@/lib/business-runtime';
+import type { StoreData } from '@/types/store';
 import { readSource } from './helpers/source';
 
 /**
@@ -83,7 +84,7 @@ describe('a laundry owner can find it', () => {
 
   it('is reachable at all for a laundry', () => {
     // A shortcut to a tab the runtime filters out would render nothing.
-    const laundry = { storeType: 'laundry', category: 'retail' };
+    const laundry: Partial<StoreData> = { storeType: 'laundry', category: 'retail' };
     expect(isBusinessTabAllowed(laundry, 'staff')).toBe(true);
   });
 });

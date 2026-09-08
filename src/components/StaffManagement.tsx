@@ -72,7 +72,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   const [salary, setSalary] = useState('');
   // Whichever role the shop is most likely to be adding: a till shop hires a
   // cashier, a laundry or a barber hires someone to take work in.
-  const [role, setRole] = useState<'admin' | 'manager' | 'cashier' | 'attendant' | 'inventory' | 'accountant' | 'supervisor' | 'custom'>(
+  const [role, setRole] = useState<StaffMember['role']>(
     runsATill(store) ? 'cashier' : 'attendant',
   );
   
