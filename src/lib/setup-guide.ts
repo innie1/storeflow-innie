@@ -234,31 +234,67 @@ export function guideProgress(store: StoreData, tab = ''): { done: number; total
   };
 }
 
-const DISMISSED_KEY = 'storeflow_setup_guide_dismissed';
-const FINISHED_KEY = 'storeflow_setup_guide_finished';
+/*
+ * Both flags are per shop.
+ *
+ * They were single global keys, so the first store to finish setup switched
+ * the walk off for every store on the device - and, worse, spent the "ready
+ * for business" moment on behalf of all of them. Open a second laundry and it
+ * got no guide and no celebration, having done nothing. Somebody trying the
+ * app out with a few shops would see it once and never again, which is exactly
+ * how it was reported: the training finished and nothing happened.
+ *
+ * Each shop earns its own.
+ */
+const DISMISSED_PREFIX = 'storeflow_setup_guide_dismissed_';
+const FINISHED_PREFIX = 'storeflow_setup_guide_finished_';
 
-export function guideDismissed(): boolean {
-  try { return localStorage.getItem(DISMISSED_KEY) === '1'; } catch { return false; }
-}
+/** The old global keys, still honoured for the shop that set them. */
+const LEGACY_DISMISSED = 'storeflow_setup_guide_dismissed';
+const LEGACY_FINISHED = 'storeflow_setup_guide_finished';
 
-export function dismissGuide(): void {
-  try { localStorage.setItem(DISMISSED_KEY, '1'); } catch { /* private mode */ }
-}
+const shopKey = (prefix: string, accessCode?: string) =>
+  `${prefix}${String(accessCode || '').toUpperCase()}`;
 
-export function restartGuide(): void {
+function readFlag(prefix: string, legacy: string, accessCode?: string): boolean {
   try {
-    localStorage.removeItem(DISMISSED_KEY);
-    localStorage.removeItem(FINISHED_KEY);
+    if (localStorage.getItem(shopKey(prefix, accessCode)) === '1') return true;
+    /*
+     * A merchant already trading when this changed must not be shown the walk
+     * again, so the old global key still counts - but only until they finish
+     * or dismiss on this shop, which writes the per-shop one.
+     */
+    return localStorage.getItem(legacy) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function guideDismissed(accessCode?: string): boolean {
+  return readFlag(DISMISSED_PREFIX, LEGACY_DISMISSED, accessCode);
+}
+
+export function dismissGuide(accessCode?: string): void {
+  try { localStorage.setItem(shopKey(DISMISSED_PREFIX, accessCode), '1'); } catch { /* private mode */ }
+}
+
+export function restartGuide(accessCode?: string): void {
+  try {
+    localStorage.removeItem(shopKey(DISMISSED_PREFIX, accessCode));
+    localStorage.removeItem(shopKey(FINISHED_PREFIX, accessCode));
+    // The global ones would otherwise keep the walk switched off for ever.
+    localStorage.removeItem(LEGACY_DISMISSED);
+    localStorage.removeItem(LEGACY_FINISHED);
   } catch { /* private mode */ }
 }
 
-/** Whether the "ready for business" moment has already been shown. */
-export function celebrationShown(): boolean {
-  try { return localStorage.getItem(FINISHED_KEY) === '1'; } catch { return false; }
+/** Whether this shop's "ready for business" moment has already been shown. */
+export function celebrationShown(accessCode?: string): boolean {
+  return readFlag(FINISHED_PREFIX, LEGACY_FINISHED, accessCode);
 }
 
-export function markCelebrationShown(): void {
-  try { localStorage.setItem(FINISHED_KEY, '1'); } catch { /* private mode */ }
+export function markCelebrationShown(accessCode?: string): void {
+  try { localStorage.setItem(shopKey(FINISHED_PREFIX, accessCode), '1'); } catch { /* private mode */ }
 }
 
 /**
@@ -270,6 +306,6 @@ export function markCelebrationShown(): void {
  */
 export function shouldRunGuide(store: StoreData | null | undefined, tab = ''): boolean {
   if (!store) return false;
-  if (guideDismissed()) return false;
+  if (guideDismissed(store.accessCode)) return false;
   return nextStep(store, tab) !== null;
 }

@@ -460,9 +460,12 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
                 </div>
               </div>
               <div>
-                <label className="text-[10px] uppercase font-black text-muted-foreground">{draft.pricing === 'per_piece' ? 'Starting price' : draft.pricing === 'per_kg' ? 'Price per KG' : 'Price per load'}</label>
+                <label className="text-[10px] uppercase font-black text-muted-foreground">{draft.pricing === 'per_piece' ? 'What is your starting price?' : draft.pricing === 'per_kg' ? 'Price per KG' : 'Price per load'}</label>
                 <div className="mt-1 flex items-center gap-2 px-3.5 py-3 rounded-xl border border-border bg-surface-2"><span className="text-sm text-muted-foreground">₦</span><input value={draft.defaultPrice} onChange={event => setDraft(current => ({ ...current, defaultPrice: event.target.value.replace(/[^0-9.]/g, '') }))} inputMode="decimal" placeholder="0" className="w-full bg-transparent outline-none text-sm font-black" /></div>
-                {draft.pricing === 'per_piece' && <p className="text-[10px] text-muted-foreground mt-1">Sets the starting price for every item. You can change each one after.</p>}
+                {/* Said as a question with the answer under it, because "starting price"
+            on its own reads like the price, and a shop that charges different
+            amounts per garment needs to know this is only where they begin. */}
+        {draft.pricing === 'per_piece' && <p className="text-[10px] text-muted-foreground mt-1">You can edit this in your items individually later.</p>}
               </div>
               <div>
                 <label className="text-[10px] uppercase font-black text-muted-foreground">Turnaround</label>

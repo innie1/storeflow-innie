@@ -189,7 +189,7 @@ export default function SetupGuide({ store, tab, onNavigate }: Props) {
             </div>
             <button
               type="button"
-              onClick={() => { dismissGuide(); setHidden(true); }}
+              onClick={() => { dismissGuide(store?.accessCode); setHidden(true); }}
               aria-label="Close the setup guide"
               className="w-8 h-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface-2 flex items-center justify-center"
             >

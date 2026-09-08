@@ -1125,7 +1125,7 @@ export default function Index() {
    */
   const [showReady, setShowReady] = useState(false);
   useEffect(() => {
-    if (!store || celebrationShown()) return;
+    if (!store || celebrationShown(store.accessCode)) return;
     if (nextStep(store) === null && guideProgress(store).total > 0) setShowReady(true);
   }, [store]);
 
@@ -2084,7 +2084,7 @@ export default function Index() {
         {showReady && store && (
           <ReadyForBusiness
             storeName={store.storeName || 'Your store'}
-            onDone={() => { markCelebrationShown(); setShowReady(false); }}
+            onDone={() => { markCelebrationShown(store.accessCode); setShowReady(false); }}
           />
         )}
 

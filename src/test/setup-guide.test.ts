@@ -5,6 +5,8 @@ import {
   guideSteps,
   nextStep,
   restartGuide,
+  celebrationShown,
+  markCelebrationShown,
   shouldRunGuide,
 } from '@/lib/setup-guide';
 import { laundryLocalStorageKey } from '@/lib/laundry-offline';
@@ -149,8 +151,37 @@ describe('it does not nag', () => {
   it('stays closed once the merchant closes it', () => {
     const store = laundry();
     expect(shouldRunGuide(store, 'dashboard')).toBe(true);
-    dismissGuide();
+    dismissGuide(store.accessCode);
     expect(shouldRunGuide(store, 'dashboard')).toBe(false);
+  });
+
+  /**
+   * Both flags used to be single global keys, so the first shop to finish or
+   * dismiss switched the walk off for every shop on the device and spent the
+   * "ready for business" moment on their behalf. A second laundry got no guide
+   * and no celebration, having done nothing - which is exactly how it was
+   * reported: the training finished and nothing happened.
+   */
+  it('closing the walk on one shop leaves it running on another', () => {
+    const shine = laundry({ accessCode: 'SHINE1' });
+    const second = laundry({ accessCode: 'SECOND' });
+
+    dismissGuide(shine.accessCode);
+
+    expect(shouldRunGuide(shine, 'dashboard')).toBe(false);
+    expect(shouldRunGuide(second, 'dashboard')).toBe(true);
+  });
+
+  it('gives each shop its own ready-for-business moment', () => {
+    markCelebrationShown('SHINE1');
+    expect(celebrationShown('SHINE1')).toBe(true);
+    expect(celebrationShown('SECOND')).toBe(false);
+  });
+
+  it('still honours the old global flag for a shop already trading', () => {
+    // A merchant mid-setup when this changed must not be shown it all again.
+    localStorage.setItem('storeflow_setup_guide_dismissed', '1');
+    expect(shouldRunGuide(laundry({ accessCode: 'OLDONE' }), 'dashboard')).toBe(false);
   });
 
   it('does not run for a shop that is already trading', () => {
