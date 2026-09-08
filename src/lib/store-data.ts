@@ -2153,6 +2153,32 @@ export function getPendingSummary(store: StoreData) {
 }
 
 // ─── Customer Helpers ─────────────────────────────────────────────────────────
+/**
+ * The one way the app decides whether it already knows somebody.
+ *
+ * By phone when there is a phone, because two people share a name far more
+ * often than a number. By name when there is not - which there often is not
+ * now that the counter can take a bundle from a walk-in who would rather not
+ * give a number.
+ *
+ * The empty case is the one that bites: matching '' against '' makes every
+ * anonymous walk-in the same person, so a shop that served four of them would
+ * find one customer with four visits. Comparing names instead keeps Musa and
+ * Ngozi apart, and two different Musas with no phone between them will merge -
+ * which is a smaller wrong than either losing them or inventing four people.
+ */
+export function matchCustomer(
+  customers: Customer[] | undefined,
+  who: { name?: string; phone?: string },
+): Customer | undefined {
+  const digits = String(who.phone || '').replace(/\D/g, '');
+  const name = String(who.name || '').trim().toLowerCase();
+
+  if (digits) return (customers || []).find(customer => String(customer.phone || '').replace(/\D/g, '') === digits);
+  if (!name) return undefined;
+  return (customers || []).find(customer => !String(customer.phone || '').trim() && customer.name.trim().toLowerCase() === name);
+}
+
 export function addCustomer(store: StoreData, customer: Omit<Customer, 'id' | 'totalPurchases' | 'outstandingDebt' | 'purchaseHistory' | 'loyaltyPoints' | 'visitsCount'>): StoreData {
   const newCust: Customer = {
     ...customer,

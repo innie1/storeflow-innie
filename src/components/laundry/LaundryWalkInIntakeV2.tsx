@@ -4,7 +4,7 @@ import { checkNewMilestone, markMilestoneReached, type MilestoneDef } from '@/li
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import QRCode from 'qrcode';
 import type { StoreData } from '@/types/store';
-import { addCustomer } from '@/lib/store-data';
+import { matchCustomer, addCustomer } from '@/lib/store-data';
 import { getServicePricingLabel, getStoredServicePricing } from '@/lib/service-pricing';
 import { countLaundryPieces, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
 import {
@@ -193,7 +193,19 @@ function activePreset(promisedFor: string, chips: { hours: number }[]): number |
   return null;
 }
 
-export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, onRecorded, practice = false }: Props) {
+export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, onRecorded, practice: guidedPractice = false }: Props) {
+  /*
+   * Rehearsing is something you can see you are doing, and stop.
+   *
+   * The only sign of a practice run used to be on the receipt, after saving -
+   * "this was practice, nothing was recorded" - which is the worst possible
+   * moment to find out, with a customer at the counter and their clothes
+   * already counted. It is said up front now, and can be turned off without
+   * losing what has been typed.
+   */
+  const [rehearsing, setRehearsing] = useState(guidedPractice);
+  useEffect(() => { setRehearsing(guidedPractice); }, [guidedPractice]);
+  const practice = rehearsing;
   const services = useMemo(
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
     [store.products],
@@ -560,11 +572,19 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
         promisedFor,
       });
 
-      // A walk-in who gave no number does not go in the customer book. The
-      // book is keyed on the phone, so every anonymous "Musa" would either
-      // fold into one person or pile up as duplicates, and neither is a
-      // customer record anybody can use. The bundle still carries the name.
-      if (phone && !customers.some(customer => customer.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''))) {
+      /*
+       * Everyone the counter names goes in the book.
+       *
+       * Making the phone optional, this briefly skipped the book entirely for
+       * anyone without one - on the grounds that the book is keyed on phone
+       * and blank numbers would collide. That was the wrong trade. The shop
+       * typed a name; that is a customer, and a customer who does not appear
+       * in the customer book is the app quietly losing what it was told.
+       *
+       * matchCustomer handles the collision instead: by number when there is
+       * one, by name when there is not.
+       */
+      if (!matchCustomer(customers, { name, phone })) {
         try {
           nextStore = addCustomer(nextStore, { name, phone, address: customerAddress.trim() || undefined });
         } catch (customerError) {
@@ -610,6 +630,8 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
   };
 
   const canSave = Boolean(customerName.trim() && (!customerPhone.trim() || validPhone(customerPhone)) && selectedService && pieceCount > 0 && Number.isFinite(Number(totalPrice)));
+  // The button says which one it is. Nobody should have to remember.
+  const saveLabel = practice ? 'Try it (nothing saved)' : 'Record Laundry';
 
   // The saved custom interval sits alongside the fixed ones, unless it is
   // already one of them.
@@ -758,6 +780,22 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {practice && (
+              <div className="rounded-2xl border border-amber-500/50 bg-amber-500/10 p-3.5 text-left">
+                <p className="font-display font-black text-sm text-amber-500">Practice run — nothing will be saved</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                  The guide is showing you how this works. Fill it in and press
+                  save to see what happens; no job, no customer and no money
+                  will be recorded.
+                </p>
+                <button
+                  onClick={() => setRehearsing(false)}
+                  className="mt-2.5 h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black"
+                >
+                  This is a real customer — record it
+                </button>
+              </div>
+            )}
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">1. Customer</p>
               {customers.length > 0 && <select value={selectedCustomerId} onChange={event => selectCustomer(event.target.value)} className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm"><option value="">New customer</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name} · {customer.phone}</option>)}</select>}
@@ -1109,7 +1147,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
                 <p className="text-[10px] uppercase font-black text-muted-foreground">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</p>
                 <p className="font-display font-black text-lg leading-tight">₦{(Number(totalPrice) || 0).toLocaleString()}</p>
               </div>
-              <button disabled={!canSave || saving} onClick={saveIntake} className="flex-1 py-3.5 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm disabled:opacity-40">{saving ? 'Saving…' : 'Record Laundry'}</button>
+              <button disabled={!canSave || saving} onClick={saveIntake} className={`flex-1 py-3.5 rounded-xl font-display font-black text-sm disabled:opacity-40 ${practice ? 'bg-amber-500 text-black' : 'bg-primary text-primary-foreground'}`}>{saving ? 'Saving…' : saveLabel}</button>
             </div>
           </>}
         </div>

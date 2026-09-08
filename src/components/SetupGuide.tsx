@@ -8,6 +8,7 @@ import {
   shouldRunGuide,
   type GuideStep,
 } from '@/lib/setup-guide';
+import { recordGuideEvent, setGuideStepOnScreen } from '@/lib/guide-activity';
 
 /**
  * The spotlight that walks a new shop through opening.
@@ -44,6 +45,21 @@ export default function SetupGuide({ store, tab, onNavigate }: Props) {
   const running = shouldRunGuide(store, tab) && !hidden;
   const step: GuideStep | null = running ? nextStep(store, tab) : null;
   const progress = guideProgress(store, tab);
+
+  /*
+   * Say what is on screen, so nothing has to guess.
+   *
+   * A screen may only put itself into rehearsal while the guide is actually
+   * showing that step. This used to be inferred from the shop's data - which
+   * step was next - and a merchant whose guide never displayed recorded a real
+   * customer's bundle into a practice run and lost it. Nothing infers it now:
+   * if this component is not rendering the step, no rehearsal is happening.
+   */
+  useEffect(() => {
+    setGuideStepOnScreen(step?.id ?? null);
+    if (step) recordGuideEvent(store?.accessCode, step.id, 'shown');
+    return () => setGuideStepOnScreen(null);
+  }, [step?.id, store?.accessCode]);
 
   // Find and follow the target. Layout effect so the hole is placed before
   // paint rather than flashing over the whole screen first.

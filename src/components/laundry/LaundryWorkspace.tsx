@@ -31,6 +31,7 @@ import { saveStore } from '@/lib/store-data';
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, Ticket, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
 import ClaimTicket from '@/components/laundry/ClaimTicket';
+import { GUIDE_STEP_SIGNAL, guideStepOnScreen } from '@/lib/guide-activity';
 import LaundryRuns from '@/components/laundry/LaundryRuns';
 import { can } from '@/lib/permissions';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
@@ -105,6 +106,15 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
   /** A bundle about to be handed over with money still owed on it. */
   const [collectGuard, setCollectGuard] = useState<DecoratedRecord | null>(null);
   const [ticket, setTicket] = useState<DecoratedRecord | null>(null);
+  // What the guide is displaying, straight from the guide rather than guessed.
+  const [guideStep, setGuideStep] = useState<string | null>(() => guideStepOnScreen());
+
+  useEffect(() => {
+    const onGuideStep = (event: Event) => setGuideStep((event as CustomEvent<string | null>).detail ?? null);
+    window.addEventListener(GUIDE_STEP_SIGNAL, onGuideStep);
+    setGuideStep(guideStepOnScreen());
+    return () => window.removeEventListener(GUIDE_STEP_SIGNAL, onGuideStep);
+  }, []);
   /*
    * The list is ordered by what needs attention, which is right at the counter
    * but means a bundle you have just taken in lands wherever its due date puts
@@ -480,7 +490,18 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
             onRecorded={setJustRecorded}
             /* The setup walk's last step is a rehearsal: it teaches the screen
                without leaving an invented customer in the books. */
-            practice={nextStep(store, 'laundry-records')?.id === 'first-job'}
+            /*
+             * Only while the guide is on screen saying so.
+             *
+             * This read `nextStep(...)?.id === 'first-job'` - the shop's data,
+             * not the screen. A merchant whose guide never displayed opened
+             * Intake, counted a real bundle into it, and was told afterwards
+             * that it was practice and nothing had been saved. He took the
+             * whole bundle in again.
+             *
+             * If the guide is not up, this is real work and it is saved.
+             */
+            practice={guideStep === 'first-job'}
           />
 
           {/*

@@ -11,7 +11,7 @@ import { readLinkedTab, readNotificationAct, readOrderDeepLink, stripOrderDeepLi
 import { acknowledgeStockLoss, getStockLossNotice, markStockLossRaised } from '@/lib/stock-loss-notice';
 import { dropBackgroundNotice, enableBackgroundNotices, queueBackgroundNotice, showLocalNotification } from '@/lib/push-notifications';
 import type { NotificationAct } from '@/lib/order-deep-link';
-import { loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
+import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
 import StreakDetailsPanel from '@/components/streaks/StreakDetailsPanel';
@@ -920,10 +920,12 @@ export default function Index() {
             .map((it: any) => `${store.products.find((p: any) => p.id === it.product_id)?.name || 'Item'} (x${it.quantity})`)
             .join(', ');
           const purchase = { date: nowStr, amount: orderTotal, items: itemsSummary };
-          const existing = updatedCustomers.find((c: any) =>
-            (targetOrder.customer_phone && c.phone === targetOrder.customer_phone) ||
-            (!targetOrder.customer_phone && c.name.toLowerCase() === (targetOrder.customer_name || '').toLowerCase())
-          );
+          // The same rule the counter uses, rather than a second copy of it:
+          // by number when there is one, by name when there is not.
+          const existing = matchCustomer(updatedCustomers, {
+            name: targetOrder.customer_name,
+            phone: targetOrder.customer_phone,
+          });
           if (existing) {
             updatedCustomers = updatedCustomers.map((c: any) => c.id === existing.id ? {
               ...c,
