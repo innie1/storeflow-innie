@@ -4,6 +4,8 @@ import {
   getLaundryGarmentPrice,
   publishLaundryPricingToTemplate,
   setLaundryGarmentPrice,
+  seedLaundryGarmentPrices,
+  addLaundryGarmentType,
 } from '@/lib/laundry-pricing';
 import { defaultGarmentPrice } from '@/lib/laundry-intake';
 
@@ -130,5 +132,37 @@ describe('the going rate a laundry starts from', () => {
 
   it('says nothing for something it has never heard of', () => {
     expect(defaultGarmentPrice('Ankara Headwrap')).toBeNull();
+  });
+});
+
+describe('seeding a new service', () => {
+  /**
+   * Seeding wrote the service's flat starting price against every garment, so
+   * a vest and a king duvet were both set to whatever number the shop typed
+   * once at setup - and since an explicit price always wins, nothing could
+   * correct it afterwards. The shop lost money on every large item until
+   * somebody repriced twenty-eight rows by hand.
+   */
+  it('gives each item its own going rate, not one flat price', () => {
+    const seeded: any = seedLaundryGarmentPrices(makeStore());
+    const row = seeded.laundryPricing.matrix['svc-full'];
+
+    expect(row['Single Bedsheet']).toBe(900);
+    expect(row['King Bedsheet']).toBe(1300);
+    expect(row['Singlet / Vest']).toBe(300);
+    expect(row['Large Duvet']).toBe(3000);
+  });
+
+  it('still falls back to the service price for an item with no usual rate', () => {
+    let store: any = makeStore();
+    store = addLaundryGarmentType(store, 'Ankara Headwrap');
+    const seeded: any = seedLaundryGarmentPrices(store);
+    expect(seeded.laundryPricing.matrix['svc-full']['Ankara Headwrap']).toBe(500);
+  });
+
+  it('never overwrites a price the shop has already set', () => {
+    let store: any = setLaundryGarmentPrice(makeStore(), 'svc-full', 'King Bedsheet', 2000);
+    store = seedLaundryGarmentPrices(store);
+    expect(store.laundryPricing.matrix['svc-full']['King Bedsheet']).toBe(2000);
   });
 });

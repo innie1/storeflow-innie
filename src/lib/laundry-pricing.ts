@@ -167,7 +167,19 @@ export function seedLaundryGarmentPrices(store: StoreData): StoreData {
     const current = { ...(matrix[serviceId] || {}) };
     for (const garment of config.garmentTypes) {
       if (Number.isFinite(Number(current[garment]))) continue;
-      current[garment] = Math.max(0, Number(service.sellingPrice) || 0);
+      /*
+       * The going rate for that item, not the service's flat price.
+       *
+       * This used to write the starting price against every garment, so a
+       * vest and a king duvet were both seeded at whatever number the shop
+       * typed once at setup - and because an explicit price always wins,
+       * nothing could correct it afterwards. The shop lost money on every
+       * large item until somebody noticed and repriced twenty-eight rows by
+       * hand. The service price remains the fallback for anything the trade
+       * has no usual rate for.
+       */
+      const usual = defaultGarmentPrice(garment);
+      current[garment] = usual !== null ? usual : Math.max(0, Number(service.sellingPrice) || 0);
       changed = true;
     }
     matrix[serviceId] = current;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { COMMON_LAUNDRY_SERVICES } from '@/lib/laundry-intake';
 import PricingAdvisor from '@/components/PricingAdvisor';
+import PriceRunThrough from '@/components/laundry/PriceRunThrough';
 import { getLaundryDepositRule, setLaundryDepositRule } from '@/lib/laundry-money';
 import type { Product, StoreData } from '@/types/store';
 import { addProduct, deleteProduct, saveStore, updateProduct } from '@/lib/store-data';
@@ -56,6 +57,8 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
   const [garmentNameDraft, setGarmentNameDraft] = useState('');
   const [draft, setDraft] = useState<ServiceDraft>(emptyDraft);
   const [showGarmentPrices, setShowGarmentPrices] = useState(false);
+  /** The one-at-a-time run through every price. */
+  const [runThrough, setRunThrough] = useState(false);
 
   const selectedService = allServices.find(service => String(service.id) === selectedServiceId) || allServices[0] || null;
   const selectedPricing = selectedService ? getStoredServicePricing(selectedService) : 'per_piece';
@@ -292,6 +295,15 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
           where somebody is already thinking about them. */}
       {allServices.length > 0 && <PricingAdvisor store={store} onUpdate={persist} />}
 
+      {runThrough && selectedService && (
+        <PriceRunThrough
+          store={store}
+          service={selectedService}
+          onUpdate={persist}
+          onClose={() => setRunThrough(false)}
+        />
+      )}
+
       {allServices.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-8 text-center">
           <Shirt className="w-7 h-7 text-primary mx-auto" />
@@ -395,8 +407,18 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
                     );
                   })}
                   </div>
+                  {/* Deal them one at a time instead of hunting the list.
+                      Pricing twenty-eight items by opening each in turn is why
+                      most shops price three and leave the rest. */}
+                  <button
+                    type="button"
+                    onClick={() => setRunThrough(true)}
+                    className="w-full p-4 text-xs font-display font-black text-primary hover:bg-primary/5 border-t border-border"
+                  >
+                    Set every price, one at a time
+                  </button>
                   {!showGarmentPrices && (
-                    <button type="button" onClick={() => setShowGarmentPrices(true)} className="w-full p-4 text-xs font-display font-bold text-primary hover:bg-primary/5">
+                    <button type="button" onClick={() => setShowGarmentPrices(true)} className="w-full p-4 text-xs font-display font-bold text-muted-foreground hover:bg-surface-2/50 border-t border-border">
                       Show all {config.garmentTypes.length} clothing prices
                     </button>
                   )}
