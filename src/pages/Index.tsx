@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } fro
 import { canOpenTab } from '@/lib/permissions';
 import SetupGuide from '@/components/SetupGuide';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
-import { celebrationShown, guideProgress, markCelebrationShown, nextStep } from '@/lib/setup-guide';
+import { celebrationShown, guideProgress, hasPractised, markCelebrationShown, nextStep, PRACTISED_SIGNAL } from '@/lib/setup-guide';
 import { StoreData, TabId, Product } from '@/types/store';
 import FlowShirtFab from '@/components/FlowShirtFab';
 import { getBusinessTemplate, isBusinessTabAllowed, isServiceFirstBusiness, resolveBusinessType, shouldRunRetailRestockEngine } from '@/lib/business-runtime';
@@ -1125,8 +1125,15 @@ export default function Index() {
    */
   const [showReady, setShowReady] = useState(false);
   useEffect(() => {
-    if (!store || celebrationShown(store.accessCode)) return;
-    if (nextStep(store) === null && guideProgress(store).total > 0) setShowReady(true);
+    const check = () => {
+      if (!store || celebrationShown(store.accessCode)) return;
+      if (nextStep(store) === null && guideProgress(store).total > 0) setShowReady(true);
+    };
+    check();
+    // The last step is a rehearsal that writes nothing, so `store` does not
+    // change when it finishes and this would never look again.
+    window.addEventListener(PRACTISED_SIGNAL, check);
+    return () => window.removeEventListener(PRACTISED_SIGNAL, check);
   }, [store]);
 
   const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;
@@ -2084,6 +2091,7 @@ export default function Index() {
         {showReady && store && (
           <ReadyForBusiness
             storeName={store.storeName || 'Your store'}
+            practised={hasPractised(store.accessCode) && (store.sales || []).length === 0}
             onDone={() => { markCelebrationShown(store.accessCode); setShowReady(false); }}
           />
         )}

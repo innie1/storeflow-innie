@@ -10,12 +10,19 @@ import { useEffect, useMemo, useState } from 'react';
 
 interface Props {
   storeName: string;
+  /**
+   * Whether the walk was finished by rehearsing rather than by real work.
+   *
+   * The line said "your first job is recorded", which after a rehearsal is
+   * simply untrue - and the whole point of the rehearsal is that nothing was.
+   */
+  practised?: boolean;
   onDone: () => void;
 }
 
 const COLORS = ['#FFD166', '#EF476F', '#06D6A0', '#118AB2', '#9B5DE5', '#F97316'];
 
-export default function ReadyForBusiness({ storeName, onDone }: Props) {
+export default function ReadyForBusiness({ storeName, practised = false, onDone }: Props) {
   const [leaving, setLeaving] = useState(false);
 
   const bursts = useMemo(
@@ -77,7 +84,9 @@ export default function ReadyForBusiness({ storeName, onDone }: Props) {
           {storeName} is ready for business
         </h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Your prices are set and your first job is recorded. Everything from here is real money.
+          {practised
+            ? 'Your prices are set and you know how to take a bundle in. Everything from here is real money.'
+            : 'Your prices are set and your first job is recorded. Everything from here is real money.'}
         </p>
         <button
           type="button"

@@ -113,7 +113,16 @@ function serviceSteps(store: StoreData): GuideStep[] {
       body: isLaundry
         ? 'This is where clothes go when someone brings them in. Tap here.'
         : 'This is where work you take in is logged. Tap here.',
-      done: (store, tab) => tab === (isLaundry ? 'laundry-records' : 'orders') || hasJob(store),
+      /*
+       * Practising counts as having opened it, obviously - and it has to,
+       * because the celebration checks the walk with no tab in hand. Left as
+       * "you are standing on it, or you have traded", a shop that had only
+       * rehearsed never finished this step, so the walk never completed and
+       * the "ready for business" moment never came.
+       */
+      done: (store, tab) => tab === (isLaundry ? 'laundry-records' : 'orders')
+        || hasJob(store)
+        || hasPractised(store.accessCode),
     },
     {
       // Pointed at the button that starts a job, not at the tab. Aimed at the
@@ -286,8 +295,18 @@ function readFlag(prefix: string, legacy: string, accessCode?: string): boolean 
   }
 }
 
+/** Fired when the rehearsal finishes, because nothing else changes. */
+export const PRACTISED_SIGNAL = 'storeflow:setup-practised';
+
 export function markPractised(accessCode?: string): void {
   try { localStorage.setItem(shopKey(PRACTISED_PREFIX, accessCode), '1'); } catch { /* private mode */ }
+  /*
+   * The "ready for business" moment is re-checked when the store changes, and
+   * a rehearsal deliberately changes nothing - so finishing the walk left the
+   * guide gone and no celebration, which is the very thing it was reported
+   * missing for. Nothing to watch means it has to be announced.
+   */
+  try { window.dispatchEvent(new CustomEvent(PRACTISED_SIGNAL)); } catch { /* not a browser */ }
 }
 
 export function hasPractised(accessCode?: string): boolean {

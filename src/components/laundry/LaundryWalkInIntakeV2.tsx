@@ -666,7 +666,9 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
             <div className="rounded-2xl border-2 border-primary/40 bg-primary/5 p-4 text-center">
               {qrDataUrl && <img src={qrDataUrl} alt={`Laundry ${created.tagCode} QR code`} className="w-28 h-28 mx-auto rounded-xl bg-white p-2" />}
               <p className="font-mono font-black text-4xl tracking-[0.18em] mt-3">{created.tagCode}</p>
-              <p className="text-[11px] text-muted-foreground mt-2">Write this on every tag in the bundle.</p>
+              <p className="text-[11px] text-muted-foreground mt-2">
+                {practice ? 'This is where the real tag code appears.' : 'Write this on every tag in the bundle.'}
+              </p>
               <button onClick={copyTag} className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary/30 text-primary text-xs font-bold"><ClipboardCopy className="w-3.5 h-3.5" /> Copy code</button>
             </div>
 
@@ -688,11 +690,15 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
               <p className="text-xs font-bold mt-1">{created.garmentSummary}</p>
             </div>
 
-            {created.syncStatus !== 'synced' && <p className="text-[11px] text-primary text-center font-semibold">Saved on this phone. It will upload when you are back online.</p>}
+            {!practice && created.syncStatus !== 'synced' && <p className="text-[11px] text-primary text-center font-semibold">Saved on this phone. It will upload when you are back online.</p>}
             </div>
 
             <div className="shrink-0 border-t border-border p-4 flex gap-2">
-              <button onClick={sendWhatsApp} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</button>
+              {/* Not in a rehearsal. Sending it would message a real phone
+                  number a receipt for a job that was never recorded. */}
+              {!practice && (
+                <button onClick={sendWhatsApp} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp</button>
+              )}
               <button onClick={close} className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
             </div>
           </> : <>

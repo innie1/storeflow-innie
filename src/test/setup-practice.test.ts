@@ -67,3 +67,39 @@ describe('finishing the walk without a real job', () => {
     expect(guideSteps(trading).at(-1)!.done(trading, 'laundry-records')).toBe(true);
   });
 });
+
+describe('finishing on a rehearsal still celebrates', () => {
+  const guide = readSource('src/lib/setup-guide.ts');
+  const index = readSource('src/pages/Index.tsx');
+  const ready = readSource('src/components/ReadyForBusiness.tsx');
+
+  /**
+   * Found by walking it, not by reading it. The "ready for business" moment is
+   * re-checked when the store changes, and a rehearsal deliberately changes
+   * nothing - so the walk finished, the guide vanished, and no celebration
+   * came. Which is the very thing it was reported missing for.
+   */
+  it('announces the rehearsal, since nothing else changes', () => {
+    expect(guide).toContain('PRACTISED_SIGNAL');
+    expect(index).toContain('window.addEventListener(PRACTISED_SIGNAL, check)');
+  });
+
+  /**
+   * And the step before it. "Open Intake" completed on standing on the tab or
+   * having traded; the celebration checks the walk with no tab in hand, so a
+   * shop that had only rehearsed never finished that step either.
+   */
+  it('counts the rehearsal as having opened the intake', () => {
+    const store = laundry({ accessCode: 'OPENED' });
+    const openIntake = guideSteps(store).find(step => step.id === 'open-intake')!;
+    expect(openIntake.done(store, '')).toBe(false);
+
+    markPractised(store.accessCode);
+    expect(openIntake.done(store, '')).toBe(true);
+  });
+
+  it('does not claim a job was recorded when none was', () => {
+    expect(ready).toContain('you know how to take a bundle in');
+    expect(index).toContain('practised={hasPractised(store.accessCode)');
+  });
+});
