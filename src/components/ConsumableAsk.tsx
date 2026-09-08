@@ -2,15 +2,22 @@ import { useState } from 'react';
 import { Droplets, X } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { markAsked, recordSoapAnswer, shouldAskAboutSoap, soapHistorySentence } from '@/lib/soap-log';
+import { consumableAsk } from '@/lib/trade-supplies';
 import { showToast } from '@/components/Toast';
 
 /**
- * A quiet question about soap, on the screen where money is already the point.
+ * A quiet question about the thing this shop keeps buying, on the screen where
+ * money is already the point.
  *
  * A card, not a pop-up. It sits in the page rather than over it, so a merchant
  * who came here to do something else can do it and never look down. It can be
  * closed without answering, and closing counts as an answer: it will not ask
  * again for a fortnight.
+ *
+ * This lived in components/laundry and asked every trade about soap, which is
+ * how a barber learns to ignore it. The blind spot is the same everywhere and
+ * only the noun changes, so the noun comes from the trade now, and the file
+ * sits where the other shared screens do.
  */
 
 interface Props {
@@ -18,7 +25,7 @@ interface Props {
   onUpdate: (store: StoreData) => void;
 }
 
-export default function SoapAsk({ store, onUpdate }: Props) {
+export default function ConsumableAsk({ store, onUpdate }: Props) {
   const code = String(store.accessCode || '');
   const [dismissed, setDismissed] = useState(false);
   const [amount, setAmount] = useState('');
@@ -40,10 +47,12 @@ export default function SoapAsk({ store, onUpdate }: Props) {
     }
     onUpdate(recordSoapAnswer(store, { amount: value, quantity: Number(quantity) || undefined, brand }));
     setDismissed(true);
-    showToast('Noted — that goes into what a piece costs you', 'success');
+    showToast('Noted — that goes into what a job costs you', 'success');
   };
 
   const history = soapHistorySentence(code);
+  // A barber asked about soap ignores the card. Same question, the trade's word.
+  const ask = consumableAsk(store);
 
   return (
     <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4 text-left">
@@ -58,11 +67,11 @@ export default function SoapAsk({ store, onUpdate }: Props) {
         </button>
       </div>
 
-      <p className="font-display font-black text-sm mt-1.5">Have you bought soap lately?</p>
+      <p className="font-display font-black text-sm mt-1.5">Have you bought {ask.noun} lately?</p>
       <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-        Most shops pay for detergent out of the drawer and never record it, which
-        makes every profit figure look better than it is. Tell me roughly and I
-        will work the rest out.
+        Most shops pay for it out of the drawer and never record it, which makes
+        every profit figure look better than it is. Tell me roughly and I will
+        work the rest out.
       </p>
 
       <div className="mt-3 space-y-2">
@@ -90,7 +99,7 @@ export default function SoapAsk({ store, onUpdate }: Props) {
           <input
             value={brand}
             onChange={event => setBrand(event.target.value)}
-            placeholder="Which soap"
+            placeholder={ask.brandHint}
             className="h-11 px-3 rounded-xl bg-card border border-border text-sm outline-none"
           />
         </div>

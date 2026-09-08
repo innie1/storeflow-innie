@@ -1,25 +1,33 @@
 /**
- * Asking about soap, occasionally, where money is already on somebody's mind.
+ * Asking about the thing the shop keeps buying, where money is already on
+ * somebody's mind.
  *
- * Most shops buy detergent with cash out of the drawer and never record it, so
- * the cost of doing a piece is worked out from a fraction of what was really
- * spent - and every figure built on it comes out flattering. The shop is told
- * it is doing better than it is.
+ * Most shops buy their main consumable with cash out of the drawer and never
+ * record it, so the cost of doing a job is worked out from a fraction of what
+ * was really spent - and every figure built on it comes out flattering. The
+ * shop is told it is doing better than it is.
  *
- * Nobody is going to keep a soap ledger, so this asks instead: rarely, on the
+ * The blind spot is identical across the trades and only the word changes: a
+ * laundry does it with detergent, a barber with blades and clipper oil, a
+ * printing shop with paper and toner. Asking a barber about soap is how a good
+ * question gets ignored, so the noun comes from the trade - see
+ * `consumableAsk`. The file keeps its name because the stored history keys do.
+ *
+ * Nobody is going to keep a ledger for it, so this asks instead: rarely, on the
  * expenses screen where the question already fits, and never while a customer
  * is being served. It can always be dismissed without answering; a prompt that
  * must be cleared is a prompt that gets cleared without reading.
  *
  * What it does with the answer is deliberately modest. It records the spend so
  * the cost per piece is honest, and it remembers which soap was named. It does
- * not decide which soap is better: one shop changing brand between two months
+ * not decide which brand is better: one shop changing brand between two months
  * in which a dozen other things also changed is not evidence, and dressing it
  * up as a finding would be inventing knowledge.
  */
 
 import type { StoreData } from '@/types/store';
 import { addExpense } from '@/lib/store-data';
+import { consumableAsk } from '@/lib/trade-supplies';
 
 const ASKED_KEY = 'storeflow_soap_asked_';
 const LOG_KEY = 'storeflow_soap_log_';
@@ -131,7 +139,7 @@ export function recordSoapAnswer(
 
   const note = [brand, quantity ? `${quantity}` : '']
     .filter(Boolean)
-    .join(' × ') || 'Soap';
+    .join(' × ') || consumableAsk(store).noun;
 
   /*
    * Through addExpense, not by appending to the array.

@@ -15,21 +15,15 @@
  */
 
 import type { Expense, StoreData, SupplyItem } from '@/types/store';
+import { tradeSupplies } from '@/lib/trade-supplies';
 
 /**
- * A starting list, not a fixed one. Every shop buys something the next one
- * does not, so these are only what appears before anybody types anything.
+ * A starting list, not a fixed one, and no longer the laundry's list for
+ * everybody. This constant is the laundry seed; every other trade has its own
+ * in trade-supplies, and supplyList picks by business type. A barber was being
+ * offered starch and fabric softener, which is how a good screen gets ignored.
  */
-export const DEFAULT_SUPPLIES: { name: string; unit: string }[] = [
-  { name: 'Detergent', unit: 'bag' },
-  { name: 'Bleach', unit: 'litre' },
-  { name: 'Starch', unit: 'bag' },
-  { name: 'Fabric softener', unit: 'litre' },
-  { name: 'Diesel', unit: 'litre' },
-  { name: 'Cooking gas', unit: 'kg' },
-  { name: 'Water', unit: 'tank' },
-  { name: 'Nylon bags', unit: 'pack' },
-];
+export const DEFAULT_SUPPLIES: { name: string; unit: string }[] = tradeSupplies({ storeType: 'laundry' });
 
 export const CONSUMABLES_CATEGORY = 'Consumables' as const;
 
@@ -38,14 +32,15 @@ export function getSupplies(store: Pick<StoreData, 'supplies'>): SupplyItem[] {
 }
 
 /**
- * The list to show, which is the shop's own once it has one and the starting
- * list before that. A brand new laundry should not open an empty screen and
- * have to invent the word "detergent" before it can report running out.
+ * The list to show, which is the shop's own once it has one and its trade's
+ * starting list before that. A brand new laundry should not open an empty
+ * screen and have to invent the word "detergent" before it can report running
+ * out - and nor should a car wash have to delete "starch" first.
  */
-export function supplyList(store: Pick<StoreData, 'supplies'>): SupplyItem[] {
+export function supplyList(store: Partial<StoreData>): SupplyItem[] {
   const own = getSupplies(store);
   if (own.length) return own;
-  return DEFAULT_SUPPLIES.map((entry, index) => ({
+  return tradeSupplies(store).map((entry, index) => ({
     id: `seed_${index}_${entry.name.toLowerCase().replace(/\W+/g, '_')}`,
     name: entry.name,
     unit: entry.unit,
@@ -57,7 +52,7 @@ export function supplyId(): string {
 }
 
 /** Supplies somebody has flagged as run out, oldest complaint first. */
-export function lowSupplies(store: Pick<StoreData, 'supplies'>): SupplyItem[] {
+export function lowSupplies(store: Partial<StoreData>): SupplyItem[] {
   return supplyList(store)
     .filter(item => !!item.lowSince)
     .sort((a, b) => String(a.lowSince).localeCompare(String(b.lowSince)));

@@ -825,6 +825,17 @@ export interface StoreData {
   };
   category?: StoreCategory;
   retailType?: string;
+  /*
+   * The canonical trade key, and the one resolveBusinessType reads first.
+   *
+   * It was never declared, so all ten places that read it did so through
+   * `(store as any).businessType` - the field that decides which trade a shop
+   * is, and which screens it gets, was invisible to the compiler. Typed as a
+   * string rather than the union because that union is derived from
+   * BUSINESS_TEMPLATES, which imports this file; the valid values are the keys
+   * of BUSINESS_TEMPLATES and normalizeType is what enforces them.
+   */
+  businessType?: string;
   storeType?: StoreType; // what kind of store this is for the customer app — provision, laundry, gas filling, etc. Editable anytime.
   loyaltySettings?: {
     enabled: boolean;

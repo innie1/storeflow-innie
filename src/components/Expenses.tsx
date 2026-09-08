@@ -3,7 +3,7 @@ import { StoreData, ExpenseCategory, Expense, Restock, RecurringBill } from '@/t
 import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SupplySheet from '@/components/SupplySheet';
-import SoapAsk from '@/components/laundry/SoapAsk';
+import ConsumableAsk from '@/components/ConsumableAsk';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import { lowSupplies } from '@/lib/consumables';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
@@ -192,7 +192,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
       {/* Add buttons */}
       {/* Where money is already the point. Never over a job, never twice in
           a fortnight, and closing it counts as an answer. */}
-      {serviceShop && <SoapAsk store={store} onUpdate={onUpdate} />}
+      {serviceShop && <ConsumableAsk store={store} onUpdate={onUpdate} />}
 
       <div className="grid grid-cols-2 gap-2">
         <button
