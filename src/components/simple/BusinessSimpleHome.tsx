@@ -3,6 +3,7 @@ import { canOpenTab, canSeeMoney } from '@/lib/permissions';
 import BreakEvenPip from '@/components/BreakEvenPip';
 import BreakEvenWatcher from '@/components/BreakEvenWatcher';
 import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
+import DayClose from '@/components/laundry/DayClose';
 import RevenueCard from '@/components/RevenueCard';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
@@ -98,6 +99,16 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
       */}
       {isLaundry && (
         <LaundryDayBoard
+          store={store}
+          orders={orders || []}
+          onNavigate={onNavigate}
+          canSeeMoney={canSeeMoney(currentUser)}
+        />
+      )}
+
+      {/* And how it went, once the evening comes round. */}
+      {isLaundry && (
+        <DayClose
           store={store}
           orders={orders || []}
           onNavigate={onNavigate}

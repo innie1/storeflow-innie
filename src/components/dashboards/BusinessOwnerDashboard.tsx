@@ -9,6 +9,7 @@ import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
 import BusinessPulse from '@/components/BusinessPulse';
 import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
 import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
+import DayClose from '@/components/laundry/DayClose';
 import RevenueCard from '@/components/RevenueCard';
 import { canSeeMoney } from '@/lib/permissions';
 
@@ -177,6 +178,16 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
       */}
       {isLaundry && (
         <LaundryDayBoard
+          store={store}
+          orders={orders || []}
+          onNavigate={onNavigate as (tab: any) => void}
+          canSeeMoney={canSeeMoney(currentUser)}
+        />
+      )}
+
+      {/* And how it went, once the evening comes round. */}
+      {isLaundry && (
+        <DayClose
           store={store}
           orders={orders || []}
           onNavigate={onNavigate as (tab: any) => void}

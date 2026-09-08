@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StoreData } from '@/types/store';
 import { laundryDayBoard, dayBoardSentence } from '@/lib/laundry-day';
 import type { DecoratedRecord } from '@/lib/laundry-records';
-import { revenueInRange } from '@/components/RevenueCard';
+import { revenueInRange } from '@/lib/revenue-window';
 import { readSource } from './helpers/source';
 
 /**
