@@ -274,3 +274,29 @@ describe('the profile names the trade, not the bucket', () => {
     expect(settings).not.toContain("{store.category || 'Retail'}");
   });
 });
+
+describe('what the shop typed at sign-up reaches its profile', () => {
+  const access = readSource('src/components/StoreAccess.tsx');
+
+  it('asks for the owner\'s name, which nothing ever did', () => {
+    /*
+     * The profile screen had an Owner Name field and nothing ever filled it,
+     * because nothing ever asked - so a merchant who had just typed their
+     * shop name, email and phone opened their profile and found a blank where
+     * their own name should be, which reads as the app having lost it.
+     */
+    expect(access).toContain('Your Name');
+    expect(access).toContain('setOwnerName');
+  });
+
+  it('writes it onto the profile beside the email and phone', () => {
+    const profileWrite = access.slice(access.indexOf('email: recoveryEmail.trim()'));
+    expect(profileWrite.slice(0, 400)).toContain('ownerName:');
+    expect(profileWrite.slice(0, 400)).toContain('phone: recoveryPhone.trim()');
+  });
+
+  it('does not wipe a name the shop already had', () => {
+    // Securing a store a second time must not blank what is there.
+    expect(access).toContain('ownerName.trim() || loadedStore.profile?.ownerName');
+  });
+});

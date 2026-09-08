@@ -105,6 +105,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryPhone, setRecoveryPhone] = useState('');
+  const [ownerName, setOwnerName] = useState('');
   const [recoveryQuestion, setRecoveryQuestion] = useState(QUESTIONS[0]);
   const [recoveryAnswer, setRecoveryAnswer] = useState('');
   const [generatedRecoveryKey, setGeneratedRecoveryKey] = useState('');
@@ -323,6 +324,10 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         ...(loadedStore.profile || {}),
         email: recoveryEmail.trim(),
         phone: recoveryPhone.trim(),
+        // Kept alongside the email and phone that already came from here, so
+        // the profile screen opens with what the shop has already told us
+        // rather than three empty boxes.
+        ownerName: ownerName.trim() || loadedStore.profile?.ownerName,
         logoStyle: loadedStore.profile?.logoStyle || selectedLogoStyle || 'minimalist'
       },
       managerSettings: {
@@ -1701,6 +1706,25 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            </div>
+
+            {/*
+              Asked here, where the shop is already giving its details.
+
+              The profile screen has an Owner Name field and nothing ever
+              filled it, because nothing ever asked - so a merchant who had
+              just typed their shop name, email and phone opened their profile
+              and found a blank where their own name should be, which reads as
+              the app having lost it.
+            */}
+            <div className="space-y-1">
+              <label className="block text-xs text-muted-foreground uppercase font-bold">Your Name</label>
+              <input
+                value={ownerName}
+                onChange={e => setOwnerName(e.target.value)}
+                placeholder="The owner's full name"
+                className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
