@@ -29,6 +29,10 @@ import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
+import LaundryRuns from '@/components/laundry/LaundryRuns';
+import { can } from '@/lib/permissions';
+import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
+import { Bike } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { getPromisedTime } from '@/lib/business-insights';
 
@@ -77,6 +81,10 @@ interface DecoratedRecord {
    */
   recordedByName?: string;
   recordedByRole?: string;
+  /** Walk-in, collected from the customer, or delivered back. */
+  fulfillment?: LaundryFulfillment;
+  /** The journey, which is not the wash stage. */
+  runStatus?: LaundryRunStatus;
   synced: boolean;
   whatsapp: ReturnType<typeof buildLaundryWhatsAppPayload>;
   total: number;
@@ -107,6 +115,8 @@ function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     tagCode: String(meta.tag_code || meta.receipt_number || order.order_number || '—').toUpperCase(),
     customerName: order.customer_name || 'Walk-in Customer',
     shelfLocation: meta.shelf_location || undefined,
+    fulfillment: meta.fulfillment || undefined,
+    runStatus: meta.run_status || undefined,
     recordedByName: meta.recorded_by_name || undefined,
     recordedByRole: meta.recorded_by_role || undefined,
     customerPhone: order.customer_phone || '',
@@ -301,6 +311,17 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
       .sort((a, b) => b.createdAt - a.createdAt);
   }, [decorated]);
 
+  const runCount = useMemo(() => {
+    const runs = decorated.filter(record =>
+      record.fulfillment === 'pickup'
+        ? record.runStatus !== 'picked_up'
+        : record.fulfillment === 'delivery'
+          && record.runStatus !== 'delivered'
+          && (record.stage === 'ready' || record.runStatus === 'out_for_delivery'),
+    );
+    return runs.length;
+  }, [decorated]);
+
   const changeView = (next: LaundryWorkspaceView) => {
     requestLaundryWorkspace(next);
     setView(next);
@@ -437,7 +458,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-wider text-primary font-black">Laundry workspace</p>
-          <h1 className="font-display font-black text-xl mt-0.5">{view === 'record' ? 'Record Laundry' : 'Laundry Records'}</h1>
+          <h1 className="font-display font-black text-xl mt-0.5">{view === 'record' ? 'Record Laundry' : view === 'runs' ? 'Runs' : 'Laundry Records'}</h1>
           {view === 'records' && (
             <p className="text-xs text-muted-foreground mt-1">Search by tag, customer or item.</p>
           )}
@@ -450,6 +471,11 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
           <button onClick={() => changeView('records')} className={`px-3 py-2 rounded-xl border text-xs font-display font-bold flex items-center gap-1.5 ${view === 'records' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>
             <ClipboardList className="w-3.5 h-3.5" /> Records
           </button>
+          {runCount > 0 && (
+            <button onClick={() => changeView('runs')} className={`px-3 py-2 rounded-xl border text-xs font-display font-bold flex items-center gap-1.5 ${view === 'runs' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>
+              <Bike className="w-3.5 h-3.5" /> Runs · {runCount}
+            </button>
+          )}
         </div>
       </div>
 
@@ -506,6 +532,8 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
             </div>
           )}
         </>
+      ) : view === 'runs' ? (
+        <LaundryRuns store={store} canSeeMoney={can(currentUser, 'money')} />
       ) : (
         <div className="space-y-3">
           <div className="flex gap-2">

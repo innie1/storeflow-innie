@@ -27,6 +27,7 @@ import { showToast } from '@/components/Toast';
 import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MapPin, MessageCircle, Minus, Plus, Search, Shirt, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
 import { reassignLaundryPhotos } from '@/lib/laundry-photos';
+import { FULFILLMENT_LABELS, totalWithDelivery, type LaundryFulfillment } from '@/lib/laundry-runs';
 import { filterGarments, findSimilarGarment } from '@/lib/garment-match';
 
 interface Props {
@@ -197,6 +198,11 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
   const [pickingCustom, setPickingCustom] = useState(false);
   /** Where the bundle is being put, so it can be found again. */
   const [shelfLocation, setShelfLocation] = useState('');
+  /** Walk-in, we collect, or we deliver. Most bundles are walk-ins. */
+  const [fulfillment, setFulfillment] = useState<LaundryFulfillment>('walk_in');
+  const [runAddress, setRunAddress] = useState('');
+  const [runLandmark, setRunLandmark] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState('');
   /**
    * Photos are taken before the bundle has a client ref of its own, so they
    * are held against a draft key and moved onto the real ref once it saves.
@@ -294,6 +300,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
     setSelectedServiceId(services[0] ? String(services[0].id) : '');
     setGarmentCounts(emptyCounts(garmentTypes));
     setShelfLocation('');
+    setFulfillment('walk_in');
+    setRunAddress('');
+    setRunLandmark('');
+    setDeliveryFee('');
     setCustomGarment('');
     setBillingQuantity('1');
     setTotalPrice('');
@@ -380,7 +390,8 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
     const name = customerName.trim();
     const phone = customerPhone.trim();
     const clean = sanitizeGarmentSelections(selections);
-    const total = Number(totalPrice);
+    const fee = fulfillment === 'walk_in' ? 0 : Math.max(0, Number(deliveryFee) || 0);
+    const total = totalWithDelivery(Number(totalPrice), fee);
     const billingQty = Number(billingQuantity) || 0;
 
     if (!accessCode) return showToast('Store access code is missing', 'error');
@@ -418,6 +429,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
         total,
         notes: notes.trim(),
         shelfLocation: shelfLocation.trim(),
+        fulfillment,
+        runAddress: runAddress.trim(),
+        runLandmark: runLandmark.trim(),
+        deliveryFee: fee,
         garments: pricedGarments,
         ...attribution(currentUser),
       });
@@ -689,6 +704,57 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
               </div>
               {/* Kept on this phone. Nothing uploads them. */}
               <BundlePhotos clientRef={draftRef} accessCode={String((store as any).accessCode || '')} />
+
+              {/* Three words, one row. Most bundles are walk-ins, so this stays
+                  out of the way until it is the one that is not. */}
+              <div className="grid grid-cols-3 gap-1 rounded-xl border border-border bg-surface-2 p-1">
+                {(Object.keys(FULFILLMENT_LABELS) as LaundryFulfillment[]).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setFulfillment(option)}
+                    className={`rounded-lg py-2 text-[11px] font-display font-black transition-colors ${
+                      fulfillment === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {FULFILLMENT_LABELS[option]}
+                  </button>
+                ))}
+              </div>
+
+              {fulfillment !== 'walk_in' && (
+                <div className="space-y-2 rounded-xl border border-border bg-surface-2 p-3">
+                  <input
+                    value={runAddress}
+                    onChange={event => setRunAddress(event.target.value)}
+                    placeholder="Address"
+                    className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm"
+                  />
+                  {/* Asked for plainly, because a great many addresses here are
+                      only findable by one. */}
+                  <input
+                    value={runLandmark}
+                    onChange={event => setRunLandmark(event.target.value)}
+                    placeholder="Landmark — e.g. opposite the filling station"
+                    className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-display font-bold text-muted-foreground shrink-0">
+                      {fulfillment === 'pickup' ? 'Collection fee' : 'Delivery fee'}
+                    </span>
+                    <input
+                      value={deliveryFee}
+                      onChange={event => setDeliveryFee(event.target.value.replace(/[^0-9.]/g, ''))}
+                      inputMode="decimal"
+                      placeholder="0"
+                      className="flex-1 h-10 px-3 rounded-lg bg-card border border-border text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    Added to what this customer owes, so it reaches the takings.
+                  </p>
+                </div>
+              )}
             </section>
 
             <section className="space-y-2 text-left">

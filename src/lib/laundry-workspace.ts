@@ -1,4 +1,4 @@
-export type LaundryWorkspaceView = 'record' | 'records';
+export type LaundryWorkspaceView = 'record' | 'records' | 'runs';
 
 export const LAUNDRY_WORKSPACE_VIEW_STORAGE = 'storeflow-laundry-workspace-view';
 export const LAUNDRY_INTAKE_OPEN_STORAGE = 'storeflow-open-laundry-intake';

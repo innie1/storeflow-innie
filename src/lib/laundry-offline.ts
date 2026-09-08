@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
 import { generateLaundryReceiptNumber, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
 
 export type LaundrySyncStatus = 'pending' | 'synced';
@@ -44,6 +45,18 @@ export interface LocalLaundryRecord {
    * "3rd shelf", "under the counter".
    */
   shelfLocation?: string;
+  /** How the bundle reaches the shop and gets back: walk-in, we collect, we deliver. */
+  fulfillment?: LaundryFulfillment;
+  /** Where to go. Free text, with a landmark, because that is how it is given. */
+  runAddress?: string;
+  runLandmark?: string;
+  /**
+   * The journey, kept apart from the wash stage: a bundle can be ready and out
+   * on a bike at the same time.
+   */
+  runStatus?: LaundryRunStatus;
+  /** Charged for the run, and part of what the customer owes. */
+  deliveryFee?: number;
   promisedFor?: string;
   washMethodId?: string;
   washMethodName?: string;
@@ -90,6 +103,18 @@ export interface NewLocalLaundryRecord {
    * "3rd shelf", "under the counter".
    */
   shelfLocation?: string;
+  /** How the bundle reaches the shop and gets back: walk-in, we collect, we deliver. */
+  fulfillment?: LaundryFulfillment;
+  /** Where to go. Free text, with a landmark, because that is how it is given. */
+  runAddress?: string;
+  runLandmark?: string;
+  /**
+   * The journey, kept apart from the wash stage: a bundle can be ready and out
+   * on a bike at the same time.
+   */
+  runStatus?: LaundryRunStatus;
+  /** Charged for the run, and part of what the customer owes. */
+  deliveryFee?: number;
   promisedFor?: string;
   washMethodId?: string;
   washMethodName?: string;
@@ -183,6 +208,13 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     customerPhone,
     customerAddress: (input.customerAddress || '').trim() || undefined,
     shelfLocation: (input.shelfLocation || '').trim() || undefined,
+    fulfillment: input.fulfillment,
+    runAddress: (input.runAddress || '').trim() || undefined,
+    runLandmark: (input.runLandmark || '').trim() || undefined,
+    // A collection is outstanding the moment it is booked; a delivery only
+    // becomes a run once the washing is done, so it starts with no status.
+    runStatus: input.fulfillment === 'pickup' ? 'awaiting_pickup' : undefined,
+    deliveryFee: Math.max(0, Number(input.deliveryFee) || 0) || undefined,
     promisedFor: input.promisedFor && Number.isFinite(new Date(input.promisedFor).getTime()) ? new Date(input.promisedFor).toISOString() : undefined,
     washMethodId: input.washMethodId || undefined,
     washMethodName: input.washMethodName || undefined,
@@ -238,6 +270,25 @@ export function setLocalLaundryStage(accessCode: string, clientRef: string, stag
   });
 }
 
+/**
+ * Move a bundle along its run.
+ *
+ * Separate from setLocalLaundryStage because the two are separate journeys:
+ * this must not touch workflowStage, or a bundle going out for delivery would
+ * stop counting as ready and the counter's totals would drift.
+ */
+export function setLocalLaundryRunStatus(
+  accessCode: string,
+  clientRef: string,
+  runStatus: LaundryRunStatus,
+): LocalLaundryRecord | null {
+  return updateLocalRecord(accessCode, clientRef, {
+    runStatus,
+    syncStatus: 'pending',
+    lastSyncError: undefined,
+  });
+}
+
 export function isWalkInLaundryOrder(order: any): boolean {
   const meta = order?.service_metadata && typeof order.service_metadata === 'object'
     ? order.service_metadata
@@ -270,6 +321,11 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     // Carried into the order shape too, or the workspace - which rebuilds
     // every row from an order - loses who took the bundle in.
     shelf_location: record.shelfLocation,
+    fulfillment: record.fulfillment,
+    run_address: record.runAddress,
+    run_landmark: record.runLandmark,
+    run_status: record.runStatus,
+    delivery_fee: record.deliveryFee,
     recorded_by_name: record.recordedByName,
     recorded_by_role: record.recordedByRole,
     receipt_number: record.tagCode,
