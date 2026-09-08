@@ -78,6 +78,7 @@ import ScrollLock from '@/components/ScrollLock';
 import { downscaleImageToDataUrl } from '@/lib/downscale-image';
 import { speakAsFlow, type FlowVoiceGender } from '@/lib/flow-voice';
 import { hasBusinessModule } from '@/lib/business-runtime';
+import { clearPin, enrollFingerprint, fingerprintEnrolled, fingerprintSupported, forgetFingerprint, hasPin, PIN_LENGTH, setPin as savePin } from '@/lib/app-lock';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
 
@@ -666,6 +667,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   }, [keepsStock, view]);
   const [searchQuery, setSearchQuery] = useState('');
   const [timer, setTimer] = useState<LockTimer>(getLockTimer());
+  const [pinSet, setPinSet] = useState(() => hasPin());
+  const [fingerprintOn, setFingerprintOn] = useState(() => fingerprintEnrolled());
+  /** null when closed; 'set' while choosing; 'confirm' while repeating it. */
+  const [pinStage, setPinStage] = useState<'set' | 'confirm' | null>(null);
+  const [pinDraft, setPinDraft] = useState('');
+  const [pinFirst, setPinFirst] = useState('');
   const [theme, setTheme] = useState<ThemeId>(getTheme());
   const [showTrash, setShowTrash] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -3222,7 +3229,71 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     </SubPage>
   );
 
+  /*
+   * Choosing a PIN, twice.
+   *
+   * Asked for a second time before it is saved, because a PIN mistyped once
+   * and saved is a shop locked out of its own records with no way back except
+   * clearing the app - and the records are the app.
+   */
+  const pinSheet = pinStage && (
+    <div className="fixed inset-0 z-[90] bg-black/70 flex items-end sm:items-center justify-center p-4" onClick={() => { setPinStage(null); setPinDraft(''); setPinFirst(''); }}>
+      <div className="w-full sm:max-w-xs rounded-2xl bg-card border border-border p-5 text-center" onClick={event => event.stopPropagation()}>
+        <p className="font-display font-black text-base">
+          {pinStage === 'set' ? 'Choose a 4-digit PIN' : 'Enter it again'}
+        </p>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          {pinStage === 'set'
+            ? 'You will use this to unlock the app on this phone.'
+            : 'Just to be sure it is the one you meant.'}
+        </p>
+
+        <input
+          value={pinDraft}
+          onChange={async event => {
+            const digits = event.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH);
+            setPinDraft(digits);
+            if (digits.length < PIN_LENGTH) return;
+
+            if (pinStage === 'set') {
+              setPinFirst(digits);
+              setPinDraft('');
+              setPinStage('confirm');
+              return;
+            }
+            if (digits !== pinFirst) {
+              setPinDraft('');
+              setPinFirst('');
+              setPinStage('set');
+              showToast('Those did not match. Start again.', 'error');
+              return;
+            }
+            const ok = await savePin(digits);
+            setPinSet(ok);
+            setPinStage(null);
+            setPinDraft('');
+            setPinFirst('');
+            showToast(ok ? 'PIN set' : 'Could not set a PIN on this device', ok ? 'success' : 'error');
+          }}
+          inputMode="numeric"
+          autoFocus
+          type="password"
+          className="mt-4 w-full h-14 rounded-xl bg-surface-2 border border-border text-center text-2xl font-display font-black tracking-[0.6em] outline-none focus:border-primary"
+        />
+
+        <button
+          onClick={() => { setPinStage(null); setPinDraft(''); setPinFirst(''); }}
+          className="mt-3 w-full h-10 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold text-muted-foreground"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
   if (view === 'security') return (
+    <>
+    {pinSheet}
     <SubPage title="Security" onBack={() => setView('home')}>
       {/* 1. Multi-device Cloud Sync Section */}
       <div className="px-1">
@@ -3354,8 +3425,53 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         <SectionLabel>App Locking Settings</SectionLabel>
       </div>
       <div className={`${card} px-4 divide-y divide-border`}>
-        <ToggleRow label="Biometric Lock" description="Use fingerprint / Face ID where supported." checked={mgr.biometricLock} onChange={v => updateMgr({ biometricLock: v })} />
-        <ToggleRow label="PIN Lock" checked={mgr.pinLock} onChange={v => updateMgr({ pinLock: v })} />
+        {/*
+          These were two switches that did nothing at all, which is the worst
+          version of a security control - it says the shop is locked and the
+          shop is not. They are real now, and the PIN comes first because a
+          fingerprint unlocks a PIN, it does not replace one: a reader that
+          will not take, on a cold morning or with wet hands, has to leave a
+          way in that is not "reinstall and lose the records".
+        */}
+        <div className="py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-display font-semibold">PIN Lock</p>
+            <p className="text-[11px] text-muted-foreground">
+              {pinSet ? 'A 4-digit PIN is set for this device.' : 'Four digits, asked for when the app locks.'}
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => { setPinDraft(''); setPinStage('set'); }}
+              className="h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black"
+            >
+              {pinSet ? 'Change' : 'Set PIN'}
+            </button>
+            {pinSet && (
+              <button
+                onClick={() => { clearPin(); setPinSet(false); setFingerprintOn(false); showToast('PIN removed', 'info'); }}
+                className="h-9 px-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold text-muted-foreground"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Only once there is a PIN behind it, and only where the phone can. */}
+        {pinSet && fingerprintSupported() && (
+          <ToggleRow
+            label="Unlock with fingerprint"
+            description="Use this phone's own fingerprint or face unlock. The PIN still works."
+            checked={fingerprintOn}
+            onChange={async v => {
+              if (!v) { forgetFingerprint(); setFingerprintOn(false); showToast('Fingerprint unlock off', 'info'); return; }
+              const ok = await enrollFingerprint(store.storeName || 'StoreFlow');
+              setFingerprintOn(ok);
+              showToast(ok ? 'Fingerprint unlock is on' : 'This phone would not register a fingerprint', ok ? 'success' : 'error');
+            }}
+          />
+        )}
       </div>
 
       {/* 3. Access Code & Password Section */}
@@ -3522,6 +3638,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         />
       )}
     </SubPage>
+    </>
   );
 
   if (view === 'data') return (

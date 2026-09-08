@@ -21,6 +21,8 @@ import StreakDetailsPanel from '@/components/streaks/StreakDetailsPanel';
 import StreakRewardReveal from '@/components/streaks/StreakRewardReveal';
 import { checkDebtExpenseReminders, checkWeeklyRestockDraft } from '@/lib/manager-intel';
 import StoreAccess from '@/components/StoreAccess';
+import AppLockScreen from '@/components/AppLockScreen';
+import { appLockActive } from '@/lib/app-lock';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import NotificationDrawer from '@/components/NotificationDrawer';
 import Dashboard from '@/components/Dashboard';
@@ -366,6 +368,26 @@ const isTabAllowed = (tabId: TabId, user: any) => canOpenTab(tabId, user);
 
 export default function Index() {
   const [store, setStore] = useState<StoreData | null>(null);
+  /*
+   * Locked on arrival whenever a PIN exists, and again whenever the app has
+   * been away long enough. Away rather than closed: a PWA is backgrounded far
+   * more often than it is shut, and a lock that only applies on a cold start
+   * is a lock that almost never applies.
+   */
+  const [locked, setLocked] = useState(() => appLockActive());
+  const hiddenSince = useRef<number | null>(null);
+
+  useEffect(() => {
+    const RELOCK_AFTER_MS = 2 * 60 * 1000;
+    const onVisibility = () => {
+      if (document.hidden) { hiddenSince.current = Date.now(); return; }
+      const away = hiddenSince.current ? Date.now() - hiddenSince.current : 0;
+      hiddenSince.current = null;
+      if (appLockActive() && away > RELOCK_AFTER_MS) setLocked(true);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   /*
    * Reduce Motion and Compact Mode, applied to the whole app.
@@ -1571,6 +1593,18 @@ export default function Index() {
     showToast(`✓ Saved ${name}`);
     setNewProductPrompt(null);
   };
+
+  /*
+   * The PIN, before anything else on the screen.
+   *
+   * Only when one has been set - a shop that has not asked to be locked is not
+   * locked - and only over a store that is already open, because there is
+   * nothing to guard on the sign-in screen and being asked for a PIN before
+   * choosing a shop would make no sense.
+   */
+  if (store && locked) {
+    return <AppLockScreen storeName={store.storeName || ''} onUnlock={() => setLocked(false)} />;
+  }
 
   if (!store) {
     return (
