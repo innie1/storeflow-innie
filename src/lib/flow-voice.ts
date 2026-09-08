@@ -103,6 +103,35 @@ function whenVoicesReady(then: () => void): void {
   }, 1200);
 }
 
+/**
+ * Turns a chat message into something worth hearing.
+ *
+ * Flow's messages are written for the eye: emoji as punctuation, bullets,
+ * bold, and ₦ in front of every figure. Read out literally, a status line
+ * became "white heavy check mark nothing is past its promised day, credit card
+ * one thousand five hundred" — the emoji announced by name and the currency
+ * dropped, because no engine says ₦. That is most of what made Flow sound like
+ * a machine reading a screen instead of a person telling you something.
+ */
+export function toSpeakable(text: string): string {
+  return String(text || '')
+    // ₦1,500 -> 1,500 naira. Said after the number, the way it is spoken.
+    .replace(/₦\s*([\d,]+(?:\.\d+)?)/g, '$1 naira')
+    // Emoji and pictographs are punctuation for the eye; they have no sound.
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{27BF}\u{FE0F}\u{2B00}-\u{2BFF}]/gu, ' ')
+    // Markdown, including the bullets and rules that would be read as symbols.
+    .replace(/[*#_`>[\]]/g, '')
+    .replace(/^\s*[-•]\s*/gm, '')
+    // A dash between clauses is a pause, not a word.
+    .replace(/\s+[—–-]\s+/g, ', ')
+    // Each line is its own sentence, so the voice stops rather than running on.
+    .replace(/\n+/g, '. ')
+    .replace(/\.\s*\.+/g, '.')
+    .replace(/\s+([.,!?])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export interface SpeakOptions {
   gender?: FlowVoiceGender;
   /** Slightly under 1 reads as unhurried; much under reads as sluggish. */
@@ -114,7 +143,7 @@ export interface SpeakOptions {
 /** Reads text aloud in Flow's voice. Cancels anything already speaking. */
 export function speakAsFlow(text: string, options: SpeakOptions = {}): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  const clean = text.replace(/[*#_`>[\]]/g, '').replace(/\s+/g, ' ').trim();
+  const clean = toSpeakable(text);
   if (!clean) return;
 
   whenVoicesReady(() => {

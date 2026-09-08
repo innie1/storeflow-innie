@@ -25,6 +25,8 @@ export interface ServiceSnapshot {
   today: number;
   /** Money still owed across the book. */
   owed: number;
+  /** How many people that is spread across — not how many customers exist. */
+  owedBy: number;
   /** Services the shop offers. */
   services: string[];
   customers: number;
@@ -58,9 +60,8 @@ export function serviceSnapshot(store: StoreData): ServiceSnapshot {
     overdue: overdue.length,
     ready: open.filter(record => record.workflowStage === 'ready').length,
     today: records.filter(record => new Date(record.createdAt).getTime() >= midnight.getTime()).length,
-    owed: (store.pendingPayments || [])
-      .filter(payment => payment.status === 'pending')
-      .reduce((sum, payment) => sum + Math.max(0, Number(payment.balance) || 0), 0),
+    owed: openDebts(store).reduce((sum, payment) => sum + Math.max(0, Number(payment.balance) || 0), 0),
+    owedBy: debtorNames(store).length,
     services: (store.products || [])
       .filter(product => product.isService && !product.discontinued)
       .map(product => product.name),
@@ -69,6 +70,37 @@ export function serviceSnapshot(store: StoreData): ServiceSnapshot {
 }
 
 const money = (value: number) => `₦${Math.round(value || 0).toLocaleString()}`;
+
+/** Unsettled balances, wherever they came from. */
+function openDebts(store: StoreData) {
+  return (store.pendingPayments || []).filter(payment => payment.status === 'pending' && Number(payment.balance) > 0);
+}
+
+const normaliseName = (value: unknown) => String(value || '').trim().toLowerCase();
+
+function debtorNames(store: StoreData): string[] {
+  return Array.from(new Set(openDebts(store).map(payment => normaliseName(payment.customerName)).filter(Boolean)));
+}
+
+/**
+ * What one customer owes.
+ *
+ * Reads the pending payments rather than `customer.outstandingDebt`, which the
+ * laundry flow never writes: recordLaundryPayment opens a pending payment and
+ * leaves the customer record alone.
+ */
+export function owedByCustomer(store: StoreData, customer: { name?: string; phone?: string }): number {
+  const name = normaliseName(customer.name);
+  const phone = String(customer.phone || '').replace(/\D/g, '');
+  return openDebts(store)
+    .filter(payment => {
+      const paymentPhone = String(payment.customerPhone || '').replace(/\D/g, '');
+      if (phone && paymentPhone) return phone === paymentPhone;
+      return normaliseName(payment.customerName) === name;
+    })
+    .reduce((sum, payment) => sum + Math.max(0, Number(payment.balance) || 0), 0)
+    + Number((customer as any).outstandingDebt || 0);
+}
 
 /** How the shop is doing, in the terms a service shop actually uses. */
 export function serviceOverview(store: StoreData): string {
@@ -87,7 +119,7 @@ export function serviceOverview(store: StoreData): string {
 
   if (snapshot.ready > 0) lines.push(`📦 **${snapshot.ready}** finished and waiting to be collected.`);
   if (snapshot.today > 0) lines.push(`📥 **${snapshot.today}** taken in today.`);
-  if (snapshot.owed > 0) lines.push(`💳 **${money(snapshot.owed)}** still owed across ${snapshot.customers} customer${snapshot.customers === 1 ? '' : 's'}.`);
+  if (snapshot.owed > 0) lines.push(`💳 **${money(snapshot.owed)}** still owed across ${snapshot.owedBy} customer${snapshot.owedBy === 1 ? '' : 's'}.`);
 
   if (!snapshot.services.length) {
     lines.push('', 'You have no services set up yet, so I cannot price anything. Add one in your price list.');
@@ -158,7 +190,7 @@ const daysSince = (iso?: string) => {
 /** Everything the shop knows about one customer, said plainly. */
 export function customerBrief(store: StoreData, customer: Customer): string {
   const away = daysSince(customer.lastPurchaseDate);
-  const owed = Number(customer.outstandingDebt || 0);
+  const owed = owedByCustomer(store, customer);
   const spent = Number(customer.totalPurchases || 0);
   const visits = Number(customer.visitsCount || 0);
 
@@ -192,7 +224,7 @@ export function customerRoundup(store: StoreData): string {
   const customers = (store.customers || []).filter(Boolean);
   if (!customers.length) return 'No customers saved yet. Take a phone number at the counter and I can keep track of them.';
 
-  const owing = customers.filter(customer => Number(customer.outstandingDebt || 0) > 0);
+  const owing = customers.filter(customer => owedByCustomer(store, customer) > 0);
   const lapsed = customers.filter(customer => {
     const away = daysSince(customer.lastPurchaseDate);
     return away !== null && away >= 30;
@@ -200,9 +232,9 @@ export function customerRoundup(store: StoreData): string {
 
   const lines = [`You have **${customers.length} customer${customers.length === 1 ? '' : 's'}**.`];
   if (owing.length) {
-    const total = owing.reduce((sum, customer) => sum + Number(customer.outstandingDebt || 0), 0);
+    const total = owing.reduce((sum, customer) => sum + owedByCustomer(store, customer), 0);
     lines.push('', `💳 **${owing.length}** owe you ${money(total)}:`);
-    lines.push(...owing.slice(0, 5).map(customer => `• ${customer.name} — ${money(Number(customer.outstandingDebt || 0))}`));
+    lines.push(...owing.slice(0, 5).map(customer => `• ${customer.name} — ${money(owedByCustomer(store, customer))}`));
   }
   if (lapsed.length) {
     lines.push('', `🕰️ **${lapsed.length}** have not been in for a month or more:`);

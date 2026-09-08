@@ -75,10 +75,16 @@ export function reportSupplyLow(
   low: boolean,
   reportedBy?: string,
 ): StoreData {
-  const existing = getSupplies(store);
-  // A seeded supply has never been saved, so the first report is what creates it.
-  const known = existing.some(item => item.id === supply.id);
-  const next = known ? existing : [...existing, ...supplyList(store).filter(item => item.id === supply.id)];
+  /*
+   * A seeded supply has never been saved, so the first report is what writes
+   * the list down — and it has to write the whole starting list, not only the
+   * item being flagged. Saving just that one left a shop that reported running
+   * out of detergent looking at a screen with detergent on it and nothing
+   * else.
+   */
+  const base = getSupplies(store).length ? getSupplies(store) : supplyList(store);
+  const known = base.some(item => item.id === supply.id);
+  const next = known ? base : [...base, supply];
 
   return {
     ...store,

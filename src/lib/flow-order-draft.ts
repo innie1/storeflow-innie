@@ -617,3 +617,51 @@ export function applyFlowConversationOrderLocalEffects(store: StoreData, order: 
 
   return { ...store, customers, pendingPayments };
 }
+
+/**
+ * Words that are a request, not a person.
+ *
+ * Everything Flow answers to in one or two words, so that "help", "sales" or
+ * "today" is never mistaken for a customer walking in.
+ */
+const NOT_A_NAME = new Set([
+  'hi', 'hey', 'hello', 'yo', 'ok', 'okay', 'yes', 'no', 'thanks', 'thank you',
+  'help', 'sales', 'today', 'yesterday', 'stock', 'money', 'profit', 'debt',
+  'customers', 'orders', 'expenses', 'report', 'reports', 'undo', 'cancel',
+  'stop', 'start', 'new order', 'my customers', 'best sellers', 'settings',
+]);
+
+/**
+ * Does this look like somebody simply saying who is at the counter?
+ *
+ * Flow opens by asking for "the customer's name, their phone number, and what
+ * they want", and then had no way to accept the first of those on its own:
+ * typing "John" fell through to "Not sure what you meant". Being asked a
+ * question and then told the answer is wrong is the worst thing an assistant
+ * can do, so a bare name now starts the order and Flow asks for the rest.
+ */
+export function looksLikeBareCustomerName(store: StoreData, text: string): boolean {
+  if (!supportsFlowMessageOrders(store)) return false;
+  const clean = String(text || '').trim();
+  if (!clean || /\d/.test(clean)) return false;
+  if (NOT_A_NAME.has(clean.toLowerCase())) return false;
+  // A name, not a sentence: up to three words of letters.
+  if (!/^[a-z][a-z'’-]*(?:\s+[a-z][a-z'’-]*){0,2}$/i.test(clean)) return false;
+  // If it names something the shop sells, it is an item, not a person.
+  const base = parseFlowMessageOrder(store, clean);
+  if (base.items.length > 0) return false;
+  return true;
+}
+
+/** Starts an order from nothing but a name. */
+export function draftFromCustomerName(store: StoreData, name: string): FlowConversationOrderDraft {
+  const draft = parseFlowConversationOrder(store, name);
+  const resolved = resolveFlowOrderCustomer(store, name);
+  return {
+    ...draft,
+    customerName: resolved.customer?.name || name.trim(),
+    customerPhone: resolved.customer?.phone || draft.customerPhone,
+    customerId: resolved.customer?.id,
+    customerMatched: !!resolved.customer,
+  };
+}

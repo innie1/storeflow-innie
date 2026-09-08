@@ -8,6 +8,8 @@ import {
 } from '@/lib/store-data';
 import { exportROICSV, exportROIPDF } from '@/lib/export-data';
 import { cashBalanceBreakdown } from '@/lib/manager-intel';
+import { isServiceShop } from '@/lib/flow-service-brain';
+import { consumablesSpend } from '@/lib/consumables';
 import { showToast } from '@/components/Toast';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import { 
@@ -45,6 +47,9 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
   const [repayAmount, setRepayAmount] = useState<{[key: string]: string}>({});
 
   // 1. Calculations
+  const serviceShop = isServiceShop(store);
+  const supplySpend = useMemo(() => consumablesSpend(store, 30), [store]);
+
   const inventoryValue = useMemo(() => {
     return store.products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
   }, [store.products]);
@@ -138,7 +143,7 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
     if (capitalAddedThisMonth > 0) {
       list.push(`ROI base grew this month due to ₦${capitalAddedThisMonth.toLocaleString()} in capital additions.`);
     }
-    if (inventoryValue > totalRevenue && totalRevenue > 0) {
+    if (!serviceShop && inventoryValue > totalRevenue && totalRevenue > 0) {
       list.push("Inventory value is currently higher than total revenue.");
     } else if (totalRevenue > 0) {
       list.push("Sales are growing while investment remains stable.");
@@ -359,8 +364,12 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
           {/* Sub KPIs Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-card border border-border/40 rounded-2xl p-4 space-y-1">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold">Inventory Value</span>
-              <p className="font-display font-bold text-xl text-foreground">₦{inventoryValue.toLocaleString()}</p>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold">
+                {serviceShop ? 'Supplies · 30 days' : 'Inventory Value'}
+              </span>
+              <p className="font-display font-bold text-xl text-foreground">
+                ₦{(serviceShop ? supplySpend : inventoryValue).toLocaleString()}
+              </p>
             </div>
             <div className="bg-card border border-border/40 rounded-2xl p-4 space-y-1">
               <div className="flex items-center gap-1">

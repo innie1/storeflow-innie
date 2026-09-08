@@ -2,6 +2,9 @@ import { useState, useMemo } from 'react';
 import { StoreData, ExpenseCategory, Expense, Restock, RecurringBill } from '@/types/store';
 import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
+import SupplySheet from '@/components/SupplySheet';
+import { isServiceShop } from '@/lib/flow-service-brain';
+import { lowSupplies } from '@/lib/consumables';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import { Banknote, Droplets, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
@@ -35,6 +38,9 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
   const [confirmDel, setConfirmDel] = useState<Expense | null>(null);
   const [showRestock, setShowRestock] = useState(false);
+  const [showSupplies, setShowSupplies] = useState(false);
+  const serviceShop = isServiceShop(store);
+  const lowSupplyCount = serviceShop ? lowSupplies(store).length : 0;
   const [restockQtys, setRestockQtys] = useState<Record<string, string>>({});
   const [restockFunding, setRestockFunding] = useState<RestockFunding>('balance');
   const [restockSearch, setRestockSearch] = useState('');
@@ -190,12 +196,26 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
         >
           + New Expense
         </button>
-        <button
-          onClick={() => setShowRestock(true)}
-          className="p-3 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90"
-        >
-          <Package className="w-3.5 h-3.5" /> Restock Items
-        </button>
+        {serviceShop ? (
+          <button
+            onClick={() => setShowSupplies(true)}
+            className="p-3 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90 relative"
+          >
+            <Droplets className="w-3.5 h-3.5 inline-block -mt-0.5 mr-1" /> Supplies
+            {lowSupplyCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-amber-500 text-background text-[10px] font-black flex items-center justify-center">
+                {lowSupplyCount}
+              </span>
+            )}
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowRestock(true)}
+            className="p-3 rounded-lg bg-success text-success-foreground font-display font-semibold text-sm hover:opacity-90"
+          >
+            <Package className="w-3.5 h-3.5" /> Restock Items
+          </button>
+        )}
       </div>
 
       {/* Recurring Bills */}
@@ -288,7 +308,7 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                     className={inputClass}
                   />
                   <select value={billCategory} onChange={e => setBillCategory(e.target.value as ExpenseCategory)} className={inputClass}>
-                    {EXPENSE_CATEGORIES.filter(c => c !== 'Restock').map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    {EXPENSE_CATEGORIES.filter(c => c !== 'Restock' && (serviceShop || c !== 'Consumables')).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -480,6 +500,16 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
           confirmLabel="Delete Expense"
           onConfirm={doDelete}
           onCancel={() => setConfirmDel(null)}
+        />
+      )}
+
+      {showSupplies && (
+        <SupplySheet
+          store={store}
+          onUpdate={onUpdate}
+          onClose={() => setShowSupplies(false)}
+          canSeeMoney
+          showToast={showToast}
         />
       )}
 

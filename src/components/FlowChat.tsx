@@ -7,7 +7,7 @@ import { showToast } from '@/components/Toast';
 import { flowQuickActions } from '@/lib/flow-quick-actions';
 import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';
 import { buildFlowOrderWhatsAppMessage, createFlowMessageOrder, formatFlowOrderReceipt, isFlowMessageOrderRequest, parseFlowMessageOrder, supportsFlowMessageOrders, whatsappUrl, type FlowMessageOrderDraft } from '@/lib/flow-message-orders';
-import { applyFlowConversationOrderLocalEffects, buildFlowConversationWhatsAppMessage, createFlowConversationOrder, formatFlowConversationDraft, formatFlowConversationReceipt, isFlowConversationOrderRequest, mergeFlowConversationOrderDraft, nextFlowDraftQuestion, parseFlowConversationOrder, type FlowConversationOrderDraft } from '@/lib/flow-order-draft';
+import { applyFlowConversationOrderLocalEffects, buildFlowConversationWhatsAppMessage, createFlowConversationOrder, formatFlowConversationDraft, formatFlowConversationReceipt, draftFromCustomerName, isFlowConversationOrderRequest, looksLikeBareCustomerName, mergeFlowConversationOrderDraft, nextFlowDraftQuestion, parseFlowConversationOrder, type FlowConversationOrderDraft } from '@/lib/flow-order-draft';
 import { understandFlexible } from '@/lib/flow-understanding';
 import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/flow-brain-memory';
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
@@ -21,6 +21,7 @@ import FlowComposer, { makeFlowAttachment, type FlowAttachment } from '@/compone
 import FlowCameraCapture from '@/components/FlowCameraCapture';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import { speakAsFlow } from '@/lib/flow-voice';
+import { isServiceShop, workNoun } from '@/lib/flow-service-brain';
 
 interface FlowChatProps { store: StoreData; orders?: any[]; onClose: () => void; onNavigate?: (tab: TabId) => void; onUpdate: (s: StoreData) => void; }
 interface ChatAction { label: string; onClick: () => void; }
@@ -119,7 +120,9 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   // Spoke with no voice chosen and at 1.04, which reads as hurried.
   const speak = (text: string) => {
     if (!voiceOn) return;
-    speakAsFlow(text.replace(/\*\*/g, '').replace(/\n/g, '. '));
+    // Cleaned its own way here, which stripped bold and left every emoji for
+    // the engine to announce by name. speakAsFlow does the whole job now.
+    speakAsFlow(text);
   };
   const flow = (text: string, actions?: ChatAction[]) => { setMessages(prev => [...prev, { id: id('flow'), from: 'flow', text, actions }]); speak(text); };
   const you = (text: string) => setMessages(prev => [...prev, { id: id('you'), from: 'you', text }]);
@@ -367,6 +370,17 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       return true;
     }
 
+    if (looksLikeBareCustomerName(store, text)) {
+      const draft = draftFromCustomerName(store, text);
+      presentFlowOrderDraft(
+        draft,
+        draft.customerMatched
+          ? `${draft.customerName} is already in your customer list.`
+          : undefined,
+      );
+      return true;
+    }
+
     if (!isFlowConversationOrderRequest(store, text)) return false;
     const draft = parseFlowConversationOrder(store, text);
     presentFlowOrderDraft(draft, draft.customerMatched ? 'I found this customer in your saved customer list.' : undefined);
@@ -532,6 +546,24 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     const needsStock = a.out[0] || a.low[0];
     const actions: ChatAction[] = [];
 
+    /*
+     * A laundry has no stock to sell or restock, so this offered "Sell 1 Full
+     * service", "Restock" and "Best sellers" to a shop that does none of those
+     * things. The suggestions are the main way anyone learns what Flow can do,
+     * and every one of them was pointing the wrong way.
+     */
+    if (isServiceShop(store)) {
+      const noun = workNoun(store);
+      return {
+        text: `Sorry, I did not follow that. You can tell me a customer's name to start a ${noun}, or ask how the shop is doing.`,
+        actions: [
+          { label: 'How is my shop?', onClick: () => ask('how is my shop?') },
+          { label: 'My customers', onClick: () => ask('tell me about my customers') },
+          { label: `What is still here?`, onClick: () => ask('what is still in the shop?') },
+        ],
+      };
+    }
+
     if (seller) actions.push({ label: `Sell 1 ${seller.name}`, onClick: () => ask(`sell 1 ${seller.name}`) });
     if (needsStock) actions.push({ label: `Restock ${needsStock.name}`, onClick: () => ask(`restock ${needsStock.name}`) });
     if (a.out.length || a.low.length) actions.push({ label: "What's low?", onClick: () => ask("what's low?") });
@@ -548,7 +580,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       text: (store.products || []).length
         // One line. It used to be a paragraph plus a list of examples, on the
         // screen a merchant reaches by already being confused.
-        ? `Not sure what you meant. Try: ${examples.slice(0, 2).join(' or ')}.`
+        ? `Sorry, I did not follow that. Try: ${examples.slice(0, 2).join(' or ')}.`
         : 'Add a few products first, then I can sell and restock them for you.',
       // Three at most, like everywhere else in this chat.
       actions: actions.slice(0, 3),
