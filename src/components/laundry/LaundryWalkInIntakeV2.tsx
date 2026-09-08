@@ -29,6 +29,7 @@ import BundlePhotos from '@/components/laundry/BundlePhotos';
 import { reassignLaundryPhotos } from '@/lib/laundry-photos';
 import { FULFILLMENT_LABELS, totalWithDelivery, type LaundryFulfillment } from '@/lib/laundry-runs';
 import { LAUNDRY_MODIFIERS, describeModifiers, toggleModifier } from '@/lib/laundry-modifiers';
+import { orderedDueChips, recordDueChoice } from '@/lib/laundry-due-usage';
 import { filterGarments, findSimilarGarment } from '@/lib/garment-match';
 
 interface Props {
@@ -452,6 +453,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
 
       reassignLaundryPhotos(draftRef, localRecord.clientRef).catch(() => {});
       onRecorded?.(localRecord.clientRef);
+      if (activeHours) recordDueChoice(accessCode, activeHours);
 
       // Money first, so a failure here cannot leave a bundle recorded as paid
       // when it was not. recordLaundryPayment books only what was handed over
@@ -518,10 +520,27 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
 
   // The saved custom interval sits alongside the fixed ones, unless it is
   // already one of them.
-  const dueChips = customDue && !DUE_PRESETS.some(preset => preset.hours === customDue)
-    ? [...DUE_PRESETS, { label: describeHours(customDue), hours: customDue }]
-    : DUE_PRESETS;
-  const activeHours = activePreset(promisedFor, dueChips);
+  /*
+   * Ordered by what this shop actually promises, not by the order they were
+   * written. A laundry that says "tomorrow" to nearly everyone had to reach
+   * past twelve hours every time, and Custom sat behind a row that scrolled.
+   * Recomputed on each save so the order keeps up with the habit.
+   */
+  const activeHours = activePreset(promisedFor, [
+    ...DUE_PRESETS,
+    ...(customDue ? [{ label: describeHours(customDue), hours: customDue }] : []),
+  ]);
+  const dueChips = useMemo(
+    () => orderedDueChips(String((store as any).accessCode || ''), DUE_PRESETS, {
+      custom: customDue,
+      selected: activeHours,
+    }),
+    // `created` is set on every save, which is also when the tally changes, so
+    // this is what makes the order keep up. Without it the reading would run
+    // on every keystroke in the form, for a list that changes once a bundle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, customDue, activeHours, created],
+  );
 
   return (
     <>

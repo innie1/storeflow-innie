@@ -8,6 +8,7 @@ import {
 import { showToast } from '@/components/Toast';
 import { getCustomerActivitySignals } from '@/lib/business-insights';
 import { owedByCustomer } from '@/lib/flow-service-brain';
+import { customerStanding, explainStanding } from '@/lib/customer-rhythm';
 import ScrollLock from '@/components/ScrollLock';
 
 interface CustomersProps {
@@ -82,11 +83,12 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
 
   // Flow customer classification
   const isValuable = (c: Customer) => c.totalPurchases > 10000 || c.visitsCount >= 5;
-  const isInactive = (c: Customer) => {
-    if (!c.lastPurchaseDate) return true;
-    const daysSince = (Date.now() - new Date(c.lastPurchaseDate).getTime()) / (1000 * 60 * 60 * 24);
-    return daysSince > 14;
-  };
+  // Was 14 days here and 30 everywhere else, so one customer could read
+  // "gone quiet" on this screen and healthy on the next. And `if
+  // (!lastPurchaseDate) return true` branded every customer added at the
+  // counter as lapsed before they had ever bought anything.
+  const isInactive = (c: Customer) => customerStanding(c) === 'quiet';
+  const isNew = (c: Customer) => customerStanding(c) === 'new';
 
   const openFollowUp = (customer: Customer) => {
     const signal = signalByCustomer.get(customer.id);
@@ -183,7 +185,9 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
                     */}
                     <span className="block text-[11px] text-muted-foreground truncate mt-0.5">
                       {c.phone}
-                      {inactive
+                      {isNew(c)
+                        ? <> · <span className="text-muted-foreground">new</span></>
+                        : inactive
                         ? <> · <span className="text-destructive font-semibold">gone quiet</span></>
                         : signal
                           ? <> · <span className="text-primary font-semibold">needs a message</span></>
@@ -223,9 +227,10 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
                       {c.loyaltyPoints > 0 && <> · {c.loyaltyPoints} coins</>}
                     </p>
 
+                    <p className="text-[11px] text-muted-foreground">{explainStanding(c)}</p>
                     {c.purchaseHistory && c.purchaseHistory.length > 0 && (
                       <p className="text-[11px] text-muted-foreground">
-                        Last {c.lastPurchaseDate ? new Date(c.lastPurchaseDate).toLocaleDateString() : ''} — {c.purchaseHistory[0].items}
+                        Last bought — {c.purchaseHistory[0].items}
                       </p>
                     )}
 

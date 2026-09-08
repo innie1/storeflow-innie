@@ -1,4 +1,5 @@
 import type { Customer, StoreData } from '@/types/store';
+import { hasGoneQuiet, quietAfterDays } from '@/lib/customer-rhythm';
 
 const DAY = 86_400_000;
 
@@ -53,8 +54,12 @@ export type CustomerActivitySignal = {
 };
 
 export function getCustomerActivitySignals(store: StoreData): CustomerActivitySignal[] {
-  return arrayOrEmpty<Customer>(store?.customers).filter(customer => customer && typeof customer === 'object').map(customer => {
+  return arrayOrEmpty<Customer>(store?.customers).filter(customer => customer && typeof customer === 'object').map((customer): CustomerActivitySignal => {
     const inactiveDays = daysSince(customer.lastPurchaseDate);
+    // Against this customer's own habit rather than a flat 14 and 30, which
+    // nagged a monthly customer constantly and noticed a weekly one late.
+    const quiet = hasGoneQuiet(customer);
+    const slowing = inactiveDays !== null && !quiet && inactiveDays >= quietAfterDays(customer) * 0.6;
     const frequent = Number(customer.visitsCount || 0) >= 5 || Number(customer.totalPurchases || 0) >= 10_000;
     const customerName = String(customer.name || 'there');
     const storeName = String(store?.storeName || 'our store');
@@ -62,8 +67,8 @@ export function getCustomerActivitySignals(store: StoreData): CustomerActivitySi
       customer, kind: 'new', label: 'New / no purchase yet',
       message: `Hello ${customerName}, thank you for connecting with ${storeName}. We are ready whenever you need us.`,
     };
-    if (frequent && inactiveDays >= 14) return {
-      customer, kind: inactiveDays >= 30 ? 'inactive' : 'slowing', label: inactiveDays >= 30 ? 'Regular now inactive' : 'Regular slowing down',
+    if (frequent && (quiet || slowing)) return {
+      customer, kind: quiet ? 'inactive' : 'slowing', label: quiet ? 'Regular now inactive' : 'Regular slowing down',
       message: `Hello ${customerName}, we have missed serving you at ${storeName}. Is there anything you need us to prepare for you this week?`,
     };
     if (frequent) return {
@@ -71,7 +76,7 @@ export function getCustomerActivitySignals(store: StoreData): CustomerActivitySi
       message: `Hello ${customerName}, thank you for being a regular customer of ${storeName}. We appreciate you and are ready for your next order.`,
     };
     return {
-      customer, kind: inactiveDays >= 30 ? 'inactive' : 'new', label: inactiveDays >= 30 ? 'Inactive customer' : 'Growing customer',
+      customer, kind: quiet ? 'inactive' : 'new', label: quiet ? 'Inactive customer' : 'Growing customer',
       message: `Hello ${customerName}, ${storeName} is ready to serve you again. Let us know what you need.`,
     };
   }).sort((a, b) => {

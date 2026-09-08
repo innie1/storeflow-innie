@@ -1,4 +1,5 @@
 import type { Customer, StoreData } from '@/types/store';
+import { hasGoneQuiet, quietAfterDays, usualGapDays } from '@/lib/customer-rhythm';
 import { getBusinessTemplate, isServiceFirstBusiness } from '@/lib/business-runtime';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 
@@ -213,8 +214,11 @@ export function customerBrief(store: StoreData, customer: Customer): string {
   if (openOnes.length) {
     lines.push('', `In the shop now: ${openOnes.map(record => `${record.tagCode} (${record.workflowStage || 'received'})`).join(', ')}`);
   }
-  if (away !== null && away >= 30) {
-    lines.push('', 'They have gone quiet. Worth a message.');
+  if (hasGoneQuiet(customer)) {
+    const usual = usualGapDays(customer);
+    lines.push('', usual === null
+      ? 'They have gone quiet. Worth a message.'
+      : `They usually come every ${Math.round(usual)} days, so this is long for them. Worth a message.`);
   }
   return lines.join('\n');
 }
@@ -225,10 +229,8 @@ export function customerRoundup(store: StoreData): string {
   if (!customers.length) return 'No customers saved yet. Take a phone number at the counter and I can keep track of them.';
 
   const owing = customers.filter(customer => owedByCustomer(store, customer) > 0);
-  const lapsed = customers.filter(customer => {
-    const away = daysSince(customer.lastPurchaseDate);
-    return away !== null && away >= 30;
-  });
+  // Each customer against their own habit, not one number for everybody.
+  const lapsed = customers.filter(hasGoneQuiet);
 
   const lines = [`You have **${customers.length} customer${customers.length === 1 ? '' : 's'}**.`];
   if (owing.length) {
