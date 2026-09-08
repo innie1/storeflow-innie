@@ -39,6 +39,20 @@ export const DEFAULT_LAUNDRY_GARMENTS = [
   'Underwear',
 ] as const;
 
+/**
+ * What almost every laundry offers, so setup is a tap rather than typing.
+ *
+ * Four shops asked to type their trade's standard services from a blank box
+ * will write the same thing four ways, and on a phone it is slow. A shop with
+ * something of its own still types it.
+ */
+export const COMMON_LAUNDRY_SERVICES = [
+  'Wash & Iron',
+  'Wash Only',
+  'Ironing Only',
+  'Dry Cleaning',
+] as const;
+
 export interface LaundryGarmentSelection {
   garmentType: string;
   quantity: number;

@@ -1,5 +1,7 @@
 import { StoreData, TabId } from '@/types/store';
 import { canOpenTab, canSeeMoney } from '@/lib/permissions';
+import BreakEvenCard from '@/components/laundry/BreakEvenCard';
+import { isServiceShop } from '@/lib/flow-service-brain';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { getBusinessTemplate, isBusinessTabAllowed } from '@/lib/business-runtime';
@@ -88,6 +90,12 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser }: P
           <p className="font-display font-black text-2xl mt-2">{customers}</p>
         </div>
       </div>
+
+      {/* What the month still needs. Only for a shop that sells work by the
+          piece, where the figure means something. */}
+      {isServiceShop(store) && (
+        <BreakEvenCard store={store} canSeeMoney={canSeeMoney(currentUser)} />
+      )}
 
       <div className="rounded-2xl bg-card border border-border p-4">
         <div className="flex items-center gap-2 mb-3">

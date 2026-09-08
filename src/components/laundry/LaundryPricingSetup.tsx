@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { COMMON_LAUNDRY_SERVICES } from '@/lib/laundry-intake';
 import { getLaundryDepositRule, setLaundryDepositRule } from '@/lib/laundry-money';
 import type { Product, StoreData } from '@/types/store';
 import { addProduct, deleteProduct, saveStore, updateProduct } from '@/lib/store-data';
@@ -445,7 +446,30 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
             <div className="space-y-3 mt-4 text-left">
               <div>
                 <label className="text-[10px] uppercase font-black text-muted-foreground">Service name</label>
-                <input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder="e.g. Full Service" className="mt-1 w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2 text-sm outline-none focus:border-primary" />
+                {/*
+                  The four a laundry almost always offers, tappable.
+                  Setup asked a shop to type its trade's standard services from
+                  a blank box, which is slow on a phone and invites four shops
+                  to write the same thing four ways. The field stays, because a
+                  shop with its own service still needs it.
+                */}
+                {!editingServiceId && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {COMMON_LAUNDRY_SERVICES.map(preset => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setDraft(current => ({ ...current, name: preset }))}
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-display font-bold border transition-colors ${
+                          draft.name === preset ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 border-border text-muted-foreground'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder="Or type your own" className="mt-1.5 w-full px-3.5 py-3 rounded-xl border border-border bg-surface-2 text-sm outline-none focus:border-primary" />
               </div>
               <div>
                 <label className="text-[10px] uppercase font-black text-muted-foreground">How is this service charged?</label>
