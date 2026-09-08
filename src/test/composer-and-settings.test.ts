@@ -34,9 +34,33 @@ describe('tapping the composer does not draw a box round it', () => {
 
   it('keeps the outline everywhere else, for keyboard users', () => {
     // Removing it globally would leave someone tabbing through with no idea
-    // where they are.
+    // where they are. Asserted as "there is still a visible outline" rather
+    // than a literal width and colour: this used to pin `2px solid
+    // hsl(var(--ring))`, so making the highlight thinner and softer failed a
+    // test whose point was only that focus stays visible at all.
     expect(overhaul).toContain('body.storeflow-ui-overhaul button:focus-visible');
-    expect(overhaul).toContain('outline: 2px solid hsl(var(--ring))');
+    const rule = overhaul.slice(overhaul.indexOf('body.storeflow-ui-overhaul button:focus-visible'));
+    const declaration = rule.slice(0, rule.indexOf('}'));
+    expect(declaration).toMatch(/outline:\s*[\d.]+px solid hsl\(var\(--ring\)/);
+    expect(declaration).not.toContain('outline: none');
+  });
+
+  it('draws that outline thin and under full strength', () => {
+    // A focused field only needs to say where the caret is. At 2px of solid
+    // primary, offset 2px, it read as a bright rectangle laid over the page
+    // rather than part of the field.
+    const rule = overhaul.slice(overhaul.indexOf('body.storeflow-ui-overhaul button:focus-visible'));
+    const declaration = rule.slice(0, rule.indexOf('}'));
+    const width = Number(declaration.match(/outline:\s*([\d.]+)px/)?.[1]);
+    expect(width).toBeLessThanOrEqual(1);
+    expect(declaration).toMatch(/var\(--ring\)\s*\/\s*0?\.\d+/);
+  });
+
+  it('lights the shell rather than boxing the field inside it', () => {
+    // An input with its own border removed, sitting in a rounded container,
+    // was drawing a hard rectangle inside a rounded one at a different radius.
+    expect(overhaul).toContain(':has(> input:focus-visible) > input:focus-visible');
+    expect(overhaul).toContain(':has(> input:focus-visible),');
   });
 
   it('shows focus on the rounded edge instead of the brand colour', () => {

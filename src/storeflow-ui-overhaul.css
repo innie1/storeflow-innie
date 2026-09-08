@@ -99,8 +99,42 @@ body.storeflow-ui-overhaul a:focus-visible,
 body.storeflow-ui-overhaul input:focus-visible,
 body.storeflow-ui-overhaul select:focus-visible,
 body.storeflow-ui-overhaul textarea:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 2px;
+  /*
+   * Thin, on the edge, and well under full strength.
+   *
+   * This was 2px of solid primary sitting 2px outside the element. It was the
+   * brightest colour in the palette at full weight, for something that only
+   * needs to say "the caret is here", and the offset put it in the gap rather
+   * than on the edge, so it read as a separate rectangle laid over the page
+   * instead of part of the field.
+   */
+  outline: 1px solid hsl(var(--ring) / 0.55);
+  outline-offset: 1px;
+}
+
+/*
+ * A field inside a bordered shell lights the shell, not itself.
+ *
+ * The note above about the composer applies to every field built this way -
+ * the shelf row, the delivery address, the search boxes: an input with its own
+ * border removed, sitting inside a rounded container. Drawing the focus on the
+ * inner field put a hard rectangle inside a rounded one, at a different
+ * radius. Lighting the container gives one edge that follows the corners the
+ * eye already sees.
+ *
+ * Written per element type so the specificity matches the rule above and the
+ * later declaration wins. Where :has is unsupported the field keeps the thin
+ * ring, which is still an improvement on what it replaced.
+ */
+body.storeflow-ui-overhaul :where(div, label):has(> input:focus-visible) > input:focus-visible,
+body.storeflow-ui-overhaul :where(div, label):has(> textarea:focus-visible) > textarea:focus-visible,
+body.storeflow-ui-overhaul :where(div, label):has(> select:focus-visible) > select:focus-visible {
+  outline: none;
+}
+body.storeflow-ui-overhaul :where(div, label):has(> input:focus-visible),
+body.storeflow-ui-overhaul :where(div, label):has(> textarea:focus-visible),
+body.storeflow-ui-overhaul :where(div, label):has(> select:focus-visible) {
+  border-color: hsl(var(--ring) / 0.55);
 }
 
 /* The composer keeps its focus on its own rounded edge. */
@@ -109,6 +143,18 @@ body.storeflow-ui-overhaul .flow-composer textarea:focus-visible {
 }
 body.storeflow-ui-overhaul .flow-composer:focus-within {
   border-color: hsl(var(--border));
+}
+
+/*
+ * The border-swap already written across the app, at the same weight.
+ *
+ * A hundred and eighty places set focus:border-primary or a yellow variant,
+ * which lit the border at full strength. Softened here rather than edited in
+ * each file, so the whole app agrees on how loud a focused field is.
+ */
+body.storeflow-ui-overhaul .focus\:border-primary:focus,
+body.storeflow-ui-overhaul [class*="focus:border-yellow"]:focus {
+  border-color: hsl(var(--ring) / 0.55);
 }
 
 /* Customer Orders must remain a primary mobile navigation destination.
