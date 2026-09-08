@@ -11,7 +11,22 @@ const STOREFLOW_PRECACHE = self.__WB_MANIFEST;
 precacheAndRoute(STOREFLOW_PRECACHE);
 self.skipWaiting();
 self.addEventListener('activate', event => event.waitUntil(Promise.all([self.clients.claim(), caches.delete('html')])));
-registerRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ cacheName: 'html', networkTimeoutSeconds: 2 }));
+/*
+ * Five seconds, not two.
+ *
+ * An installed app cold-starts with the phone's radio still waking up, so two
+ * seconds routinely elapsed before the network answered and the shop was
+ * handed yesterday's shell - which points at yesterday's scripts, which are
+ * also cached, so the whole old app booted and looked perfectly fine.
+ *
+ * This costs nothing when there is genuinely no network: a fetch with nothing
+ * to reach fails immediately rather than waiting out the timeout, so the
+ * offline start that a shop relies on when the light goes is as fast as it
+ * ever was. The timeout only governs a connection that is present and slow,
+ * and there five seconds is the difference between the current app and last
+ * week's.
+ */
+registerRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ cacheName: 'html', networkTimeoutSeconds: 5 }));
 registerRoute(({ request }) => ['style','script','worker','image','font'].includes(request.destination), new StaleWhileRevalidate({ cacheName: 'assets' }));
 setCatchHandler(async ({ event }) => event.request.mode === 'navigate' ? ((await matchPrecache('/index.html')) || Response.error()) : Response.error());
 

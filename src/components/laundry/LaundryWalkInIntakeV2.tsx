@@ -24,6 +24,7 @@ import {
 } from '@/lib/laundry-offline';
 import { openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
+import { beginWork } from '@/lib/work-in-progress';
 import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MapPin, MessageCircle, Minus, Plus, Search, Shirt, Ticket, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
 import ClaimTicket from '@/components/laundry/ClaimTicket';
@@ -322,6 +323,19 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
     window.addEventListener(LAUNDRY_SYNC_CHANGED_EVENT, handleSync);
     return () => window.removeEventListener(LAUNDRY_SYNC_CHANGED_EVENT, handleSync);
   }, []);
+
+  /*
+   * Say that there is unsaved work here.
+   *
+   * The app updates by reloading. Anywhere else that costs nothing; here it
+   * costs a bundle - the customer is at the counter and twelve shirts have
+   * been counted into a form that is not saved yet. While this is open the
+   * updater waits.
+   */
+  useEffect(() => {
+    if (!open) return;
+    return beginWork();
+  }, [open]);
 
   useEffect(() => {
     if (!created) {

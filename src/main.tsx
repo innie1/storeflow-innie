@@ -3,6 +3,7 @@ import App from "./App.tsx";
 import "./index.css";
 import "./storeflow-ui-overhaul.css";
 import { initTheme } from "./lib/theme";
+import { workInProgress } from "@/lib/work-in-progress";
 
 initTheme();
 
@@ -93,16 +94,61 @@ if (isPreviewHost || isInIframe || isLocalDev) {
     regs.forEach((r) => r.unregister());
   });
 } else if ("serviceWorker" in navigator) {
+  /*
+   * Installed apps were never checking for a new version.
+   *
+   * The browser looks for an updated worker on navigation. An app on the home
+   * screen does not navigate - it is resumed from the app switcher, the same
+   * document as yesterday - so the check never ran and the shop stayed on
+   * whatever build it installed with. Reported from the field as "the
+   * installed apps are the ones still showing the old UI", and they were.
+   *
+   * So we ask, ourselves: every half hour, and whenever the app comes back to
+   * the foreground, which is the moment an installed app most looks like a
+   * fresh launch and least is one.
+   */
+  const CHECK_EVERY_MS = 30 * 60 * 1000;
+
   import("virtual:pwa-register").then(({ registerSW }) => {
-    registerSW({ immediate: true });
+    registerSW({
+      immediate: true,
+      onRegisteredSW(_swUrl, registration) {
+        if (!registration) return;
+        const check = () => { registration.update().catch(() => {}); };
+        window.setInterval(check, CHECK_EVERY_MS);
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) check();
+        });
+      },
+    });
   }).catch(() => {});
 
+  /*
+   * And applying it only when it costs nothing.
+   *
+   * This used to reload the instant a new worker took over. Checking for
+   * updates as often as we now do, that would eventually land in the middle of
+   * an intake - customer at the counter, twelve shirts counted into a form,
+   * screen goes blank. So the new version waits for the app to be in the
+   * background with nothing unsaved open, and the merchant finds it already
+   * updated the next time they look.
+   */
+  let pending = false;
   let reloaded = false;
-  navigator.serviceWorker?.addEventListener("controllerchange", () => {
-    if (reloaded) return;
+
+  const applyWhenSafe = () => {
+    if (reloaded || !pending) return;
+    if (!document.hidden) return;
+    if (workInProgress()) return;
     reloaded = true;
     window.location.reload();
+  };
+
+  navigator.serviceWorker?.addEventListener("controllerchange", () => {
+    pending = true;
+    applyWhenSafe();
   });
+  document.addEventListener("visibilitychange", applyWhenSafe);
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
