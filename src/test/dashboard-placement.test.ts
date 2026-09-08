@@ -62,10 +62,14 @@ describe('what the trades are called', () => {
    * that buys goods and sells them. A merchant selling phone chargers read the
    * list, saw nothing that was them, and picked Other - the emptiest template.
    */
-  it('calls the goods-and-shelves template a retail business', () => {
+  it('names both halves of buying and selling on', () => {
     const retail = listBusinessTypes().find(entry => entry.type === 'provision')!;
-    expect(retail.name).toBe('Retail Business');
+    // "Retail" alone strictly means selling to the person using the thing, so
+    // somebody selling by the carton to other shops would have picked Other
+    // for exactly the reason this rename exists.
+    expect(retail.name).toBe('Retail / Wholesale');
     expect(retail.description).toMatch(/electronics/i);
+    expect(retail.description).toMatch(/carton/i);
   });
 
   /** The type is unchanged, so no existing shop shifts under its owner. */

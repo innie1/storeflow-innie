@@ -60,7 +60,7 @@ const serviceCommerce: BusinessModule[] = ['orders', ...commerce, 'queue'];
 export const BUSINESS_TEMPLATES: Record<string, BusinessTemplate> = {
   provision: {
     /*
-     * "Retail Business", not "Provision / Supermarket".
+     * "Retail / Wholesale", not "Provision / Supermarket".
      *
      * The name described one kind of shop while the template serves every shop
      * that buys goods and sells them: provisions, electronics, hardware, phone
@@ -68,10 +68,16 @@ export const BUSINESS_TEMPLATES: Record<string, BusinessTemplate> = {
      * nothing that was them, and picked Other - which is the template with the
      * least in it.
      *
+     * Wholesale is named because "retail" strictly means selling to the person
+     * using the thing, and somebody selling by the carton to other shops would
+     * have made exactly the same mistake for exactly the same reason. The word
+     * "Business" is not there because it earns nothing and these tiles are two
+     * to a row on a phone.
+     *
      * The type stays 'provision' so no existing shop changes underneath its
      * owner; only what it is called has moved.
      */
-    type: 'provision', name: 'Retail Business', icon: '🛒', description: 'Buy goods and sell them: provisions, electronics, hardware, anything on a shelf.',
+    type: 'provision', name: 'Retail / Wholesale', icon: '🛒', description: 'Buy goods and sell them on, by the piece or by the carton: provisions, electronics, hardware.',
     modes: ['products'], modules: ['inventory', 'sales', 'orders', 'suppliers', ...commerce], offerings: [],
     labels: { primaryAction: 'Sell', orderNoun: 'Sale', offeringNoun: 'Product' }, customerFeatures: { quantity: true },
     customerExperience: { primaryAction: 'Shop', intro: 'Choose what you want to buy.', intake: ['quantity'] }, workflow: ['cart', 'checkout', 'complete']
