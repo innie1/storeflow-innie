@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { StoreData } from '@/types/store';
 import { createLocalLaundryRecord } from '@/lib/laundry-offline';
 import { estimateUnitCost, explainUnitCost, isVariableCost, MIN_PIECES_TO_ESTIMATE } from '@/lib/cost-estimator';
-import { monthlyFixedCosts } from '@/lib/laundry-breakeven';
+import { monthlyFixedCosts } from '@/lib/service-breakeven';
 
 const CODE = 'ESTIM8';
 const today = () => new Date().toISOString();

@@ -25,7 +25,7 @@
 import type { Product, StoreData } from '@/types/store';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
-import { monthWindow, breakEven } from '@/lib/laundry-breakeven';
+import { monthWindow, breakEven } from '@/lib/service-breakeven';
 import { estimateUnitCost } from '@/lib/cost-estimator';
 
 /**

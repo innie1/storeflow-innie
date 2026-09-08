@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Target } from 'lucide-react';
 import type { StoreData } from '@/types/store';
-import { breakEven, breakEvenSentence } from '@/lib/laundry-breakeven';
+import { breakEven, breakEvenSentence } from '@/lib/service-breakeven';
 
 /**
  * What the shop still has to take this month.

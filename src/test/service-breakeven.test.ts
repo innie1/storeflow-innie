@@ -8,7 +8,7 @@ import {
   monthToDate,
   variableCostPerPiece,
   MIN_PIECES_FOR_UNIT_COST,
-} from '@/lib/laundry-breakeven';
+} from '@/lib/service-breakeven';
 
 const CODE = 'BREAK1';
 const today = () => new Date().toISOString();

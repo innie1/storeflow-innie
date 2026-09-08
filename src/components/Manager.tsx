@@ -34,8 +34,8 @@ import ScrollLock from '@/components/ScrollLock';
 import FlowAdviceReport from '@/components/FlowAdviceReport';
 import type { ProductFocus } from '@/lib/product-focus';
 import { speakAsFlow, stopFlowVoice, type FlowVoiceGender } from '@/lib/flow-voice';
-import BreakEvenCard from '@/components/laundry/BreakEvenCard';
-import MonthReportCard from '@/components/laundry/MonthReportCard';
+import BreakEvenCard from '@/components/BreakEvenCard';
+import MonthReportCard from '@/components/MonthReportCard';
 import { isServiceShop } from '@/lib/flow-service-brain';
 
 interface ManagerProps {

@@ -13,7 +13,7 @@
 
 import type { StoreData } from '@/types/store';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
-import { breakEven, monthWindow, monthlyFixedCosts, type MonthWindow } from '@/lib/laundry-breakeven';
+import { breakEven, monthWindow, monthlyFixedCosts, type MonthWindow } from '@/lib/service-breakeven';
 import { estimateUnitCost } from '@/lib/cost-estimator';
 
 const HISTORY_KEY = 'storeflow_month_history_';

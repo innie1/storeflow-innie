@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { StoreData } from '@/types/store';
-import { breakEven } from '@/lib/laundry-breakeven';
-import { breakEvenCelebrated, markBreakEvenCelebrated } from '@/lib/laundry-month-report';
-import BreakEvenReached from '@/components/laundry/BreakEvenReached';
+import { breakEven } from '@/lib/service-breakeven';
+import { breakEvenCelebrated, markBreakEvenCelebrated } from '@/lib/service-month-report';
+import BreakEvenReached from '@/components/BreakEvenReached';
 
 /**
  * Notices the month covering itself, once.

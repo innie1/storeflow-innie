@@ -1,7 +1,7 @@
 import { StoreData, TabId } from '@/types/store';
 import { canOpenTab, canSeeMoney } from '@/lib/permissions';
-import BreakEvenPip from '@/components/laundry/BreakEvenPip';
-import BreakEvenWatcher from '@/components/laundry/BreakEvenWatcher';
+import BreakEvenPip from '@/components/BreakEvenPip';
+import BreakEvenWatcher from '@/components/BreakEvenWatcher';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';

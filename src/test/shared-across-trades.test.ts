@@ -140,10 +140,34 @@ describe('the pricing help is not locked to one screen', () => {
 });
 
 describe('the shared screens are not filed under laundry', () => {
+  /*
+   * Where a file sits is what decides whether it gets remembered. Everything
+   * here is shown to every service trade already - the break-even card and the
+   * month report are mounted in Manager, the pip and its watcher on the shared
+   * home screen - but all of them sat in components/laundry, where a session
+   * working on the barber shop would never look.
+   */
   it('the consumable prompt sits with the shared components', () => {
-    // Named SoapAsk and filed in components/laundry, it read as the laundry's
-    // and was skipped whenever another trade was being worked on.
     expect(() => readSource('src/components/ConsumableAsk.tsx')).not.toThrow();
     expect(() => readSource('src/components/laundry/SoapAsk.tsx')).toThrow();
+  });
+
+  it('so does everything mounted on a screen every trade opens', () => {
+    for (const shared of ['BreakEvenCard', 'BreakEvenPip', 'BreakEvenReached', 'BreakEvenWatcher', 'MonthReportCard']) {
+      expect(() => readSource(`src/components/${shared}.tsx`)).not.toThrow();
+      expect(() => readSource(`src/components/laundry/${shared}.tsx`)).toThrow();
+    }
+  });
+
+  it('and the libraries behind them are not named for one trade', () => {
+    expect(() => readSource('src/lib/service-breakeven.ts')).not.toThrow();
+    expect(() => readSource('src/lib/service-month-report.ts')).not.toThrow();
+  });
+
+  it("leaves what really is the laundry's where it is", () => {
+    // The intake camera, the workspace, the garment pricing: these are the
+    // laundry's own and moving them would be the opposite mistake.
+    expect(() => readSource('src/components/laundry/LaundryWorkspace.tsx')).not.toThrow();
+    expect(() => readSource('src/components/laundry/IntakeCamera.tsx')).not.toThrow();
   });
 });

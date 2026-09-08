@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { StoreData } from '@/types/store';
-import { breakEven } from '@/lib/laundry-breakeven';
+import { breakEven } from '@/lib/service-breakeven';
 
 /**
  * How far through the month, in the corner.

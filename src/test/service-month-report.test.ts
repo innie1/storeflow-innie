@@ -9,8 +9,8 @@ import {
   monthKey,
   monthReport,
   recordMonthSnapshot,
-} from '@/lib/laundry-month-report';
-import { monthWindow } from '@/lib/laundry-breakeven';
+} from '@/lib/service-month-report';
+import { monthWindow } from '@/lib/service-breakeven';
 
 const CODE = 'REPORT';
 const today = () => new Date().toISOString();

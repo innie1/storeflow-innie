@@ -6,7 +6,7 @@ import {
   monthReport,
   recordMonthSnapshot,
   type MonthReport,
-} from '@/lib/laundry-month-report';
+} from '@/lib/service-month-report';
 
 /**
  * How the month went, and the months before it.
