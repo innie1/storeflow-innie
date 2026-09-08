@@ -164,7 +164,22 @@ function urgencyRank(record: DecoratedRecord): number {
 }
 
 export default function LaundryWorkspace({ store, orders, onUpdate, currentUser }: Props) {
-  const [view, setView] = useState<LaundryWorkspaceView>(() => consumeLaundryWorkspaceView());
+  const [view, setView] = useState<LaundryWorkspaceView>(() => {
+    const requested = consumeLaundryWorkspaceView();
+    /*
+     * A shop with nothing recorded opens on the intake, not on an empty list.
+     *
+     * The default was the record list, so a brand-new laundry arriving from
+     * the Intake tab was shown "No laundry recorded yet" and a row of zeroes.
+     * The setup walk's last step points at the button that starts a bundle,
+     * and that button only exists on the intake view - so the step had no
+     * target at all: the card appeared with nothing lit and nothing to press.
+     * That is the "nothing happens, there is no place to click" this was
+     * reported as, and it is also just the wrong screen to land on.
+     */
+    if (requested === 'records' && getLocalLaundryRecords(store.accessCode).length === 0) return 'record';
+    return requested;
+  });
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filter, setFilter] = useState<RecordFilter>('all');
@@ -483,7 +498,16 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         </div>
 
         <div className="flex gap-2 shrink-0">
-          <button data-guide="record-job" onClick={() => changeView('record')} className={`px-3 py-2 rounded-xl border text-xs font-display font-bold flex items-center gap-1.5 ${view === 'record' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>
+          {/*
+            No data-guide here any more.
+            Two elements carried data-guide="record-job": this tab toggle and
+            the button inside the intake that actually opens the sheet. The
+            spotlight takes the first visible match and this one is higher in
+            the DOM, so the last step of the setup walk pointed at a tab the
+            merchant was already standing on. Tapping it changed nothing, which
+            is exactly what "there is no place to click" describes.
+          */}
+          <button onClick={() => changeView('record')} className={`px-3 py-2 rounded-xl border text-xs font-display font-bold flex items-center gap-1.5 ${view === 'record' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>
             <Plus className="w-3.5 h-3.5" /> Record Laundry
           </button>
           <button onClick={() => changeView('records')} className={`px-3 py-2 rounded-xl border text-xs font-display font-bold flex items-center gap-1.5 ${view === 'records' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>
