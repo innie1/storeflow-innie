@@ -1,1 +1,1 @@
-export { default } from './LaundryWalkInIntakeV2';
+export { default } from './LaundryWalkInIntakeV3';
