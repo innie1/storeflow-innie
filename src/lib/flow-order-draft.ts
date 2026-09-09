@@ -141,6 +141,7 @@ export function mergeFlowConversationOrderDraft(
   });
 
   for (const clarification of clarificationsFromNote(result.note)) {
+    if (explicitRemoval(text, clarification.family)) continue;
     const key = normalizePhrase(clarification.family);
     const existing = pending.findIndex(row => normalizePhrase(row.family) === key);
     if (existing >= 0) pending[existing] = clarification;
