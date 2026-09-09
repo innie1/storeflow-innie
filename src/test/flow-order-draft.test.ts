@@ -5,6 +5,8 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 import {
   applyFlowConversationOrderLocalEffects,
   buildFlowConversationWhatsAppMessage,
+  draftFromCustomerName,
+  flowConversationDraftExamples,
   flowDraftBalance,
   formatFlowConversationDraft,
   mergeFlowConversationOrderDraft,
@@ -44,6 +46,25 @@ const restaurantStore = () => ({
   expenses: [],
 } as any);
 
+const laundryStore = (garmentTypes: string[] = ['Trousers', 'Jeans', 'Bedsheet', 'Duvet']) => {
+  const wash = product('wash', 'Wash & Iron', 0, { isService: true, servicePricing: 'per_piece', unit: 'pcs' });
+  const matrix = Object.fromEntries(garmentTypes.map((garment, index) => [garment, 500 + index * 100]));
+  return {
+    ...restaurantStore(),
+    storeName: 'Kanta Laundry',
+    storeType: 'laundry',
+    businessType: 'laundry',
+    category: 'retail',
+    products: [wash],
+    customers: [],
+    laundryPricing: {
+      version: 1,
+      garmentTypes,
+      matrix: { wash: matrix },
+    },
+  } as any;
+};
+
 describe('Flow conversational order drafts', () => {
   it('keeps the picked items while asking only for a missing phone number', () => {
     const store = restaurantStore();
@@ -58,6 +79,57 @@ describe('Flow conversational order drafts', () => {
     expect(updated.customerPhone).toBe('08033334444');
     expect(updated.items[0].quantity).toBe(2);
     expect(nextFlowDraftQuestion(updated)).toBeNull();
+  });
+
+  it('consumes a phone-only laundry answer as phone data and never invents a garment', () => {
+    const store = laundryStore();
+    const draft = draftFromCustomerName(store, 'john');
+    expect(draft.items).toHaveLength(0);
+    expect(nextFlowDraftQuestion(draft)).toContain('phone number');
+
+    const result = mergeFlowConversationOrderDraft(store, draft, '09034246467');
+    expect(result.draft.customerPhone).toBe('09034246467');
+    expect(result.draft.items).toHaveLength(0);
+    expect(result.note).toBe('Phone updated.');
+    expect(nextFlowDraftQuestion(result.draft)).toBe('What items or services does the customer want?');
+  });
+
+  it('handles the exact jean bedsheet duvet follow-up without carrying a stale trouser', () => {
+    const store = laundryStore();
+    let draft = draftFromCustomerName(store, 'john');
+    draft = mergeFlowConversationOrderDraft(store, draft, '09034246467').draft;
+    draft = mergeFlowConversationOrderDraft(store, draft, 'jean bedsheet duvet').draft;
+
+    const garments = draft.items.map(item => item.metadata?.garment_type);
+    expect(garments).toEqual(['Jeans', 'Bedsheet', 'Duvet']);
+    expect(garments).not.toContain('Trousers');
+  });
+
+  it('asks for the priced size when bedsheet or duvet names are ambiguous', () => {
+    const store = laundryStore(['Trousers', 'Jeans', 'Single Bedsheet', 'Double Bedsheet', 'King Bedsheet', 'Small Duvet', 'Large Duvet']);
+    let draft = draftFromCustomerName(store, 'john');
+    draft = mergeFlowConversationOrderDraft(store, draft, '09034246467').draft;
+    const result = mergeFlowConversationOrderDraft(store, draft, 'jean bedsheet duvet');
+
+    expect(result.draft.items.map(item => item.metadata?.garment_type)).toEqual(['Jeans']);
+    expect(result.note).toContain('Single Bedsheet');
+    expect(result.note).toContain('Double Bedsheet');
+    expect(result.note).toContain('Small Duvet');
+    expect(result.note).toContain('Large Duvet');
+  });
+
+  it('uses the laundry catalogue for draft examples instead of restaurant products', () => {
+    const store = laundryStore(['Shirt', 'Jeans', 'Bedsheet']);
+    let draft = draftFromCustomerName(store, 'john');
+    draft = mergeFlowConversationOrderDraft(store, draft, '09034246467').draft;
+    draft = mergeFlowConversationOrderDraft(store, draft, 'shirt').draft;
+
+    const examples = flowConversationDraftExamples(store, draft);
+    expect(examples).toContain('Shirt');
+    expect(examples).toContain('Jeans');
+    expect(examples).not.toContain('Jollof Rice');
+    expect(examples).not.toContain('Coke');
+    expect(examples).not.toContain('Chicken');
   });
 
   it("finds a saved customer from a natural 'John's order' reference", () => {
