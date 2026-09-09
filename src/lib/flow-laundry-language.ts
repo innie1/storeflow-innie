@@ -55,6 +55,12 @@ const COMMON_EQUIVALENTS: Record<string, string[]> = {
   singlet: ['vest'],
 };
 
+const FUZZY_CONTEXT_WORDS = new Set([
+  'customer', 'client', 'buyer', 'order', 'orders', 'wants', 'needs', 'ordered', 'would', 'like', 'please',
+  'add', 'another', 'item', 'items', 'piece', 'pieces', 'service', 'treatment', 'wash', 'washing', 'iron', 'ironing',
+  'dry', 'clean', 'cleaning', 'phone', 'number', 'pickup', 'delivery', 'paid', 'deposit', 'balance', 'cash', 'transfer', 'pos',
+]);
+
 function garmentAliases(garment: string): string[] {
   const canonical = normalizeFlowLaundryText(garment);
   const singular = compactSingular(garment);
@@ -162,7 +168,7 @@ export function matchFlowLaundryGarments(text: string, garmentTypes: string[]): 
     const start = token.index;
     const end = start + word.length;
     if (overlaps(matches, start, end)) continue;
-    if (NUMBER_WORDS[word]) continue;
+    if (NUMBER_WORDS[word] || FUZZY_CONTEXT_WORDS.has(word)) continue;
 
     let best: { garment: string; score: number } | null = null;
     for (const garment of garmentTypes) {
