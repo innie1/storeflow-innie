@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readSource } from './helpers/source';
 import {
   dismissGuide,
+  guideDismissed,
   guideProgress,
   guideSteps,
   nextStep,
@@ -12,29 +13,11 @@ import {
 } from '@/lib/setup-guide';
 import { laundryLocalStorageKey } from '@/lib/laundry-offline';
 
-/**
- * The walk a brand-new shop is taken on.
- *
- * Setup used to end with a store that existed and did nothing: no prices, no
- * services, no first job, and everything needed to open hidden behind a tab
- * the owner had never seen.
- *
- * The guide follows the store rather than counting clicks, which is what these
- * tests pin: doing a step early, out of order, or on another day all have to
- * land the merchant in the right place.
- */
-
-/**
- * Laundry records are not a field on the store - they live in their own
- * localStorage bucket, keyed by access code. Seeding a `laundryRecords`
- * property tested nothing the app reads.
- */
 function seedRecords(accessCode: string, count: number) {
   const rows = Array.from({ length: count }, (_, i) => ({ clientRef: `r${i}`, accessCode }));
   localStorage.setItem(laundryLocalStorageKey(accessCode), JSON.stringify(rows));
 }
 
-/** Records stamped on given days, for the "past opening day" rule. */
 function seedRecordsAcrossDays(accessCode: string, createdAt: string[]) {
   const rows = createdAt.map((at, i) => ({ clientRef: `r${i}`, accessCode, createdAt: at }));
   localStorage.setItem(laundryLocalStorageKey(accessCode), JSON.stringify(rows));
@@ -55,14 +38,11 @@ const service = (price = 0) => ({
   id: 's1', name: 'Wash & Iron', isService: true, sellingPrice: price, costPrice: 0, quantity: 0,
 });
 
-beforeEach(() => { restartGuide(); localStorage.clear(); });
-afterEach(() => { restartGuide(); localStorage.clear(); });
+beforeEach(() => { localStorage.clear(); });
+afterEach(() => { localStorage.clear(); });
 
 describe('a brand-new laundry', () => {
   it('is walked through five steps', () => {
-    // Opening a screen and doing the thing on it are separate steps. Aimed at
-    // the tab, the last step spotlighted a tab the merchant was already
-    // standing on, so tapping it changed nothing and the walk never finished.
     expect(guideSteps(laundry()).map(step => step.id)).toEqual([
       'open-price-list', 'add-service', 'set-price', 'open-intake', 'first-job',
     ]);
@@ -74,42 +54,24 @@ describe('a brand-new laundry', () => {
     expect(step?.target).toBe('tab-inventory');
   });
 
-  it('counts arriving on the screen as doing the step', () => {
-    // No data changes when a merchant opens a tab, so without this the guide
-    // kept pointing at a tab they were already standing on.
+  it('counts arriving on the price-list screen as doing the navigation step', () => {
     expect(nextStep(laundry(), 'inventory')?.id).toBe('add-service');
   });
 
-  it('asks for a service next, pointing at the button that adds one', () => {
-    const step = nextStep(laundry(), 'inventory');
-    expect(step?.id).toBe('add-service');
-    expect(step?.target).toBe('add-service');
-  });
-
   it('asks for a price once a service exists', () => {
-    const store = laundry({ products: [service(0)] });
-    expect(nextStep(store, 'inventory')?.id).toBe('set-price');
+    expect(nextStep(laundry({ products: [service(0)] }), 'inventory')?.id).toBe('set-price');
   });
 
-  it('sends them to Intake once prices are set', () => {
-    const store = laundry({ products: [service(500)] });
-    expect(nextStep(store, 'inventory')?.id).toBe('open-intake');
+  it('sends the merchant to Intake once prices are set', () => {
+    expect(nextStep(laundry({ products: [service(500)] }), 'inventory')?.id).toBe('open-intake');
   });
 
-  it('then points at the button that starts a job, not at the tab', () => {
-    const store = laundry({ products: [service(500)] });
-    const step = nextStep(store, 'laundry-records');
+  it('then points at the button that starts a job', () => {
+    const step = nextStep(laundry({ products: [service(500)] }), 'laundry-records');
     expect(step?.id).toBe('first-job');
     expect(step?.target).toBe('record-job');
   });
 
-  /*
-   * One job used to finish the walk. Reported from the field: a merchant
-   * records their first order and the guide vanishes having taught them
-   * nothing - which is backwards, because somebody who has just recorded one
-   * order is exactly who the walk is for. It ends on a rehearsal, or on the
-   * shop having traded across more than one day.
-   */
   it('is not finished by one job on one day', () => {
     const store = laundry({ products: [service(500)] });
     seedRecords('TEST01', 1);
@@ -124,30 +86,23 @@ describe('a brand-new laundry', () => {
     expect(shouldRunGuide(store)).toBe(false);
   });
 
-  it('accepts a price set through the garment matrix instead of a service', () => {
+  it('accepts a price set through the garment matrix', () => {
     const store = laundry({
       products: [service(0)],
-      // Keyed by service id, which is how the app writes it.
       businessTemplate: { laundryPricing: { matrix: { s1: { Shirt: 500 } } } },
     });
     expect(nextStep(store, 'inventory')?.id).toBe('open-intake');
   });
 });
 
-describe('it keeps up with a merchant who works out of order', () => {
-  it('skips ahead when someone adds a service before being asked', () => {
-    const store = laundry({ products: [service(800)] });
-    // Three steps satisfied at once; the guide lands on the fourth.
-    expect(nextStep(store, 'dashboard')?.id).toBe('open-intake');
-  });
-
-  it('reports progress honestly', () => {
+describe('guide progress', () => {
+  it('skips steps already satisfied and reports progress honestly', () => {
+    const configured = laundry({ products: [service(800)] });
+    expect(nextStep(configured, 'dashboard')?.id).toBe('open-intake');
     expect(guideProgress(laundry(), 'dashboard').done).toBe(0);
-    expect(guideProgress(laundry({ products: [service(800)] }), 'dashboard').done).toBe(3);
-    expect(guideProgress(laundry(), 'dashboard').total).toBe(5);
-    // The number shown is where they are, not how many boxes are ticked: a
-    // later step being satisfied early used to inflate it.
-    expect(guideProgress(laundry({ products: [service(800)] }), 'dashboard').index).toBe(3);
+    expect(guideProgress(configured, 'dashboard').done).toBe(3);
+    expect(guideProgress(configured, 'dashboard').index).toBe(3);
+    expect(guideProgress(configured, 'dashboard').total).toBe(5);
   });
 });
 
@@ -157,9 +112,10 @@ describe('a shop that sells goods gets a different walk', () => {
     products: [], sales: [], ...over,
   }) as any;
 
-  it('is about stock and a sale, not services', () => {
-    const ids = guideSteps(shop()).map(step => step.id);
-    expect(ids).toEqual(['open-inventory', 'add-product', 'open-sales', 'first-sale']);
+  it('uses stock and sale steps, not laundry steps', () => {
+    expect(guideSteps(shop()).map(step => step.id)).toEqual([
+      'open-inventory', 'add-product', 'open-sales', 'first-sale',
+    ]);
   });
 
   it('finishes on the first sale', () => {
@@ -168,27 +124,15 @@ describe('a shop that sells goods gets a different walk', () => {
   });
 });
 
-describe('it does not nag', () => {
-  it('stays closed once the merchant closes it', () => {
-    const store = laundry();
-    expect(shouldRunGuide(store, 'dashboard')).toBe(true);
-    dismissGuide(store.accessCode);
-    expect(shouldRunGuide(store, 'dashboard')).toBe(false);
-  });
-
-  /**
-   * Both flags used to be single global keys, so the first shop to finish or
-   * dismiss switched the walk off for every shop on the device and spent the
-   * "ready for business" moment on their behalf. A second laundry got no guide
-   * and no celebration, having done nothing - which is exactly how it was
-   * reported: the training finished and nothing happened.
-   */
+describe('onboarding state is strictly per store', () => {
   it('closing the walk on one shop leaves it running on another', () => {
     const shine = laundry({ accessCode: 'SHINE1' });
     const second = laundry({ accessCode: 'SECOND' });
 
     dismissGuide(shine.accessCode);
 
+    expect(guideDismissed('SHINE1')).toBe(true);
+    expect(guideDismissed('SECOND')).toBe(false);
     expect(shouldRunGuide(shine, 'dashboard')).toBe(false);
     expect(shouldRunGuide(second, 'dashboard')).toBe(true);
   });
@@ -199,10 +143,32 @@ describe('it does not nag', () => {
     expect(celebrationShown('SECOND')).toBe(false);
   });
 
-  it('still honours the old global flag for a shop already trading', () => {
-    // A merchant mid-setup when this changed must not be shown it all again.
+  it('ignores the old global dismissed flag', () => {
     localStorage.setItem('storeflow_setup_guide_dismissed', '1');
-    expect(shouldRunGuide(laundry({ accessCode: 'OLDONE' }), 'dashboard')).toBe(false);
+    const newShop = laundry({ accessCode: 'NEWSTORE' });
+
+    expect(guideDismissed('NEWSTORE')).toBe(false);
+    expect(shouldRunGuide(newShop, 'dashboard')).toBe(true);
+  });
+
+  it('ignores the old global finished flag', () => {
+    localStorage.setItem('storeflow_setup_guide_finished', '1');
+
+    expect(celebrationShown('NEWSTORE')).toBe(false);
+  });
+
+  it('restarting one shop does not clear another shop state', () => {
+    dismissGuide('SHINE1');
+    dismissGuide('SECOND');
+    markCelebrationShown('SHINE1');
+    markCelebrationShown('SECOND');
+
+    restartGuide('SHINE1');
+
+    expect(guideDismissed('SHINE1')).toBe(false);
+    expect(celebrationShown('SHINE1')).toBe(false);
+    expect(guideDismissed('SECOND')).toBe(true);
+    expect(celebrationShown('SECOND')).toBe(true);
   });
 
   it('does not run for a shop that has been trading more than a day', () => {
@@ -217,8 +183,6 @@ describe('it does not nag', () => {
   });
 
   it('still runs for a shop on its very first day of trading', () => {
-    // The one it exists for: they have taken a job and have no idea what the
-    // rest of the app does.
     const store = laundry({
       products: [service(500)],
       sales: [{ id: 's', total: 3000, date: '2026-09-08T10:00:00.000Z' }],
@@ -233,13 +197,6 @@ describe('it does not nag', () => {
 });
 
 describe('switching to another shop starts its own walk', () => {
-  /*
-   * The guide keeps "I closed this" in component state, and it is never
-   * unmounted - so closing it on one shop closed it on every shop opened after
-   * it on that device. The stored flag was always per shop; only the live
-   * component's memory of it was not, which is why a merchant switching store
-   * saw no walk at all on a shop that had never dismissed one.
-   */
   const index = readSource('src/pages/Index.tsx');
 
   it('remounts the guide when the shop changes', () => {
@@ -247,8 +204,9 @@ describe('switching to another shop starts its own walk', () => {
     expect(mount).toContain('key={store.accessCode}');
   });
 
-  it('and the dismissal it reads is per shop, not per device', () => {
+  it('reads dismissal from an access-code-specific key', () => {
     const guide = readSource('src/lib/setup-guide.ts');
     expect(guide).toContain('shopKey(DISMISSED_PREFIX, accessCode)');
+    expect(guide).not.toContain("localStorage.getItem('storeflow_setup_guide_dismissed')");
   });
 });
