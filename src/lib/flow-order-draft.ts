@@ -10,7 +10,15 @@ import {
   type FlowMessageOrderItem,
 } from '@/lib/flow-message-orders';
 import { resolveBusinessType } from '@/lib/business-runtime';
-import { getLaundryGarmentPrice } from '@/lib/laundry-pricing';
+import { getLaundryGarmentPrice, getLaundryPricingConfig } from '@/lib/laundry-pricing';
+import { suggestFlowLaundryGarment } from '@/lib/flow-laundry-language';
+import {
+  clearPendingGarmentCorrection,
+  learnBrainGarmentAlias,
+  loadBrainMemory,
+  pendingBrainGarmentCorrection,
+  rememberPendingGarmentCorrection,
+} from '@/lib/flow-brain-memory';
 
 export interface FlowOrderPaymentDraft {
   paidAmount?: number;
@@ -255,8 +263,29 @@ function switchLaundryService(store: StoreData, draft: FlowConversationOrderDraf
   return changed ? items : null;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Apply aliases this particular shop has explicitly taught Flow. */
+function replaceLearnedLaundryAliases(store: StoreData, text: string): string {
+  if (resolveBusinessType(store) !== 'laundry') return text;
+  const config = getLaundryPricingConfig(store);
+  const liveGarments = new Map(config.garmentTypes.map(garment => [normalize(garment), garment]));
+  const aliases = Object.entries(loadBrainMemory(store).garmentAliases || {})
+    .map(([alias, garment]) => ({ alias: normalize(alias), garment: liveGarments.get(normalize(garment)) }))
+    .filter((row): row is { alias: string; garment: string } => !!row.alias && !!row.garment)
+    .sort((a, b) => b.alias.length - a.alias.length);
+  let result = text;
+  for (const { alias, garment } of aliases) {
+    const pattern = new RegExp(`\\b${escapeRegExp(alias).replace(/\\ /g, '\\s+')}\\b`, 'gi');
+    result = result.replace(pattern, garment);
+  }
+  return result;
+}
+
 function parsedItemsForContinuation(store: StoreData, draft: FlowConversationOrderDraft, text: string): FlowMessageOrderItem[] {
-  let phrase = text.trim();
+  let phrase = replaceLearnedLaundryAliases(store, text.trim());
   if (resolveBusinessType(store) === 'laundry') {
     const serviceName = String(draft.items.find(item => item.metadata?.service_name)?.metadata?.service_name || '');
     if (serviceName && !findLaundryService(store, phrase)) phrase = `${serviceName} ${phrase}`;
@@ -276,7 +305,8 @@ function newDraftId(): string {
 
 export function isFlowConversationOrderRequest(store: StoreData, text: string): boolean {
   if (!supportsFlowMessageOrders(store)) return false;
-  const base = parseFlowMessageOrder(store, text);
+  const interpreted = replaceLearnedLaundryAliases(store, text);
+  const base = parseFlowMessageOrder(store, interpreted);
   if (/\b(?:create|make|take|place|record|start)\s+(?:an?\s+)?(?:new\s+)?(?:customer\s+)?order\b/i.test(text)) return true;
   if (/\b[a-z][a-z .'-]{0,30}['’]s\s+(?:order|job|booking)\b/i.test(text) && base.items.length > 0) return true;
   if (/\b(?:customer|client|buyer)\b.{0,45}\b(?:wants|needs|ordered|would like)\b/i.test(text)) return true;
@@ -285,7 +315,8 @@ export function isFlowConversationOrderRequest(store: StoreData, text: string): 
 }
 
 export function parseFlowConversationOrder(store: StoreData, text: string): FlowConversationOrderDraft {
-  const base = parseFlowMessageOrder(store, text);
+  const interpreted = replaceLearnedLaundryAliases(store, text);
+  const base = parseFlowMessageOrder(store, interpreted);
   const resolved = resolveFlowOrderCustomer(store, text);
   const customer = resolved.customer;
   const customerName = customer?.name || base.customerName;
@@ -314,6 +345,28 @@ export function flowDraftBalance(draft: FlowConversationOrderDraft): number {
 
 export function mergeFlowConversationOrderDraft(store: StoreData, current: FlowConversationOrderDraft, text: string): FlowDraftMergeResult {
   if (/^\s*(?:cancel|discard|forget|stop)(?:\s+(?:this\s+)?order)?\s*$/i.test(text)) return { draft: current, changed: false, cancelled: true, note: 'Order draft cancelled.' };
+
+  const pendingCorrection = resolveBusinessType(store) === 'laundry' ? pendingBrainGarmentCorrection(store) : null;
+  if (pendingCorrection && /^\s*(?:correct|that'?s\s+right|right|exactly|use\s+it|yes\s+that'?s\s+right)\s*[.!]?\s*$/i.test(text)) {
+    learnBrainGarmentAlias(store, pendingCorrection.alias, pendingCorrection.garment);
+    const confirmed = mergeFlowConversationOrderDraft(
+      store,
+      current,
+      `add ${pendingCorrection.quantity || 1} ${pendingCorrection.garment}`,
+    );
+    return {
+      ...confirmed,
+      note: `Got it — I’ll remember **${pendingCorrection.alias}** means **${pendingCorrection.garment}** for this shop.${confirmed.note ? ` ${confirmed.note}` : ''}`,
+    };
+  }
+  if (pendingCorrection && /^\s*(?:wrong|not\s+that|no\s+that'?s\s+wrong|nope|reject)\s*[.!]?\s*$/i.test(text)) {
+    clearPendingGarmentCorrection(store);
+    return {
+      draft: { ...current, revision: current.revision + 1 },
+      changed: true,
+      note: `Okay — I won’t learn **${pendingCorrection.alias}**. Say the garment again and I’ll try another match.`,
+    };
+  }
 
   const draft: FlowConversationOrderDraft = {
     ...current,
@@ -385,11 +438,29 @@ export function mergeFlowConversationOrderDraft(store: StoreData, current: FlowC
       changed = true;
       notes.push(`Added ${additions.map(item => item.label).join(', ')}.`);
     }
-  } else if ((!draft.items.length || /\b(?:wants|needs|ordered|would like)\b/i.test(text)) && !/\b(?:paid|deposit|balance|delivery|pickup)\b/i.test(text)) {
+  } else if (!/\b(?:paid|deposit|balance|delivery|pickup)\b/i.test(text)) {
     const additions = parsedItemsForContinuation(store, draft, text);
-    if (additions.length) {
+    const isLaundryContinuation = resolveBusinessType(store) === 'laundry';
+    if (additions.length && (isLaundryContinuation || !draft.items.length || /\b(?:wants|needs|ordered|would like)\b/i.test(text))) {
       draft.items = draft.items.length ? mergeItems(draft.items, additions) : additions;
       changed = true;
+      if (isLaundryContinuation) notes.push(`Added ${additions.map(item => item.label).join(', ')}.`);
+    }
+  }
+
+  // If a laundry garment was close but not safe enough to auto-match, keep the
+  // order open and ask one focused question. We deliberately teach only after
+  // the merchant replies "correct" (or equivalent), never from a guess.
+  if (!changed && resolveBusinessType(store) === 'laundry' && !/\b(?:paid|deposit|balance|delivery|pickup|cash|transfer|pos)\b/i.test(text)) {
+    const suggestion = suggestFlowLaundryGarment(text, getLaundryPricingConfig(store).garmentTypes);
+    if (suggestion) {
+      rememberPendingGarmentCorrection(store, suggestion);
+      draft.revision = current.revision + 1;
+      return {
+        draft,
+        changed: true,
+        note: `Did you mean **${suggestion.garment}**? Reply **correct** to use it and teach Flow, or **wrong** to ignore it.`,
+      };
     }
   }
 
@@ -618,12 +689,6 @@ export function applyFlowConversationOrderLocalEffects(store: StoreData, order: 
   return { ...store, customers, pendingPayments };
 }
 
-/**
- * Words that are a request, not a person.
- *
- * Everything Flow answers to in one or two words, so that "help", "sales" or
- * "today" is never mistaken for a customer walking in.
- */
 const NOT_A_NAME = new Set([
   'hi', 'hey', 'hello', 'yo', 'ok', 'okay', 'yes', 'no', 'thanks', 'thank you',
   'help', 'sales', 'today', 'yesterday', 'stock', 'money', 'profit', 'debt',
@@ -631,29 +696,17 @@ const NOT_A_NAME = new Set([
   'stop', 'start', 'new order', 'my customers', 'best sellers', 'settings',
 ]);
 
-/**
- * Does this look like somebody simply saying who is at the counter?
- *
- * Flow opens by asking for "the customer's name, their phone number, and what
- * they want", and then had no way to accept the first of those on its own:
- * typing "John" fell through to "Not sure what you meant". Being asked a
- * question and then told the answer is wrong is the worst thing an assistant
- * can do, so a bare name now starts the order and Flow asks for the rest.
- */
 export function looksLikeBareCustomerName(store: StoreData, text: string): boolean {
   if (!supportsFlowMessageOrders(store)) return false;
   const clean = String(text || '').trim();
   if (!clean || /\d/.test(clean)) return false;
   if (NOT_A_NAME.has(clean.toLowerCase())) return false;
-  // A name, not a sentence: up to three words of letters.
   if (!/^[a-z][a-z'’-]*(?:\s+[a-z][a-z'’-]*){0,2}$/i.test(clean)) return false;
-  // If it names something the shop sells, it is an item, not a person.
-  const base = parseFlowMessageOrder(store, clean);
+  const base = parseFlowMessageOrder(store, replaceLearnedLaundryAliases(store, clean));
   if (base.items.length > 0) return false;
   return true;
 }
 
-/** Starts an order from nothing but a name. */
 export function draftFromCustomerName(store: StoreData, name: string): FlowConversationOrderDraft {
   const draft = parseFlowConversationOrder(store, name);
   const resolved = resolveFlowOrderCustomer(store, name);
