@@ -89,6 +89,19 @@ function phoneFromText(text: string): string {
   return match?.[0]?.replace(/[\s-]/g, '') || '';
 }
 
+/**
+ * A phone answer is a field answer, not an order line. In particular, never
+ * let the garment/product fuzzy matcher see a bare Nigerian phone number.
+ */
+function isPhoneOnlyAnswer(text: string): boolean {
+  if (!phoneFromText(text)) return false;
+  const rest = text
+    .replace(/(?:\+?234|0)?[\s-]?[789](?:[\s-]?\d){9}\b/g, ' ')
+    .replace(/\b(?:phone|number|is|my|customer|client|buyer)\b/gi, ' ')
+    .replace(/[^a-z0-9]+/gi, '');
+  return rest.length === 0;
+}
+
 function customerReference(text: string): string {
   const clean = text.replace(/(?:\+?234|0)?[\s-]?[789](?:[\s-]?\d){9}\b/g, ' ').trim();
   const patterns = [
@@ -293,6 +306,35 @@ function parsedItemsForContinuation(store: StoreData, draft: FlowConversationOrd
   return parseFlowMessageOrder(store, `Customer wants ${phrase}`).items;
 }
 
+const LAUNDRY_FAMILY_STOP_WORDS = new Set([
+  ...Object.keys(NUMBER_WORDS),
+  'add', 'remove', 'delete', 'drop', 'make', 'change', 'set', 'update', 'customer', 'wants', 'needs',
+  'ordered', 'would', 'like', 'wash', 'iron', 'ironing', 'dry', 'clean', 'cleaning', 'service', 'treatment',
+  'paid', 'deposit', 'balance', 'delivery', 'pickup', 'cash', 'transfer', 'pos', 'piece', 'pieces', 'pcs',
+]);
+
+/**
+ * A word such as "bedsheet" can describe several priced rows (Single, Double,
+ * King). Flow must ask which one instead of ignoring it or choosing a price.
+ */
+function laundryFamilyClarifications(store: StoreData, text: string, additions: FlowMessageOrderItem[]): string[] {
+  if (resolveBusinessType(store) !== 'laundry') return [];
+  const garmentTypes = getLaundryPricingConfig(store).garmentTypes;
+  const matched = new Set(additions.map(item => compact(item.metadata?.garment_type || '')).filter(Boolean));
+  const tokens = [...new Set(normalize(text).split(' ').map(compact).filter(Boolean))];
+  const questions: string[] = [];
+
+  for (const token of tokens) {
+    if (token.length < 4 || LAUNDRY_FAMILY_STOP_WORDS.has(token) || /^\d+$/.test(token)) continue;
+    if ([...matched].some(garment => garment === token || garment.split(' ').includes(token))) continue;
+    const candidates = garmentTypes.filter(garment => compact(garment).split(' ').includes(token));
+    if (candidates.length < 2) continue;
+    const choices = candidates.map(candidate => `**${candidate}**`).join(', ');
+    questions.push(`Which **${token}** do you mean: ${choices}?`);
+  }
+  return questions;
+}
+
 function looksLikeNameAnswer(text: string): boolean {
   const clean = text.trim();
   return /^[a-z][a-z .'-]{1,45}$/i.test(clean)
@@ -377,8 +419,11 @@ export function mergeFlowConversationOrderDraft(store: StoreData, current: FlowC
   };
   let changed = false;
   const notes: string[] = [];
+  const phoneOnly = isPhoneOnlyAnswer(text);
 
-  const resolved = resolveFlowOrderCustomer(store, text);
+  // Once a draft already has a name, a phone-only field answer must not silently
+  // replace that person with another saved customer who happens to own the number.
+  const resolved = phoneOnly && draft.customerName ? {} : resolveFlowOrderCustomer(store, text);
   if (resolved.customer) {
     const customer = resolved.customer;
     if (draft.customerId !== customer.id || draft.customerPhone !== customer.phone || draft.customerName !== customer.name) {
@@ -398,6 +443,13 @@ export function mergeFlowConversationOrderDraft(store: StoreData, current: FlowC
   if (!draft.customerName && looksLikeNameAnswer(text)) {
     draft.customerName = text.trim();
     changed = true;
+  }
+
+  // Stop here for a phone field answer. This is the guard that prevents a
+  // number such as 09034246467 from becoming Trousers (or any other item).
+  if (phoneOnly) {
+    if (changed) draft.revision = current.revision + 1;
+    return { draft, changed, note: changed ? 'Phone updated.' : undefined };
   }
 
   const serviceItems = switchLaundryService(store, draft, text);
@@ -430,9 +482,11 @@ export function mergeFlowConversationOrderDraft(store: StoreData, current: FlowC
     }
   }
 
+  let additionsFromThisMessage: FlowMessageOrderItem[] = [];
   const add = text.match(/^\s*(?:please\s+)?add\s+(.+)$/i);
   if (add?.[1] && !/\b(?:service|treatment)\b/i.test(text)) {
     const additions = parsedItemsForContinuation(store, draft, add[1]);
+    additionsFromThisMessage = additions;
     if (additions.length) {
       draft.items = mergeItems(draft.items, additions);
       changed = true;
@@ -440,12 +494,19 @@ export function mergeFlowConversationOrderDraft(store: StoreData, current: FlowC
     }
   } else if (!/\b(?:paid|deposit|balance|delivery|pickup)\b/i.test(text)) {
     const additions = parsedItemsForContinuation(store, draft, text);
+    additionsFromThisMessage = additions;
     const isLaundryContinuation = resolveBusinessType(store) === 'laundry';
     if (additions.length && (isLaundryContinuation || !draft.items.length || /\b(?:wants|needs|ordered|would like)\b/i.test(text))) {
       draft.items = draft.items.length ? mergeItems(draft.items, additions) : additions;
       changed = true;
       if (isLaundryContinuation) notes.push(`Added ${additions.map(item => item.label).join(', ')}.`);
     }
+  }
+
+  const familyQuestions = laundryFamilyClarifications(store, add?.[1] || text, additionsFromThisMessage);
+  if (familyQuestions.length) {
+    notes.push(...familyQuestions);
+    changed = true;
   }
 
   // If a laundry garment was close but not safe enough to auto-match, keep the
@@ -504,6 +565,28 @@ export function formatFlowConversationDraft(draft: FlowConversationOrderDraft): 
     ? `${draft.fulfillment.mode === 'delivery' ? 'Delivery' : 'Pickup'}${draft.fulfillment.address ? ` • ${draft.fulfillment.address}` : ''}${draft.fulfillment.requestedTime ? ` • ${draft.fulfillment.requestedTime}` : ''}`
     : 'Not specified';
   return `**Order draft**\nCustomer: **${customer}**\nPhone: **${phone}**\n\n${items}\n\nTotal: **₦${draft.total.toLocaleString()}**\n${paymentSummary(draft)}\nFulfilment: ${fulfilment}`;
+}
+
+/** Build draft-edit examples from the current shop instead of leaking another business's products. */
+export function flowConversationDraftExamples(store: StoreData, draft: FlowConversationOrderDraft): string {
+  const examples: string[] = [];
+
+  if (resolveBusinessType(store) === 'laundry') {
+    const configured = getLaundryPricingConfig(store).garmentTypes;
+    const alreadyInDraft = draft.items.map(item => String(item.metadata?.garment_type || '').trim()).filter(Boolean);
+    const garments = [...new Set([...alreadyInDraft, ...configured])].filter(Boolean);
+    if (garments[0]) examples.push(`**make ${garments[0]} to 2**`);
+    if (garments[1]) examples.push(`**remove ${garments[1]}**`);
+    if (garments[2]) examples.push(`**add 2 ${garments[2]}**`);
+  } else {
+    const names = (store.products || []).filter(product => !product.discontinued).map(product => product.name).filter(Boolean);
+    if (names[0]) examples.push(`**make ${names[0]} to 2**`);
+    if (names[1]) examples.push(`**remove ${names[1]}**`);
+    if (names[2]) examples.push(`**add 2 ${names[2]}**`);
+  }
+
+  examples.push('**paid ₦5,000 cash**', '**delivery to 12 Airport Road**');
+  return `You can still say things like ${examples.slice(0, 5).join(', ')} before creating it.`;
 }
 
 function detailsPayload(draft: FlowConversationOrderDraft) {
