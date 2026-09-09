@@ -2,6 +2,7 @@ import type { Product, StoreData } from '@/types/store';
 import { supabase } from '@/integrations/supabase/client';
 import { getBusinessTemplate, hasBusinessModule, resolveBusinessType } from '@/lib/business-runtime';
 import { resolveProduct } from '@/lib/flow-operating-engine';
+import { matchFlowLaundryGarments } from '@/lib/flow-laundry-language';
 import { getLaundryGarmentPrice, getLaundryPricingConfig } from '@/lib/laundry-pricing';
 import { getStoredServicePricing } from '@/lib/service-pricing';
 
@@ -171,13 +172,27 @@ function laundryItems(store: StoreData, text: string): FlowMessageOrderItem[] {
   }
   if (!service && services.length === 1) service = services[0];
   if (!service) return [];
+
   const config = getLaundryPricingConfig(store);
-  const hits = config.garmentTypes.map(garment => ({ garment, key: normalized(garment), index: (` ${q} `).indexOf(` ${normalized(garment)} `) }))
-    .filter(hit => hit.key && hit.index >= 0).sort((a, b) => a.index - b.index);
+  const hits = matchFlowLaundryGarments(text, config.garmentTypes);
   return hits.map(hit => {
-    const quantity = quantityNear(q, Math.max(0, hit.index), Math.max(0, hit.index) + hit.key.length);
     const unitPrice = getLaundryGarmentPrice(store, service!, hit.garment);
-    return { product: service!, productId: String(service!.id), label: `${hit.garment} — ${service!.name}`, quantity, unitPrice, subtotal: quantity * unitPrice, unit: 'pcs', itemKind: 'service' as const, metadata: { garment_type: hit.garment, service_name: service!.name } };
+    return {
+      product: service!,
+      productId: String(service!.id),
+      label: `${hit.garment} — ${service!.name}`,
+      quantity: hit.quantity,
+      unitPrice,
+      subtotal: hit.quantity * unitPrice,
+      unit: 'pcs',
+      itemKind: 'service' as const,
+      metadata: {
+        garment_type: hit.garment,
+        service_name: service!.name,
+        flow_match: hit.matchedText,
+        flow_match_score: hit.score,
+      },
+    };
   });
 }
 
