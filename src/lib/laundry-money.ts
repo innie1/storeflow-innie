@@ -63,7 +63,10 @@ export interface LaundryPaymentInput {
   customerId?: string;
   /** The whole price of the bundle, whatever has been paid so far. */
   total: number;
-  /** What is being handed over right now. May be zero. */
+  /**
+   * What the customer handed over right now. May be more than the amount due;
+   * the difference is change and must never become revenue.
+   */
   amountPaid: number;
   /** When the bundle is promised, so an unpaid balance has a due date. */
   promisedFor?: string;
@@ -71,6 +74,36 @@ export interface LaundryPaymentInput {
 }
 
 const money = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+
+/**
+ * One payment at the counter, separated into what was tendered, what belongs
+ * to the job, and what must be handed back as change.
+ *
+ * Keeping these three numbers distinct is important. A customer can hand over
+ * ₦6,000 for a ₦2,500 bundle: the shop received ₦6,000 physically, earned
+ * ₦2,500, and owes ₦3,500 change. Clamping the first number to the second made
+ * the app say only ₦2,500 had been given and erased the change completely.
+ */
+export interface LaundryPaymentSettlement {
+  tendered: number;
+  applied: number;
+  change: number;
+  paidAfter: number;
+  balance: number;
+}
+
+export function settleLaundryPayment(total: number, tendered: number, paidBefore = 0): LaundryPaymentSettlement {
+  const safeTotal = money(Math.max(0, Number(total) || 0));
+  const safePaidBefore = Math.min(safeTotal, money(Math.max(0, Number(paidBefore) || 0)));
+  const safeTendered = money(Math.max(0, Number(tendered) || 0));
+  const remaining = money(Math.max(0, safeTotal - safePaidBefore));
+  const applied = money(Math.min(remaining, safeTendered));
+  const paidAfter = money(Math.min(safeTotal, safePaidBefore + applied));
+  const change = money(Math.max(0, safeTendered - applied));
+  const balance = money(Math.max(0, safeTotal - paidAfter));
+
+  return { tendered: safeTendered, applied, change, paidAfter, balance };
+}
 
 /**
  * Records a payment against a bundle, and keeps the debt in step.
@@ -88,12 +121,15 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
   const pendingList = store.pendingPayments || [];
   const existing = pendingList.find(entry => entry.id === `laundry-${input.clientRef}`);
   const paidBefore = existing ? money(existing.paid) : 0;
-  const paidNow = Math.min(total, money(paidBefore + paying));
-  const actuallyTaken = money(paidNow - paidBefore);
+  const settlement = settleLaundryPayment(total, paying, paidBefore);
+  const paidNow = settlement.paidAfter;
+  // Only the part that belongs to this job is revenue. Change is money the
+  // customer handed over temporarily and gets handed straight back.
+  const actuallyTaken = settlement.applied;
 
   let next = store;
 
-  // ── Revenue, for the money actually taken now ───────────────────────────
+  // ── Revenue, for the money actually applied to the job now ───────────────
   if (actuallyTaken > 0) {
     const sale: Sale = {
       id: `laundry-${input.clientRef}-${at}`,
@@ -113,9 +149,15 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
   }
 
   // ── What is still owed ──────────────────────────────────────────────────
-  const balance = money(total - paidNow);
+  const balance = settlement.balance;
   const event = actuallyTaken > 0
-    ? [{ date: at, amount: actuallyTaken, note: `${input.tagCode} payment` }]
+    ? [{
+        date: at,
+        amount: actuallyTaken,
+        note: settlement.change > 0
+          ? `${input.tagCode} payment — ₦${settlement.tendered.toLocaleString()} tendered, ₦${settlement.change.toLocaleString()} change`
+          : `${input.tagCode} payment`,
+      }]
     : [];
 
   const entry: PendingPayment = {
