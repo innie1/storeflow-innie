@@ -130,7 +130,14 @@ export interface PendingPayment {
  * into goods the shop still owns, so it is kept out of profit. Detergent is
  * gone once the wash is done, which makes it a real cost of trading.
  */
-export type ExpenseCategory = 'Restock' | 'Consumables' | 'Rent' | 'Utilities' | 'Salaries' | 'Transport' | 'Other';
+/*
+ * 'Piece work' is separate from 'Salaries' on purpose. A salary is owed every
+ * month whether or not a single shirt is ironed; piece work is owed only for
+ * shirts that were. Putting them in one category would make the break-even
+ * target treat a variable cost as a fixed one and set it far too high in a
+ * quiet month.
+ */
+export type ExpenseCategory = 'Restock' | 'Consumables' | 'Rent' | 'Utilities' | 'Salaries' | 'Piece work' | 'Transport' | 'Other';
 
 /** A supply a service shop buys and uses up. */
 export interface SupplyItem {
@@ -444,6 +451,53 @@ export interface DiaryEntry {
   audioData?: string; // compressed base64 Voice Note data URI
 }
 
+/**
+ * What a per-piece worker earns for one item of one kind.
+ *
+ * A garmentType of '*' is the rate for anything not named specifically, so a
+ * shop can set "ironing, anything, fifty naira" and then override the native
+ * wear that takes three times as long.
+ */
+/** One claim: this worker did this many of this item, on this job. */
+export interface PieceWorkEntry {
+  id: string;
+  workerId: string;
+  workerName: string;
+  /** The laundry record the pieces belong to. */
+  clientRef: string;
+  tagCode: string;
+  customerName: string;
+  task: string;
+  garmentType: string;
+  quantity: number;
+  /** Copied at the time, so a later rate change never rewrites old work. */
+  rate: number;
+  amount: number;
+  at: string;
+  /*
+   * Nothing is owed until the owner has looked at it. The worker is claiming
+   * work, not recording a fact, and the difference matters when the money is
+   * real.
+   */
+  approved: boolean;
+  approvedAt?: string;
+}
+
+export interface WorkerPayment {
+  id: string;
+  workerId: string;
+  workerName: string;
+  amount: number;
+  at: string;
+  note?: string;
+}
+
+export interface PieceRate {
+  task: string;
+  garmentType: string;
+  rate: number;
+}
+
 export interface StaffMember {
   id: string;
   name: string;
@@ -463,6 +517,21 @@ export interface StaffMember {
    * answer rather than a missing one.
    */
   monthlySalary?: number;
+  /**
+   * How this person is paid.
+   *
+   * A laundry's ironing is very often done by somebody who comes in when there
+   * is work, irons forty shirts and goes home - not on a wage at all. Treating
+   * them as a monthly salary makes the break-even target wrong in both
+   * directions: it charges the shop for a wage it does not pay, and it hides
+   * the real cost of the pieces they did.
+   *
+   * Absent means monthly, which is what every staff member recorded before
+   * this existed was assumed to be.
+   */
+  payType?: 'monthly' | 'per_piece' | 'none';
+  /** What this person earns per piece, by task and item. See piece-work. */
+  pieceRates?: PieceRate[];
   permissions: {
     sales: boolean;
     inventory: boolean;
@@ -937,6 +1006,10 @@ export interface StoreData {
   bankBalance?: number;
   walletBalance?: number;
   otherAssets?: number;
+  /** Work claimed by per-piece workers. See piece-work. */
+  pieceWork?: PieceWorkEntry[];
+  /** What has actually been handed over to those workers. */
+  workerPayments?: WorkerPayment[];
   liabilities?: number;
 }
 

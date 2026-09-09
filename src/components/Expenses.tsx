@@ -7,7 +7,7 @@ import ConsumableAsk from '@/components/ConsumableAsk';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import { lowSupplies } from '@/lib/consumables';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
-import { Banknote, Droplets, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { Banknote, Droplets, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon, Shirt} from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 
 interface ExpensesProps {
@@ -21,6 +21,9 @@ const CATEGORY_ICON: Record<ExpenseCategory, LucideIcon> = {
   Rent: Home,
   Utilities: Lightbulb,
   Salaries: Users,
+  // Separate from Salaries because it behaves differently: owed per shirt,
+  // not per month.
+  'Piece work': Shirt,
   Transport: Truck,
   Other: Receipt,
 };

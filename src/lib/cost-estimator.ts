@@ -31,6 +31,7 @@
 import type { Expense, ExpenseCategory, StoreData } from '@/types/store';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
+import { approvedLabourBetween, PIECE_WORK_CATEGORY } from '@/lib/piece-work';
 
 /**
  * Costs that rise and fall with the amount of work done.
@@ -40,7 +41,13 @@ import { isServiceFirstBusiness } from '@/lib/business-runtime';
  * are the lights, which burn whether or not anybody buys anything.
  */
 export const ALWAYS_VARIABLE: ExpenseCategory[] = ['Consumables'];
-export const VARIABLE_FOR_SERVICES: ExpenseCategory[] = ['Consumables', 'Utilities'];
+/*
+ * Piece work is variable by definition: a shop that irons nothing pays nobody
+ * to iron. It belongs here so that paying a per-piece worker never lands in
+ * the month's fixed costs beside the rent, where it would make the break-even
+ * target lurch on payday and sit too low the rest of the month.
+ */
+export const VARIABLE_FOR_SERVICES = ['Consumables', 'Utilities', PIECE_WORK_CATEGORY] as ExpenseCategory[];
 
 export function variableCategories(store: StoreData): ExpenseCategory[] {
   return isServiceFirstBusiness(store) ? VARIABLE_FOR_SERVICES : ALWAYS_VARIABLE;
@@ -95,9 +102,30 @@ export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
 
   for (const expense of store.expenses || []) {
     if (!within(expense.date) || !categories.includes(expense.category)) continue;
+    /*
+     * Paying a worker is not when the work cost something - approving it was.
+     * The payment is still an expense, because the cash really left, but
+     * counting it here as well as the approved work below would charge the
+     * shop twice for the same shirts.
+     */
+    if (expense.category === PIECE_WORK_CATEGORY) continue;
     const amount = Math.max(0, Number(expense.amount) || 0);
     spend += amount;
     totals.set(expense.category, (totals.get(expense.category) || 0) + amount);
+  }
+
+  /*
+   * The labour that actually went into these pieces.
+   *
+   * Read from approved work rather than from payments, because that is when
+   * the money became owed. Reading payments would tell a shop that ironing
+   * costs nothing all month and everything on payday, and it would price the
+   * work wrong on both days.
+   */
+  const labour = approvedLabourBetween(store, since, Date.now());
+  if (labour > 0) {
+    spend += labour;
+    totals.set(PIECE_WORK_CATEGORY as ExpenseCategory, labour);
   }
 
   const accessCode = String(store.accessCode || '');
