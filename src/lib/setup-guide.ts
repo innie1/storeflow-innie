@@ -150,22 +150,11 @@ function serviceSteps(store: StoreData): GuideStep[] {
       body: isLaundry
         ? 'This is where clothes go when someone brings them in. Tap here.'
         : 'This is where work you take in is logged. Tap here.',
-      /*
-       * Practising counts as having opened it, obviously - and it has to,
-       * because the celebration checks the walk with no tab in hand. Left as
-       * "you are standing on it, or you have traded", a shop that had only
-       * rehearsed never finished this step, so the walk never completed and
-       * the "ready for business" moment never came.
-       */
       done: (store, tab) => tab === (isLaundry ? 'laundry-records' : 'orders')
         || hasJob(store)
         || hasPractised(store.accessCode),
     },
     {
-      // Pointed at the button that starts a job, not at the tab. Aimed at the
-      // tab, this step went on spotlighting a tab the merchant was already
-      // standing on: tapping it changed nothing, and the walk could not be
-      // finished.
       id: 'first-job',
       target: 'record-job',
       tab: isLaundry ? 'laundry-records' : 'orders',
@@ -173,38 +162,12 @@ function serviceSteps(store: StoreData): GuideStep[] {
       body: isLaundry
         ? 'Walk through it once. Nothing is saved — this is only to show you how.'
         : 'Log the first piece of work you take in. That is the shop open.',
-      /*
-       * Practised, or plainly past opening day.
-       *
-       * This used to end on `hasJob` - one real order, and the whole walk was
-       * over. Reported from the field: a merchant records their first order
-       * and the guide vanishes, having taught them nothing. Which is exactly
-       * backwards, because somebody who has just recorded one order is the
-       * person the walk is for.
-       *
-       * The step's own words are "walk through it once, nothing is saved,
-       * this is only to show you how". A real bundle is not that. So it ends
-       * when they have actually been shown - or when the shop has been
-       * trading across more than one day and obviously does not need showing.
-       */
       done: store => hasPractised(store.accessCode) || tradingBeyondFirstDay(store),
     },
   ];
 }
 
-/**
- * The walk for a gaming centre.
- *
- * It used to get the retail walk, which opens "Start with your stock. This is
- * where what you sell lives" - to a business that sells time on a PlayStation.
- * Worse, a gaming centre's tabs are Home, History, Analytics and Games: it has
- * no inventory tab and no sales tab, so all four steps pointed at things that
- * do not exist. Every one of them dimmed the screen and lit nothing.
- *
- * Its own walk is short because most of it is already done: the template seeds
- * the games, so the only thing a new centre has genuinely not done is put a
- * player on a machine.
- */
+/** The walk for a gaming centre. */
 function gamesSteps(): GuideStep[] {
   const priced = (store: StoreData) => (store.games || []).some(game => Number((game as any).price || 0) > 0);
   const played = (store: StoreData) => ((store as any).gameSessions || []).length > 0;
@@ -265,8 +228,6 @@ function productSteps(): GuideStep[] {
 }
 
 export function guideSteps(store: StoreData): GuideStep[] {
-  // Checked before the service test: a gaming centre lists 'products' among
-  // its modes, so it fell through to the retail walk despite selling sessions.
   if (String(store.storeType || store.category || '').toLowerCase() === 'games') return gamesSteps();
   return isServiceFirstBusiness(store) ? serviceSteps(store) : productSteps();
 }
@@ -276,14 +237,7 @@ export function nextStep(store: StoreData, tab = ''): GuideStep | null {
   return guideSteps(store).find(step => !step.done(store, tab)) || null;
 }
 
-/**
- * Where the merchant is in the walk.
- *
- * `index` is the position of the step they are actually on, not a count of
- * everything ticked off. Counting told someone adding their first service that
- * they were on "Step 3 of 5", because a later step happened to be satisfied
- * already.
- */
+/** Where the merchant is in the walk. */
 export function guideProgress(store: StoreData, tab = ''): { done: number; total: number; index: number } {
   const steps = guideSteps(store);
   const current = steps.findIndex(step => !step.done(store, tab));
@@ -295,50 +249,23 @@ export function guideProgress(store: StoreData, tab = ''): { done: number; total
 }
 
 /*
- * Both flags are per shop.
+ * Setup-guide state is strictly per shop.
  *
- * They were single global keys, so the first store to finish setup switched
- * the walk off for every store on the device - and, worse, spent the "ready
- * for business" moment on behalf of all of them. Open a second laundry and it
- * got no guide and no celebration, having done nothing. Somebody trying the
- * app out with a few shops would see it once and never again, which is exactly
- * how it was reported: the training finished and nothing happened.
- *
- * Each shop earns its own.
- */
-/*
- * The last step is a rehearsal, so it cannot be judged by what it leaves
- * behind.
- *
- * Recording a bundle during the walk used to create a real one: a real job in
- * the records, a real customer, real money in the day's takings. Somebody
- * sitting at home learning the app ended up with an invented customer in their
- * books and takings that never happened. The service they set up is real setup
- * and stays; the bundle is only practice.
- *
- * Which means completion has to be recorded rather than inferred - there is
- * nothing left over to look for.
+ * Older versions wrote global dismissal/finished keys. Reading those keys here
+ * makes a second store inherit the first store's onboarding state, so they are
+ * intentionally ignored. A store only counts as dismissed, practised or
+ * celebrated when its own access-code-specific key says so.
  */
 const PRACTISED_PREFIX = 'storeflow_setup_guide_practised_';
 const DISMISSED_PREFIX = 'storeflow_setup_guide_dismissed_';
 const FINISHED_PREFIX = 'storeflow_setup_guide_finished_';
 
-/** The old global keys, still honoured for the shop that set them. */
-const LEGACY_DISMISSED = 'storeflow_setup_guide_dismissed';
-const LEGACY_FINISHED = 'storeflow_setup_guide_finished';
-
 const shopKey = (prefix: string, accessCode?: string) =>
   `${prefix}${String(accessCode || '').toUpperCase()}`;
 
-function readFlag(prefix: string, legacy: string, accessCode?: string): boolean {
+function readShopFlag(prefix: string, accessCode?: string): boolean {
   try {
-    if (localStorage.getItem(shopKey(prefix, accessCode)) === '1') return true;
-    /*
-     * A merchant already trading when this changed must not be shown the walk
-     * again, so the old global key still counts - but only until they finish
-     * or dismiss on this shop, which writes the per-shop one.
-     */
-    return localStorage.getItem(legacy) === '1';
+    return localStorage.getItem(shopKey(prefix, accessCode)) === '1';
   } catch {
     return false;
   }
@@ -349,21 +276,15 @@ export const PRACTISED_SIGNAL = 'storeflow:setup-practised';
 
 export function markPractised(accessCode?: string): void {
   try { localStorage.setItem(shopKey(PRACTISED_PREFIX, accessCode), '1'); } catch { /* private mode */ }
-  /*
-   * The "ready for business" moment is re-checked when the store changes, and
-   * a rehearsal deliberately changes nothing - so finishing the walk left the
-   * guide gone and no celebration, which is the very thing it was reported
-   * missing for. Nothing to watch means it has to be announced.
-   */
   try { window.dispatchEvent(new CustomEvent(PRACTISED_SIGNAL)); } catch { /* not a browser */ }
 }
 
 export function hasPractised(accessCode?: string): boolean {
-  try { return localStorage.getItem(shopKey(PRACTISED_PREFIX, accessCode)) === '1'; } catch { return false; }
+  return readShopFlag(PRACTISED_PREFIX, accessCode);
 }
 
 export function guideDismissed(accessCode?: string): boolean {
-  return readFlag(DISMISSED_PREFIX, LEGACY_DISMISSED, accessCode);
+  return readShopFlag(DISMISSED_PREFIX, accessCode);
 }
 
 export function dismissGuide(accessCode?: string): void {
@@ -375,28 +296,19 @@ export function restartGuide(accessCode?: string): void {
     localStorage.removeItem(shopKey(DISMISSED_PREFIX, accessCode));
     localStorage.removeItem(shopKey(FINISHED_PREFIX, accessCode));
     localStorage.removeItem(shopKey(PRACTISED_PREFIX, accessCode));
-    // The global ones would otherwise keep the walk switched off for ever.
-    localStorage.removeItem(LEGACY_DISMISSED);
-    localStorage.removeItem(LEGACY_FINISHED);
   } catch { /* private mode */ }
 }
 
 /** Whether this shop's "ready for business" moment has already been shown. */
 export function celebrationShown(accessCode?: string): boolean {
-  return readFlag(FINISHED_PREFIX, LEGACY_FINISHED, accessCode);
+  return readShopFlag(FINISHED_PREFIX, accessCode);
 }
 
 export function markCelebrationShown(accessCode?: string): void {
   try { localStorage.setItem(shopKey(FINISHED_PREFIX, accessCode), '1'); } catch { /* private mode */ }
 }
 
-/**
- * Whether the guide should be on screen at all.
- *
- * Only for a shop that has not started trading. Once there are prices and a
- * first job it goes away for good, and a merchant who closes it is not asked
- * twice.
- */
+/** Whether the guide should be on screen at all. */
 export function shouldRunGuide(store: StoreData | null | undefined, tab = ''): boolean {
   if (!store) return false;
   if (guideDismissed(store.accessCode)) return false;
