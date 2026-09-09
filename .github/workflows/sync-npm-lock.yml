@@ -1,56 +1,38 @@
-name: Apply tray reset and refresh reliability fixes
+name: Sync npm lockfile
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  patch:
+  sync-lockfile:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          ref: main
+          node-version: 20
+          cache: npm
 
-      - name: Apply targeted fixes
+      - name: Regenerate lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Commit lockfile when changed
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path('src/components/laundry/LaundryWalkInIntakeV3.tsx')
-          s = p.read_text()
-          if "    setPaidNow('');\n    setPaidTouched(false);" not in s:
-              old = "  const reset = () => {\n    setCustomerName('');"
-              new = "  const reset = () => {\n    // Everything belonging to the previous customer/order must start clean.\n    // The due date is the one intentional exception: promisedFor and\n    // promisedTouched stay untouched until the merchant changes them.\n    setPaidNow('');\n    setPaidTouched(false);\n    setShowSuggestions(false);\n    setAskingNumber(false);\n    setLateNumber('');\n    setGarmentSearch('');\n    setSimilarGarment(null);\n    setPickingCustom(false);\n    setShowTicket(false);\n    setCustomerName('');"
-              if old not in s:
-                  raise SystemExit('Laundry reset anchor not found')
-              p.write_text(s.replace(old, new, 1))
-
-          p = Path('src/sw.ts')
-          s = p.read_text()
-          if "new NetworkFirst({ cacheName: 'html' }));" not in s:
-              start_marker = "/*\n * Five seconds, not two."
-              next_marker = "registerRoute(({ request }) => ['style','script','worker','image','font'].includes(request.destination)"
-              start = s.find(start_marker)
-              end = s.find(next_marker, start)
-              if start < 0 or end < 0:
-                  raise SystemExit('Service-worker navigation strategy anchor not found')
-              replacement = "/*\n * Always prefer the current HTML when the network is available. A navigation\n * timeout could serve an older cached shell whose hashed JavaScript chunks no\n * longer exist on the current deployment, leaving a blank screen until the\n * next refresh. NetworkFirst still falls back to cached HTML when the network\n * actually fails, so installed shops keep their offline start.\n */\nregisterRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ cacheName: 'html' }));\n"
-              p.write_text(s[:start] + replacement + s[end:])
-          PY
-
-      - name: Commit targeted files if changed
-        run: |
-          if git diff --quiet -- src/components/laundry/LaundryWalkInIntakeV3.tsx src/sw.ts; then
-            echo "Targeted fixes are already applied."
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json is already in sync."
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/laundry/LaundryWalkInIntakeV3.tsx src/sw.ts
-          git commit -m "Reset laundry payment fields and prevent blank refreshes"
-          git push origin HEAD:main
+          git add package-lock.json
+          git commit -m "chore: sync npm lockfile"
+          git push
