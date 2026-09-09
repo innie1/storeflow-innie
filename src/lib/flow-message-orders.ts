@@ -196,6 +196,28 @@ function laundryItems(store: StoreData, text: string): FlowMessageOrderItem[] {
   });
 }
 
+function exactLaundryServiceItem(store: StoreData, text: string): FlowMessageOrderItem[] {
+  const q = normalized(text);
+  if (!q) return [];
+  const service = (store.products || []).find(product => {
+    if (!product.isService || product.discontinued) return false;
+    return [product.name, ...((product as any).voiceAliases || [])]
+      .some(alias => normalized(String(alias || '')) === q);
+  });
+  if (!service) return [];
+  const unitPrice = Math.max(0, Number(service.sellingPrice) || 0);
+  return [{
+    product: service,
+    productId: String(service.id),
+    label: service.name,
+    quantity: 1,
+    unitPrice,
+    subtotal: unitPrice,
+    unit: service.unit,
+    itemKind: itemKindFor(service),
+  }];
+}
+
 export function supportsFlowMessageOrders(store: StoreData): boolean {
   return hasBusinessModule(store, 'orders');
 }
@@ -214,11 +236,9 @@ export function parseFlowMessageOrder(store: StoreData, text: string): FlowMessa
   const customerPhone = phoneFromText(text) || knownCustomer?.phone || '';
   const isLaundry = resolveBusinessType(store) === 'laundry';
   const laundry = isLaundry ? laundryItems(store, text) : [];
-  // Laundry service names describe the treatment, not a garment. When no
-  // garment is safely matched, leave the item list empty so the conversation
-  // layer can ask a clarification instead of adding "Wash & Iron" as an item.
+  const serviceOnly = isLaundry && !laundry.length ? exactLaundryServiceItem(store, text) : [];
   const parsed = isLaundry
-    ? { items: laundry, unmatched: laundry.length ? [] as string[] : [text.trim()].filter(Boolean) }
+    ? { items: laundry.length ? laundry : serviceOnly, unmatched: (laundry.length || serviceOnly.length) ? [] as string[] : [text.trim()].filter(Boolean) }
     : genericItems(store, text);
   return { rawText: text.trim(), customerName, customerPhone, items: parsed.items, unmatched: parsed.unmatched, total: parsed.items.reduce((sum, item) => sum + item.subtotal, 0) };
 }
