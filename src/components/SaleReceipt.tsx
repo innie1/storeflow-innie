@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import ContactPickButton from '@/components/ContactPickButton';
 import { StoreData, Sale, ManagerSettings } from '@/types/store';
 import { printReceipt } from '@/lib/print-engine';
 import { showToast } from '@/components/Toast';
@@ -289,13 +290,16 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
               {/* Buyer Phone Input */}
               <div>
                 <label className="block text-xs text-muted-foreground text-left mb-1">Buyer&apos;s WhatsApp Number</label>
-                <input
-                  type="tel"
-                  value={buyerPhone}
-                  onChange={e => setBuyerPhone(e.target.value)}
-                  placeholder="e.g. +2348012345678"
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-xs"
-                />
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={buyerPhone}
+                    onChange={e => setBuyerPhone(e.target.value)}
+                    placeholder="e.g. +2348012345678"
+                    className="w-full p-2.5 pr-11 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-xs"
+                  />
+                  <ContactPickButton onPick={picked => setBuyerPhone(picked)} />
+                </div>
               </div>
 
               {/* Action Buttons */}

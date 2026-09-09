@@ -4,6 +4,7 @@ import { getBusinessTemplate } from '@/lib/business-runtime';
 import { applyBusinessTemplate, businessCategoryFor, listBusinessTypes } from '@/lib/business-templates';
 import { StoreData, StoreCategory, StoreType, StaffMember } from '@/types/store';
 import { showToast } from '@/components/Toast';
+import ContactPickButton from '@/components/ContactPickButton';
 import Mascot, { MascotMood } from '@/components/Mascot';
 import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
 import { Eye, EyeOff, Key, Shield, HelpCircle, Lock, Mail, Phone, Users, Cloud, Database, Sparkles, Plus, Check, LogIn, UserPlus, Building, ArrowLeft, Camera } from 'lucide-react';
@@ -1740,13 +1741,22 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
               </div>
               <div className="space-y-1">
                 <label className="block text-xs text-muted-foreground uppercase font-bold">Phone Number</label>
-                <input
-                  type="tel"
-                  value={recoveryPhone}
-                  onChange={e => setRecoveryPhone(e.target.value)}
-                  placeholder="07025517388"
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
-                />
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={recoveryPhone}
+                    onChange={e => setRecoveryPhone(e.target.value)}
+                    placeholder="07025517388"
+                    className="w-full p-2.5 pr-11 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                  />
+                  {/* The owner's own number, which is the one they are least
+                      likely to want to type and most need to be right - it is
+                      how they get back in. */}
+                  <ContactPickButton onPick={(phone, pickedName) => {
+                    setRecoveryPhone(phone);
+                    if (pickedName && !ownerName.trim()) setOwnerName(pickedName);
+                  }} />
+                </div>
               </div>
             </div>
 

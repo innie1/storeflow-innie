@@ -18,6 +18,7 @@ import ToggleRow from '@/components/Toggle';
 import Mascot from '@/components/Mascot';
 import StoreLogo, { LOGO_STYLES } from '@/components/StoreLogo';
 import StoreAvatar from '@/components/StoreAvatar';
+import ContactPickButton from '@/components/ContactPickButton';
 import { compileBackupPayload, triggerBackupExport, restoreBackupPayload, BackupPayload, decryptBackup } from '@/lib/backup-system';
 import { LocalBackup, getLocalBackups, saveLocalBackup, deleteLocalBackup } from '@/lib/backup-db';
 import { getLowStockThreshold, saveLowStockThreshold } from '@/lib/settings';
@@ -2526,7 +2527,18 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
           <Field label="Business Address" value={profile.location} onChange={v => setProfile({ ...profile, location: v })} placeholder="12 Market Road, Lagos" />
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Phone" value={profile.phone} onChange={v => setProfile({ ...profile, phone: v })} placeholder="08012345678" type="tel" />
+            <Field
+              label="Phone"
+              value={profile.phone}
+              onChange={v => setProfile({ ...profile, phone: v })}
+              placeholder="08012345678"
+              type="tel"
+              trailing={<ContactPickButton onPick={(picked, pickedName) => setProfile(current => ({
+                ...current,
+                phone: picked,
+                ownerName: current.ownerName?.trim() ? current.ownerName : pickedName,
+              }))} />}
+            />
             <Field label="Email" value={profile.email} onChange={v => setProfile({ ...profile, email: v })} placeholder="store@email.com" type="email" />
           </div>
           <Field label="Website" value={profile.website || ''} onChange={v => setProfile({ ...profile, website: v })} placeholder="www.mystore.com" />
@@ -4870,11 +4882,16 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
 
 // ============ small components ============
-function Field({ label, value, onChange, placeholder, type='text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+function Field({ label, value, onChange, placeholder, type='text', trailing }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; trailing?: React.ReactNode }) {
   return (
     <div>
       <label className="block text-xs text-muted-foreground mb-1">{label}</label>
-      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type} className={inputClass} />
+      {/* `relative` always, so anything passed in sits inside the field rather
+          than pushing the row around. */}
+      <div className="relative">
+        <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type} className={`${inputClass} ${trailing ? 'pr-11' : ''}`} />
+        {trailing}
+      </div>
     </div>
   );
 }

@@ -24,6 +24,7 @@ import {
 } from '@/lib/laundry-offline';
 import { openLaundryWhatsApp, openWhatsAppChooser } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
+import ContactPickButton from '@/components/ContactPickButton';
 import { beginWork } from '@/lib/work-in-progress';
 import { CalendarClock, Check, ChevronDown, ChevronUp, ClipboardCopy, MapPin, MessageCircle, Minus, Plus, Search, Shirt, Ticket, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
@@ -842,7 +843,20 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
                 onPick={customer => selectCustomer(customer.id)}
               />
               </div>
-              <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number — e.g. 08012345678" inputMode="tel" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
+              {/* Typing eleven digits at a counter with somebody waiting is
+                  where wrong numbers come from, and a wrong number messages a
+                  stranger about somebody else's clothes. Most customers are
+                  already in the phone. */}
+              <div className="relative">
+                <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number — e.g. 08012345678" inputMode="tel" className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm" />
+                <ContactPickButton onPick={(phone, name) => {
+                  setCustomerPhone(phone);
+                  setSelectedCustomerId('');
+                  // Only when the field is still empty: somebody who has typed
+                  // a name has told us who this is.
+                  if (name && !customerName.trim()) setCustomerName(name);
+                }} />
+              </div>
               {/* Said, rather than enforced. The bundle saves either way; this
                   is only so nobody is surprised later that no message went. */}
               {!customerPhone.trim() && (

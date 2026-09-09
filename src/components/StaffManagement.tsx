@@ -8,6 +8,7 @@ import {
   Briefcase, UserPlus, Lock, Key, Shield, Calendar, Play, Square, FileText, CheckSquare, Trash2, Edit
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import ContactPickButton from '@/components/ContactPickButton';
 import ConfirmModal from '@/components/ConfirmModal';
 import ScrollLock from '@/components/ScrollLock';
 
@@ -432,13 +433,19 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
 
               <div className="space-y-1 text-left">
                 <label className="text-xs text-muted-foreground uppercase font-bold">WhatsApp / Phone Number</label>
-                <input 
-                  type="text" 
-                  value={phone} 
-                  onChange={e => setPhone(e.target.value)}
-                  placeholder="e.g. 07025517388"
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="e.g. 07025517388"
+                    className="w-full p-2.5 pr-11 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
+                  />
+                  <ContactPickButton onPick={(picked, pickedName) => {
+                    setPhone(picked);
+                    if (pickedName && !name.trim()) setName(pickedName);
+                  }} />
+                </div>
               </div>
 
               {/*

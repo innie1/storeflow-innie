@@ -6,6 +6,7 @@ import {
   Users, UserPlus, Phone, MapPin, Search, Trophy, Sparkles, AlertCircle, ChevronDown, Edit, Trash2, Calendar, FileText, MessageCircle
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import ContactPickButton from '@/components/ContactPickButton';
 import { getCustomerActivitySignals } from '@/lib/business-insights';
 import { owedByCustomer } from '@/lib/flow-service-brain';
 import { customerStanding, explainStanding } from '@/lib/customer-rhythm';
@@ -304,13 +305,19 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
 
               <div className="space-y-1 text-left">
                 <label className="text-xs text-muted-foreground uppercase font-bold">Phone Number</label>
-                <input 
-                  type="tel" 
-                  value={phone} 
-                  onChange={e => setPhone(e.target.value)}
-                  placeholder="e.g. 08012345678"
-                  className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
-                />
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="e.g. 08012345678"
+                    className="w-full p-2.5 pr-11 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
+                  />
+                  <ContactPickButton onPick={(picked, pickedName) => {
+                    setPhone(picked);
+                    if (pickedName && !name.trim()) setName(pickedName);
+                  }} />
+                </div>
               </div>
 
               <div className="space-y-1 text-left">

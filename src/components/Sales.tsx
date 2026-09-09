@@ -5,6 +5,7 @@ import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale, lo
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
+import ContactPickButton from '@/components/ContactPickButton';
 import { playSoldSound, playQuickAddSound } from '@/lib/sound-effects';
 import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
@@ -1045,8 +1046,15 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                   <div className="grid grid-cols-2 gap-1.5 relative">
                     <input placeholder="Name" value={customerName} onChange={e => { setCustomerName(e.target.value); setPickedCustomer(false); }}
                       className="p-1.5 rounded bg-card border border-border text-xs w-full" />
-                    <input placeholder="Phone" value={customerPhone} onChange={e => { setCustomerPhone(e.target.value); setPickedCustomer(false); }}
-                      className="p-1.5 rounded bg-card border border-border text-xs w-full" />
+                    <div className="relative">
+                      <input placeholder="Phone" value={customerPhone} onChange={e => { setCustomerPhone(e.target.value); setPickedCustomer(false); }}
+                        className="p-1.5 pr-9 rounded bg-card border border-border text-xs w-full" />
+                      <ContactPickButton className="right-0.5 w-7 h-7" onPick={(phone, pickedName) => {
+                        setCustomerPhone(phone);
+                        setPickedCustomer(false);
+                        if (pickedName && !customerName.trim()) setCustomerName(pickedName);
+                      }} />
+                    </div>
                     <CustomerSuggestions
                       customers={store.customers || []}
                       query={customerName}
