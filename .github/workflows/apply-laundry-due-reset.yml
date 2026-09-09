@@ -1,0 +1,47 @@
+name: Apply laundry due-date tray reset fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-laundry-due-reset.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Keep selected due date across tray resets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/components/laundry/LaundryWalkInIntakeV3.tsx')
+          source = path.read_text()
+          old = """    setNotes('');
+    setPromisedFor(services[0] ? suggestedPromisedLocal(services[0].turnaround) : suggestedPromisedLocal());
+    setPromisedTouched(false);
+    setWashMethodId('manual:hand-wash');
+"""
+          new = """    setNotes('');
+    // Due date is deliberately sticky across tray resets. The counter often
+    // takes several bundles promised for the same date; keep the merchant's
+    // last selection until they manually choose another one.
+    setWashMethodId('manual:hand-wash');
+"""
+          if old not in source:
+              raise SystemExit('Expected due-date reset block was not found; refusing to change anything.')
+          source = source.replace(old, new, 1)
+          path.write_text(source)
+          PY
+      - name: Commit targeted fix and remove temporary workflow
+        run: |
+          git config user.name "storeflow-fix-bot"
+          git config user.email "101974666+innie1@users.noreply.github.com"
+          git rm .github/workflows/apply-laundry-due-reset.yml
+          git add src/components/laundry/LaundryWalkInIntakeV3.tsx
+          git commit -m "Keep laundry due date across tray reset"
+          git push origin HEAD:main
