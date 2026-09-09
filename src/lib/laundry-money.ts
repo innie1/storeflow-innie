@@ -47,7 +47,6 @@ export function setLaundryDepositRule(store: StoreData, percent: number): StoreD
 export function requiredDeposit(store: StoreData, total: number): number {
   const { percent } = getLaundryDepositRule(store);
   if (percent <= 0 || !Number.isFinite(total) || total <= 0) return 0;
-  // Never ask for more than the job costs.
   return Math.min(Math.round(total), Math.ceil((total * percent) / 100));
 }
 
@@ -78,11 +77,6 @@ const money = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 /**
  * One payment at the counter, separated into what was tendered, what belongs
  * to the job, and what must be handed back as change.
- *
- * Keeping these three numbers distinct is important. A customer can hand over
- * ₦6,000 for a ₦2,500 bundle: the shop received ₦6,000 physically, earned
- * ₦2,500, and owes ₦3,500 change. Clamping the first number to the second made
- * the app say only ₦2,500 had been given and erased the change completely.
  */
 export interface LaundryPaymentSettlement {
   tendered: number;
@@ -106,6 +100,51 @@ export function settleLaundryPayment(total: number, tendered: number, paidBefore
 }
 
 /**
+ * What the customer physically handed over on the latest overpayment, so every
+ * screen can show the same tender/change pair after the intake sheet closes.
+ *
+ * Existing records already keep this in the payment event note, so this also
+ * works for bundles saved before this helper existed.
+ */
+export interface LaundryTenderSummary {
+  tendered: number;
+  applied: number;
+  change: number;
+  at: string;
+}
+
+export function laundryTenderSummary(store: StoreData, clientRefOrTag: string): LaundryTenderSummary | null {
+  const key = String(clientRefOrTag || '').trim();
+  if (!key) return null;
+  const upper = key.toUpperCase();
+
+  const entry = (store.pendingPayments || []).find(payment =>
+    payment.id === `laundry-${key}`
+    || (payment.items || []).some(item => String(item.productName || '').toUpperCase().includes(upper))
+    || (payment.events || []).some(event => String(event.note || '').toUpperCase().includes(upper)),
+  );
+  if (!entry) return null;
+
+  const events = [...(entry.events || [])].reverse();
+  for (const event of events) {
+    const note = String(event.note || '');
+    const match = note.match(/₦([\d,]+(?:\.\d+)?)\s+tendered,\s*₦([\d,]+(?:\.\d+)?)\s+change/i);
+    if (!match) continue;
+    const tendered = money(Number(match[1].replace(/,/g, '')));
+    const change = money(Number(match[2].replace(/,/g, '')));
+    if (!(tendered > 0) || !(change > 0)) continue;
+    return {
+      tendered,
+      applied: money(Number(event.amount) || Math.max(0, tendered - change)),
+      change,
+      at: event.date,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Records a payment against a bundle, and keeps the debt in step.
  *
  * Safe to call more than once for the same bundle: a second payment adds to
@@ -123,13 +162,10 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
   const paidBefore = existing ? money(existing.paid) : 0;
   const settlement = settleLaundryPayment(total, paying, paidBefore);
   const paidNow = settlement.paidAfter;
-  // Only the part that belongs to this job is revenue. Change is money the
-  // customer handed over temporarily and gets handed straight back.
   const actuallyTaken = settlement.applied;
 
   let next = store;
 
-  // ── Revenue, for the money actually applied to the job now ───────────────
   if (actuallyTaken > 0) {
     const sale: Sale = {
       id: `laundry-${input.clientRef}-${at}`,
@@ -138,8 +174,6 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
       quantity: 1,
       unitPrice: actuallyTaken,
       total: actuallyTaken,
-      // A laundry service has no stock behind it, so what comes in is what is
-      // earned. Booking a cost here would invent one.
       profit: actuallyTaken,
       date: at,
       pendingPaymentId: `laundry-${input.clientRef}`,
@@ -148,7 +182,6 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
     next = { ...next, sales: [...(next.sales || []), sale] };
   }
 
-  // ── What is still owed ──────────────────────────────────────────────────
   const balance = settlement.balance;
   const event = actuallyTaken > 0
     ? [{
@@ -162,8 +195,6 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
 
   const entry: PendingPayment = {
     id: `laundry-${input.clientRef}`,
-    // Kept if it was ever known: a later part-payment must not quietly
-    // detach the debt from the customer it belongs to.
     customerId: input.customerId || existing?.customerId,
     customerName: input.customerName,
     customerPhone: input.customerPhone,
@@ -183,8 +214,6 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
   } as PendingPayment;
 
   const others = pendingList.filter(item => item.id !== entry.id);
-  // A settled bundle keeps its record — it is history, and the events on it
-  // are how the shop can show what was paid and when.
   next = { ...next, pendingPayments: [...others, entry] };
 
   return next;
