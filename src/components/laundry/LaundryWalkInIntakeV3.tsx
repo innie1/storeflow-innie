@@ -284,6 +284,18 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   }, [created, store.accessCode]);
 
   const reset = () => {
+    // Everything belonging to the previous customer/order must start clean.
+    // The due date is the one intentional exception: promisedFor and
+    // promisedTouched stay untouched until the merchant changes them.
+    setPaidNow('');
+    setPaidTouched(false);
+    setShowSuggestions(false);
+    setAskingNumber(false);
+    setLateNumber('');
+    setGarmentSearch('');
+    setSimilarGarment(null);
+    setPickingCustom(false);
+    setShowTicket(false);
     setCustomerName('');
     setCustomerPhone('');
     setCustomerAddress('');
