@@ -18,9 +18,16 @@ describe('the picker knows when it cannot work', () => {
     expect(contactPickerAvailable()).toBe(false);
   });
 
-  it('draws nothing at all in that case', () => {
+  it('still draws the button there, and explains itself', () => {
+    /*
+     * It used to hide itself, which sounded right and was not: the icon was
+     * simply absent on the owner's own phone, with no way to tell whether the
+     * app had the feature, had lost it, or had never shipped it. A missing
+     * thing cannot explain itself. See contact-pick-button.test.tsx.
+     */
     const button = readSource('src/components/ContactPickButton.tsx');
-    expect(button).toContain('if (!contactPickerAvailable()) return null;');
+    expect(button).not.toContain('return null;');
+    expect(button).toContain('if (!available) {');
   });
 
   it('treats a cancelled pick as nothing happening', () => {
