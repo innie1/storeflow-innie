@@ -250,3 +250,82 @@ describe('what the work costs the shop', () => {
     expect(approvedLabourBetween(store, NOW - DAY, NOW + DAY)).toBe(0);
   });
 });
+
+describe('the labour reaches the figures that price the work', () => {
+  /*
+   * Relative to the real clock, not the fixed NOW the rest of this file uses.
+   * estimateUnitCost reads Date.now() itself, so a fixture dated at noon is in
+   * the future on any morning and falls outside its own window.
+   */
+  const NOW_ISO = new Date(Date.now() - 3600_000).toISOString();
+
+  const shop = (over: Record<string, unknown>) => {
+    localStorage.setItem(laundryLocalStorageKey('SHOP1'), JSON.stringify([{
+      clientRef: 'r1', accessCode: 'SHOP1', tagCode: 'LT-1', customerName: 'Musa',
+      garments: [{ garmentType: 'Shirt', quantity: 20 }], pieceCount: 20,
+      createdAt: NOW_ISO, workflowStage: 'washing',
+    }]));
+    return {
+      accessCode: 'SHOP1', storeType: 'laundry', businessType: 'laundry',
+      expenses: [], pieceWork: [], staffMembers: [], products: [], sales: [],
+      ...over,
+    } as unknown as StoreData;
+  };
+
+  it('counts approved work in what a piece costs', async () => {
+    /*
+     * The point of the whole feature. If the ironing does not reach the cost
+     * per piece, the pricing advisor is recommending prices against a cost
+     * that leaves out the largest thing the shop pays for by the piece.
+     */
+    const { estimateUnitCost } = await import('@/lib/cost-estimator');
+    const withLabour = shop({
+      pieceWork: [{ amount: 400, at: NOW_ISO, approved: true, quantity: 8 }],
+    });
+    const estimate = estimateUnitCost(withLabour);
+    expect(estimate.spend).toBe(400);
+    expect(estimate.breakdown.some(line => line.category === 'Piece work')).toBe(true);
+  });
+
+  it('leaves unapproved claims out of the cost', async () => {
+    const { estimateUnitCost } = await import('@/lib/cost-estimator');
+    const claimed = shop({ pieceWork: [{ amount: 400, at: NOW_ISO, approved: false, quantity: 8 }] });
+    expect(estimateUnitCost(claimed).spend).toBe(0);
+  });
+
+  it('does not charge the shop twice when the worker is paid', async () => {
+    /*
+     * The payment is a real expense, because the cash really left. But the
+     * cost was recognised when the work was approved, and counting both would
+     * make every shirt look like it cost double to iron.
+     */
+    const { estimateUnitCost } = await import('@/lib/cost-estimator');
+    const both = shop({
+      pieceWork: [{ amount: 400, at: NOW_ISO, approved: true, quantity: 8 }],
+      expenses: [{ amount: 400, category: 'Piece work', date: NOW_ISO }],
+    });
+    expect(estimateUnitCost(both).spend).toBe(400);
+  });
+
+  it('is a variable cost, so it never lands beside the rent', async () => {
+    /*
+     * A salary is owed whether or not a shirt is ironed; piece work is not.
+     * Treating it as fixed would make the break-even target lurch on payday
+     * and sit too low every other day of the month.
+     */
+    const { isVariableCost } = await import('@/lib/cost-estimator');
+    const laundry = shop({});
+    expect(isVariableCost(laundry, { category: 'Piece work' })).toBe(true);
+    expect(isVariableCost(laundry, { category: 'Salaries' })).toBe(false);
+  });
+
+  it("so the month's fixed costs ignore it", async () => {
+    const { monthlyFixedCosts } = await import('@/lib/service-breakeven');
+    const paid = shop({ expenses: [{ amount: 400, category: 'Piece work', date: NOW_ISO }] });
+    const window = {
+      start: Date.now() - 30 * DAY, end: Date.now() + DAY,
+      daysInMonth: 30, dayOfMonth: 9,
+    };
+    expect(monthlyFixedCosts(paid, window)).toBe(0);
+  });
+});

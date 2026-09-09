@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { runsATill } from '@/lib/business-runtime';
-import { StoreData, StaffMember, Shift } from '@/types/store';
+import { StoreData, StaffMember, Shift, PieceRate } from '@/types/store';
 import { 
   addStaffMember, deleteStaffMember, updateStaffMember, startShift, endShift 
 } from '@/lib/store-data';
@@ -8,6 +8,9 @@ import {
   Briefcase, UserPlus, Lock, Key, Shield, Calendar, Play, Square, FileText, CheckSquare, Trash2, Edit
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
+import { ANY_GARMENT, pendingClaims, setPieceRate, taskLabel, WORK_TASKS } from '@/lib/piece-work';
+import RecordWork from '@/components/laundry/RecordWork';
+import WorkerEarnings from '@/components/laundry/WorkerEarnings';
 import ContactPickButton from '@/components/ContactPickButton';
 import ConfirmModal from '@/components/ConfirmModal';
 import ScrollLock from '@/components/ScrollLock';
@@ -71,6 +74,42 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   const [phone, setPhone] = useState('');
   /** What they are paid a month. Feeds the shop's fixed costs. */
   const [salary, setSalary] = useState('');
+  const [payType, setPayType] = useState<'monthly' | 'per_piece' | 'none'>('monthly');
+  const [pieceRates, setPieceRates] = useState<PieceRate[]>([]);
+  const [newRateTask, setNewRateTask] = useState<string>(WORK_TASKS[0].id);
+  const [newRateGarment, setNewRateGarment] = useState('');
+  const [recordingFor, setRecordingFor] = useState<StaffMember | null>(null);
+  const [earningsFor, setEarningsFor] = useState<StaffMember | null>(null);
+
+  /** Claims this worker has waiting, so an owner can see there is something. */
+  const pendingFor = (workerId: string) =>
+    pendingClaims(store).filter(entry => entry.workerId === workerId).length;
+
+  /** What is typed in a rate box right now, as a string. */
+  const rateFor = (task: string, garmentType: string) => {
+    const found = pieceRates.find(r => r.task === task && r.garmentType.toLowerCase() === garmentType.toLowerCase());
+    return found ? String(found.rate) : '';
+  };
+
+  /*
+   * Zero and empty both mean "no rate", which setPieceRate turns into a
+   * removal rather than a rate of nothing - recording free work by accident is
+   * exactly the kind of thing that only shows up on payday.
+   */
+  const changeRate = (task: string, garmentType: string, value: string) => {
+    const rate = Number(value.replace(/[^0-9]/g, '')) || 0;
+    setPieceRates(current => {
+      const next = setPieceRate(current, { task, garmentType, rate });
+      // Keep a named garment visible at zero while it is being typed into.
+      if (rate === 0 && garmentType !== ANY_GARMENT && !next.some(r => r.task === task && r.garmentType === garmentType)) {
+        return [...next, { task, garmentType, rate: 0 }];
+      }
+      return next;
+    });
+  };
+
+  /** Everything except the catch-alls, which have their own row above. */
+  const namedRates = pieceRates.filter(r => r.garmentType !== ANY_GARMENT);
   // Whichever role the shop is most likely to be adding: a till shop hires a
   // cashier, a laundry or a barber hires someone to take work in.
   const [role, setRole] = useState<StaffMember['role']>(
@@ -105,7 +144,9 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
       name: name.trim(),
       pin: pin.trim(),
       phone: phone.trim(),
-      monthlySalary: Math.max(0, Number(salary) || 0),
+      monthlySalary: payType === 'monthly' ? Math.max(0, Number(salary) || 0) : 0,
+      payType,
+      pieceRates: payType === 'per_piece' ? pieceRates.filter(r => r.rate > 0) : [],
       role,
       permissions: {
         sales: salesAccess,
@@ -132,7 +173,9 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
       name: name.trim(),
       pin: pin.trim(),
       phone: phone.trim(),
-      monthlySalary: Math.max(0, Number(salary) || 0),
+      monthlySalary: payType === 'monthly' ? Math.max(0, Number(salary) || 0) : 0,
+      payType,
+      pieceRates: payType === 'per_piece' ? pieceRates.filter(r => r.rate > 0) : [],
       role,
       permissions: {
         sales: salesAccess,
@@ -196,6 +239,9 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setPin('');
     setPhone('');
     setSalary('');
+    setPayType('monthly');
+    setPieceRates([]);
+    setNewRateGarment('');
     setRole(runsATill(store) ? 'cashier' : 'attendant');
     setSalesAccess(true);
     setInventoryAccess(false);
@@ -211,6 +257,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setPin(s.pin);
     setPhone(s.phone || '');
     setSalary(s.monthlySalary ? String(s.monthlySalary) : '');
+    setPayType(s.payType || 'monthly');
+    setPieceRates(s.pieceRates || []);
     setRole(s.role);
     setSalesAccess(s.permissions.sales);
     setInventoryAccess(s.permissions.inventory);
@@ -223,6 +271,25 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   const shifts = store.shifts || [];
 
   return (
+    <>
+      {/* Full-screen, because both are a job of work rather than a glance. */}
+      {recordingFor && (
+        <RecordWork
+          store={store}
+          worker={recordingFor}
+          onUpdate={onUpdate}
+          onClose={() => setRecordingFor(null)}
+        />
+      )}
+      {earningsFor && (
+        <WorkerEarnings
+          store={store}
+          worker={earningsFor}
+          canManage={currentUser?.role === 'owner'}
+          onUpdate={onUpdate}
+          onClose={() => setEarningsFor(null)}
+        />
+      )}
     <div className="space-y-6 text-left">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -340,9 +407,19 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                     <div className="flex justify-between items-start gap-2">
                       <div>
                         <h4 className="font-display font-bold text-sm text-foreground">{s.name}</h4>
-                        <span className="inline-block px-1.5 py-0.5 rounded bg-surface-2 border border-border/80 text-[8px] font-bold text-yellow-500 uppercase mt-1">
-                          {s.role}
-                        </span>
+                        <div className="flex items-center gap-1 mt-1 flex-wrap">
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-surface-2 border border-border/80 text-[8px] font-bold text-yellow-500 uppercase">
+                            {s.role}
+                          </span>
+                          {/* How somebody is paid changes what the shop owes
+                              them, which is worth seeing on the row rather
+                              than only inside the edit form. */}
+                          {s.payType === 'per_piece' && (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-primary/15 border border-primary/30 text-[8px] font-bold text-primary uppercase">
+                              per piece
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {currentUser?.role === 'owner' && (
                         <div className="flex items-center gap-1">
@@ -362,6 +439,34 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                       <span className={`px-1.5 py-0.5 rounded ${s.permissions.reports ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Reports</span>
                       <span className={`px-1.5 py-0.5 rounded ${s.permissions.settings ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Settings</span>
                     </div>
+
+                    {/*
+                      Recording work and being paid are the two things a
+                      per-piece worker's row is for. Attendance stays where it
+                      is: somebody can turn up all day and iron nothing, and
+                      the shop owes them for the ironing either way.
+                    */}
+                    {s.payType === 'per_piece' && (
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => setRecordingFor(s)}
+                          className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-[11px] font-display font-black"
+                        >
+                          Record work
+                        </button>
+                        <button
+                          onClick={() => setEarningsFor(s)}
+                          className="flex-1 h-9 rounded-lg bg-surface-2 border border-border text-[11px] font-display font-bold"
+                        >
+                          Earnings
+                          {pendingFor(s.id) > 0 && (
+                            <span className="ml-1 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full bg-destructive text-white text-[8px] font-bold">
+                              {pendingFor(s.id)}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -449,12 +554,117 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
               </div>
 
               {/*
-                What they are paid, because break-even cannot be right without
-                it. Wages are usually a shop's largest cost after rent, and a
-                shop was being told it had covered its month while a salary it
-                had not yet paid was still owed. Blank is fine - a family
-                member helping out may not be on a wage.
+                How they are paid, before how much.
+
+                A laundry's ironing is very often done by somebody who comes in
+                when there is work, irons forty shirts and goes home. Recording
+                them as a monthly wage makes the shop's figures wrong twice
+                over: it charges for a salary that is not paid, and it hides
+                what those forty shirts actually cost.
               */}
+              <div className="space-y-1 text-left">
+                <label className="text-xs text-muted-foreground uppercase font-bold">How they are paid</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    ['monthly', 'Monthly'],
+                    ['per_piece', 'Per piece'],
+                    ['none', 'No payroll'],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setPayType(id)}
+                      className={`h-10 rounded-lg border text-[11px] font-display font-bold transition-colors ${
+                        payType === id ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 border-border text-muted-foreground'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  {payType === 'per_piece'
+                    ? 'Paid for each item they finish. Set the rates below.'
+                    : payType === 'none'
+                      ? 'An owner or family member who is not on the payroll.'
+                      : 'A fixed wage every month, whatever the shop takes.'}
+                </p>
+              </div>
+
+              {/*
+                The rates, only where they mean something.
+
+                A catch-all first - "ironing, anything, fifty" - because most
+                shops price it that way, and then the few garments that take
+                three times as long can be named on top of it.
+              */}
+              {payType === 'per_piece' && (
+                <div className="space-y-2 text-left rounded-xl border border-primary/25 bg-primary/5 p-3">
+                  <p className="text-[11px] font-display font-black text-primary">What they earn per piece</p>
+                  {WORK_TASKS.map(task => (
+                    <div key={task.id} className="flex items-center gap-2">
+                      <span className="text-xs w-16 shrink-0">{task.label}</span>
+                      <div className="flex items-center gap-1 flex-1 h-9 px-2 rounded-lg bg-surface-2 border border-border">
+                        <span className="text-xs text-muted-foreground">₦</span>
+                        <input
+                          inputMode="numeric"
+                          value={rateFor(task.id, ANY_GARMENT)}
+                          onChange={e => changeRate(task.id, ANY_GARMENT, e.target.value)}
+                          placeholder="any item"
+                          className="w-full bg-transparent text-xs outline-none"
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Named garments, for the ones that are not like the rest. */}
+                  {namedRates.map(rate => (
+                    <div key={`${rate.task}-${rate.garmentType}`} className="flex items-center gap-2">
+                      <span className="text-[11px] w-16 shrink-0 truncate text-muted-foreground">{taskLabel(rate.task)}</span>
+                      <span className="text-[11px] flex-1 truncate">{rate.garmentType}</span>
+                      <div className="flex items-center gap-1 w-24 h-9 px-2 rounded-lg bg-surface-2 border border-border">
+                        <span className="text-xs text-muted-foreground">₦</span>
+                        <input
+                          inputMode="numeric"
+                          value={rateFor(rate.task, rate.garmentType)}
+                          onChange={e => changeRate(rate.task, rate.garmentType, e.target.value)}
+                          className="w-full bg-transparent text-xs outline-none"
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex gap-1.5 pt-1">
+                    <select
+                      value={newRateTask}
+                      onChange={e => setNewRateTask(e.target.value)}
+                      className="h-9 rounded-lg bg-surface-2 border border-border text-[11px] px-2 outline-none"
+                    >
+                      {WORK_TASKS.map(task => <option key={task.id} value={task.id}>{task.label}</option>)}
+                    </select>
+                    <input
+                      value={newRateGarment}
+                      onChange={e => setNewRateGarment(e.target.value)}
+                      placeholder="e.g. Native Wear"
+                      className="flex-1 h-9 rounded-lg bg-surface-2 border border-border text-[11px] px-2 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const name = newRateGarment.trim();
+                        if (!name) return;
+                        changeRate(newRateTask, name, '0');
+                        setNewRateGarment('');
+                      }}
+                      className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] font-display font-black"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {payType === 'monthly' && (
               <div className="space-y-1 text-left">
                 <label className="text-xs text-muted-foreground uppercase font-bold">Monthly salary</label>
                 <div className="flex items-center gap-2 w-full p-2.5 rounded-lg bg-surface-2 border border-border">
@@ -469,6 +679,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                   />
                 </div>
               </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1 text-left">
@@ -589,5 +800,6 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
         onCancel={() => setPendingDeleteId(null)}
       />
     </div>
+    </>
   );
 }
