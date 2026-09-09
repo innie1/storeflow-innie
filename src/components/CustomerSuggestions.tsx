@@ -19,10 +19,26 @@ interface Props {
   query: string;
   /** Hidden once the caller has settled on someone. */
   enabled?: boolean;
+  /**
+   * Sits in the page rather than floating over it.
+   *
+   * Floating is right where the next field is beside this one. Where it is
+   * underneath - the laundry counter, where the phone field is directly below
+   * the name - the list covered the very field the counter needed to tell two
+   * people of the same name apart.
+   */
+  inline?: boolean;
   onPick: (customer: Customer) => void;
 }
 
-export default function CustomerSuggestions({ customers, query, enabled = true, onPick }: Props) {
+/** "2 Sep", or nothing when we have never served them. */
+function lastSeen(customer: Customer): string {
+  const at = customer.lastPurchaseDate ? new Date(customer.lastPurchaseDate) : null;
+  if (!at || Number.isNaN(at.getTime())) return '';
+  return at.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+export default function CustomerSuggestions({ customers, query, enabled = true, inline = false, onPick }: Props) {
   if (!enabled) return null;
 
   /*
@@ -40,7 +56,7 @@ export default function CustomerSuggestions({ customers, query, enabled = true, 
   const showingRecent = matches[0].matchedOn === 'recent';
 
   return (
-    <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+    <div className={`${inline ? 'relative' : 'absolute left-0 right-0'} z-20 mt-1 rounded-xl border border-border bg-card shadow-lg overflow-hidden`}>
       {/* Said, so three names appearing unasked reads as help rather than as
           the app having decided something. */}
       {showingRecent && (
@@ -54,11 +70,19 @@ export default function CustomerSuggestions({ customers, query, enabled = true, 
           className="w-full px-3 py-2.5 text-left hover:bg-surface-2 border-b last:border-b-0 border-border/60"
         >
           <p className="text-sm font-bold">{customer.name}</p>
+          {/*
+            Enough to tell two people of the same name apart, which a bare name
+            never can. "No phone" is said rather than left blank, because a
+            blank reads as missing information rather than as the fact it is.
+          */}
           <p className="text-[11px] text-muted-foreground">
-            {customer.phone}
-            {matchedOn === 'phone' ? ' · matched on phone' : ''}
-            {/* Worth knowing before taking in more of their work. */}
-            {customer.outstandingDebt > 0 ? ` · owes ₦${Math.round(customer.outstandingDebt).toLocaleString()}` : ''}
+            {[
+              customer.phone || 'No phone',
+              matchedOn === 'phone' ? 'matched on phone' : '',
+              lastSeen(customer) ? `last order ${lastSeen(customer)}` : '',
+              // Worth knowing before taking in more of their work.
+              customer.outstandingDebt > 0 ? `owes ₦${Math.round(customer.outstandingDebt).toLocaleString()}` : '',
+            ].filter(Boolean).join(' · ')}
           </p>
         </button>
       ))}

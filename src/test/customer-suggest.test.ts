@@ -26,9 +26,21 @@ const book = [
 ];
 
 describe('it offers customers as the name is typed', () => {
-  it('says nothing for a single letter', () => {
-    // One letter matches half the book; that is noise, not help.
-    expect(suggestCustomers(book, 'A')).toHaveLength(0);
+  it('starts looking from the very first letter', () => {
+    /*
+     * It used to wait for two, on the grounds that one letter matches half the
+     * book. But the list is three ranked results, so the cost of looking early
+     * is nothing and the gain is a customer found before their name is typed
+     * out — which is the whole point.
+     */
+    const names = suggestCustomers(book, 'A').map(match => match.customer.name);
+    expect(names.length).toBeGreaterThan(0);
+    expect(names[0]).toBe('Ada Nwosu');
+  });
+
+  it('never offers more than three at once', () => {
+    // More than three stops being scannable with somebody at the counter.
+    expect(suggestCustomers(book, 'a').length).toBeLessThanOrEqual(3);
   });
 
   it('finds everyone whose name starts with what was typed', () => {
@@ -57,9 +69,14 @@ describe('it offers customers as the name is typed', () => {
     expect(suggestCustomers(book, '08')).toHaveLength(0);
   });
 
-  it('stops suggesting once the name is typed out in full', () => {
-    // The field already says it; repeating it below is clutter.
-    expect(suggestCustomers(book, 'Ada Nwosu').map(s => s.customer.name)).not.toContain('Ada Nwosu');
+  it('keeps offering the customer whose name is typed out in full', () => {
+    /*
+     * The opposite of what this used to do. Hiding it read as "nobody by that
+     * name exists", which is the wrong answer when somebody by that name does
+     * — and with two people sharing a name it is precisely the moment the
+     * counter has to be shown both. The list hides itself once one is picked.
+     */
+    expect(suggestCustomers(book, 'Ada Nwosu').map(s => s.customer.name)).toContain('Ada Nwosu');
   });
 
   it('offers nothing for a genuinely new customer', () => {
@@ -254,5 +271,49 @@ describe('a number written the other way round', () => {
 
   it('still finds a number by the middle of it', () => {
     expect(suggestCustomers(fromContacts, '1234567')).toHaveLength(1);
+  });
+});
+
+describe('the best match comes first', () => {
+  const twoMusas = [
+    { ...customer('Musa Bello', ''), id: 'CUST-1' },
+    { ...customer('Musa Bello', '08055556666'), id: 'CUST-2' },
+    customer('Musa Ibrahim', '08012345678'),
+  ];
+
+  it('puts an exact number above everything', () => {
+    // Numbers do not repeat; names do.
+    expect(suggestCustomers(twoMusas, '08055556666')[0].customer.id).toBe('CUST-2');
+  });
+
+  it('offers a name typed in full rather than hiding it', () => {
+    /*
+     * This used to be filtered out because the field already said it. That is
+     * wrong the moment two people share a name: typing it in full is exactly
+     * when the counter must be shown both and asked which.
+     */
+    const both = suggestCustomers(twoMusas, 'Musa Bello').map(match => match.customer.id);
+    expect(both).toContain('CUST-1');
+    expect(both).toContain('CUST-2');
+  });
+
+  it('puts the whole name above a name that merely starts with it', () => {
+    expect(suggestCustomers(twoMusas, 'Musa Bello')[0].customer.name).toBe('Musa Bello');
+  });
+
+  it('finds somebody by the middle of their number', () => {
+    expect(suggestCustomers(twoMusas, '5555').map(m => m.customer.id)).toContain('CUST-2');
+  });
+});
+
+describe('punctuation is not why a customer cannot be found', () => {
+  const punctuated = [customer('Ngozi A.', '08099887766'), customer('Ade-Bayo Kane', '08011112222')];
+
+  it('finds a name written with a full stop when it is typed without one', () => {
+    expect(suggestCustomers(punctuated, 'Ngozi A')).toHaveLength(1);
+  });
+
+  it('finds a hyphenated name typed without the hyphen', () => {
+    expect(suggestCustomers(punctuated, 'Adebayo').map(m => m.customer.name)).toContain('Ade-Bayo Kane');
   });
 });

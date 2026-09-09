@@ -10,14 +10,26 @@ import type { Customer } from '@/types/store';
  * person, splits their history, and loses whatever they still owe.
  */
 
-/** Enough letters to be worth searching on. */
-const MIN_QUERY = 2;
+/**
+ * One letter is enough.
+ *
+ * It used to wait for two, which sounds harmless and is not: the whole point
+ * is that the counter finds somebody before typing the name out, and the list
+ * is capped at three ranked results, so a single letter costs nothing.
+ */
+const MIN_QUERY = 1;
 
-/** More than a few and the list stops being scannable at a counter. */
-const MAX_RESULTS = 5;
+/** More than three and the list stops being scannable at a counter. */
+const MAX_RESULTS = 3;
 
+/*
+ * Punctuation goes, because it is never how anybody remembers a name.
+ * "Ngozi A." and "Ngozi A" are one person, and so are "Ade-Bayo" and
+ * "Adebayo" - a full stop should not be the reason a customer cannot be found.
+ */
 const norm = (value: string) =>
-  String(value || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  String(value || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[.,'’\-_/]/g, '').replace(/\s+/g, ' ').trim();
 
 const digits = (value: string) => String(value || '').replace(/\D/g, '');
 
@@ -143,21 +155,35 @@ export function recentCustomers(customers: Customer[], limit = RECENT_SUGGESTION
 /**
  * Customers worth offering for what has been typed so far.
  *
- * Matching is deliberately literal — a name that starts with what was typed,
- * then a name that contains it, then a phone number. Someone typing "Ade"
- * expects Adebayo, not a fuzzy guess at Abed; being surprised by a wrong
- * customer at the counter is worse than typing the name out.
+ * Ranked by how certain the match is, best first:
+ *
+ *   1. the number, exactly — nothing beats it, because numbers do not repeat
+ *   2. the whole name, exactly
+ *   3. a name that starts with what was typed
+ *   4. a name that contains it anywhere — surname, middle name, any of it
+ *   5. part of the number
+ *   6. a name that was probably meant, spelling aside
+ *
+ * A guess never outranks something literal. Being surprised by the wrong
+ * customer at a counter is worse than typing the name out.
+ *
+ * An exact full-name hit is offered rather than hidden, which it used to be on
+ * the grounds that the field already said it. That was wrong the moment two
+ * people share a name: typing "Musa Bello" in full is exactly when the counter
+ * has to be shown both of them and asked which one.
  */
 export function suggestCustomers(customers: Customer[], query: string): CustomerSuggestion[] {
   const q = norm(query);
   const qDigits = digits(query);
 
-  // A phone number is worth searching on from the third digit; a name needs
-  // two letters.
+  // A single letter of a name is worth searching on; a fragment of a number
+  // needs three digits before it means anything.
   const byName = q.length >= MIN_QUERY;
   const byPhone = qDigits.length >= 3;
   if (!byName && !byPhone) return [];
 
+  const exactPhone: CustomerSuggestion[] = [];
+  const exactName: CustomerSuggestion[] = [];
   const starts: CustomerSuggestion[] = [];
   const contains: CustomerSuggestion[] = [];
   const phones: CustomerSuggestion[] = [];
@@ -170,7 +196,16 @@ export function suggestCustomers(customers: Customer[], query: string): Customer
   for (const customer of customers || []) {
     if (!customer?.name) continue;
     const name = norm(customer.name);
+    const phone = digits(customer.phone);
 
+    if (byPhone && phone && (phone === qDigits || localNumber(phone) === qLocal)) {
+      exactPhone.push({ customer, matchedOn: 'phone' });
+      continue;
+    }
+    if (byName && name === q) {
+      exactName.push({ customer, matchedOn: 'name' });
+      continue;
+    }
     if (byName && name.startsWith(q)) {
       starts.push({ customer, matchedOn: 'name' });
       continue;
@@ -179,22 +214,15 @@ export function suggestCustomers(customers: Customer[], query: string): Customer
       contains.push({ customer, matchedOn: 'name' });
       continue;
     }
-    if (byPhone) {
-      const phone = digits(customer.phone);
-      if (phone.includes(qDigits) || localNumber(phone).includes(qLocal)) {
-        phones.push({ customer, matchedOn: 'phone' });
-        continue;
-      }
+    if (byPhone && phone && (phone.includes(qDigits) || localNumber(phone).includes(qLocal))) {
+      phones.push({ customer, matchedOn: 'phone' });
+      continue;
     }
     if (byName && looksLike(name, q)) {
       close.push({ customer, matchedOn: 'name' });
     }
   }
 
-  // Someone typed in full is not a suggestion worth making — the field
-  // already says it.
-  const ordered = [...starts, ...contains, ...phones, ...close]
-    .filter(entry => !(norm(entry.customer.name) === q && entry.matchedOn === 'name'));
-
-  return ordered.slice(0, MAX_RESULTS);
+  return [...exactPhone, ...exactName, ...starts, ...contains, ...phones, ...close]
+    .slice(0, MAX_RESULTS);
 }
