@@ -212,8 +212,14 @@ export function parseFlowMessageOrder(store: StoreData, text: string): FlowMessa
   const knownCustomer = existingCustomerFromText(store, text);
   const customerName = knownCustomer?.name || inferredCustomerName(text);
   const customerPhone = phoneFromText(text) || knownCustomer?.phone || '';
-  const laundry = resolveBusinessType(store) === 'laundry' ? laundryItems(store, text) : [];
-  const parsed = laundry.length ? { items: laundry, unmatched: [] as string[] } : genericItems(store, text);
+  const isLaundry = resolveBusinessType(store) === 'laundry';
+  const laundry = isLaundry ? laundryItems(store, text) : [];
+  // Laundry service names describe the treatment, not a garment. When no
+  // garment is safely matched, leave the item list empty so the conversation
+  // layer can ask a clarification instead of adding "Wash & Iron" as an item.
+  const parsed = isLaundry
+    ? { items: laundry, unmatched: laundry.length ? [] as string[] : [text.trim()].filter(Boolean) }
+    : genericItems(store, text);
   return { rawText: text.trim(), customerName, customerPhone, items: parsed.items, unmatched: parsed.unmatched, total: parsed.items.reduce((sum, item) => sum + item.subtotal, 0) };
 }
 
