@@ -5,6 +5,7 @@ import {
   recordLaundryPayment,
   requiredDeposit,
   setLaundryDepositRule,
+  settleLaundryPayment,
 } from '@/lib/laundry-money';
 import { getDashboardStats } from '@/lib/store-data';
 import type { StoreData } from '@/types/store';
@@ -85,6 +86,27 @@ describe('money taken is money earned', () => {
     store = recordLaundryPayment(store, bundle({ amountPaid: 9999 }));
     expect(getDashboardStats(store).totalRevenue).toBe(4500);
     expect(laundryBalance(store, 'ref-1')).toBe(0);
+  });
+
+  it('separates tendered cash from revenue and change', () => {
+    const payment = settleLaundryPayment(2500, 6000);
+    expect(payment).toEqual({
+      tendered: 6000,
+      applied: 2500,
+      change: 3500,
+      paidAfter: 2500,
+      balance: 0,
+    });
+  });
+
+  it('keeps the exact tendered amount in payment history without inflating revenue', () => {
+    const after = recordLaundryPayment(base(), bundle({ total: 2500, amountPaid: 6000 }));
+    expect(getDashboardStats(after).totalRevenue).toBe(2500);
+    expect(after.pendingPayments![0].paid).toBe(2500);
+    expect(after.pendingPayments![0].balance).toBe(0);
+    expect(after.pendingPayments![0].events[0].amount).toBe(2500);
+    expect(after.pendingPayments![0].events[0].note).toContain('₦6,000 tendered');
+    expect(after.pendingPayments![0].events[0].note).toContain('₦3,500 change');
   });
 
   it('does not invent a cost for a service with no stock behind it', () => {
