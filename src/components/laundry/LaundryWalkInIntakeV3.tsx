@@ -67,18 +67,9 @@ function emptyCounts(garments: string[]): Record<string, number> {
   return Object.fromEntries(garments.map(name => [name, 0]));
 }
 
-/**
- * Put the clothing this shop actually handles most at the top of the picker,
- * based on everything it has recorded before. Ties keep the merchant's own
- * price-list order, so an untouched shop still sees a predictable list.
- *
- * The ranking is captured when the sheet opens rather than recomputed live, so
- * tiles never reshuffle under the counter's finger mid-entry.
- */
 export function rankGarmentsByUsage(accessCode: string, garmentTypes: string[]): string[] {
   const used = new Map<string, number>();
   const lastUsed = new Map<string, number>();
-
   for (const record of getLocalLaundryRecords(accessCode)) {
     const at = new Date(record.createdAt || '').getTime();
     for (const garment of record.garments || []) {
@@ -88,22 +79,11 @@ export function rankGarmentsByUsage(accessCode: string, garmentTypes: string[]):
       if (Number.isFinite(at)) lastUsed.set(name, Math.max(lastUsed.get(name) || 0, at));
     }
   }
-
-  /*
-   * Most handled first, then most recently handled, then the shop's own order.
-   *
-   * Frequency alone left two items a shop uses equally often in whatever order
-   * the list happened to be written, and buried something taken in this
-   * morning below things not seen in months. Recency is the tie-break, so what
-   * the counter is dealing with now sits under what it deals with always.
-   */
   return [...garmentTypes].sort((a, b) => {
     const byUsage = (used.get(b) || 0) - (used.get(a) || 0);
     if (byUsage !== 0) return byUsage;
-
     const byRecency = (lastUsed.get(b) || 0) - (lastUsed.get(a) || 0);
     if (byRecency !== 0) return byRecency;
-
     return garmentTypes.indexOf(a) - garmentTypes.indexOf(b);
   });
 }
@@ -123,15 +103,6 @@ function suggestedPromisedLocal(turnaround?: string): string {
   return local.toISOString().slice(0, 16);
 }
 
-/**
- * When clothes are promised back, as an attendant would say it.
- *
- * The only control here was a datetime-local input, which on a phone means
- * opening a calendar, picking a day, opening a clock and picking a time - four
- * taps and a lot of squinting, at a counter, with a customer waiting. Almost
- * every laundry promise is one of a handful of intervals, so those are now one
- * tap each and the full picker stays for the exception.
- */
 const DUE_PRESETS: { label: string; hours: number }[] = [
   { label: '12 hours', hours: 12 },
   { label: '1 day', hours: 24 },
@@ -140,19 +111,10 @@ const DUE_PRESETS: { label: string; hours: number }[] = [
   { label: '1 week', hours: 168 },
 ];
 
-/**
- * Pricing modes billed by a quantity the attendant types, rather than by
- * counting garments against the price list.
- *
- * Kept in one place because three call sites - the validation, the saved
- * billing quantity and the field itself - have to agree, and they were three
- * separate copies of the same condition.
- */
 function isCountedUnit(pricing: string): boolean {
   return pricing === 'per_kg' || pricing === 'per_load' || pricing === 'per_bundle';
 }
 
-/** A custom time the merchant picked, kept so it can be tapped again. */
 const CUSTOM_DUE_KEY = 'storeflow_laundry_custom_due_hours';
 
 function readCustomDue(): number | null {
@@ -168,7 +130,6 @@ function rememberCustomDue(hours: number): void {
   try { localStorage.setItem(CUSTOM_DUE_KEY, String(Math.round(hours))); } catch { /* private mode */ }
 }
 
-/** "18 hours", "5 days" — how a counter would say an interval. */
 function describeHours(hours: number): string {
   const rounded = Math.round(hours);
   if (rounded < 24) return `${rounded} hour${rounded === 1 ? '' : 's'}`;
@@ -177,14 +138,12 @@ function describeHours(hours: number): string {
   return `${days} day${days === 1 ? '' : 's'}`;
 }
 
-/** An offset from now, in the YYYY-MM-DDTHH:mm shape the input wants. */
 function promisedInHours(hours: number): string {
   const date = new Date(Date.now() + hours * 60 * 60 * 1000);
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
 }
 
-/** Which chip, if any, the current value corresponds to - within a minute. */
 function activePreset(promisedFor: string, chips: { hours: number }[]): number | null {
   if (!promisedFor) return null;
   const target = new Date(promisedFor).getTime();
@@ -197,15 +156,6 @@ function activePreset(promisedFor: string, chips: { hours: number }[]): number |
 }
 
 export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, onRecorded, practice: guidedPractice = false }: Props) {
-  /*
-   * Rehearsing is something you can see you are doing, and stop.
-   *
-   * The only sign of a practice run used to be on the receipt, after saving -
-   * "this was practice, nothing was recorded" - which is the worst possible
-   * moment to find out, with a customer at the counter and their clothes
-   * already counted. It is said up front now, and can be turned off without
-   * losing what has been typed.
-   */
   const [rehearsing, setRehearsing] = useState(guidedPractice);
   useEffect(() => { setRehearsing(guidedPractice); }, [guidedPractice]);
   const practice = rehearsing;
@@ -213,39 +163,24 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
     [store.products],
   );
-  /*
-   * Two lists on purpose.
-   *
-   * `book` is what has actually been written to the customer book, and is the
-   * only thing worth checking before adding somebody to it. `directory` is
-   * everyone the shop has ever named - bundles, debts, storefront orders - and
-   * is what the counter searches, because a customer visible on four other
-   * screens has to be findable here.
-   */
   const book = store.customers || [];
   const directory = useMemo(() => knownCustomers(store), [store]);
   const garmentTypes = useMemo(() => getLaundryPricingConfig(store).garmentTypes, [store]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  // What the customer pays at drop-off. Nothing was ever captured here, so a
-  // shop could hand back forty bundles and be told it had earned nothing.
   const [paidNow, setPaidNow] = useState('');
   const [paidTouched, setPaidTouched] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  // Hidden once one is picked, and while the field is untouched.
   const [showSuggestions, setShowSuggestions] = useState(false);
-  /** A number asked for after the bundle was saved, so WhatsApp can reach them. */
   const [askingNumber, setAskingNumber] = useState(false);
   const [lateNumber, setLateNumber] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [garmentCounts, setGarmentCounts] = useState<Record<string, number>>(() => emptyCounts(garmentTypes));
   const [customGarment, setCustomGarment] = useState('');
-  /** Narrows the clothing grid; a long-running shop ends up with forty types. */
   const [garmentSearch, setGarmentSearch] = useState('');
-  /** A garment the typed name looks like, held while the attendant decides. */
   const [similarGarment, setSimilarGarment] = useState<{ existing: string; typed: string } | null>(null);
   const [billingQuantity, setBillingQuantity] = useState('1');
   const [totalPrice, setTotalPrice] = useState('');
@@ -255,21 +190,13 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   const [promisedTouched, setPromisedTouched] = useState(false);
   const [milestone, setMilestone] = useState<MilestoneDef | null>(null);
   const [pickingCustom, setPickingCustom] = useState(false);
-  /** Where the bundle is being put, so it can be found again. */
   const [shelfLocation, setShelfLocation] = useState('');
-  /** Walk-in, we collect, or we deliver. Most bundles are walk-ins. */
   const [fulfillment, setFulfillment] = useState<LaundryFulfillment>('walk_in');
   const [runAddress, setRunAddress] = useState('');
   const [runLandmark, setRunLandmark] = useState('');
   const [deliveryFee, setDeliveryFee] = useState('');
-  /** Per garment type: how this one is to be treated. */
   const [garmentModifiers, setGarmentModifiers] = useState<Record<string, string[]>>({});
-  /** Which item's instructions are open. One at a time. */
   const [modifyingGarment, setModifyingGarment] = useState<string | null>(null);
-  /**
-   * Photos are taken before the bundle has a client ref of its own, so they
-   * are held against a draft key and moved onto the real ref once it saves.
-   */
   const [draftRef] = useState(() => `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`);
   const [customDue, setCustomDue] = useState<number | null>(() => readCustomDue());
   const [washMethodId, setWashMethodId] = useState('manual:hand-wash');
@@ -278,10 +205,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   const [createdPayment, setCreatedPayment] = useState<ReturnType<typeof settleLaundryPayment> | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [showTicket, setShowTicket] = useState(false);
-  // Address, processing methods and notes are needed on a minority of jobs, so
-  // they stay folded away and out of the counter's fastest path.
   const [showMore, setShowMore] = useState(false);
-  // Frozen for the life of one entry -- see rankGarmentsByUsage.
   const [garmentOrder, setGarmentOrder] = useState<string[]>(garmentTypes);
 
   const selectedService = services.find(service => String(service.id) === selectedServiceId) || services[0] || null;
@@ -301,9 +225,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     [garmentCounts, garmentModifiers],
   );
   const pieceCount = countLaundryPieces(selections);
-  // Most-used clothing first, then anything typed into "Other clothing type"
-  // during this entry. Order is stable while tapping because garmentOrder is
-  // only recalculated when the sheet opens.
   const displayGarments = useMemo(() => {
     const ranked = garmentOrder.filter(name => name in garmentCounts);
     const extras = Object.keys(garmentCounts).filter(name => !ranked.includes(name));
@@ -324,10 +245,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   }, [selectedService, promisedTouched]);
 
   useEffect(() => {
-    setGarmentCounts(current => {
-      const next = { ...emptyCounts(garmentTypes), ...current };
-      return next;
-    });
+    setGarmentCounts(current => ({ ...emptyCounts(garmentTypes), ...current }));
   }, [garmentTypes]);
 
   useEffect(() => {
@@ -335,9 +253,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     setTotalPrice(calculated.total > 0 ? String(calculated.total) : '');
   }, [selectedService, calculated.total, priceTouched]);
 
-  // A shop can require part of the price before the clothes are left, which is
-  // what stops bundles sitting uncollected for weeks. Prefilled so the
-  // attendant does not have to work out the percentage in their head.
   const deposit = requiredDeposit(store, Number(totalPrice) || 0);
   useEffect(() => {
     if (!paidTouched) setPaidNow(deposit > 0 ? String(deposit) : '');
@@ -353,14 +268,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     return () => window.removeEventListener(LAUNDRY_SYNC_CHANGED_EVENT, handleSync);
   }, []);
 
-  /*
-   * Say that there is unsaved work here.
-   *
-   * The app updates by reloading. Anywhere else that costs nothing; here it
-   * costs a bundle - the customer is at the counter and twelve shirts have
-   * been counted into a form that is not saved yet. While this is open the
-   * updater waits.
-   */
   useEffect(() => {
     if (!open) return;
     return beginWork();
@@ -395,8 +302,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     setTotalPrice('');
     setPriceTouched(false);
     setNotes('');
-    setPromisedFor(services[0] ? suggestedPromisedLocal(services[0].turnaround) : suggestedPromisedLocal());
-    setPromisedTouched(false);
+    // Keep the merchant's selected due date until they manually change it.
     setWashMethodId('manual:hand-wash');
     setDryMethodId('manual:sun-dry');
     setCreated(null);
@@ -447,12 +353,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     setPriceTouched(false);
   };
 
-  /**
-   * Only an identical name used to count as the same garment, so "Shirt with
-   * Emma" created a second kind of shirt and the price list, the counts and
-   * every report then treated the two as unrelated. A close name now asks
-   * first, and the attendant decides.
-   */
   const shownGarments = useMemo(
     () => filterGarments(displayGarments, garmentSearch),
     [displayGarments, garmentSearch],
@@ -463,7 +363,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     if (!name) return;
     const exact = Object.keys(garmentCounts).find(key => key.toLowerCase() === name.toLowerCase());
     if (exact) return countGarment(exact);
-
     const similar = findSimilarGarment(Object.keys(garmentCounts), name);
     if (similar) {
       setSimilarGarment({ existing: similar, typed: name });
@@ -483,18 +382,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
 
     if (!accessCode) return showToast('Store access code is missing', 'error');
     if (!name) return showToast('Customer name is required', 'error');
-    /*
-     * No phone, no problem.
-     *
-     * This used to refuse to save without a valid number, which meant a
-     * walk-in who would not give one could not be recorded at all - and an
-     * attendant who reaches for the paper book once for that bundle is back on
-     * paper for the next one too. Paper never asked, and anything the app
-     * cannot record is a reason to stop using it.
-     *
-     * A number that was typed is still checked, because a wrong one is worse
-     * than none: it sends the bundle's updates to a stranger.
-     */
     if (phone && !validPhone(phone)) return showToast('That phone number looks wrong — fix it or leave it empty', 'error');
     if (!selectedService) return showToast('Add and select a laundry service first', 'error');
     if (clean.length === 0) return showToast('Record at least one item of clothing', 'error');
@@ -511,15 +398,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
 
     setSaving(true);
     try {
-      /*
-       * A rehearsal stops here.
-       *
-       * Everything below writes: the record, the money, the customer book, the
-       * milestone check, the sync. None of it runs. The receipt is built from
-       * what was typed so the merchant sees exactly what would have happened,
-       * and says plainly that nothing was kept - because a bundle that
-       * silently vanished would be worse than the problem this solves.
-       */
       if (practice) {
         setCreated({
           clientRef: `practice_${Date.now().toString(36)}`,
@@ -547,27 +425,10 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
         return;
       }
 
-      /*
-       * Who this is, decided before anything is written.
-       *
-       * One customer record, one internal id, one balance, many bundles. The
-       * bundle and the debt both carry the id, so two customers who share a
-       * name - and may both have given no number - keep separate money.
-       *
-       * The order matters: the customer has to exist before the bundle can
-       * point at them.
-       */
       let nextStore = store;
       const picked = selectedCustomerId && isInCustomerBook({ id: selectedCustomerId })
         ? book.find(entry => entry.id === selectedCustomerId)
         : undefined;
-      /*
-       * A pick is the counter telling us which person this is, and beats any
-       * matching we could do. Otherwise: by number, then by name, and
-       * matchCustomer refuses to choose between two people of the same name -
-       * in which case this makes a new record rather than guessing, because
-       * the list showed both and neither was chosen.
-       */
       const existingCustomer = picked || matchCustomer(book, { name, phone });
       let customerId = existingCustomer?.id || '';
       try {
@@ -575,16 +436,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
           nextStore = addCustomer(nextStore, { name, phone, address: customerAddress.trim() || undefined });
           customerId = (nextStore.customers || [])[0]?.id || '';
         } else {
-          /*
-           * Somebody we already had, who has just told us something we did not
-           * know. A customer taken in ten times without a number, whose number
-           * finally gets typed, should stop being the customer with no number -
-           * otherwise the shop can never message them about their clothes.
-           *
-           * Only ever fills a blank. What the book already holds was put there
-           * deliberately, and a mistyped number at a busy counter must not be
-           * allowed to overwrite a good one.
-           */
           const address = customerAddress.trim();
           const learned: Record<string, string> = {};
           if (phone && !String(existingCustomer.phone || '').trim()) learned.phone = phone;
@@ -625,9 +476,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
       onRecorded?.(localRecord.clientRef);
       if (activeHours) recordDueChoice(accessCode, activeHours);
 
-      // The amount typed is what the customer actually handed over. The money
-      // engine applies only what the bundle costs and keeps the rest as change,
-      // instead of erasing an overpayment by clamping ₦6,000 down to ₦2,500.
       nextStore = recordLaundryPayment(nextStore, {
         clientRef: localRecord.clientRef,
         tagCode: localRecord.tagCode,
@@ -641,29 +489,12 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
         promisedFor,
       });
 
-
-      // Milestones were only ever checked after a product sale, so a laundry
-      // could take its first ten thousand - or its first million - in silence.
       const crossed = checkNewMilestone(nextStore);
       if (crossed) {
         nextStore = markMilestoneReached(nextStore, crossed.id);
         setMilestone(crossed);
       }
 
-      /*
-       * Written to the device, then handed to the screen.
-       *
-       * onUpdate is setStore - React state, and nothing else. The money this
-       * function books reached the disk only as a side effect of addCustomer
-       * calling saveStore on its way past, so a bundle taken in for somebody
-       * already in the book with nothing new to tell us saved the bundle and
-       * silently dropped the payment and the debt that went with it. Reload,
-       * and the shop had the clothes and no record of being owed for them.
-       *
-       * The bundle itself was never at risk - it lives in its own store and is
-       * written by createLocalLaundryRecord - which is exactly why this was
-       * invisible: everything on the screen looked right.
-       */
       saveStore(nextStore);
       onUpdate(nextStore);
       setCreatedPayment(payment);
@@ -693,7 +524,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     }
   };
 
-  /** The same message, with WhatsApp asking who it goes to. */
   const sendWhatsAppToAnyone = () => {
     if (!created) return;
     if (!openWhatsAppChooser(store, localLaundryRecordToOrder(created))) {
@@ -708,16 +538,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     }
   };
 
-  /*
-   * A number for somebody who did not give one at the counter.
-   *
-   * The button used to say "Send on WhatsApp" and open a chooser, which is an
-   * odd answer to a customer with no number: the shop wanted to message this
-   * person, and the app knows perfectly well why it cannot. So it asks for the
-   * number instead - and keeps it, on the customer and on the bundle, so the
-   * next bundle and every reminder after it can reach them too. Asking and
-   * throwing the answer away would be the same question tomorrow.
-   */
   const saveNumberAndSend = () => {
     if (!created) return;
     const typed = lateNumber.trim();
@@ -733,7 +553,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     let next = store;
     if (created.customerId) {
       const known = (store.customers || []).find(entry => entry.id === created.customerId);
-      // Only ever fills a blank, the same rule the counter's save follows.
       if (known && !String(known.phone || '').trim()) next = updateCustomer(next, known.id, { phone: typed });
     }
     next = {
@@ -754,16 +573,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   };
 
   const canSave = Boolean(customerName.trim() && (!customerPhone.trim() || validPhone(customerPhone)) && selectedService && pieceCount > 0 && Number.isFinite(Number(totalPrice)));
-  // The button says which one it is. Nobody should have to remember.
   const saveLabel = practice ? 'Try it (nothing saved)' : 'Record Laundry';
-  // The saved custom interval sits alongside the fixed ones, unless it is
-  // already one of them.
-  /*
-   * Ordered by what this shop actually promises, not by the order they were
-   * written. A laundry that says "tomorrow" to nearly everyone had to reach
-   * past twelve hours every time, and Custom sat behind a row that scrolled.
-   * Recomputed on each save so the order keeps up with the habit.
-   */
   const activeHours = activePreset(promisedFor, [
     ...DUE_PRESETS,
     ...(customDue ? [{ label: describeHours(customDue), hours: customDue }] : []),
@@ -773,9 +583,6 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
       custom: customDue,
       selected: activeHours,
     }),
-    // `created` is set on every save, which is also when the tally changes, so
-    // this is what makes the order keep up. Without it the reading would run
-    // on every keystroke in the form, for a list that changes once a bundle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [store, customDue, activeHours, created],
   );
@@ -783,10 +590,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   return (
     <>
       {milestone && (
-        <MilestoneCelebration
-          milestone={milestone}
-          onDismiss={() => setMilestone(null)}
-        />
+        <MilestoneCelebration milestone={milestone} onDismiss={() => setMilestone(null)} />
       )}
       {showTicket && created && (
         <ClaimTicket
@@ -824,18 +628,11 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {/*
-              Said plainly, and first.
-              A bundle that quietly disappeared would be worse than the problem
-              this solves, so anybody who was actually serving a customer is
-              told at once - and offered the way to do it for real.
-            */}
             {practice && (
               <div className="rounded-2xl border border-primary/40 bg-primary/5 p-3.5 text-left">
                 <p className="font-display font-black text-sm">Nothing was saved</p>
                 <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                  This was practice, so no job, no customer and no money were
-                  recorded. Your prices and services are real and stay.
+                  This was practice, so no job, no customer and no money were recorded. Your prices and services are real and stay.
                 </p>
                 <button
                   onClick={() => { setCreated(null); showToast('Fill it in again and it will be recorded', 'info'); }}
@@ -899,66 +696,28 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
             </div>
 
             <div className="shrink-0 border-t border-border p-4 flex gap-2">
-              {/* Not in a rehearsal. Sending it would message a real phone
-                  number a receipt for a job that was never recorded. */}
               {practice ? (
                 <button onClick={close} className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
               ) : (
                 <div className="w-full space-y-2">
-                  {/*
-                    Sending it is the first thing offered, and it always has a
-                    route out.
-
-                    With a number it goes straight to that customer in one tap.
-                    Without one - a walk-in who would not give a number, a
-                    bundle dropped off by a driver, or the owner wanting a copy
-                    on their own phone - WhatsApp's own contact picker opens
-                    with the message already written, which is one tap and no
-                    typing either.
-                  */}
                   <button
                     onClick={created.customerPhone ? sendWhatsApp : () => setAskingNumber(true)}
                     className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"
                   >
                     <MessageCircle className="w-4 h-4" />
-                    {created.customerPhone
-                      ? `WhatsApp ${created.customerName.split(' ')[0]}`
-                      : `Add ${created.customerName.split(' ')[0]}'s number`}
+                    {created.customerPhone ? `WhatsApp ${created.customerName.split(' ')[0]}` : `Add ${created.customerName.split(' ')[0]}'s number`}
                   </button>
 
-                  {/* Asked here rather than sending them back to redo the
-                      bundle, and kept, so it is not the same question next
-                      time. */}
                   {askingNumber && !created.customerPhone && (
                     <div className="rounded-xl border border-emerald-600/40 bg-emerald-600/5 p-3 space-y-2">
-                      <p className="text-[11px] text-muted-foreground">
-                        {created.customerName} gave no number. Add one and the message goes now.
-                      </p>
+                      <p className="text-[11px] text-muted-foreground">{created.customerName} gave no number. Add one and the message goes now.</p>
                       <div className="relative">
-                        <input
-                          value={lateNumber}
-                          onChange={event => setLateNumber(event.target.value)}
-                          placeholder="e.g. 08012345678"
-                          inputMode="tel"
-                          autoFocus
-                          className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm"
-                        />
+                        <input value={lateNumber} onChange={event => setLateNumber(event.target.value)} placeholder="e.g. 08012345678" inputMode="tel" autoFocus className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm" />
                         <ContactPickButton onPick={phone => setLateNumber(phone)} />
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          onClick={saveNumberAndSend}
-                          disabled={!validPhone(lateNumber)}
-                          className="flex-1 h-10 rounded-xl bg-emerald-600 text-white text-xs font-display font-black disabled:opacity-40"
-                        >
-                          Save and send
-                        </button>
-                        <button
-                          onClick={() => { setAskingNumber(false); sendWhatsAppToAnyone(); }}
-                          className="h-10 px-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold"
-                        >
-                          Send to someone else
-                        </button>
+                        <button onClick={saveNumberAndSend} disabled={!validPhone(lateNumber)} className="flex-1 h-10 rounded-xl bg-emerald-600 text-white text-xs font-display font-black disabled:opacity-40">Save and send</button>
+                        <button onClick={() => { setAskingNumber(false); sendWhatsAppToAnyone(); }} className="h-10 px-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold">Send to someone else</button>
                       </div>
                     </div>
                   )}
@@ -968,12 +727,8 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
                     <button onClick={close} className="px-5 py-3 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2"><Check className="w-4 h-4" /> Done</button>
                   </div>
 
-                  {/* Somebody other than the customer: the owner's own phone,
-                      a driver, a relative collecting on their behalf. */}
                   {Boolean(created.customerPhone) && (
-                    <button onClick={sendWhatsAppToAnyone} className="w-full py-2 text-[11px] font-display font-bold text-muted-foreground">
-                      Send to someone else instead
-                    </button>
+                    <button onClick={sendWhatsAppToAnyone} className="w-full py-2 text-[11px] font-display font-bold text-muted-foreground">Send to someone else instead</button>
                   )}
                 </div>
               )}
@@ -991,70 +746,25 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
             {practice && (
               <div className="rounded-2xl border border-amber-500/50 bg-amber-500/10 p-3.5 text-left">
                 <p className="font-display font-black text-sm text-amber-500">Practice run — nothing will be saved</p>
-                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                  The guide is showing you how this works. Fill it in and press
-                  save to see what happens; no job, no customer and no money
-                  will be recorded.
-                </p>
-                <button
-                  onClick={() => setRehearsing(false)}
-                  className="mt-2.5 h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black"
-                >
-                  This is a real customer — record it
-                </button>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">The guide is showing you how this works. Fill it in and press save to see what happens; no job, no customer and no money will be recorded.</p>
+                <button onClick={() => setRehearsing(false)} className="mt-2.5 h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black">This is a real customer — record it</button>
               </div>
             )}
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">1. Customer</p>
-              {/*
-                One field, not two.
-                
-                There used to be a "New customer" dropdown above this listing
-                every customer in the shop. Fine with six, useless with six
-                hundred, and an attendant with a queue in front of them types
-                the name again rather than scrolling — which quietly makes a
-                second record for the same person, splits their history and
-                loses what they owed.
-
-                Touching the field now offers the last few people served, and
-                typing narrows it: by name, by number, and through a wrong
-                letter or two.
-              */}
               <div className="relative">
               <input value={customerName} onChange={event => { setCustomerName(event.target.value); setSelectedCustomerId(''); setShowSuggestions(true); }} onFocus={() => setShowSuggestions(true)} placeholder="Customer name *" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
-              <CustomerSuggestions
-                customers={directory}
-                query={customerName}
-                enabled={showSuggestions && !selectedCustomerId}
-                /* In the page, not over it: floating, it covered the phone
-                   field directly below — the one thing that tells two people
-                   of the same name apart. */
-                inline
-                onPick={customer => selectCustomer(customer.id)}
-              />
+              <CustomerSuggestions customers={directory} query={customerName} enabled={showSuggestions && !selectedCustomerId} inline onPick={customer => selectCustomer(customer.id)} />
               </div>
-              {/* Typing eleven digits at a counter with somebody waiting is
-                  where wrong numbers come from, and a wrong number messages a
-                  stranger about somebody else's clothes. Most customers are
-                  already in the phone. */}
               <div className="relative">
                 <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number — e.g. 08012345678" inputMode="tel" className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm" />
                 <ContactPickButton onPick={(phone, name) => {
                   setCustomerPhone(phone);
                   setSelectedCustomerId('');
-                  // Only when the field is still empty: somebody who has typed
-                  // a name has told us who this is.
                   if (name && !customerName.trim()) setCustomerName(name);
                 }} />
               </div>
-              {/* Said, rather than enforced. The bundle saves either way; this
-                  is only so nobody is surprised later that no message went. */}
-              {!customerPhone.trim() && (
-                <p className="text-[10px] text-muted-foreground">
-                  No phone is fine — you just will not be able to WhatsApp this
-                  customer when the clothes are ready.
-                </p>
-              )}
+              {!customerPhone.trim() && <p className="text-[10px] text-muted-foreground">No phone is fine — you just will not be able to WhatsApp this customer when the clothes are ready.</p>}
             </section>
 
             <section className="space-y-2 text-left">
@@ -1063,95 +773,38 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
             </section>
 
             <section className="space-y-2 text-left">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="text-[11px] uppercase font-black text-muted-foreground">3. Clothes</p>
-                <span className="text-xs font-black text-primary">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</span>
-              </div>
-              {/* A shop that has been running a while has thirty or forty
-                  clothing types, and every one of them was on screen at once. */}
+              <div className="flex items-baseline justify-between gap-3"><p className="text-[11px] uppercase font-black text-muted-foreground">3. Clothes</p><span className="text-xs font-black text-primary">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</span></div>
               {displayGarments.length > 6 && (
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  <input
-                    value={garmentSearch}
-                    onChange={event => setGarmentSearch(event.target.value)}
-                    placeholder="Search clothing type"
-                    className="w-full h-10 pl-9 pr-9 rounded-xl bg-surface-2 border border-border text-sm outline-none focus:border-primary"
-                  />
-                  {garmentSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setGarmentSearch('')}
-                      aria-label="Clear search"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
+                  <input value={garmentSearch} onChange={event => setGarmentSearch(event.target.value)} placeholder="Search clothing type" className="w-full h-10 pl-9 pr-9 rounded-xl bg-surface-2 border border-border text-sm outline-none focus:border-primary" />
+                  {garmentSearch && <button type="button" onClick={() => setGarmentSearch('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>}
                 </div>
               )}
-              {shownGarments.length === 0 && (
-                <p className="text-[11px] text-muted-foreground py-1">
-                  Nothing matches “{garmentSearch}”. Add it below.
-                </p>
-              )}
+              {shownGarments.length === 0 && <p className="text-[11px] text-muted-foreground py-1">Nothing matches “{garmentSearch}”. Add it below.</p>}
               <div className="grid grid-cols-2 gap-1.5">{shownGarments.map(garment => {
                 const quantity = garmentCounts[garment] || 0;
                 const unitPrice = selectedService && pricing === 'per_piece' ? getLaundryGarmentPrice(store, selectedService, garment) : 0;
                 return (
                   <div key={garment} className={`rounded-xl border px-2 pt-1.5 pb-1.5 ${quantity > 0 ? 'border-primary bg-primary/5' : 'border-border bg-surface-2'}`}>
-                    <div className="flex items-baseline justify-between gap-1.5 leading-tight">
-                      <p className="text-xs font-bold truncate">{garment}</p>
-                      {selectedService && pricing === 'per_piece' && <span className="text-[10px] text-primary font-bold shrink-0">₦{unitPrice.toLocaleString()}</span>}
-                    </div>
+                    <div className="flex items-baseline justify-between gap-1.5 leading-tight"><p className="text-xs font-bold truncate">{garment}</p>{selectedService && pricing === 'per_piece' && <span className="text-[10px] text-primary font-bold shrink-0">₦{unitPrice.toLocaleString()}</span>}</div>
                     <div className="flex items-center justify-between gap-1 mt-1.5">
                       <button type="button" onClick={() => changeCount(garment, -1)} disabled={quantity === 0} className="w-8 h-8 shrink-0 rounded-lg border border-border bg-card flex items-center justify-center disabled:opacity-30" aria-label={`Remove one ${garment}`}><Minus className="w-3.5 h-3.5" /></button>
                       <span className="text-sm font-black tabular-nums">{quantity}</span>
                       <button type="button" onClick={() => changeCount(garment, 1)} className="w-8 h-8 shrink-0 rounded-lg bg-primary text-primary-foreground flex items-center justify-center" aria-label={`Add one ${garment}`}><Plus className="w-3.5 h-3.5" /></button>
                     </div>
-
-                    {/* Only once the item is actually in the bundle. An
-                        instruction row on every garment in the catalogue would
-                        be a wall of taps for something most items never need. */}
-                    {quantity > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setModifyingGarment(modifyingGarment === garment ? null : garment)}
-                        className="w-full mt-1.5 text-left text-[10px] font-bold truncate text-primary"
-                      >
-                        {garmentModifiers[garment]?.length
-                          ? describeModifiers(garmentModifiers[garment])
-                          : '+ how to treat it'}
-                      </button>
-                    )}
+                    {quantity > 0 && <button type="button" onClick={() => setModifyingGarment(modifyingGarment === garment ? null : garment)} className="w-full mt-1.5 text-left text-[10px] font-bold truncate text-primary">{garmentModifiers[garment]?.length ? describeModifiers(garmentModifiers[garment]) : '+ how to treat it'}</button>}
                   </div>
                 );
               })}</div>
 
               {modifyingGarment && (
                 <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-display font-black">{modifyingGarment}</p>
-                    <button type="button" onClick={() => setModifyingGarment(null)} className="text-[10px] font-black text-muted-foreground">Done</button>
-                  </div>
+                  <div className="flex items-center justify-between gap-2"><p className="text-xs font-display font-black">{modifyingGarment}</p><button type="button" onClick={() => setModifyingGarment(null)} className="text-[10px] font-black text-muted-foreground">Done</button></div>
                   <div className="flex flex-wrap gap-1.5">
                     {LAUNDRY_MODIFIERS.map(modifier => {
                       const on = garmentModifiers[modifyingGarment]?.includes(modifier);
-                      return (
-                        <button
-                          key={modifier}
-                          type="button"
-                          onClick={() => setGarmentModifiers(current => ({
-                            ...current,
-                            [modifyingGarment]: toggleModifier(current[modifyingGarment], modifier),
-                          }))}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-display font-bold border transition-colors ${
-                            on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'
-                          }`}
-                        >
-                          {modifier}
-                        </button>
-                      );
+                      return <button key={modifier} type="button" onClick={() => setGarmentModifiers(current => ({ ...current, [modifyingGarment]: toggleModifier(current[modifyingGarment], modifier) }))} className={`px-2.5 py-1.5 rounded-lg text-[11px] font-display font-bold border transition-colors ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground'}`}>{modifier}</button>;
                     })}
                   </div>
                 </div>
@@ -1159,24 +812,10 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
               <div className="flex gap-2"><input value={customGarment} onChange={event => setCustomGarment(event.target.value)} onKeyDown={event => event.key === 'Enter' && addCustomGarment()} placeholder="Other clothing type" className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" /><button onClick={addCustomGarment} type="button" className="px-4 h-11 rounded-xl border border-primary text-primary font-black text-xs shrink-0">Add</button></div>
               {similarGarment && (
                 <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 space-y-2">
-                  <p className="text-xs text-foreground leading-snug">
-                    You already have <b>{similarGarment.existing}</b>. Is “{similarGarment.typed}” the same thing?
-                  </p>
+                  <p className="text-xs text-foreground leading-snug">You already have <b>{similarGarment.existing}</b>. Is “{similarGarment.typed}” the same thing?</p>
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => countGarment(similarGarment.existing)}
-                      className="h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black"
-                    >
-                      Yes, count as {similarGarment.existing}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => countGarment(similarGarment.typed)}
-                      className="h-9 px-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-black"
-                    >
-                      No, keep “{similarGarment.typed}”
-                    </button>
+                    <button type="button" onClick={() => countGarment(similarGarment.existing)} className="h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black">Yes, count as {similarGarment.existing}</button>
+                    <button type="button" onClick={() => countGarment(similarGarment.typed)} className="h-9 px-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-black">No, keep “{similarGarment.typed}”</button>
                   </div>
                 </div>
               )}
@@ -1186,189 +825,65 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
 
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">4. Where it goes</p>
-              <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3">
-                <MapPin className="h-4 w-4 text-primary shrink-0" />
-                <input
-                  value={shelfLocation}
-                  onChange={event => setShelfLocation(event.target.value)}
-                  placeholder="Shelf or rack - e.g. Rack B, 3rd shelf"
-                  className="w-full bg-transparent py-3 text-sm outline-none"
-                />
-              </div>
-              {/* Kept on this phone. Nothing uploads them. */}
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3"><MapPin className="h-4 w-4 text-primary shrink-0" /><input value={shelfLocation} onChange={event => setShelfLocation(event.target.value)} placeholder="Shelf or rack - e.g. Rack B, 3rd shelf" className="w-full bg-transparent py-3 text-sm outline-none" /></div>
               <BundlePhotos clientRef={draftRef} accessCode={String((store as any).accessCode || '')} />
-
-              {/* Three words, one row. Most bundles are walk-ins, so this stays
-                  out of the way until it is the one that is not. */}
               <div className="grid grid-cols-3 gap-1 rounded-xl border border-border bg-surface-2 p-1">
-                {(Object.keys(FULFILLMENT_LABELS) as LaundryFulfillment[]).map(option => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setFulfillment(option)}
-                    className={`rounded-lg py-2 text-[11px] font-display font-black transition-colors ${
-                      fulfillment === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {FULFILLMENT_LABELS[option]}
-                  </button>
-                ))}
+                {(Object.keys(FULFILLMENT_LABELS) as LaundryFulfillment[]).map(option => <button key={option} type="button" onClick={() => setFulfillment(option)} className={`rounded-lg py-2 text-[11px] font-display font-black transition-colors ${fulfillment === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{FULFILLMENT_LABELS[option]}</button>)}
               </div>
-
               {fulfillment !== 'walk_in' && (
                 <div className="space-y-2 rounded-xl border border-border bg-surface-2 p-3">
-                  <input
-                    value={runAddress}
-                    onChange={event => setRunAddress(event.target.value)}
-                    placeholder="Address"
-                    className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm"
-                  />
-                  {/* Asked for plainly, because a great many addresses here are
-                      only findable by one. */}
-                  <input
-                    value={runLandmark}
-                    onChange={event => setRunLandmark(event.target.value)}
-                    placeholder="Landmark — e.g. opposite the filling station"
-                    className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-display font-bold text-muted-foreground shrink-0">
-                      {fulfillment === 'pickup' ? 'Collection fee' : 'Delivery fee'}
-                    </span>
-                    <input
-                      value={deliveryFee}
-                      onChange={event => setDeliveryFee(event.target.value.replace(/[^0-9.]/g, ''))}
-                      inputMode="decimal"
-                      placeholder="0"
-                      className="flex-1 h-10 px-3 rounded-lg bg-card border border-border text-sm"
-                    />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground leading-snug">
-                    Added to what this customer owes, so it reaches the takings.
-                  </p>
+                  <input value={runAddress} onChange={event => setRunAddress(event.target.value)} placeholder="Address" className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm" />
+                  <input value={runLandmark} onChange={event => setRunLandmark(event.target.value)} placeholder="Landmark — e.g. opposite the filling station" className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm" />
+                  <div className="flex items-center gap-2"><span className="text-[11px] font-display font-bold text-muted-foreground shrink-0">{fulfillment === 'pickup' ? 'Collection fee' : 'Delivery fee'}</span><input value={deliveryFee} onChange={event => setDeliveryFee(event.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" className="flex-1 h-10 px-3 rounded-lg bg-card border border-border text-sm" /></div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">Added to what this customer owes, so it reaches the takings.</p>
                 </div>
               )}
             </section>
 
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">5. Due &amp; price</p>
-              {/* One line, scrolled rather than wrapped, so the row does not
-                  push the price out of reach on a phone. */}
               <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-0.5 px-0.5 py-0.5">
                 {dueChips.map(chip => {
                   const active = activeHours === chip.hours;
-                  return (
-                    <button
-                      key={chip.label}
-                      type="button"
-                      onClick={() => { setPromisedFor(promisedInHours(chip.hours)); setPromisedTouched(true); }}
-                      aria-pressed={active}
-                      className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${
-                        active
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
-                      }`}
-                    >
-                      {chip.label}
-                    </button>
-                  );
+                  return <button key={chip.label} type="button" onClick={() => { setPromisedFor(promisedInHours(chip.hours)); setPromisedTouched(true); }} aria-pressed={active} className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${active ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'}`}>{chip.label}</button>;
                 })}
-                <button
-                  type="button"
-                  onClick={() => setPickingCustom(current => !current)}
-                  aria-expanded={pickingCustom}
-                  className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${
-                    pickingCustom || activeHours === null
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
-                  }`}
-                >
-                  Custom
-                </button>
+                <button type="button" onClick={() => setPickingCustom(current => !current)} aria-expanded={pickingCustom} className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${pickingCustom || activeHours === null ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'}`}>Custom</button>
               </div>
 
-              {/* Picking a custom time keeps it: it joins the row above so the
-                  next customer with the same turnaround is one tap, not four. */}
               {pickingCustom && (
                 <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-2 px-3">
                   <CalendarClock className="h-4 w-4 text-primary shrink-0" />
-                  <input
-                    type="datetime-local"
-                    value={promisedFor}
-                    onChange={event => {
-                      setPromisedFor(event.target.value);
-                      setPromisedTouched(true);
-                      const hours = (new Date(event.target.value).getTime() - Date.now()) / 3_600_000;
-                      if (Number.isFinite(hours) && hours > 0) {
-                        rememberCustomDue(hours);
-                        setCustomDue(Math.round(hours));
-                      }
-                    }}
-                    className="w-full bg-transparent py-3 text-sm outline-none"
-                  />
+                  <input type="datetime-local" value={promisedFor} onChange={event => {
+                    setPromisedFor(event.target.value);
+                    setPromisedTouched(true);
+                    const hours = (new Date(event.target.value).getTime() - Date.now()) / 3_600_000;
+                    if (Number.isFinite(hours) && hours > 0) {
+                      rememberCustomDue(hours);
+                      setCustomDue(Math.round(hours));
+                    }
+                  }} className="w-full bg-transparent py-3 text-sm outline-none" />
                 </div>
               )}
 
-              {promisedFor && (
-                <p className="text-[11px] text-muted-foreground">
-                  Ready {new Date(promisedFor).toLocaleString(undefined, {
-                    weekday: 'short', hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short',
-                  })}
-                </p>
-              )}
+              {promisedFor && <p className="text-[11px] text-muted-foreground">Ready {new Date(promisedFor).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' })}</p>}
               {pricing === 'per_piece' && calculated.lines.length > 0 && <div className="rounded-xl border border-border bg-card divide-y divide-border/60">{calculated.lines.map(line => <div key={line.garmentType} className="flex justify-between gap-3 px-3 py-1.5 text-xs"><span className="truncate">{line.quantity} × {line.garmentType} @ ₦{line.unitPrice.toLocaleString()}</span><span className="font-black shrink-0">₦{line.subtotal.toLocaleString()}</span></div>)}</div>}
               <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input value={totalPrice} onChange={event => { setTotalPrice(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(true); }} inputMode="decimal" className="w-full bg-transparent outline-none font-black" placeholder="Total price" /></div>
               {priceTouched && calculated.total !== Number(totalPrice) && <p className="text-[10px] text-muted-foreground">Manually adjusted. Calculated price is ₦{calculated.total.toLocaleString()}.</p>}
-              {/* What the customer hands over now.
-                  Nothing was captured here at all, so the price was worked out,
-                  shown, and then forgotten: no takings, and no record of who
-                  still owed. Zero is allowed — plenty of shops are paid on
-                  collection — unless the shop has set a deposit. */}
-              <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border">
-                <span className="font-black">₦</span>
-                <input
-                  inputMode="numeric"
-                  value={paidNow}
-                  onChange={event => { setPaidTouched(true); setPaidNow(event.target.value.replace(/[^0-9]/g, '')); }}
-                  placeholder="Paid now (0 if paying later)"
-                  className="flex-1 bg-transparent outline-none text-sm"
-                />
-              </div>
+              <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input inputMode="numeric" value={paidNow} onChange={event => { setPaidTouched(true); setPaidNow(event.target.value.replace(/[^0-9]/g, '')); }} placeholder="Paid now (0 if paying later)" className="flex-1 bg-transparent outline-none text-sm" /></div>
               {(() => {
                 const fee = fulfillment === 'walk_in' ? 0 : Math.max(0, Number(deliveryFee) || 0);
                 const price = totalWithDelivery(Number(totalPrice) || 0, fee);
                 const payment = settleLaundryPayment(price, Number(paidNow) || 0);
-                if (deposit > 0 && payment.applied < deposit) {
-                  return (
-                    <p className="text-[10px] text-destructive font-bold">
-                      This shop asks for ₦{deposit.toLocaleString()} before clothes are left.
-                    </p>
-                  );
-                }
-                if (payment.change > 0) {
-                  return (
-                    <p className="text-[10px] text-emerald-500 font-bold">
-                      Customer gave ₦{payment.tendered.toLocaleString()} — give ₦{payment.change.toLocaleString()} change.
-                    </p>
-                  );
-                }
-                if (payment.balance > 0) {
-                  return (
-                    <p className="text-[10px] text-amber-500 font-bold">
-                      ₦{payment.balance.toLocaleString()} owing — it will show in Money Owed.
-                    </p>
-                  );
-                }
+                if (deposit > 0 && payment.applied < deposit) return <p className="text-[10px] text-destructive font-bold">This shop asks for ₦{deposit.toLocaleString()} before clothes are left.</p>;
+                if (payment.change > 0) return <p className="text-[10px] text-emerald-500 font-bold">Customer gave ₦{payment.tendered.toLocaleString()} — give ₦{payment.change.toLocaleString()} change.</p>;
+                if (payment.balance > 0) return <p className="text-[10px] text-amber-500 font-bold">₦{payment.balance.toLocaleString()} owing — it will show in Money Owed.</p>;
                 if (price > 0) return <p className="text-[10px] text-emerald-500 font-bold">Paid in full.</p>;
                 return null;
               })()}
             </section>
 
             <section className="text-left border-t border-border/60 pt-1">
-              <button type="button" onClick={() => setShowMore(current => !current)} className="w-full flex items-center justify-between gap-3 py-2">
-                <span className="text-[11px] uppercase font-black text-muted-foreground">Address & notes</span>
-                {showMore ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-              </button>
+              <button type="button" onClick={() => setShowMore(current => !current)} className="w-full flex items-center justify-between gap-3 py-2"><span className="text-[11px] uppercase font-black text-muted-foreground">Address & notes</span>{showMore ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</button>
               {showMore && <div className="space-y-2 pt-1">
                 <textarea value={customerAddress} onChange={event => setCustomerAddress(event.target.value)} placeholder="Pickup or delivery address" rows={2} className="w-full resize-none p-3 rounded-xl bg-surface-2 border border-border text-sm" />
                 <div className="grid grid-cols-2 gap-2">
@@ -1382,10 +897,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
             </div>
 
             <div className="shrink-0 border-t border-border p-4 flex items-center gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase font-black text-muted-foreground">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</p>
-                <p className="font-display font-black text-lg leading-tight">₦{(Number(totalPrice) || 0).toLocaleString()}</p>
-              </div>
+              <div className="min-w-0"><p className="text-[10px] uppercase font-black text-muted-foreground">{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</p><p className="font-display font-black text-lg leading-tight">₦{(Number(totalPrice) || 0).toLocaleString()}</p></div>
               <button disabled={!canSave || saving} onClick={saveIntake} className={`flex-1 py-3.5 rounded-xl font-display font-black text-sm disabled:opacity-40 ${practice ? 'bg-amber-500 text-black' : 'bg-primary text-primary-foreground'}`}>{saving ? 'Saving…' : saveLabel}</button>
             </div>
           </>}
