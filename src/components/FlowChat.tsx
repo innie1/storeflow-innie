@@ -7,7 +7,7 @@ import { showToast } from '@/components/Toast';
 import { flowQuickActions } from '@/lib/flow-quick-actions';
 import { understand, resolveProduct, responseFor, storeAnalysis, FlowLineItem, OperatingIntent } from '@/lib/flow-operating-engine';
 import { buildFlowOrderWhatsAppMessage, createFlowMessageOrder, formatFlowOrderReceipt, isFlowMessageOrderRequest, parseFlowMessageOrder, supportsFlowMessageOrders, whatsappUrl, type FlowMessageOrderDraft } from '@/lib/flow-message-orders';
-import { applyFlowConversationOrderLocalEffects, buildFlowConversationWhatsAppMessage, createFlowConversationOrder, formatFlowConversationDraft, formatFlowConversationReceipt, draftFromCustomerName, isFlowConversationOrderRequest, looksLikeBareCustomerName, mergeFlowConversationOrderDraft, nextFlowDraftQuestion, parseFlowConversationOrder, type FlowConversationOrderDraft } from '@/lib/flow-order-draft';
+import { applyFlowConversationOrderLocalEffects, buildFlowConversationWhatsAppMessage, createFlowConversationOrder, flowConversationDraftExamples, formatFlowConversationDraft, formatFlowConversationReceipt, draftFromCustomerName, isFlowConversationOrderRequest, looksLikeBareCustomerName, mergeFlowConversationOrderDraft, nextFlowDraftQuestion, parseFlowConversationOrder, type FlowConversationOrderDraft } from '@/lib/flow-order-draft';
 import { understandFlexible } from '@/lib/flow-understanding';
 import { loadBrainMemory, learnBrainAlias, rememberBrainContext } from '@/lib/flow-brain-memory';
 import { setFlowControl, getFlowControl } from '@/lib/flow-app-controls';
@@ -64,11 +64,8 @@ function parseNewProduct(text: string): AddDraft | null {
 }
 
 export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowChatProps) {
-  // Overlay: hold the page behind it still while this is open.
   useBodyScrollLock();
   const storeKey = store.id || store.storeId || store.accessCode || 'default';
-  // Recomputed when the store changes, so the buttons follow what is actually
-  // happening in the shop rather than being fixed at mount.
   const quickActions = useMemo(() => flowQuickActions(store), [store]);
   const savedBrain = loadBrainMemory(store);
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: id('greet'), from: 'flow', text: "Hey 👋 I'm Flow. You can ask me to do anything." }]);
@@ -89,7 +86,6 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [showFlowCamera, setShowFlowCamera] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
-  // What the merchant picked from "+", held in the composer until they send.
   const [attachment, setAttachment] = useState<FlowAttachment | null>(null);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -117,11 +113,8 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     });
   }, [messages, sessionId, storeKey]);
 
-  // Spoke with no voice chosen and at 1.04, which reads as hurried.
   const speak = (text: string) => {
     if (!voiceOn) return;
-    // Cleaned its own way here, which stripped bold and left every emoji for
-    // the engine to announce by name. speakAsFlow does the whole job now.
     speakAsFlow(text);
   };
   const flow = (text: string, actions?: ChatAction[]) => { setMessages(prev => [...prev, { id: id('flow'), from: 'flow', text, actions }]); speak(text); };
@@ -153,14 +146,6 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
   const SUPPORTED_FILE_EXTS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'tsv', 'txt', 'json'];
 
-  /**
-   * Hold a picked file in the composer rather than acting on it immediately.
-   *
-   * This used to send images straight into the receipt scanner and, for a
-   * stock file, show a toast and navigate out of the chat — discarding the
-   * file the merchant had just chosen. Now it becomes a visible attachment
-   * they can remove, describe, or send.
-   */
   const handleFlowAttachment = (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     if (!file.type.startsWith('image/') && !SUPPORTED_FILE_EXTS.includes(ext)) {
@@ -180,12 +165,10 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     });
   };
 
-  /** Send whatever is in the composer: text, an attachment, or both. */
   const sendComposer = (text: string, file: FlowAttachment | null) => {
     if (file) {
       const ext = file.file.name.split('.').pop()?.toLowerCase() || '';
-      you(text ? `${text}
-📎 ${file.file.name}` : `📎 ${file.file.name}`);
+      you(text ? `${text}\n📎 ${file.file.name}` : `📎 ${file.file.name}`);
       setInput('');
       clearAttachment();
       if (file.file.type.startsWith('image/')) {
@@ -195,7 +178,6 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
         return;
       }
       if (SUPPORTED_FILE_EXTS.includes(ext)) {
-        // Offer the import rather than yanking the merchant out of the chat.
         flow(`**${file.file.name}** looks like a stock file. Inventory does the import — shall I take you there?`, [
           { label: 'Open Inventory', onClick: () => onNavigate?.('inventory') },
           { label: 'Not now', onClick: () => flow('Fine — it is still here when you need it.') },
@@ -265,7 +247,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       ]);
       return;
     }
-    flow(prefix + formatFlowConversationDraft(draft) + '\n\nYou can still say things like **make Jollof Rice to 3**, **remove Coke**, **add 2 Chicken**, **paid ₦5,000 cash**, or **delivery to 12 Airport Road** before creating it.', [
+    flow(prefix + formatFlowConversationDraft(draft) + '\n\n' + flowConversationDraftExamples(store, draft), [
       { label: 'Create order', onClick: () => void finalizeFlowConversationOrder(draft) },
       { label: 'Cancel order', onClick: cancelFlowOrderDraft },
     ]);
@@ -309,18 +291,6 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     }
   };
 
-  /**
-   * Input that is plainly a different instruction, not a line of an order.
-   *
-   * While an order draft is open it takes every message as an edit to that
-   * order, so "open settings", "dark theme" or "create list" were absorbed
-   * into it and nothing happened. The merchant is then stuck in an order they
-   * may not have meant to start, with no way out except the Cancel button they
-   * have to notice.
-   *
-   * Every pattern here is anchored at the start of the message, so a genuine
-   * order line — "John wants 2 bags of rice" — cannot trip it.
-   */
   const isClearlyNotOrderInput = (text: string) => {
     const q = text.trim().toLowerCase();
     return (
@@ -338,8 +308,6 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const handleFlowConversationOrder = (text: string): boolean => {
     const active = flowOrderDraftRef.current;
     if (active) {
-      // Let an unmistakably different instruction out, rather than folding it
-      // into the order and looking broken.
       if (isClearlyNotOrderInput(text)) {
         cancelFlowOrderDraft();
         flow('I have put that order aside. Say **new order** when you want to pick it up again.');
@@ -531,27 +499,12 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     return true;
   };
 
-  /**
-   * What Flow says when it does not understand, and for "help".
-   *
-   * The engine returned a fixed wall of eleven bullets with hard-coded example
-   * products — "Sell 2 Indomie", "Add 5 Milo" — which mean nothing to a
-   * pharmacy, a laundry or a barber, and offered nothing to tap. This grounds
-   * the examples in what this store actually stocks and turns them into
-   * one-tap chips.
-   */
   const suggestFromStore = (): { text: string; actions: ChatAction[] } => {
     const a = storeAnalysis(store);
     const seller = a.top[0]?.product;
     const needsStock = a.out[0] || a.low[0];
     const actions: ChatAction[] = [];
 
-    /*
-     * A laundry has no stock to sell or restock, so this offered "Sell 1 Full
-     * service", "Restock" and "Best sellers" to a shop that does none of those
-     * things. The suggestions are the main way anyone learns what Flow can do,
-     * and every one of them was pointing the wrong way.
-     */
     if (isServiceShop(store)) {
       const noun = workNoun(store);
       return {
@@ -578,11 +531,8 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
     return {
       text: (store.products || []).length
-        // One line. It used to be a paragraph plus a list of examples, on the
-        // screen a merchant reaches by already being confused.
         ? `Sorry, I did not follow that. Try: ${examples.slice(0, 2).join(' or ')}.`
         : 'Add a few products first, then I can sell and restock them for you.',
-      // Three at most, like everywhere else in this chat.
       actions: actions.slice(0, 3),
     };
   };
@@ -596,8 +546,6 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     if (/^(undo|undo that|reverse that|take that back)$/i.test(text)) { if (!lastUndo) flow('There is nothing recent I can undo.'); else { const previous = lastUndo; setLastUndo(null); onUpdate(previous); rememberBrainContext(previous, { lastAction: 'undo' }); flow('Done — I reversed my last change.'); } return; }
     if (addDraft) { handleAddWizard(text); return; }
 
-    // Flexible conversational layer: short topics, partial product names and
-    // store-level questions are resolved before the command engine can guess.
     const flexible = understandFlexible(store, text);
     const flexibleStore = 'nextStore' in flexible ? flexible.nextStore : undefined;
     if (flexibleStore) onUpdate(flexibleStore);
@@ -649,7 +597,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
           try {
             if (navigator.share) await navigator.share({ title: 'StoreFlow Buy List', text: textToShare });
             else { await navigator.clipboard.writeText(textToShare); showToast('Buy List copied. You can paste it anywhere.', 'success'); }
-          } catch { /* user cancelled sharing */ }
+          } catch {}
         }}]);
       } else {
         flow(flexible.reply, topicActions[flexible.topic]);
@@ -716,25 +664,12 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     flow(responseFor(store, plan));
   };
 
-  /*
-   * Auto voice listening, from the Flow settings screen.
-   *
-   * The switch was there and nothing read it. What it promises is that opening
-   * Flow opens the microphone, so somebody with both hands full of somebody
-   * else's clothes can just talk - which is the whole reason the setting is
-   * worth having in a laundry.
-   *
-   * Off by default, and it stays off unless voice features are on too: a
-   * microphone that opens itself in a shop, unasked, is not a feature.
-   */
   useEffect(() => {
     const settings = store.managerSettings;
     if (settings?.autoVoiceListen !== true) return;
     if (settings?.voiceFeatures === false) return;
-    // A beat, so the panel is on screen before the phone asks for the mic.
     const timer = setTimeout(() => startFlowVoiceInput(), 500);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startFlowVoiceInput = () => {
@@ -755,18 +690,10 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
   const deleteSession = (sid: string) => setSessions(prev => { const n = prev.filter(s => s.id !== sid); saveSessions(storeKey, n); return n; });
 
   return (<div className="fixed inset-0 z-50 flex flex-col bg-background">
-    {/*
-      The header carried a two-line title, a three-line subtitle and six icon
-      buttons, all competing in a 375px bar — the title wrapped and the
-      subtitle wrapped again. It is now one line: who you are talking to, what
-      Flow is doing right now, and the two controls used most. Everything else
-      moved behind the overflow menu.
-    */}
     <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
       <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full"><Mascot size={26} /></div>
       <div className="min-w-0 flex-1">
         <h3 className="text-sm font-display font-bold leading-tight truncate">Flow Messages</h3>
-        {/* Says what Flow is doing, not a fixed tagline. */}
         <p className="text-[10px] text-muted-foreground leading-tight truncate">
           {isListening ? 'Listening…'
             : flowOrderDraftState ? 'Building a customer order'
@@ -806,9 +733,6 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     </div>
     {showHistory && <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setShowHistory(false)}><div className="w-full sm:max-w-sm max-h-[75vh] bg-background border border-border rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between px-4 py-3 border-b border-border"><h4 className="font-display font-bold text-sm">Message history</h4><button onClick={() => setShowHistory(false)}><X className="w-4 h-4" /></button></div><div className="overflow-y-auto">{sessions.length === 0 ? <p className="text-xs text-muted-foreground text-center py-8">No past messages yet.</p> : sessions.map(s => <div key={s.id} className="flex items-center gap-2 px-4 py-3 border-b border-border/60 cursor-pointer hover:bg-surface-2/40" onClick={() => openSession(s)}><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{s.title}</p><p className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleString()}</p></div><button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}><Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" /></button></div>)}</div></div></div>}
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">{messages.map(m => <div key={m.id} className="flex flex-col gap-1.5" style={{ alignItems: m.from === 'you' ? 'flex-end' : 'flex-start' }}><div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.from === 'flow' ? 'bg-surface-2/60 text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>{m.from === 'flow' ? renderFlowText(m.text) : m.text}</div>{m.actions && <div className="flex gap-2 flex-wrap">{m.actions.map(a => <button key={a.label} onClick={a.onClick} className="px-3 py-2 rounded-full text-xs font-display font-semibold border border-primary/30 bg-primary/10 text-primary">{a.label}</button>)}</div>}</div>)}</div>
-    {/* Three actions, drawn from this store's own records and always in the
-        same place — just above the composer — rather than nine chips that
-        appeared only on the empty screen and knew nothing about the shop. */}
     {!addDraft && (
       <div className="px-4 pt-1 pb-2 flex gap-2 overflow-x-auto">
         {quickActions.map(a => (
