@@ -6,6 +6,7 @@ import {
   DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent, PurchaseOrderRecord,
   BalanceAdjustment, SavingsGoal } from '@/types/store';
 import { attribution } from '@/lib/recorded-by';
+import { backfillCustomerBook } from '@/lib/customer-backfill';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
 import { generateStoreUrl } from '@/lib/qr-code';
@@ -902,11 +903,31 @@ export function loadStore(code: string): StoreData | null {
 
   store = retireAdminRole(store);
   store = ensureStoreId(store);
+  /*
+   * Everyone the shop has actually served gets a real customer record.
+   *
+   * Here rather than in each screen: the count sits on the simple home, the
+   * full dashboard, the customer page, the export, the analytics and in what
+   * Flow says, and teaching six places to read around the same gap is how one
+   * of them keeps disagreeing with the others.
+   */
+  const backfilled = backfillCustomerBook(store, generateId);
+  /*
+   * Written down when it changed something.
+   *
+   * The links onto the bundles are written as they are made, so leaving the
+   * new customer records unsaved would be the worst of both: bundles pointing
+   * at people the book has never heard of, and the check that starts this off
+   * seeing them as already linked and never looking again.
+   */
+  const migratedCustomers = backfilled !== store;
+  store = backfilled;
   store = runScheduledSavingsDeduction(store);
   store = syncStoreData(store);
   store = syncProductPerformance(store);
 
   upsertStoreIndex(store);
+  if (migratedCustomers) saveStore(store);
   return store;
 }
 

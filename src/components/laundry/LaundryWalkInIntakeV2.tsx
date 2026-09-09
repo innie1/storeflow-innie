@@ -18,6 +18,7 @@ import CustomerSuggestions from '@/components/CustomerSuggestions';
 import {
   createLocalLaundryRecord,
   getLocalLaundryRecords,
+  setLocalLaundryPhone,
   LAUNDRY_SYNC_CHANGED_EVENT,
   localLaundryRecordToOrder,
   syncLaundryRecord,
@@ -236,6 +237,9 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   // Hidden once one is picked, and while the field is untouched.
   const [showSuggestions, setShowSuggestions] = useState(false);
+  /** A number asked for after the bundle was saved, so WhatsApp can reach them. */
+  const [askingNumber, setAskingNumber] = useState(false);
+  const [lateNumber, setLateNumber] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [garmentCounts, setGarmentCounts] = useState<Record<string, number>>(() => emptyCounts(garmentTypes));
   const [customGarment, setCustomGarment] = useState('');
@@ -695,6 +699,51 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
     }
   };
 
+  /*
+   * A number for somebody who did not give one at the counter.
+   *
+   * The button used to say "Send on WhatsApp" and open a chooser, which is an
+   * odd answer to a customer with no number: the shop wanted to message this
+   * person, and the app knows perfectly well why it cannot. So it asks for the
+   * number instead - and keeps it, on the customer and on the bundle, so the
+   * next bundle and every reminder after it can reach them too. Asking and
+   * throwing the answer away would be the same question tomorrow.
+   */
+  const saveNumberAndSend = () => {
+    if (!created) return;
+    const typed = lateNumber.trim();
+    if (!validPhone(typed)) {
+      showToast('That number looks too short', 'error');
+      return;
+    }
+
+    const withNumber = { ...created, customerPhone: typed };
+    setLocalLaundryPhone(String(store.accessCode || ''), created.clientRef, typed);
+    setCreated(withNumber);
+
+    let next = store;
+    if (created.customerId) {
+      const known = (store.customers || []).find(entry => entry.id === created.customerId);
+      // Only ever fills a blank, the same rule the counter's save follows.
+      if (known && !String(known.phone || '').trim()) next = updateCustomer(next, known.id, { phone: typed });
+    }
+    next = {
+      ...next,
+      pendingPayments: (next.pendingPayments || []).map(payment =>
+        payment.id === `laundry-${created.clientRef}` && !String(payment.customerPhone || '').trim()
+          ? { ...payment, customerPhone: typed }
+          : payment),
+    };
+    saveStore(next);
+    onUpdate(next);
+
+    setAskingNumber(false);
+    setLateNumber('');
+    if (!openLaundryWhatsApp(next, localLaundryRecordToOrder(withNumber))) {
+      showToast('Number saved — could not open WhatsApp', 'error');
+    }
+  };
+
   const canSave = Boolean(customerName.trim() && (!customerPhone.trim() || validPhone(customerPhone)) && selectedService && pieceCount > 0 && Number.isFinite(Number(totalPrice)));
   // The button says which one it is. Nobody should have to remember.
   const saveLabel = practice ? 'Try it (nothing saved)' : 'Record Laundry';
@@ -834,12 +883,51 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
                     typing either.
                   */}
                   <button
-                    onClick={created.customerPhone ? sendWhatsApp : sendWhatsAppToAnyone}
+                    onClick={created.customerPhone ? sendWhatsApp : () => setAskingNumber(true)}
                     className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-display font-black text-sm flex items-center justify-center gap-2"
                   >
                     <MessageCircle className="w-4 h-4" />
-                    {created.customerPhone ? `WhatsApp ${created.customerName.split(' ')[0]}` : 'Send on WhatsApp'}
+                    {created.customerPhone
+                      ? `WhatsApp ${created.customerName.split(' ')[0]}`
+                      : `Add ${created.customerName.split(' ')[0]}'s number`}
                   </button>
+
+                  {/* Asked here rather than sending them back to redo the
+                      bundle, and kept, so it is not the same question next
+                      time. */}
+                  {askingNumber && !created.customerPhone && (
+                    <div className="rounded-xl border border-emerald-600/40 bg-emerald-600/5 p-3 space-y-2">
+                      <p className="text-[11px] text-muted-foreground">
+                        {created.customerName} gave no number. Add one and the message goes now.
+                      </p>
+                      <div className="relative">
+                        <input
+                          value={lateNumber}
+                          onChange={event => setLateNumber(event.target.value)}
+                          placeholder="e.g. 08012345678"
+                          inputMode="tel"
+                          autoFocus
+                          className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm"
+                        />
+                        <ContactPickButton onPick={phone => setLateNumber(phone)} />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={saveNumberAndSend}
+                          disabled={!validPhone(lateNumber)}
+                          className="flex-1 h-10 rounded-xl bg-emerald-600 text-white text-xs font-display font-black disabled:opacity-40"
+                        >
+                          Save and send
+                        </button>
+                        <button
+                          onClick={() => { setAskingNumber(false); sendWhatsAppToAnyone(); }}
+                          className="h-10 px-3 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold"
+                        >
+                          Send to someone else
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex gap-2">
                     <button onClick={() => setShowTicket(true)} className="flex-1 py-3 rounded-xl bg-surface-2 border border-border font-display font-black text-sm flex items-center justify-center gap-2"><Ticket className="w-4 h-4" /> Show customer</button>

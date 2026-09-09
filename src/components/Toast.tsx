@@ -4,6 +4,8 @@ interface ToastMessage {
   id: number;
   message: string;
   type: 'success' | 'error' | 'info' | 'warning';
+  /** Makes the toast tappable — for a message that offers to do something. */
+  onTap?: () => void;
 }
 
 export type ToastTone = 'success' | 'error' | 'info' | 'warning';
@@ -12,7 +14,7 @@ export type ToastTone = 'success' | 'error' | 'info' | 'warning';
 const DEFAULT_MS = 3000;
 
 let toastId = 0;
-let addToastFn: ((msg: string, type?: ToastTone, ms?: number) => void) | null = null;
+let addToastFn: ((msg: string, type?: ToastTone, ms?: number, onTap?: () => void) => void) | null = null;
 
 /**
  * @param ms How long to leave it up. Some messages genuinely need longer -
@@ -23,17 +25,17 @@ let addToastFn: ((msg: string, type?: ToastTone, ms?: number) => void) | null = 
  * typechecker could see them: the argument was accepted by JavaScript,
  * ignored, and the code vanished in three seconds anyway.
  */
-export function showToast(message: string, type: ToastTone = 'success', ms: number = DEFAULT_MS) {
-  addToastFn?.(message, type, ms);
+export function showToast(message: string, type: ToastTone = 'success', ms: number = DEFAULT_MS, onTap?: () => void) {
+  addToastFn?.(message, type, ms, onTap);
 }
 
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   useEffect(() => {
-    addToastFn = (message, type = 'success', ms = DEFAULT_MS) => {
+    addToastFn = (message, type = 'success', ms = DEFAULT_MS, onTap) => {
       const id = ++toastId;
-      setToasts(prev => [...prev, { id, message, type }]);
+      setToasts(prev => [...prev, { id, message, type, onTap }]);
       setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), Math.max(1000, ms));
     };
     return () => { addToastFn = null; };
@@ -58,7 +60,9 @@ export function ToastContainer() {
       {toasts.map(t => (
         <div
           key={t.id}
-          className={`animate-fade-in px-4 py-3 rounded-lg font-mono text-sm shadow-lg border ${
+          onClick={t.onTap}
+          role={t.onTap ? 'button' : undefined}
+          className={`animate-fade-in px-4 py-3 rounded-lg font-mono text-sm shadow-lg border ${t.onTap ? 'cursor-pointer active:scale-[0.98] transition' : ''} ${
             t.type === 'success' ? 'bg-surface-2 border-success/30 text-success' :
             t.type === 'error' ? 'bg-surface-2 border-destructive/30 text-destructive' :
             t.type === 'warning' ? 'bg-surface-2 border-amber-500/40 text-amber-500' :

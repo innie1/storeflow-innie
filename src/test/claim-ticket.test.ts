@@ -93,13 +93,22 @@ describe('where the customer gets it', () => {
 
   it('and neither does WhatsApp any more', () => {
     /*
-     * It used to be hidden when there was nowhere to send it. Now a bundle
-     * with no number offers WhatsApp's own contact picker instead, which
-     * covers the driver who dropped the clothes off, the relative collecting
-     * them, and the owner wanting a copy on their own phone.
+     * It used to be hidden when there was nowhere to send it, then it offered
+     * a contact picker, which is an odd answer to a customer with no number:
+     * the shop wanted to message this person and the app knows exactly why it
+     * cannot. It asks for the number now - and keeps it, on the customer and
+     * on the bundle, so it is not the same question tomorrow. Sending to
+     * somebody else is still there for the driver or the relative.
      */
-    expect(intake).toContain("created.customerPhone ? sendWhatsApp : sendWhatsAppToAnyone");
-    expect(intake).toContain("created.customerPhone ? `WhatsApp ${created.customerName.split(' ')[0]}` : 'Send on WhatsApp'");
+    expect(intake).toContain("created.customerPhone ? sendWhatsApp : () => setAskingNumber(true)");
+    expect(intake).toContain("`Add ${created.customerName.split(' ')[0]}'s number`");
+    expect(intake).toContain('Send to someone else');
+  });
+
+  it('keeps a number given late, rather than asking again tomorrow', () => {
+    expect(intake).toContain('setLocalLaundryPhone(String(store.accessCode');
+    // The same rule the counter's save follows: only ever fills a blank.
+    expect(intake).toContain("if (known && !String(known.phone || '').trim()) next = updateCustomer(next, known.id, { phone: typed });");
   });
 
   it('says plainly that the record was created', () => {

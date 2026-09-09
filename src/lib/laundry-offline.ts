@@ -278,6 +278,52 @@ function updateLocalRecord(accessCode: string, clientRef: string, updates: Parti
   return changed;
 }
 
+/**
+ * Points old bundles at the customer they belong to.
+ *
+ * Everything taken in before records carried a customer id is filed under a
+ * name, which is not a person - two customers may answer to it. This is how
+ * that history gets attached to real customer records, once, on load.
+ *
+ * The caller decides which records to link; this only writes them. A link the
+ * counter chose is protected there, where the reason lives - see
+ * customer-backfill.
+ *
+ * Returns how many were linked, and writes nothing when that is none.
+ */
+export function setLocalLaundryCustomerIds(accessCode: string, links: Record<string, string>): number {
+  if (typeof localStorage === 'undefined') return 0;
+  const records = getLocalLaundryRecords(accessCode);
+  let linked = 0;
+  const next = records.map(record => {
+    const id = links[record.clientRef];
+    if (!id || record.customerId === id) return record;
+    linked += 1;
+    return { ...record, customerId: id };
+  });
+  if (linked > 0) writeLocalLaundryRecords(accessCode, next);
+  return linked;
+}
+
+/**
+ * A number given after the bundle was taken in.
+ *
+ * A walk-in who would not give one at the counter, and then does when the shop
+ * says it will message them when the clothes are ready. The bundle keeps it,
+ * so every reminder about these clothes can reach them.
+ */
+export function setLocalLaundryPhone(accessCode: string, clientRef: string, phone: string): LocalLaundryRecord | null {
+  if (typeof localStorage === 'undefined') return null;
+  const number = String(phone || '').trim();
+  if (!number) return null;
+  const records = getLocalLaundryRecords(accessCode);
+  const found = records.find(record => record.clientRef === clientRef);
+  if (!found) return null;
+  const updated = { ...found, customerPhone: number, syncStatus: 'pending' as LaundrySyncStatus };
+  writeLocalLaundryRecords(accessCode, records.map(record => record.clientRef === clientRef ? updated : record));
+  return updated;
+}
+
 export function getLocalLaundryRecord(accessCode: string, clientRef: string): LocalLaundryRecord | null {
   return getLocalLaundryRecords(accessCode).find(record => record.clientRef === clientRef) || null;
 }

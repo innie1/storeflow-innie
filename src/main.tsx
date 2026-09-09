@@ -4,6 +4,7 @@ import "./index.css";
 import "./storeflow-ui-overhaul.css";
 import { initTheme } from "./lib/theme";
 import { workInProgress } from "@/lib/work-in-progress";
+import { showToast } from "@/components/Toast";
 
 initTheme();
 
@@ -135,20 +136,48 @@ if (isPreviewHost || isInIframe || isLocalDev) {
    */
   let pending = false;
   let reloaded = false;
+  let offered = false;
+
+  const applyNow = () => {
+    if (reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  };
 
   const applyWhenSafe = () => {
     if (reloaded || !pending) return;
     if (!document.hidden) return;
     if (workInProgress()) return;
-    reloaded = true;
-    window.location.reload();
+    applyNow();
+  };
+
+  /*
+   * And saying so, when it cannot just do it.
+   *
+   * Waiting for the app to be in the background is right - nobody wants the
+   * screen to blank with twelve shirts counted into a form - but a merchant
+   * who opens the app, sees the old screen and never backgrounds it waits
+   * forever, which is what "the web has the update but the installed app does
+   * not" actually was. So the new version is offered as well: one tap, at a
+   * moment they chose.
+   */
+  const offerUpdate = () => {
+    if (offered || reloaded || !pending) return;
+    offered = true;
+    showToast("A new version is ready — tap here to update", "info", 12000, applyNow);
   };
 
   navigator.serviceWorker?.addEventListener("controllerchange", () => {
     pending = true;
     applyWhenSafe();
+    // Still on screen: tell them rather than waiting for a background that
+    // may not come for hours.
+    if (!reloaded && !document.hidden) offerUpdate();
   });
-  document.addEventListener("visibilitychange", applyWhenSafe);
+  document.addEventListener("visibilitychange", () => {
+    applyWhenSafe();
+    if (!document.hidden) offerUpdate();
+  });
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

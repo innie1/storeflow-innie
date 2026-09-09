@@ -54,8 +54,11 @@ describe('applying it costs nobody their work', () => {
   });
 
   it('tries again the next time the app is hidden rather than giving up', () => {
-    // A version that could not be applied once must not be lost.
-    expect(main).toContain('document.addEventListener("visibilitychange", applyWhenSafe)');
+    // A version that could not be applied once must not be lost. The
+    // visibility handler now also offers it on the way back in, so this
+    // checks the retry itself rather than the shape of the handler.
+    const handler = main.slice(main.indexOf('document.addEventListener("visibilitychange"'));
+    expect(handler).toContain('applyWhenSafe();');
   });
 
   it('reloads at most once', () => {
@@ -125,5 +128,35 @@ describe('a cold start reaches the network', () => {
     // network at all the fetch fails at once and the cache answers.
     expect(sw).toContain('NetworkFirst');
     expect(sw).toContain("cacheName: 'html'");
+  });
+});
+
+describe('an update the merchant is looking at', () => {
+  const main = readSource('src/main.tsx');
+
+  it('is offered rather than waited on', () => {
+    /*
+     * Waiting for the background is right - nobody wants the screen to blank
+     * with twelve shirts counted into a form. But a merchant who opens the
+     * app, sees the old screen and never backgrounds it waits forever, which
+     * is what "the web has the update but the installed app does not" was.
+     */
+    expect(main).toContain('A new version is ready');
+    expect(main).toContain('if (!reloaded && !document.hidden) offerUpdate();');
+  });
+
+  it('applies it on a tap, at a moment they chose', () => {
+    expect(main).toContain('applyNow);');
+  });
+
+  it('still refuses to reload underneath somebody mid-intake', () => {
+    expect(main).toContain('if (workInProgress()) return;');
+    expect(main).toContain('if (!document.hidden) return;');
+  });
+
+  it('only says it once', () => {
+    // Checked every half hour and on every foreground: without this the same
+    // message reappears all day.
+    expect(main).toContain('if (offered || reloaded || !pending) return;');
   });
 });
