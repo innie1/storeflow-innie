@@ -42,7 +42,19 @@ export function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
+    /*
+     * Above everything, because a message nobody can read is worse than no
+     * message. At z-50 it sat *behind* every sheet in the app - the laundry
+     * counter opens at 70, the worker screens at 75, the celebrations at 9999
+     * - so "Laundry saved", "could not save on this device" and every
+     * explanation raised from inside an open tray appeared as a strip peeking
+     * out from behind it, unreadable and looking like something had gone
+     * wrong.
+     *
+     * Toasts are small, transient and dismiss themselves, so there is nothing
+     * they can usefully be underneath.
+     */
+    <div className="fixed top-4 right-4 z-[10000] flex flex-col gap-2">
       {toasts.map(t => (
         <div
           key={t.id}

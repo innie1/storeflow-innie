@@ -191,6 +191,47 @@ describe('a name typed with a slip in it', () => {
   it('does not offer somebody with a genuinely different name', () => {
     expect(suggestCustomers(book, 'Ibrahim')).toHaveLength(0);
   });
+
+  it('forgives two letters typed the wrong way round', () => {
+    // What a thumb does on a phone keyboard, and the commonest slip there is.
+    expect(suggestCustomers(book, 'Adebayo Jhonson').map(m => m.customer.name)).toContain('Adebayo Johnson');
+    expect(suggestCustomers(book, 'Cihnedu').map(m => m.customer.name)).toContain('Chinedu Okeke');
+  });
+
+  it('counts a swap as one slip, not two', () => {
+    /*
+     * On a short name it is the difference between finding somebody and not:
+     * 'Msua' is two edits away from 'Musa' letter by letter, and four letters
+     * only ever buy one edit's worth of forgiveness.
+     */
+    const short = [customer('Musa Bello', '08012345678')];
+    expect(suggestCustomers(short, 'Msua')).toHaveLength(1);
+  });
+});
+
+describe('a name typed in the order the shop says it', () => {
+  /*
+   * Half the shops in the country write the surname first. A customer saved
+   * as "Chinedu Okeke" gets typed "Okeke Chinedu", and being offered nothing
+   * is what makes an attendant type the whole name again as a new person.
+   */
+  it('finds somebody with the words the other way round', () => {
+    expect(suggestCustomers(book, 'Okeke Chinedu').map(m => m.customer.name)).toContain('Chinedu Okeke');
+  });
+
+  it('finds them from a first name and an initial', () => {
+    expect(suggestCustomers(book, 'Chinedu O').map(m => m.customer.name)).toContain('Chinedu Okeke');
+  });
+
+  it('finds them through a missing space', () => {
+    expect(suggestCustomers(book, 'chineduokeke').map(m => m.customer.name)).toContain('Chinedu Okeke');
+  });
+
+  it('still refuses two words from two different people', () => {
+    // 'Okeke' and 'Nwosu' are two customers, not one, and offering either
+    // would be a guess at which one was meant.
+    expect(suggestCustomers(book, 'Okeke Nwosu')).toHaveLength(0);
+  });
 });
 
 describe('a number written the other way round', () => {

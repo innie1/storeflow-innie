@@ -58,6 +58,7 @@ function withinOneSlip(a: string, b: string, tolerance: number): boolean {
   if (Math.abs(a.length - b.length) > tolerance) return false;
   if (a === b) return true;
 
+  let twoBack: number[] = [];
   let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
     const current = [i];
@@ -67,9 +68,19 @@ function withinOneSlip(a: string, b: string, tolerance: number): boolean {
         current[j - 1] + 1,
         previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
       );
+      /*
+       * Two letters the right way round in the wrong order counts as one
+       * slip, not two. "Chdii" for "Chidi" is the commonest thing a thumb
+       * does on a phone keyboard, and counting it twice put it out of reach
+       * of any tolerance worth allowing.
+       */
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        current[j] = Math.min(current[j], twoBack[j - 2] + 1);
+      }
     }
     // Nothing on this row can be rescued, so stop rather than finish the grid.
     if (Math.min(...current) > tolerance) return false;
+    twoBack = previous;
     previous = current;
   }
   return previous[b.length] <= tolerance;
@@ -82,18 +93,37 @@ function slipsAllowed(query: string): number {
   return 0;
 }
 
-/** Whether a name is what somebody was reaching for, spelling aside. */
-function looksLike(name: string, query: string): boolean {
-  const tolerance = slipsAllowed(query);
-  if (tolerance === 0) return false;
+/** One word of a name against one word of what was typed. */
+function wordMatches(word: string, typed: string): boolean {
+  // The plain case first: a word of the name that begins with this one.
+  if (word.startsWith(typed)) return true;
 
-  for (const word of name.split(' ')) {
-    if (!word) continue;
-    if (withinOneSlip(query, word, tolerance)) return true;
-    // A slip inside a name still being typed: "Adebyo" for "Adebayo Johnson".
-    if (word.length > query.length && withinOneSlip(query, word.slice(0, query.length), tolerance)) return true;
-  }
-  return withinOneSlip(query, name.slice(0, query.length), tolerance);
+  const tolerance = slipsAllowed(typed);
+  if (tolerance === 0) return false;
+  if (withinOneSlip(typed, word, tolerance)) return true;
+  // A slip inside a name still being typed: "Adebyo" for "Adebayo Johnson".
+  return word.length > typed.length && withinOneSlip(typed, word.slice(0, typed.length), tolerance);
+}
+
+/**
+ * Whether a name is what somebody was reaching for, spelling aside.
+ *
+ * Word by word, in any order, because that is how names get typed. Half the
+ * shops in the country write the surname first, a customer saved as "Chidi
+ * Okeke" gets typed "Okeke Chidi", and a middle name in the book that nobody
+ * says out loud should not stop the match. Every word typed has to find a home
+ * in the name, so "Okeke Musa" still matches nobody.
+ */
+function looksLike(name: string, query: string): boolean {
+  const nameWords = name.split(' ').filter(Boolean);
+  const typedWords = query.split(' ').filter(Boolean);
+  if (!nameWords.length || !typedWords.length) return false;
+
+  if (typedWords.every(typed => nameWords.some(word => wordMatches(word, typed)))) return true;
+
+  // A missing or extra space: "chidiokeke" for "chidi okeke".
+  const tolerance = slipsAllowed(query);
+  return tolerance > 0 && withinOneSlip(query, name.slice(0, query.length), tolerance);
 }
 
 /**
