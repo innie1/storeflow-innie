@@ -40,10 +40,16 @@ const bookCustomer = (name: string, phone: string, extra: Partial<Customer> = {}
   ...extra,
 } as Customer);
 
-const job = (name: string, phone: string, createdAt = '2026-09-01T09:00:00.000Z') => ({
+const job = (
+  name: string,
+  phone: string,
+  createdAt = '2026-09-01T09:00:00.000Z',
+  customerId?: string,
+) => ({
   clientRef: `ref-${name}-${phone}-${createdAt}`,
   accessCode: CODE,
   tagCode: 'LT-001',
+  customerId,
   customerName: name,
   customerPhone: phone,
   serviceId: 's1',
@@ -61,8 +67,15 @@ const job = (name: string, phone: string, createdAt = '2026-09-01T09:00:00.000Z'
 const seedJobs = (records: any[]) =>
   localStorage.setItem(laundryLocalStorageKey(CODE), JSON.stringify(records));
 
-const debt = (name: string, phone: string, balance: number, createdAt = '2026-09-02T09:00:00.000Z') => ({
-  id: `laundry-${name}`,
+const debt = (
+  name: string,
+  phone: string,
+  balance: number,
+  createdAt = '2026-09-02T09:00:00.000Z',
+  customerId?: string,
+) => ({
+  id: `laundry-${name}-${customerId || phone || 'x'}`,
+  customerId,
   customerName: name,
   customerPhone: phone,
   items: [],
@@ -217,5 +230,75 @@ describe('the counter can find them by typing', () => {
     seedJobs([job('Musa Bello', '08077778888')]);
     const matches = suggestCustomers(knownCustomers(store()), '0807777');
     expect(matches[0].customer.name).toBe('Musa Bello');
+  });
+});
+
+describe('one customer, one id, one balance', () => {
+  /*
+   * Two customers who share a name, neither of whom gave a number. Before the
+   * bundle carried an internal id there was nothing to tell their debts apart,
+   * so the shop was shown both of them owing what one of them owed - and would
+   * have chased the wrong person for it.
+   */
+  const twoMusas = () => store({
+    customers: [
+      { ...bookCustomer('Musa Bello', ''), id: 'CUST-1' },
+      { ...bookCustomer('Musa Bello', ''), id: 'CUST-2' },
+    ],
+    pendingPayments: [debt('Musa Bello', '', 1500, '2026-09-07T09:00:00.000Z', 'CUST-2')] as any,
+  });
+
+  it('charges the debt to the one who owes it', () => {
+    const found = knownCustomers(twoMusas());
+    expect(found.find(entry => entry.id === 'CUST-2')?.outstandingDebt).toBe(1500);
+  });
+
+  it('leaves the other one owing nothing', () => {
+    const found = knownCustomers(twoMusas());
+    expect(found.find(entry => entry.id === 'CUST-1')?.outstandingDebt).toBe(0);
+  });
+
+  it('keeps them as two customers, not one', () => {
+    expect(knownCustomers(twoMusas())).toHaveLength(2);
+  });
+
+  it('still reads a debt recorded before ids existed', () => {
+    // Everything already in a running shop has no id on it.
+    const older = store({
+      customers: [bookCustomer('Ada Nwosu', '08099887766')],
+      pendingPayments: [debt('Ada Nwosu', '08099887766', 2000)] as any,
+    });
+    expect(knownCustomers(older)[0].outstandingDebt).toBe(2000);
+  });
+});
+
+describe('a bundle that says whose it is', () => {
+  const twoMusas = [
+    { ...bookCustomer('Musa Bello', ''), id: 'CUST-1' },
+    { ...bookCustomer('Musa Bello', ''), id: 'CUST-2' },
+  ];
+
+  it('is counted against that customer and no other', () => {
+    /*
+     * Two people called Musa Bello, neither with a number. By name alone this
+     * is unanswerable and the app refuses to guess - but the bundle itself
+     * says which one, so there is nothing to guess at.
+     */
+    seedJobs([job('Musa Bello', '', '2026-09-09T09:00:00.000Z', 'CUST-1')]);
+    const found = knownCustomers(store({ customers: twoMusas }));
+    expect(found).toHaveLength(2);
+    expect(found[0].id).toBe('CUST-1');
+  });
+
+  it('does not make the other one look like they were just here', () => {
+    seedJobs([job('Musa Bello', '', '2026-09-09T09:00:00.000Z', 'CUST-1')]);
+    const found = knownCustomers(store({ customers: twoMusas }));
+    expect(found.find(entry => entry.id === 'CUST-2')?.lastPurchaseDate).toBeUndefined();
+  });
+
+  it('still finds somebody whose customer record has since gone', () => {
+    // Deleted from the book, but the shop still has their clothes.
+    seedJobs([job('Musa Bello', '08012345678', '2026-09-09T09:00:00.000Z', 'CUST-GONE')]);
+    expect(knownCustomers(store()).map(entry => entry.name)).toContain('Musa Bello');
   });
 });

@@ -22,17 +22,42 @@ const laundry = (over: Partial<StoreData> = {}) => ({
   ...over,
 } as unknown as StoreData);
 
+/**
+ * The rehearsal branch itself, from `if (practice) {` to the `return` that
+ * ends it.
+ *
+ * Sliced to its own closing brace rather than to whatever happens to be the
+ * next write in the file. Anchoring on a later landmark quietly turns this
+ * into a test of where that landmark sits: moving unrelated code between the
+ * two made it fail while the rehearsal was still perfectly safe, which is a
+ * guard that cries wolf and would eventually be deleted for it.
+ */
+const BRANCH_END = ['', '        return;', '      }'].join('\n');
+
+function rehearsalEnds(): number {
+  return intake.indexOf(BRANCH_END, intake.indexOf('if (practice) {'));
+}
+
+const rehearsal = (() => {
+  const start = intake.indexOf('if (practice) {');
+  expect(start, 'the rehearsal branch must exist').toBeGreaterThan(-1);
+  expect(rehearsalEnds(), 'the rehearsal branch must end in a return').toBeGreaterThan(start);
+  return intake.slice(start, rehearsalEnds());
+})();
+
 describe('the rehearsal writes nothing', () => {
   it('leaves before anything is created, booked or synced', () => {
-    const branch = intake.slice(intake.indexOf('if (practice) {'), intake.indexOf('const localRecord = createLocalLaundryRecord'));
-    for (const write of ['createLocalLaundryRecord', 'recordLaundryPayment', 'addCustomer', 'syncLaundryRecord', 'checkNewMilestone', 'onUpdate']) {
-      expect(branch, `${write} must not run in a rehearsal`).not.toContain(write);
+    for (const write of ['createLocalLaundryRecord', 'recordLaundryPayment', 'addCustomer', 'updateCustomer', 'syncLaundryRecord', 'checkNewMilestone', 'onUpdate']) {
+      expect(rehearsal, `${write} must not run in a rehearsal`).not.toContain(write);
     }
   });
 
   it('returns rather than falling through into the real save', () => {
-    const branch = intake.slice(intake.indexOf('if (practice) {'), intake.indexOf('const localRecord = createLocalLaundryRecord'));
-    expect(branch).toContain('return;');
+    // Everything that writes lives after this point in the function.
+    const practiceReturn = rehearsalEnds();
+    for (const write of ['const existingCustomer =', 'createLocalLaundryRecord({', 'recordLaundryPayment(nextStore']) {
+      expect(intake.indexOf(write), `${write} must come after the rehearsal leaves`).toBeGreaterThan(practiceReturn);
+    }
   });
 
   /**

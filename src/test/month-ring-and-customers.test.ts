@@ -97,6 +97,24 @@ describe('recognising a customer', () => {
     expect(matchCustomer(book, { name: 'Ngozi A.', phone: '08055556666' })?.id).toBe('2');
   });
 
+  it('will not guess between two walk-ins of the same name', () => {
+    /*
+     * Neither gave a number, so nothing distinguishes them. Handing back the
+     * first files this bundle and its money against whichever happened to be
+     * recorded first - a coin toss the shop cannot see and cannot undo.
+     */
+    const twoMusas = [
+      { id: '1', name: 'Musa Bello', phone: '' },
+      { id: '2', name: 'Musa Bello', phone: '' },
+    ] as Customer[];
+    expect(matchCustomer(twoMusas, { name: 'Musa Bello' })).toBeUndefined();
+  });
+
+  it('still recognises the one walk-in there is', () => {
+    const one = [{ id: '1', name: 'Musa Bello', phone: '' }] as Customer[];
+    expect(matchCustomer(one, { name: 'Musa Bello' })?.id).toBe('1');
+  });
+
   it('will not guess when two people by that name have no number', () => {
     const twoNgozis = [
       ...book,
@@ -119,8 +137,8 @@ describe('everybody the counter names goes in the book', () => {
   it('no longer skips the book for a walk-in with no phone', () => {
     // Making the phone optional, this briefly refused to save the customer at
     // all - so the shop typed a name and the app quietly dropped it.
-    expect(intake).toContain('const alreadyKnown = matchCustomer(book, { name, phone });');
-    expect(intake).toContain('if (!alreadyKnown) {');
+    expect(intake).toContain('const existingCustomer = picked || matchCustomer(book, { name, phone });');
+    expect(intake).toContain('if (!existingCustomer) {');
     expect(intake).toContain('nextStore = addCustomer(nextStore, { name, phone,');
     expect(intake).not.toContain("if (phone && !customers.some(");
   });
@@ -137,9 +155,39 @@ describe('everybody the counter names goes in the book', () => {
   });
 
   it('fills in a number for somebody the book had none for', () => {
-    expect(intake).toContain('nextStore = updateCustomer(nextStore, alreadyKnown.id, learned);');
+    expect(intake).toContain('nextStore = updateCustomer(nextStore, existingCustomer.id, learned);');
     // Only ever a blank: a mistyped number must not overwrite a good one.
-    expect(intake).toContain("if (phone && !String(alreadyKnown.phone || '').trim()) learned.phone = phone;");
+    expect(intake).toContain("if (phone && !String(existingCustomer.phone || '').trim()) learned.phone = phone;");
+  });
+
+  it('files the bundle and its debt against one internal customer id', () => {
+    /*
+     * One customer record, one id, one balance, many bundles. Without the id
+     * the debt is filed under a name, so two customers who share one - and may
+     * both have given no number - would each be shown owing what the other
+     * owes.
+     */
+    expect(intake).toContain('customerId,');
+    expect(readSource('src/lib/laundry-offline.ts')).toContain('customerId: (input.customerId');
+    expect(readSource('src/lib/laundry-money.ts')).toContain('customerId: input.customerId || existing?.customerId,');
+  });
+
+  it('writes the money to the device, not only to the screen', () => {
+    /*
+     * onUpdate is setStore - React state and nothing else. The payment and the
+     * debt reached the disk only as a side effect of addCustomer calling
+     * saveStore on its way past, so a bundle taken in for somebody already in
+     * the book, with nothing new to tell us, saved the bundle and silently
+     * dropped what was owed for it. The bundle lives in its own store, so
+     * everything on screen still looked right.
+     */
+    expect(intake).toContain('saveStore(nextStore);');
+    expect(intake.indexOf('saveStore(nextStore);')).toBeGreaterThan(intake.indexOf('nextStore = recordLaundryPayment('));
+  });
+
+  it('lets a pick beat any matching the app could do', () => {
+    // The counter saying which person this is settles it.
+    expect(intake).toContain('const picked = selectedCustomerId && isInCustomerBook');
   });
 });
 

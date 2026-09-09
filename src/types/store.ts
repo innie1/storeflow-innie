@@ -110,6 +110,18 @@ export interface PendingPaymentEvent {
 
 export interface PendingPayment {
   id: string;
+  /**
+   * Which customer this is owed by, by internal id.
+   *
+   * The name and the number are how a person is found; this is who they are.
+   * Two customers may share a name and neither may have given a number, and
+   * without this their debts are one pile filed under a string - so the app
+   * would show both of them owing what one of them owes.
+   *
+   * Absent on everything recorded before this existed, which is why the debt
+   * lookup still falls back to matching by number and then by name.
+   */
+  customerId?: string;
   customerName: string;
   customerPhone?: string;
   customerNote?: string;

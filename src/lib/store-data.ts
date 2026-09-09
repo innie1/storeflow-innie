@@ -2194,7 +2194,14 @@ export function matchCustomer(
   }
 
   if (!name) return undefined;
-  return nameless[0];
+  /*
+   * Two walk-ins called Musa Bello, neither with a number, are two people.
+   * Handing back the first of them files this bundle - and its money - against
+   * whichever happened to be recorded first, which is a coin toss the shop
+   * cannot see and cannot undo. The counter was shown both; not choosing means
+   * this is somebody new.
+   */
+  return nameless.length === 1 ? nameless[0] : undefined;
 }
 
 export function addCustomer(store: StoreData, customer: Omit<Customer, 'id' | 'totalPurchases' | 'outstandingDebt' | 'purchaseHistory' | 'loyaltyPoints' | 'visitsCount'>): StoreData {

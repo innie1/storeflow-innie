@@ -33,6 +33,14 @@ export interface LocalLaundryRecord {
   clientRef: string;
   accessCode: string;
   tagCode: string;
+  /**
+   * Whose bundle this is, by internal customer id.
+   *
+   * One customer record, one id, one balance, many bundles. The name on the
+   * ticket is how the counter finds them; this is which of the two Musa
+   * Bellos it actually was. Absent on everything taken in before it existed.
+   */
+  customerId?: string;
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
@@ -93,6 +101,8 @@ export interface LocalLaundryRecord {
 
 export interface NewLocalLaundryRecord {
   accessCode: string;
+  /** Which customer, when the counter picked or created one. */
+  customerId?: string;
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
@@ -215,6 +225,7 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     clientRef: makeClientRef(),
     accessCode,
     tagCode: uniqueLocalTag(existing),
+    customerId: (input.customerId || '').trim() || undefined,
     customerName,
     customerPhone,
     customerAddress: (input.customerAddress || '').trim() || undefined,

@@ -4,8 +4,8 @@ import { checkNewMilestone, markMilestoneReached, type MilestoneDef } from '@/li
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import QRCode from 'qrcode';
 import type { StoreData } from '@/types/store';
-import { matchCustomer, addCustomer, updateCustomer } from '@/lib/store-data';
-import { knownCustomers } from '@/lib/customer-directory';
+import { matchCustomer, addCustomer, updateCustomer, saveStore } from '@/lib/store-data';
+import { isInCustomerBook, knownCustomers } from '@/lib/customer-directory';
 import { getServicePricingLabel, getStoredServicePricing } from '@/lib/service-pricing';
 import { countLaundryPieces, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
 import {
@@ -539,8 +539,57 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
         return;
       }
 
+      /*
+       * Who this is, decided before anything is written.
+       *
+       * One customer record, one internal id, one balance, many bundles. The
+       * bundle and the debt both carry the id, so two customers who share a
+       * name - and may both have given no number - keep separate money.
+       *
+       * The order matters: the customer has to exist before the bundle can
+       * point at them.
+       */
+      let nextStore = store;
+      const picked = selectedCustomerId && isInCustomerBook({ id: selectedCustomerId })
+        ? book.find(entry => entry.id === selectedCustomerId)
+        : undefined;
+      /*
+       * A pick is the counter telling us which person this is, and beats any
+       * matching we could do. Otherwise: by number, then by name, and
+       * matchCustomer refuses to choose between two people of the same name -
+       * in which case this makes a new record rather than guessing, because
+       * the list showed both and neither was chosen.
+       */
+      const existingCustomer = picked || matchCustomer(book, { name, phone });
+      let customerId = existingCustomer?.id || '';
+      try {
+        if (!existingCustomer) {
+          nextStore = addCustomer(nextStore, { name, phone, address: customerAddress.trim() || undefined });
+          customerId = (nextStore.customers || [])[0]?.id || '';
+        } else {
+          /*
+           * Somebody we already had, who has just told us something we did not
+           * know. A customer taken in ten times without a number, whose number
+           * finally gets typed, should stop being the customer with no number -
+           * otherwise the shop can never message them about their clothes.
+           *
+           * Only ever fills a blank. What the book already holds was put there
+           * deliberately, and a mistyped number at a busy counter must not be
+           * allowed to overwrite a good one.
+           */
+          const address = customerAddress.trim();
+          const learned: Record<string, string> = {};
+          if (phone && !String(existingCustomer.phone || '').trim()) learned.phone = phone;
+          if (address && !String(existingCustomer.address || '').trim()) learned.address = address;
+          if (Object.keys(learned).length) nextStore = updateCustomer(nextStore, existingCustomer.id, learned);
+        }
+      } catch (customerError) {
+        console.warn('[Laundry Intake] Customer book update failed:', customerError);
+      }
+
       const localRecord = createLocalLaundryRecord({
         accessCode,
+        customerId,
         customerName: name,
         customerPhone: phone,
         customerAddress: customerAddress.trim(),
@@ -572,9 +621,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
       // when it was not. recordLaundryPayment books only what was handed over
       // and opens a pending payment for whatever is left.
       const taken = Math.max(0, Math.min(total, Number(paidNow) || 0));
-      let nextStore = recordLaundryPayment(store, {
+      nextStore = recordLaundryPayment(nextStore, {
         clientRef: localRecord.clientRef,
         tagCode: localRecord.tagCode,
+        customerId,
         customerName: name,
         customerPhone: phone,
         serviceId: String(selectedService.id),
@@ -584,42 +634,6 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
         promisedFor,
       });
 
-      /*
-       * Everyone the counter names goes in the book.
-       *
-       * Making the phone optional, this briefly skipped the book entirely for
-       * anyone without one - on the grounds that the book is keyed on phone
-       * and blank numbers would collide. That was the wrong trade. The shop
-       * typed a name; that is a customer, and a customer who does not appear
-       * in the customer book is the app quietly losing what it was told.
-       *
-       * matchCustomer handles the collision instead: by number when there is
-       * one, by name when there is not.
-       */
-      const alreadyKnown = matchCustomer(book, { name, phone });
-      try {
-        if (!alreadyKnown) {
-          nextStore = addCustomer(nextStore, { name, phone, address: customerAddress.trim() || undefined });
-        } else {
-          /*
-           * Somebody we already had, who has just told us something we did not
-           * know. A customer taken in ten times without a number, whose number
-           * finally gets typed, should stop being the customer with no number -
-           * otherwise the shop can never message them about their clothes.
-           *
-           * Only ever fills a blank. What the book already holds was put there
-           * deliberately, and a mistyped number at a busy counter must not be
-           * allowed to overwrite a good one.
-           */
-          const address = customerAddress.trim();
-          const learned: Record<string, string> = {};
-          if (phone && !String(alreadyKnown.phone || '').trim()) learned.phone = phone;
-          if (address && !String(alreadyKnown.address || '').trim()) learned.address = address;
-          if (Object.keys(learned).length) nextStore = updateCustomer(nextStore, alreadyKnown.id, learned);
-        }
-      } catch (customerError) {
-        console.warn('[Laundry Intake] Customer book update failed:', customerError);
-      }
 
       // Milestones were only ever checked after a product sale, so a laundry
       // could take its first ten thousand - or its first million - in silence.
@@ -629,6 +643,21 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
         setMilestone(crossed);
       }
 
+      /*
+       * Written to the device, then handed to the screen.
+       *
+       * onUpdate is setStore - React state, and nothing else. The money this
+       * function books reached the disk only as a side effect of addCustomer
+       * calling saveStore on its way past, so a bundle taken in for somebody
+       * already in the book with nothing new to tell us saved the bundle and
+       * silently dropped the payment and the debt that went with it. Reload,
+       * and the shop had the clothes and no record of being owed for them.
+       *
+       * The bundle itself was never at risk - it lives in its own store and is
+       * written by createLocalLaundryRecord - which is exactly why this was
+       * invisible: everything on the screen looked right.
+       */
+      saveStore(nextStore);
       onUpdate(nextStore);
       setCreated(localRecord);
       showToast(`Laundry saved locally — ${localRecord.tagCode}`, 'success');
@@ -875,6 +904,10 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
                 customers={directory}
                 query={customerName}
                 enabled={showSuggestions && !selectedCustomerId}
+                /* In the page, not over it: floating, it covered the phone
+                   field directly below — the one thing that tells two people
+                   of the same name apart. */
+                inline
                 onPick={customer => selectCustomer(customer.id)}
               />
               </div>

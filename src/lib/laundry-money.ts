@@ -59,6 +59,8 @@ export interface LaundryPaymentInput {
   customerPhone?: string;
   serviceId: string;
   serviceName: string;
+  /** Whose debt this is, by internal customer id. See PendingPayment. */
+  customerId?: string;
   /** The whole price of the bundle, whatever has been paid so far. */
   total: number;
   /** What is being handed over right now. May be zero. */
@@ -118,6 +120,9 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
 
   const entry: PendingPayment = {
     id: `laundry-${input.clientRef}`,
+    // Kept if it was ever known: a later part-payment must not quietly
+    // detach the debt from the customer it belongs to.
+    customerId: input.customerId || existing?.customerId,
     customerName: input.customerName,
     customerPhone: input.customerPhone,
     items: [{

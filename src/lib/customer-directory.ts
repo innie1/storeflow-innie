@@ -25,6 +25,8 @@ import { owedByCustomer } from '@/lib/flow-service-brain';
 
 /** A name we found somewhere, and when. */
 interface Sighting {
+  /** Which customer, when whatever we found it on said so outright. */
+  customerId?: string;
   name: string;
   phone: string;
   address?: string;
@@ -69,6 +71,7 @@ function sightings(store: StoreData): Sighting[] {
         const name = String(record.customerName || '').trim();
         if (!name) continue;
         found.push({
+          customerId: record.customerId,
           name,
           phone: digits(record.customerPhone),
           address: String(record.customerAddress || '').trim() || undefined,
@@ -81,7 +84,12 @@ function sightings(store: StoreData): Sighting[] {
   for (const payment of store.pendingPayments || []) {
     const name = String(payment?.customerName || '').trim();
     if (!name) continue;
-    found.push({ name, phone: digits(payment.customerPhone), at: time(payment.createdAt) });
+    found.push({
+      customerId: payment.customerId,
+      name,
+      phone: digits(payment.customerPhone),
+      at: time(payment.createdAt),
+    });
   }
 
   for (const order of onlineOrders(store)) {
@@ -135,7 +143,25 @@ export function knownCustomers(store: StoreData): Customer[] {
     index({ ...customer }, time(customer.lastPurchaseDate));
   }
 
+  const byId = new Map(entries.map(entry => [entry.id, entry]));
+
   for (const seen of sightings(store)) {
+    /*
+     * When the job says whose it is, that settles it. Nothing below needs to
+     * run: no matching by number, no matching by name, and no refusing to
+     * choose between two people called Musa Bello - the bundle already knows
+     * which of them it belongs to.
+     */
+    if (seen.customerId) {
+      const owner = byId.get(seen.customerId);
+      if (owner) {
+        remember(owner, seen.at);
+        continue;
+      }
+      // Named a customer who is no longer in the book. Fall through and treat
+      // it as any other sighting rather than losing the person entirely.
+    }
+
     if (seen.phone) {
       const sameNumber = byPhone.get(seen.phone);
       if (sameNumber) {
@@ -183,7 +209,22 @@ export function knownCustomers(store: StoreData): Customer[] {
    * type the name again and split the customer in two.
    */
   return entries
-    .map(entry => ({ ...entry, outstandingDebt: owedByCustomer(store, entry) }))
+    .map(entry => {
+      const seen = lastSeen.get(entry.id) || 0;
+      return {
+        ...entry,
+        outstandingDebt: owedByCustomer(store, entry),
+        /*
+         * When they were last dealt with, wherever that was.
+         *
+         * Carried on the entry because it is what tells two people with the
+         * same name apart. "Musa Bello, last order 2 Sep, no phone" and "Musa
+         * Bello, last order 7 Sep, owes ₦1,500" are visibly two people; two
+         * bare "Musa Bello" rows are a coin toss.
+         */
+        lastPurchaseDate: seen ? new Date(seen).toISOString() : entry.lastPurchaseDate,
+      };
+    })
     .sort((a, b) => (lastSeen.get(b.id) || 0) - (lastSeen.get(a.id) || 0));
 }
 

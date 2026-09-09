@@ -90,11 +90,27 @@ function debtorNames(store: StoreData): string[] {
  * laundry flow never writes: recordLaundryPayment opens a pending payment and
  * leaves the customer record alone.
  */
-export function owedByCustomer(store: StoreData, customer: { name?: string; phone?: string }): number {
+export function owedByCustomer(
+  store: StoreData,
+  customer: { id?: string; name?: string; phone?: string },
+): number {
   const name = normaliseName(customer.name);
   const phone = String(customer.phone || '').replace(/\D/g, '');
+  const id = String(customer.id || '');
   return openDebts(store)
     .filter(payment => {
+      /*
+       * The id first, and on its own, because it is the only thing that
+       * cannot be two people. Two customers may share a name and neither may
+       * have given a number: matching those, both would be shown owing what
+       * one of them owes.
+       *
+       * A debt that carries an id belongs to that customer and to nobody
+       * else, so a mismatch here is a real no rather than a reason to go on
+       * and try the name.
+       */
+      if (payment.customerId) return id ? payment.customerId === id : false;
+
       const paymentPhone = String(payment.customerPhone || '').replace(/\D/g, '');
       if (phone && paymentPhone) return phone === paymentPhone;
       return normaliseName(payment.customerName) === name;
