@@ -111,6 +111,35 @@ describe('Flow conversational order drafts', () => {
     expect(draft.items.find(item => String(item.metadata?.garment_type).startsWith('Shirt'))?.unitPrice).toBe(900);
   });
 
+  it('understands natural laundry follow-ups with aliases and several garments in one message', () => {
+    const wash = product('wash', 'Wash & Iron', 0, { isService: true, servicePricing: 'per_piece', unit: 'pcs' });
+    const store = {
+      ...restaurantStore(),
+      storeType: 'laundry',
+      businessType: 'laundry',
+      category: 'retail',
+      products: [wash],
+      laundryPricing: {
+        version: 1,
+        garmentTypes: ['Shirts', 'Jeans', 'Shorts', 'Top', 'Bedsheet'],
+        matrix: {
+          wash: { Shirts: 500, Jeans: 700, Shorts: 400, Top: 450, Bedsheet: 1000 },
+        },
+      },
+    } as any;
+
+    let draft = parseFlowConversationOrder(store, 'John Doe wants Wash and Iron shirt');
+    expect(draft.items.map(item => item.metadata?.garment_type)).toEqual(['Shirts']);
+
+    draft = mergeFlowConversationOrderDraft(store, draft, 'short').draft;
+    expect(draft.items.some(item => item.metadata?.garment_type === 'Shorts')).toBe(true);
+
+    draft = mergeFlowConversationOrderDraft(store, draft, 'jean, top, bedsheet').draft;
+    expect(draft.items.some(item => item.metadata?.garment_type === 'Jeans')).toBe(true);
+    expect(draft.items.some(item => item.metadata?.garment_type === 'Top')).toBe(true);
+    expect(draft.items.some(item => item.metadata?.garment_type === 'Bedsheet')).toBe(true);
+  });
+
   it('understands deposit, balance, payment method, delivery address and requested time', () => {
     const store = restaurantStore();
     let draft = parseFlowConversationOrder(store, 'John Doe wants 3 Jollof Rice');
