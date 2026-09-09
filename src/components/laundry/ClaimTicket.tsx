@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { X } from 'lucide-react';
 import type { StoreData } from '@/types/store';
+import { laundryTenderSummary } from '@/lib/laundry-money';
 
 /**
  * The half-ticket the customer walks away with.
@@ -69,16 +70,10 @@ export default function ClaimTicket({ store, record, onClose }: Props) {
 
   const balance = claimBalance(record);
   const shopPhone = store.profile?.phone || '';
+  const tender = laundryTenderSummary(store, record.tagCode);
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4" onClick={onClose} role="dialog" aria-label="Collection ticket">
-      {/*
-        White, not the app's theme.
-
-        This gets held up across a counter and photographed, sometimes in
-        daylight. A dark panel photographs badly and prints worse, and the
-        customer's phone is not running our stylesheet.
-      */}
       <div
         className="w-full max-w-xs rounded-2xl bg-white text-neutral-900 p-5 text-center relative"
         onClick={event => event.stopPropagation()}
@@ -96,8 +91,6 @@ export default function ClaimTicket({ store, record, onClose }: Props) {
 
         {qr && <img src={qr} alt="" className="w-32 h-32 mx-auto mt-3" />}
 
-        {/* The code is the whole point of the ticket, so it is the biggest
-            thing on it. */}
         <p className="font-mono font-black text-3xl tracking-[0.18em] mt-2">{record.tagCode}</p>
         <p className="text-[11px] text-neutral-500 mt-1">Show this when you collect</p>
 
@@ -124,13 +117,20 @@ export default function ClaimTicket({ store, record, onClose }: Props) {
             <span className="text-neutral-500">Total</span>
             <span className="font-semibold">{money(record.total)}</span>
           </div>
-          {/*
-            What is still owed, in plain sight on the customer's own copy.
 
-            A balance only the shop knows about is a balance that gets argued
-            about at the counter. Both sides having the same number written
-            down is most of the argument gone.
-          */}
+          {tender?.change ? (
+            <>
+              <div className="flex justify-between gap-3">
+                <span className="text-neutral-500">Customer gave</span>
+                <span className="font-semibold">{money(tender.tendered)}</span>
+              </div>
+              <div className="flex justify-between gap-3 text-emerald-700 text-[13px]">
+                <span className="font-bold">Change</span>
+                <span className="font-black">{money(tender.change)}</span>
+              </div>
+            </>
+          ) : null}
+
           {balance > 0 ? (
             <div className="flex justify-between gap-3 text-[13px]">
               <span className="text-neutral-500">To pay on collection</span>
