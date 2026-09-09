@@ -24,15 +24,37 @@ jobs:
       - name: Regenerate lockfile
         run: npm install --package-lock-only --ignore-scripts
 
-      - name: Commit lockfile when changed
+      - name: Keep selected laundry due date across tray resets
         run: |
-          if git diff --quiet -- package-lock.json; then
-            echo "package-lock.json is already in sync."
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/components/laundry/LaundryWalkInIntakeV3.tsx')
+          source = path.read_text()
+          old = """    setNotes('');
+    setPromisedFor(services[0] ? suggestedPromisedLocal(services[0].turnaround) : suggestedPromisedLocal());
+    setPromisedTouched(false);
+    setWashMethodId('manual:hand-wash');
+"""
+          new = """    setNotes('');
+    // Due date is deliberately sticky across tray resets. The counter often
+    // takes several bundles promised for the same date; keep the merchant's
+    // last selection until they manually choose another one.
+    setWashMethodId('manual:hand-wash');
+"""
+          if old not in source:
+              raise SystemExit('Expected due-date reset block was not found; refusing to change anything.')
+          path.write_text(source.replace(old, new, 1))
+          PY
+
+      - name: Commit generated changes when changed
+        run: |
+          if git diff --quiet -- package-lock.json src/components/laundry/LaundryWalkInIntakeV3.tsx; then
+            echo "Everything is already in sync."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "chore: sync npm lockfile"
+          git add package-lock.json src/components/laundry/LaundryWalkInIntakeV3.tsx
+          git commit -m "Keep laundry due date across tray reset"
           git push
