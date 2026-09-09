@@ -12,11 +12,17 @@ export interface FlowLaundryGarmentMatch {
   score: number;
 }
 
+export interface FlowLaundryGarmentSuggestion {
+  garment: string;
+  alias: string;
+  quantity: number;
+  score: number;
+}
+
 export function normalizeFlowLaundryText(value: unknown): string {
   return String(value || '')
     .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .replace(/&/g, ' and ')
     .replace(/t[\s-]?shirt/g, 'tshirt')
     .replace(/bed[\s-]?sheet/g, 'bedsheet')
@@ -95,6 +101,16 @@ function quantityBefore(text: string, start: number): number {
   return Number.isFinite(number) && number > 0 ? number : 1;
 }
 
+function quantityAtStart(text: string): number {
+  const q = normalizeFlowLaundryText(text);
+  const words = Object.keys(NUMBER_WORDS).join('|');
+  const match = q.match(new RegExp(`^(\\d+|${words})\\s*(?:x|pcs?|pieces?)?\\s+`, 'i'));
+  if (!match) return 1;
+  const raw = match[1].toLowerCase();
+  const number = NUMBER_WORDS[raw] || Number(raw);
+  return Number.isFinite(number) && number > 0 ? number : 1;
+}
+
 function overlaps(matches: FlowLaundryGarmentMatch[], start: number, end: number): boolean {
   return matches.some(match => start < match.end && end > match.start);
 }
@@ -161,10 +177,38 @@ export function matchFlowLaundryGarments(text: string, garmentTypes: string[]): 
     }
   }
 
-  // One garment can have several equivalent aliases in the same position.
-  // Keep only the earliest/best occurrence per physical mention, while still
-  // allowing the same garment to be spoken twice in different positions.
   return matches
     .sort((a, b) => a.start - b.start || b.score - a.score || b.matchedText.length - a.matchedText.length)
     .filter((match, index, all) => !all.slice(0, index).some(previous => previous.start === match.start && previous.end === match.end));
+}
+
+/**
+ * When a garment was not strong enough to auto-match, offer one conservative
+ * clarification instead of dropping the word. A confirmed clarification is
+ * then safe to remember as a store-specific alias.
+ */
+export function suggestFlowLaundryGarment(text: string, garmentTypes: string[]): FlowLaundryGarmentSuggestion | null {
+  if (!garmentTypes.length) return null;
+  let phrase = normalizeFlowLaundryText(text)
+    .replace(/\b(?:customer|wants|needs|ordered|would|like|please|add|another|one|item|items|piece|pieces|service|treatment)\b/g, ' ')
+    .replace(/\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!phrase || phrase.length < 3 || phrase.split(' ').length > 3) return null;
+
+  let best: FlowLaundryGarmentSuggestion | null = null;
+  let secondScore = 0;
+  for (const garment of garmentTypes) {
+    let garmentScore = 0;
+    for (const alias of garmentAliases(garment)) garmentScore = Math.max(garmentScore, similarity(phrase, alias));
+    if (!best || garmentScore > best.score) {
+      secondScore = best?.score || 0;
+      best = { garment, alias: phrase, quantity: quantityAtStart(text), score: garmentScore };
+    } else if (garmentScore > secondScore) secondScore = garmentScore;
+  }
+
+  // 0.78+ is already accepted automatically by the matcher. Below 0.5 is too
+  // speculative to ask about, and a close runner-up is genuinely ambiguous.
+  if (!best || best.score < 0.5 || best.score >= 0.78 || best.score - secondScore < 0.08) return null;
+  return best;
 }
