@@ -4,7 +4,8 @@ import { checkNewMilestone, markMilestoneReached, type MilestoneDef } from '@/li
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import QRCode from 'qrcode';
 import type { StoreData } from '@/types/store';
-import { matchCustomer, addCustomer } from '@/lib/store-data';
+import { matchCustomer, addCustomer, updateCustomer } from '@/lib/store-data';
+import { knownCustomers } from '@/lib/customer-directory';
 import { getServicePricingLabel, getStoredServicePricing } from '@/lib/service-pricing';
 import { countLaundryPieces, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
 import {
@@ -211,7 +212,17 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
     [store.products],
   );
-  const customers = store.customers || [];
+  /*
+   * Two lists on purpose.
+   *
+   * `book` is what has actually been written to the customer book, and is the
+   * only thing worth checking before adding somebody to it. `directory` is
+   * everyone the shop has ever named - bundles, debts, storefront orders - and
+   * is what the counter searches, because a customer visible on four other
+   * screens has to be findable here.
+   */
+  const book = store.customers || [];
+  const directory = useMemo(() => knownCustomers(store), [store]);
   const garmentTypes = useMemo(() => getLaundryPricingConfig(store).garmentTypes, [store]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -412,7 +423,7 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
   const selectCustomer = (id: string) => {
     setSelectedCustomerId(id);
     setShowSuggestions(false);
-    const customer = customers.find(item => item.id === id);
+    const customer = directory.find(item => item.id === id);
     setCustomerName(customer?.name || '');
     setCustomerPhone(customer?.phone || '');
     setCustomerAddress(customer?.address || '');
@@ -585,12 +596,29 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
        * matchCustomer handles the collision instead: by number when there is
        * one, by name when there is not.
        */
-      if (!matchCustomer(customers, { name, phone })) {
-        try {
+      const alreadyKnown = matchCustomer(book, { name, phone });
+      try {
+        if (!alreadyKnown) {
           nextStore = addCustomer(nextStore, { name, phone, address: customerAddress.trim() || undefined });
-        } catch (customerError) {
-          console.warn('[Laundry Intake] Customer book update failed:', customerError);
+        } else {
+          /*
+           * Somebody we already had, who has just told us something we did not
+           * know. A customer taken in ten times without a number, whose number
+           * finally gets typed, should stop being the customer with no number -
+           * otherwise the shop can never message them about their clothes.
+           *
+           * Only ever fills a blank. What the book already holds was put there
+           * deliberately, and a mistyped number at a busy counter must not be
+           * allowed to overwrite a good one.
+           */
+          const address = customerAddress.trim();
+          const learned: Record<string, string> = {};
+          if (phone && !String(alreadyKnown.phone || '').trim()) learned.phone = phone;
+          if (address && !String(alreadyKnown.address || '').trim()) learned.address = address;
+          if (Object.keys(learned).length) nextStore = updateCustomer(nextStore, alreadyKnown.id, learned);
         }
+      } catch (customerError) {
+        console.warn('[Laundry Intake] Customer book update failed:', customerError);
       }
 
       // Milestones were only ever checked after a product sale, so a laundry
@@ -827,17 +855,24 @@ export default function LaundryWalkInIntakeV2({ store, onUpdate, currentUser, on
             )}
             <section className="space-y-2 text-left">
               <p className="text-[11px] uppercase font-black text-muted-foreground">1. Customer</p>
-              {customers.length > 0 && <select value={selectedCustomerId} onChange={event => selectCustomer(event.target.value)} className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm"><option value="">New customer</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name} · {customer.phone}</option>)}</select>}
-              {/* Matches from the customer book, offered as the name is
-                  typed. The only way to reuse a customer used to be a dropdown
-                  listing every one of them, so an attendant with a queue would
-                  type the name again — quietly making a second record for the
-                  same person, splitting their history and losing what they
-                  owed. */}
+              {/*
+                One field, not two.
+                
+                There used to be a "New customer" dropdown above this listing
+                every customer in the shop. Fine with six, useless with six
+                hundred, and an attendant with a queue in front of them types
+                the name again rather than scrolling — which quietly makes a
+                second record for the same person, splits their history and
+                loses what they owed.
+
+                Touching the field now offers the last few people served, and
+                typing narrows it: by name, by number, and through a wrong
+                letter or two.
+              */}
               <div className="relative">
               <input value={customerName} onChange={event => { setCustomerName(event.target.value); setSelectedCustomerId(''); setShowSuggestions(true); }} onFocus={() => setShowSuggestions(true)} placeholder="Customer name *" className="w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-sm" />
               <CustomerSuggestions
-                customers={customers}
+                customers={directory}
                 query={customerName}
                 enabled={showSuggestions && !selectedCustomerId}
                 onPick={customer => selectCustomer(customer.id)}

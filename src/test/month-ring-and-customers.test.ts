@@ -88,6 +88,25 @@ describe('recognising a customer', () => {
     expect(matchCustomer(book, { name: 'Musa Bello' })).toBeUndefined();
   });
 
+  it('recognises a number given by somebody we had no number for', () => {
+    /*
+     * Ten bundles taken in for a walk-in called Ngozi, and on the eleventh she
+     * gives her number. Without this the number makes a second Ngozi, and the
+     * first one keeps her history and whatever she owes.
+     */
+    expect(matchCustomer(book, { name: 'Ngozi A.', phone: '08055556666' })?.id).toBe('2');
+  });
+
+  it('will not guess when two people by that name have no number', () => {
+    const twoNgozis = [
+      ...book,
+      { id: '3', name: 'Ngozi A.', phone: '' },
+    ] as Customer[];
+    // A coin toss, and the wrong guess puts a stranger's number on somebody
+    // else's clothes.
+    expect(matchCustomer(twoNgozis, { name: 'Ngozi A.', phone: '08055556666' })).toBeUndefined();
+  });
+
   it('recognises nobody from nothing', () => {
     expect(matchCustomer(book, {})).toBeUndefined();
     expect(matchCustomer(undefined, { name: 'Musa Bello' })).toBeUndefined();
@@ -100,8 +119,27 @@ describe('everybody the counter names goes in the book', () => {
   it('no longer skips the book for a walk-in with no phone', () => {
     // Making the phone optional, this briefly refused to save the customer at
     // all - so the shop typed a name and the app quietly dropped it.
-    expect(intake).toContain('if (!matchCustomer(customers, { name, phone }))');
+    expect(intake).toContain('const alreadyKnown = matchCustomer(book, { name, phone });');
+    expect(intake).toContain('if (!alreadyKnown) {');
+    expect(intake).toContain('nextStore = addCustomer(nextStore, { name, phone,');
     expect(intake).not.toContain("if (phone && !customers.some(");
+  });
+
+  it('checks the book itself, not the wider list of everyone we have named', () => {
+    /*
+     * The counter searches everybody the shop has ever named - bundles, debts,
+     * storefront orders. Checking that list before writing to the book would
+     * mean a customer who only exists on an old bundle is treated as already
+     * filed, and never actually gets there.
+     */
+    expect(intake).toContain('const book = store.customers || [];');
+    expect(intake).not.toContain('matchCustomer(directory');
+  });
+
+  it('fills in a number for somebody the book had none for', () => {
+    expect(intake).toContain('nextStore = updateCustomer(nextStore, alreadyKnown.id, learned);');
+    // Only ever a blank: a mistyped number must not overwrite a good one.
+    expect(intake).toContain("if (phone && !String(alreadyKnown.phone || '').trim()) learned.phone = phone;");
   });
 });
 

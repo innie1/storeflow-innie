@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { suggestCustomers } from '@/lib/customer-suggest';
+import { recentCustomers, suggestCustomers } from '@/lib/customer-suggest';
 import { readSource } from './helpers/source';
 import type { Customer } from '@/types/store';
 
@@ -133,5 +133,85 @@ describe('the intake screen uses it', () => {
   it('warns the attendant when that customer already owes money', () => {
     // Now in the shared list, so every screen says it, not just this one.
     expect(shared).toContain('customer.outstandingDebt > 0');
+  });
+});
+
+describe('the few most recent, before anything is typed', () => {
+  /*
+   * This replaced a dropdown listing every customer in the shop, which nobody
+   * scrolled. A laundry serves the same people every week, so the name about
+   * to be typed is usually one of the last few served.
+   */
+  it('offers three', () => {
+    expect(recentCustomers(book)).toHaveLength(3);
+  });
+
+  it('keeps the order it was given, which is most recently served first', () => {
+    expect(recentCustomers(book).map(entry => entry.customer.name)).toEqual([
+      'Ada Nwosu', 'Adebayo Johnson', 'Chinedu Okeke',
+    ]);
+  });
+
+  it('says why they are being offered, so it does not look like a guess', () => {
+    expect(recentCustomers(book).every(entry => entry.matchedOn === 'recent')).toBe(true);
+  });
+
+  it('offers nothing from an empty book', () => {
+    expect(recentCustomers([])).toHaveLength(0);
+  });
+});
+
+describe('a name typed with a slip in it', () => {
+  it('still finds somebody through one wrong letter', () => {
+    // A thumb on a phone keyboard, at a counter, with somebody waiting.
+    expect(suggestCustomers(book, 'Adebyo').map(m => m.customer.name)).toContain('Adebayo Johnson');
+  });
+
+  it('finds them through a missing letter too', () => {
+    expect(suggestCustomers(book, 'Chinedu Oke').map(m => m.customer.name)).toContain('Chinedu Okeke');
+  });
+
+  it('never pushes a literal match below a guess', () => {
+    // Being offered the wrong customer first is worse than typing the name
+    // out, so a name that really starts with what was typed always wins.
+    const pair = [customer('Adebayp Kane', '08012341234'), customer('Adebayo Johnson', '08031112222')];
+    expect(suggestCustomers(pair, 'Adebayo')[0].customer.name).toBe('Adebayo Johnson');
+    expect(suggestCustomers(pair, 'Adebayo')).toHaveLength(2);
+  });
+
+  it('forgives nothing on a short query', () => {
+    /*
+     * Two or three letters are close to half the book. Forgiving a slip there
+     * offers strangers, and the whole point is that the counter can trust what
+     * it is shown.
+     */
+    expect(suggestCustomers(book, 'Adz')).toHaveLength(0);
+  });
+
+  it('does not offer somebody with a genuinely different name', () => {
+    expect(suggestCustomers(book, 'Ibrahim')).toHaveLength(0);
+  });
+});
+
+describe('a number written the other way round', () => {
+  const fromContacts = [
+    customer('Musa Bello', '+2348012345678'),
+  ];
+
+  it('finds a contacts number when the local one is typed', () => {
+    /*
+     * The picker hands back +2348012345678; the card on the counter says
+     * 08012345678. As plain digits neither contains the other.
+     */
+    expect(suggestCustomers(fromContacts, '08012345678')).toHaveLength(1);
+  });
+
+  it('finds a local number when the international one is typed', () => {
+    const local = [customer('Musa Bello', '08012345678')];
+    expect(suggestCustomers(local, '+2348012345678')).toHaveLength(1);
+  });
+
+  it('still finds a number by the middle of it', () => {
+    expect(suggestCustomers(fromContacts, '1234567')).toHaveLength(1);
   });
 });

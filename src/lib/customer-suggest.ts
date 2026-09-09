@@ -21,10 +21,93 @@ const norm = (value: string) =>
 
 const digits = (value: string) => String(value || '').replace(/\D/g, '');
 
+/**
+ * A Nigerian number in the one shape, whichever way it was written.
+ *
+ * The contacts picker hands back +2348012345678; the counter types
+ * 08012345678. As plain digits neither contains the other, so a customer whose
+ * number came from the phone book could not be found by typing the number on
+ * the card in front of you.
+ */
+function localNumber(value: string): string {
+  const raw = digits(value);
+  if (raw.startsWith('234') && raw.length >= 12) return `0${raw.slice(3)}`;
+  return raw;
+}
+
+/** How many recent customers to offer before anything is typed. */
+export const RECENT_SUGGESTIONS = 3;
+
 export interface CustomerSuggestion {
   customer: Customer;
-  /** Why it matched, so the caller can show the phone when that is the hit. */
-  matchedOn: 'name' | 'phone';
+  /**
+   * Why it matched, so the caller can say so: the phone when that was the hit,
+   * and 'recent' for the handful offered before anything is typed at all.
+   */
+  matchedOn: 'name' | 'phone' | 'recent';
+}
+
+/**
+ * Two words are the same word with a slip in it.
+ *
+ * Bounded on purpose. One wrong letter in "Adebayo" is a thumb on a phone
+ * keyboard; three is a different person, and offering a different person to
+ * somebody in a hurry is how the wrong customer's clothes get booked in.
+ */
+function withinOneSlip(a: string, b: string, tolerance: number): boolean {
+  if (Math.abs(a.length - b.length) > tolerance) return false;
+  if (a === b) return true;
+
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    // Nothing on this row can be rescued, so stop rather than finish the grid.
+    if (Math.min(...current) > tolerance) return false;
+    previous = current;
+  }
+  return previous[b.length] <= tolerance;
+}
+
+/** A typo is worth forgiving only once there is enough word to be sure. */
+function slipsAllowed(query: string): number {
+  if (query.length >= 7) return 2;
+  if (query.length >= 4) return 1;
+  return 0;
+}
+
+/** Whether a name is what somebody was reaching for, spelling aside. */
+function looksLike(name: string, query: string): boolean {
+  const tolerance = slipsAllowed(query);
+  if (tolerance === 0) return false;
+
+  for (const word of name.split(' ')) {
+    if (!word) continue;
+    if (withinOneSlip(query, word, tolerance)) return true;
+    // A slip inside a name still being typed: "Adebyo" for "Adebayo Johnson".
+    if (word.length > query.length && withinOneSlip(query, word.slice(0, query.length), tolerance)) return true;
+  }
+  return withinOneSlip(query, name.slice(0, query.length), tolerance);
+}
+
+/**
+ * The few most recent customers, offered the moment the field is touched.
+ *
+ * A laundry's customers are overwhelmingly the same people every week, so the
+ * name being typed is usually one of the last few served. Offering them before
+ * a letter is typed saves the typing that creates second copies of people.
+ */
+export function recentCustomers(customers: Customer[], limit = RECENT_SUGGESTIONS): CustomerSuggestion[] {
+  return (customers || [])
+    .filter(customer => customer?.name)
+    .slice(0, Math.max(0, limit))
+    .map(customer => ({ customer, matchedOn: 'recent' as const }));
 }
 
 /**
@@ -48,6 +131,11 @@ export function suggestCustomers(customers: Customer[], query: string): Customer
   const starts: CustomerSuggestion[] = [];
   const contains: CustomerSuggestion[] = [];
   const phones: CustomerSuggestion[] = [];
+  /* Spelling forgiven, and always last: a literal hit is never pushed down by
+     a guess. */
+  const close: CustomerSuggestion[] = [];
+
+  const qLocal = localNumber(query);
 
   for (const customer of customers || []) {
     if (!customer?.name) continue;
@@ -61,14 +149,21 @@ export function suggestCustomers(customers: Customer[], query: string): Customer
       contains.push({ customer, matchedOn: 'name' });
       continue;
     }
-    if (byPhone && digits(customer.phone).includes(qDigits)) {
-      phones.push({ customer, matchedOn: 'phone' });
+    if (byPhone) {
+      const phone = digits(customer.phone);
+      if (phone.includes(qDigits) || localNumber(phone).includes(qLocal)) {
+        phones.push({ customer, matchedOn: 'phone' });
+        continue;
+      }
+    }
+    if (byName && looksLike(name, q)) {
+      close.push({ customer, matchedOn: 'name' });
     }
   }
 
   // Someone typed in full is not a suggestion worth making — the field
   // already says it.
-  const ordered = [...starts, ...contains, ...phones]
+  const ordered = [...starts, ...contains, ...phones, ...close]
     .filter(entry => !(norm(entry.customer.name) === q && entry.matchedOn === 'name'));
 
   return ordered.slice(0, MAX_RESULTS);

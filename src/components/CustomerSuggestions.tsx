@@ -1,5 +1,5 @@
 import type { Customer } from '@/types/store';
-import { suggestCustomers } from '@/lib/customer-suggest';
+import { recentCustomers, suggestCustomers } from '@/lib/customer-suggest';
 
 /**
  * Matching customers, offered under whatever field is being typed into.
@@ -25,11 +25,27 @@ interface Props {
 export default function CustomerSuggestions({ customers, query, enabled = true, onPick }: Props) {
   if (!enabled) return null;
 
-  const matches = suggestCustomers(customers, query);
+  /*
+   * Before a letter is typed, the last few people served.
+   *
+   * A laundry serves overwhelmingly the same people every week, so the name
+   * about to be typed is usually one of the last few - and every name typed
+   * out again is a second copy of somebody, with their history and their debt
+   * split across the two. This replaced a dropdown of every customer in the
+   * shop, which nobody scrolled.
+   */
+  const typed = suggestCustomers(customers, query);
+  const matches = typed.length > 0 ? typed : (query.trim() ? [] : recentCustomers(customers));
   if (matches.length === 0) return null;
+  const showingRecent = matches[0].matchedOn === 'recent';
 
   return (
     <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+      {/* Said, so three names appearing unasked reads as help rather than as
+          the app having decided something. */}
+      {showingRecent && (
+        <p className="px-3 pt-2 pb-1 text-[10px] uppercase font-black text-muted-foreground">Recent customers</p>
+      )}
       {matches.map(({ customer, matchedOn }) => (
         <button
           key={customer.id}

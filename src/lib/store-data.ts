@@ -2174,9 +2174,27 @@ export function matchCustomer(
   const digits = String(who.phone || '').replace(/\D/g, '');
   const name = String(who.name || '').trim().toLowerCase();
 
-  if (digits) return (customers || []).find(customer => String(customer.phone || '').replace(/\D/g, '') === digits);
+  const nameless = (customers || []).filter(customer =>
+    !String(customer.phone || '').trim() && String(customer.name || '').trim().toLowerCase() === name);
+
+  if (digits) {
+    const sameNumber = (customers || []).find(customer => String(customer.phone || '').replace(/\D/g, '') === digits);
+    if (sameNumber) return sameNumber;
+    /*
+     * A number for somebody we had no number for.
+     *
+     * Ten bundles taken in for a walk-in called Musa, and on the eleventh he
+     * finally gives his number: without this, that number makes a second Musa
+     * and the first one keeps his history and his debt. Only when exactly one
+     * Musa has no number - two of them is a coin toss, and the wrong guess
+     * puts a stranger's number on somebody else's clothes.
+     */
+    if (name && nameless.length === 1) return nameless[0];
+    return undefined;
+  }
+
   if (!name) return undefined;
-  return (customers || []).find(customer => !String(customer.phone || '').trim() && customer.name.trim().toLowerCase() === name);
+  return nameless[0];
 }
 
 export function addCustomer(store: StoreData, customer: Omit<Customer, 'id' | 'totalPurchases' | 'outstandingDebt' | 'purchaseHistory' | 'loyaltyPoints' | 'visitsCount'>): StoreData {

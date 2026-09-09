@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import CustomerSuggestions from '@/components/CustomerSuggestions';
+import { knownCustomers } from '@/lib/customer-directory';
 import { StoreData, Sale, PaymentMethod, ManagerSettings, Product } from '@/types/store';
 import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale, logScanEvent } from '@/lib/store-data';
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
@@ -108,8 +109,19 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     localStorage.setItem('storeflow_last_payment_method', method);
   }, [method]);
   const [customerOpen, setCustomerOpen] = useState(false);
+  /*
+   * Everyone the shop has named, not only the customer book.
+   *
+   * A credit sale is the one place a name absolutely must match somebody who
+   * already exists - the debt is filed under whatever is typed - and the book
+   * is only a part of who the shop knows.
+   */
+  const directory = useMemo(() => knownCustomers(store), [store]);
   const [customerName, setCustomerName] = useState('');
   const [pickedCustomer, setPickedCustomer] = useState(false);
+  /* Only once the field is touched: the recent few would otherwise sit over
+     the due date and notes the moment the credit panel opened. */
+  const [nameFocused, setNameFocused] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [customerNote, setCustomerNote] = useState('');
@@ -1044,7 +1056,8 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                       whatever is typed, so a second spelling is a second
                       person who never appears to owe anything. */}
                   <div className="grid grid-cols-2 gap-1.5 relative">
-                    <input placeholder="Name" value={customerName} onChange={e => { setCustomerName(e.target.value); setPickedCustomer(false); }}
+                    <input placeholder="Name" value={customerName} onChange={e => { setCustomerName(e.target.value); setPickedCustomer(false); setNameFocused(true); }}
+                      onFocus={() => setNameFocused(true)}
                       className="p-1.5 rounded bg-card border border-border text-xs w-full" />
                     <div className="relative">
                       <input placeholder="Phone" value={customerPhone} onChange={e => { setCustomerPhone(e.target.value); setPickedCustomer(false); }}
@@ -1056,9 +1069,9 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                       }} />
                     </div>
                     <CustomerSuggestions
-                      customers={store.customers || []}
+                      customers={directory}
                       query={customerName}
-                      enabled={!pickedCustomer}
+                      enabled={nameFocused && !pickedCustomer}
                       onPick={customer => {
                         setCustomerName(customer.name);
                         setCustomerPhone(customer.phone || '');
