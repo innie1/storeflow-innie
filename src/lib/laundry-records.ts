@@ -14,7 +14,7 @@
 import type { StoreData } from '@/types/store';
 import { getLaundryRecordSearchText, parseLaundryRecordMetadata } from '@/lib/laundry-workspace';
 import { describeDue, type DueLabel } from '@/lib/laundry-due';
-import { laundryBalance } from '@/lib/laundry-money';
+import { laundryBalance, laundryTenderSummary } from '@/lib/laundry-money';
 import { LAUNDRY_SETTLED_STAGES, LAUNDRY_WORKFLOW_STAGES, type LaundryWorkflowStage } from '@/lib/laundry-offline';
 import { buildLaundryWhatsAppPayload } from '@/lib/laundry-whatsapp';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
@@ -38,13 +38,6 @@ export interface DecoratedRecord {
   clientRef: string;
   /** Free-text shelf or rack, as the attendant wrote it at drop-off. */
   shelfLocation?: string;
-  /*
-   * decorateRecord has always set these, but the interface never declared
-   * them, so DecoratedRecord did not structurally satisfy RecordedBy. That
-   * collapsed byContributor's generic to RecordedBy and every field the sort
-   * and filter needed went missing from the result type - one omission, most
-   * of this file's type errors. The filter itself worked; types are erased.
-   */
   recordedByName?: string;
   recordedByRole?: string;
   /** Walk-in, collected from the customer, or delivered back. */
@@ -76,6 +69,11 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
   const promisedDate = promisedValue ? new Date(promisedValue) : null;
   const promisedAt = promisedDate && Number.isFinite(promisedDate.getTime()) ? promisedDate.getTime() : null;
   const createdDate = order.created_at ? new Date(order.created_at) : null;
+  const baseServiceName = meta.service_name || items.find((item: any) => item?.metadata?.charge_line)?.item_name || 'Laundry service';
+  const tender = laundryTenderSummary(store, clientRef || String(meta.tag_code || meta.receipt_number || order.order_number || ''));
+  const serviceName = tender?.change
+    ? `${baseServiceName} · Gave ₦${tender.tendered.toLocaleString()} · Change ₦${tender.change.toLocaleString()}`
+    : baseServiceName;
 
   return {
     order,
@@ -89,7 +87,7 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     recordedByName: meta.recorded_by_name || undefined,
     recordedByRole: meta.recorded_by_role || undefined,
     customerPhone: order.customer_phone || '',
-    serviceName: meta.service_name || items.find((item: any) => item?.metadata?.charge_line)?.item_name || 'Laundry service',
+    serviceName,
     garmentSummary: meta.garment_summary
       || garments.map((item: any) => `${Number(item.quantity || 0)} ${item.item_name || 'item'}`).join(', '),
     pieceCount: Number(meta.garment_count || 0)
@@ -102,10 +100,6 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     createdAt: createdDate && Number.isFinite(createdDate.getTime()) ? createdDate.getTime() : 0,
     promisedAt,
     overdue: promisedAt !== null && promisedAt < Date.now() && !LAUNDRY_SETTLED_STAGES.includes(stage),
-    // A bundle waiting on the Ready shelf past its time is not late — it is
-    // finished, and waiting for someone to come for it. Only work still in
-    // progress is counted late, which is why the clock is pinned at the
-    // promised moment once a bundle settles.
     clientRef,
     balance: laundryBalance(store, clientRef),
     due: LAUNDRY_SETTLED_STAGES.includes(stage)
