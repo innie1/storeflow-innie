@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const publishSource = readFileSync(new URL('./marketplace-publish.ts', import.meta.url), 'utf8');
+const publishSource = readFileSync(resolve(process.cwd(), 'src/lib/marketplace-publish.ts'), 'utf8');
 const hardeningMigration = readFileSync(
-  new URL('../../supabase/migrations/20260912114000_remove_plaintext_store_credentials.sql', import.meta.url),
+  resolve(process.cwd(), 'supabase/migrations/20260912114000_remove_plaintext_store_credentials.sql'),
   'utf8',
 );
 
