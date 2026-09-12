@@ -12,7 +12,12 @@ describe('recovery email trust boundary', () => {
     expect(source).toContain('recoveryEmailFromStore(store)');
     expect(source).toContain('ownerEmailForStore(supabase, store)');
     expect(source).toContain('.from("stores")');
-    expect(source).not.toContain('to: [to]');
+    expect(source).toContain('let recipient = serverRecoveryEmail || serverOwnerEmail');
+    expect(source).toContain('await sendEmail(recipient, subject, html)');
+    // Legacy body.to may identify which stored recovery address the user is
+    // trying to verify, but it is never passed to the mail sender directly.
+    expect(source).not.toContain('sendEmail(body.to');
+    expect(source).not.toContain('recipient = normalizeEmail(body.to)');
   });
 
   it('does not email caller supplied recovery secrets', () => {
