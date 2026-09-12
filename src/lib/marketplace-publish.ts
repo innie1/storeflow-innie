@@ -35,9 +35,6 @@ export function prepareStoreForMarketplacePublish(
         unit: (product as any).unit || undefined,
         unitLabel: pricingInfo.unitLabel,
         turnaround: product.turnaround || '',
-        // Laundry prices are stored centrally in laundryPricing.matrix, not
-        // necessarily on each Product. Publish that exact row so the customer
-        // app sees Shirt/Trouser/etc prices configured by this merchant.
         garmentPrices: storeType === 'laundry'
           ? (laundryMatrix[serviceId] || (product as any).garmentPrices || {})
           : (product as any).garmentPrices,
@@ -65,9 +62,9 @@ export function prepareStoreForMarketplacePublish(
 /**
  * Publish only customer-facing storefront fields.
  *
- * StoreFlow supports Supabase Auth members and the original access-code +
- * owner-password merchant session. Both paths go through the same scoped RPC
- * so marketplace publishing can never overwrite finance/inventory internals.
+ * Cloud ownership is proved exclusively by the current Supabase Auth session.
+ * The local StoreFlow owner password/PIN is deliberately never sent to Supabase
+ * and is not a cloud credential.
  */
 export async function publishStorefrontToCloud(
   store: StoreData,
@@ -77,13 +74,16 @@ export async function publishStorefrontToCloud(
   const businessTemplate = (published as any).businessTemplate || {};
   const laundryPricing = (published as any).laundryPricing || businessTemplate.laundryPricing || {};
   const accessCode = String(store.accessCode || '').trim();
-  const ownerPassword = String((store as any).managerSettings?.ownerPassword || '');
 
   if (!accessCode) throw new Error('This store has no access code, so its storefront cannot be published.');
 
-  const { error } = await (supabase as any).rpc('publish_storefront_from_owner', {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.user?.id) {
+    throw new Error('Sign in to your StoreFlow cloud account before publishing this storefront.');
+  }
+
+  const { error } = await (supabase as any).rpc('publish_storefront_authenticated', {
     p_access_code: accessCode,
-    p_owner_password: ownerPassword,
     p_marketplace_settings: (published as any).marketplaceSettings || {},
     p_business_template: businessTemplate,
     p_laundry_pricing: laundryPricing,
@@ -91,8 +91,8 @@ export async function publishStorefrontToCloud(
     p_business_type: store.category || 'retail',
   });
   if (error) {
-    if (!ownerPassword && /authoriz|permission|42501/i.test(String(error.message || error.code || ''))) {
-      throw new Error('Owner verification is required before this storefront can be published.');
+    if (/authoriz|permission|42501|owner/i.test(String(error.message || error.code || ''))) {
+      throw new Error('This cloud account is not the owner of this store. Sign in with the owner account and try again.');
     }
     throw error;
   }
