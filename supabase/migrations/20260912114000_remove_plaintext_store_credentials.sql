@@ -111,14 +111,14 @@ revoke select, insert, update, delete on public.stores from anon;
 grant select, insert, update, delete on public.stores to authenticated;
 
 -- Cached merchant clients may still know the old function name. Keep its
--- historical jsonb return type, but ignore the supplied password completely and
--- delegate ownership proof to the current Supabase Auth session.
+-- historical jsonb return type and parameter defaults, but ignore the supplied
+-- password completely and delegate ownership proof to Supabase Auth.
 create or replace function public.publish_storefront_from_owner(
   p_access_code text,
   p_owner_password text,
-  p_marketplace_settings jsonb,
-  p_business_template jsonb,
-  p_laundry_pricing jsonb,
+  p_marketplace_settings jsonb default '{}'::jsonb,
+  p_business_template jsonb default '{}'::jsonb,
+  p_laundry_pricing jsonb default '{}'::jsonb,
   p_business_name text default null,
   p_business_type text default null
 )
