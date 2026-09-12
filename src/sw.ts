@@ -12,13 +12,11 @@ precacheAndRoute(STOREFLOW_PRECACHE);
 self.skipWaiting();
 self.addEventListener('activate', event => event.waitUntil(Promise.all([self.clients.claim(), caches.delete('html')])));
 /*
- * Always prefer the current HTML when the network is available. A navigation
- * timeout could serve an older cached shell whose hashed JavaScript chunks no
- * longer exist on the current deployment, leaving a blank screen until the
- * next refresh. NetworkFirst still falls back to cached HTML when the network
- * actually fails, so installed shops keep their offline start.
+ * Prefer current HTML, but do not leave a cold-start shop hanging indefinitely
+ * on a weak connection. Five seconds gives the network a fair chance before
+ * NetworkFirst falls back to the cached shell for an offline/unstable start.
  */
-registerRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ cacheName: 'html' }));
+registerRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ cacheName: 'html', networkTimeoutSeconds: 5 }));
 registerRoute(({ request }) => ['style','script','worker','image','font'].includes(request.destination), new StaleWhileRevalidate({ cacheName: 'assets' }));
 setCatchHandler(async ({ event }) => event.request.mode === 'navigate' ? ((await matchPrecache('/index.html')) || Response.error()) : Response.error());
 
