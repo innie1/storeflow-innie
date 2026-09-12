@@ -110,9 +110,9 @@ using (
 revoke select, insert, update, delete on public.stores from anon;
 grant select, insert, update, delete on public.stores to authenticated;
 
--- Cached merchant clients may still know the old function name. Keep the
--- signature as an authenticated compatibility wrapper, but ignore the supplied
--- password completely and delegate to the Auth-owned endpoint.
+-- Cached merchant clients may still know the old function name. Keep its
+-- historical jsonb return type, but ignore the supplied password completely and
+-- delegate ownership proof to the current Supabase Auth session.
 create or replace function public.publish_storefront_from_owner(
   p_access_code text,
   p_owner_password text,
@@ -122,16 +122,19 @@ create or replace function public.publish_storefront_from_owner(
   p_business_name text default null,
   p_business_type text default null
 )
-returns uuid
+returns jsonb
 language plpgsql
 security invoker
 set search_path = public
 as $$
+declare
+  v_store_id uuid;
 begin
   if auth.uid() is null then
     raise exception 'Authentication required' using errcode = '42501';
   end if;
-  return public.publish_storefront_authenticated(
+
+  v_store_id := public.publish_storefront_authenticated(
     p_access_code,
     p_marketplace_settings,
     p_business_template,
@@ -139,8 +142,15 @@ begin
     p_business_name,
     p_business_type
   );
+
+  return jsonb_build_object('success', true, 'store_id', v_store_id);
 end;
 $$;
 
 revoke all on function public.publish_storefront_from_owner(text,text,jsonb,jsonb,jsonb,text,text) from public, anon;
 grant execute on function public.publish_storefront_from_owner(text,text,jsonb,jsonb,jsonb,text,text) to authenticated;
+
+-- Default EXECUTE grants in this project include anon, so revoke it explicitly
+-- from the Auth-only publisher as well.
+revoke all on function public.publish_storefront_authenticated(text,jsonb,jsonb,jsonb,text,text) from public, anon;
+grant execute on function public.publish_storefront_authenticated(text,jsonb,jsonb,jsonb,text,text) to authenticated;
