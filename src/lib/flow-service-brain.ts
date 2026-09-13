@@ -1,6 +1,6 @@
 import type { Customer, StoreData } from '@/types/store';
 import { hasGoneQuiet, quietAfterDays, usualGapDays } from '@/lib/customer-rhythm';
-import { getBusinessTemplate, isServiceFirstBusiness } from '@/lib/business-runtime';
+import { getBusinessTemplate, isServiceFirstBusiness, resolveBusinessType } from '@/lib/business-runtime';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 
 /**
@@ -16,13 +16,15 @@ import { getLocalLaundryRecords } from '@/lib/laundry-offline';
  */
 
 export interface ServiceSnapshot {
-  /** Bundles taken in and not yet handed back. */
+  /** Whether this view supplied the records needed for a reliable count. */
+  recordsLoaded: boolean;
+  /** Work records that have not reached a terminal stage. */
   open: number;
-  /** Past the day they were promised. */
+  /** Past the date they were promised or scheduled. */
   overdue: number;
-  /** Finished and waiting for collection. */
+  /** Work records at the ready stage. */
   ready: number;
-  /** Taken in today. */
+  /** Created or scheduled today. */
   today: number;
   /** Money still owed across the book. */
   owed: number;
@@ -44,28 +46,49 @@ export function workNoun(store: StoreData): string {
 }
 
 export function serviceSnapshot(store: StoreData): ServiceSnapshot {
+  const isLaundry = resolveBusinessType(store) === 'laundry';
   const accessCode = String(store.accessCode || '');
-  const records = accessCode ? getLocalLaundryRecords(accessCode) : [];
+  const suppliedOrders = (store as StoreData & { orders?: Record<string, unknown>[] }).orders;
+  const records: Record<string, unknown>[] = isLaundry
+    ? (accessCode ? getLocalLaundryRecords(accessCode) : []) as unknown as Record<string, unknown>[]
+    : (Array.isArray(suppliedOrders) ? suppliedOrders : []);
+  const recordsLoaded = isLaundry || Array.isArray(suppliedOrders);
+  const template = getBusinessTemplate(store);
+  const terminalStages = new Set(['complete', 'completed', 'collected', 'delivered', 'cancelled', 'canceled', 'rejected']);
+  const stageOf = (record: Record<string, unknown>) => String(record.workflow_stage || record.workflowStage || record.status || '').toLowerCase();
+  const dateOf = (record: Record<string, unknown>, ...keys: string[]) => {
+    const raw = keys.map(key => record[key]).find(Boolean);
+    const time = new Date(String(raw || '')).getTime();
+    return Number.isFinite(time) ? time : null;
+  };
   const now = Date.now();
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
 
-  const open = records.filter(record => record.workflowStage !== 'collected');
+  const open = records.filter(record => !terminalStages.has(stageOf(record)));
   const overdue = open.filter(record => {
-    const due = new Date(record.promisedFor || '').getTime();
-    return Number.isFinite(due) && due < now;
+    const due = dateOf(record, 'promised_for', 'promisedFor', 'scheduled_for', 'scheduledFor');
+    return due !== null && due < now;
   });
 
+  const configuredOfferings = store.businessTemplate?.offerings || template.offerings || [];
+  const services = [...new Set([
+    ...(store.products || []).filter(product => product.isService && !product.discontinued).map(product => product.name),
+    ...configuredOfferings.filter(item => item.enabled !== false && item.active !== false && !item.discontinued).map(item => String(item.name || '').trim()).filter(Boolean),
+  ])];
+
   return {
+    recordsLoaded,
     open: open.length,
     overdue: overdue.length,
-    ready: open.filter(record => record.workflowStage === 'ready').length,
-    today: records.filter(record => new Date(record.createdAt).getTime() >= midnight.getTime()).length,
+    ready: open.filter(record => stageOf(record) === 'ready').length,
+    today: records.filter(record => {
+      const created = dateOf(record, 'created_at', 'createdAt', 'scheduled_for', 'scheduledFor');
+      return created !== null && created >= midnight.getTime();
+    }).length,
     owed: openDebts(store).reduce((sum, payment) => sum + Math.max(0, Number(payment.balance) || 0), 0),
     owedBy: debtorNames(store).length,
-    services: (store.products || [])
-      .filter(product => product.isService && !product.discontinued)
-      .map(product => product.name),
+    services,
     customers: (store.customers || []).length,
   };
 }
@@ -123,8 +146,11 @@ export function owedByCustomer(
 export function serviceOverview(store: StoreData): string {
   const snapshot = serviceSnapshot(store);
   const noun = workNoun(store);
+  if (!snapshot.recordsLoaded) {
+    return `I do not have the ${noun} records loaded in this view. Open Orders and ask again for a reliable business summary.`;
+  }
   const lines = [
-    `**${store.storeName || 'Your shop'}** — ${snapshot.open} ${noun}${snapshot.open === 1 ? '' : 's'} in the shop right now.`,
+    `**${store.storeName || 'Your shop'}** — ${snapshot.open} active ${noun}${snapshot.open === 1 ? '' : 's'} right now.`,
     '',
   ];
 
@@ -134,8 +160,8 @@ export function serviceOverview(store: StoreData): string {
     lines.push('✅ Nothing is past its promised day.');
   }
 
-  if (snapshot.ready > 0) lines.push(`📦 **${snapshot.ready}** finished and waiting to be collected.`);
-  if (snapshot.today > 0) lines.push(`📥 **${snapshot.today}** taken in today.`);
+  if (snapshot.ready > 0) lines.push(`📦 **${snapshot.ready}** at the ready stage.`);
+  if (snapshot.today > 0) lines.push(`📥 **${snapshot.today}** created or scheduled today.`);
   if (snapshot.owed > 0) lines.push(`💳 **${money(snapshot.owed)}** still owed across ${snapshot.owedBy} customer${snapshot.owedBy === 1 ? '' : 's'}.`);
 
   if (!snapshot.services.length) {
@@ -148,19 +174,21 @@ export function serviceOverview(store: StoreData): string {
 export function serviceWorkload(store: StoreData): string {
   const snapshot = serviceSnapshot(store);
   const noun = workNoun(store);
-  if (snapshot.open === 0) return `Nothing in the shop right now. Every ${noun} has been handed back.`;
+  if (!snapshot.recordsLoaded) return `I do not have the ${noun} records loaded in this view. Open Orders and ask again.`;
+  if (snapshot.open === 0) return `There are no active ${noun}s right now.`;
 
-  const parts = [`**${snapshot.open}** ${noun}${snapshot.open === 1 ? '' : 's'} in the shop.`];
+  const parts = [`**${snapshot.open}** active ${noun}${snapshot.open === 1 ? '' : 's'}.`];
   if (snapshot.overdue) parts.push(`**${snapshot.overdue}** past the promised day.`);
-  if (snapshot.ready) parts.push(`**${snapshot.ready}** ready for collection.`);
+  if (snapshot.ready) parts.push(`**${snapshot.ready}** at the ready stage.`);
   return parts.join('\n');
 }
 
 /** The services offered, replacing the best-sellers answer. */
 export function serviceList(store: StoreData): string {
   const snapshot = serviceSnapshot(store);
-  if (!snapshot.services.length) return 'You have not set up any services yet. Add one in your price list and I can price work for you.';
-  return `You offer ${snapshot.services.length} service${snapshot.services.length === 1 ? '' : 's'}:\n${
+  const offering = getBusinessTemplate(store).labels.offeringNoun.toLowerCase();
+  if (!snapshot.services.length) return `You have not set up any ${offering} offerings yet. Add one in your price list and I can price work for you.`;
+  return `You offer ${snapshot.services.length} ${offering}${snapshot.services.length === 1 ? '' : 's'}:\n${
     snapshot.services.map((name, index) => `${index + 1}. **${name}**`).join('\n')
   }`;
 }

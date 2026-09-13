@@ -10,6 +10,7 @@ export interface ProductMatch { product: Product; score: number; matchedBy: 'exa
 export interface FlowLineItem { product: ProductMatch; quantity: number; }
 export interface OperatingPlan {
   /** Set when the question was about one customer by name. */
+  clarification?: string;
   customer?: Customer; intent: OperatingIntent; confidence: number; items: FlowLineItem[]; product?: ProductMatch; quantity?: number; tab?: TabId; reason: string; }
 
 const STOP = new Set(['the','a','an','my','me','please','product','products','item','items','store','stock','inventory','now','today','for','of','to','on','is','are','what','whats','show','tell','about','do','i','can','you','give','get','some','something','thing','things','with','and','or','in','at','from','this','that','how','much','many','does','did','was','were']);
@@ -29,7 +30,7 @@ export function resolveProduct(store:StoreData,query:string):ProductMatch|null{
  const q=norm(query);if(!q)return null;
  const learned=resolveBrainAlias(store,q);if(learned)return{product:learned,score:1,matchedBy:'learned'};
  let best:ProductMatch|null=null;
- for(const p of store.products||[])for(const alias of aliases(p)){
+ for(const p of (store.products||[]).filter(p=>!p.discontinued))for(const alias of aliases(p)){
   const n=norm(alias);if(n===q)return{product:p,score:1,matchedBy:alias===p.name?'exact':'alias'};
   const qt=tokens(q),nt=tokens(n);let score=similarity(q,n);
   if(qt.length&&qt.every(t=>nt.includes(t)))score=Math.max(score,.97);
@@ -39,9 +40,24 @@ export function resolveProduct(store:StoreData,query:string):ProductMatch|null{
  return best&&best.score>=.70?best:null;
 }
 function cleanProductPhrase(s:string){return s.replace(/^\s*(?:please\s+)?(?:sell|sold|record\s+(?:a\s+)?sale|restock|receive|stock\s+up|add|buy|increase|reduce)\s*/i,'').replace(/^\s*(?:me|my|the)\s+/i,'').replace(/\b(?:qty|quantity|units?|stock)\s*[:=]?\s*\d+/ig,'').replace(/\b(?:at|for)\s+₦?[\d,]+/ig,'').trim();}
-function extractQty(s:string){const patterns=[/^\s*(\d+(?:\.\d+)?)\s+(?:x\s*)?/i,/\bx\s*(\d+(?:\.\d+)?)\b/i,/\b(?:qty|quantity|units?|stock)\s*[:=]?\s*(\d+(?:\.\d+)?)\b/i,/\b(?:sell|sold|restock|receive|add|buy)\s+(?:me\s+)?(\d+(?:\.\d+)?)\b/i];for(const r of patterns){const m=s.match(r);if(m)return Math.max(1,Math.round(Number(m[1])));}return 1;}
-function splitItems(text:string){const body=text.replace(/^\s*(?:please\s+)?(?:sell|sold|restock|receive|stock\s+up|add|buy)\s+/i,'').trim();return body.split(/\s*,\s*|\s+and\s+/i).map(x=>x.trim()).filter(Boolean);}
-function parseItems(store:StoreData,text:string){const items:FlowLineItem[]=[];for(const part of splitItems(text)){const q=extractQty(part);const phrase=cleanProductPhrase(part).replace(/^\d+(?:\.\d+)?\s+(?:x\s*)?/i,'').trim();const match=resolveProduct(store,phrase);if(match&&match.score>=.76)items.push({product:match,quantity:q});}return items;}
+function extractQty(s:string){const patterns=[/^\s*(\d+(?:\.\d+)?)\s+(?:x\s*)?/i,/\bx\s*(\d+(?:\.\d+)?)\b/i,/\b(?:qty|quantity|units?|stock)\s*[:=]?\s*(\d+(?:\.\d+)?)\b/i,/\b(?:sell|sold|record\s+(?:a\s+)?sale|restock|receive|stock\s+up|add|increase|buy)\s+(?:me\s+)?(\d+(?:\.\d+)?)\b/i];for(const r of patterns){const m=s.match(r);if(m)return Number(m[1]);}return 1;}
+function splitItems(text:string){const body=text.replace(/^\s*(?:please\s+)?(?:sell|sold|record\s+(?:a\s+)?sale|restock|receive|stock\s+up|add|increase|buy)\s+/i,'').trim();return body.split(/\s*,\s*|\s+and\s+/i).map(x=>x.trim()).filter(Boolean);}
+function parseItems(store:StoreData,text:string){
+ const items:FlowLineItem[]=[]; const unresolved:string[]=[];
+ for(const part of splitItems(text)){
+  const quantity=extractQty(part);
+  const phrase=cleanProductPhrase(part).replace(/^\d+(?:\.\d+)?\s+(?:x\s*)?/i,'').trim();
+  if(!Number.isFinite(quantity)||quantity<=0||/^\s*-\d/.test(part)){unresolved.push(`${part} (quantity must be positive)`);continue;}
+  const match=resolveProduct(store,phrase);
+  if(!match||match.score<.9){unresolved.push(part);continue;}
+  const competing=(store.products||[]).filter(p=>!p.discontinued&&p.id!==match.product.id)
+    .some(p=>aliases(p).some(alias=>norm(alias)===norm(phrase)||similarity(phrase,alias)>=match.score-.05));
+  if(competing){unresolved.push(`${part} (more than one catalog match)`);continue;}
+  const existing=items.find(item=>item.product.product.id===match.product.id);
+  if(existing)existing.quantity+=quantity; else items.push({product:match,quantity});
+ }
+ return {items:unresolved.length?[]:items,clarification:unresolved.length?`I have not changed anything. Please clarify: ${unresolved.join('; ')}. Use the exact catalog name and quantity for each item.`:undefined};
+}
 function nav(text:string):TabId|undefined{const q=norm(text);if(!/^(open|go to|take me to|navigate to|switch to|show me)\b/.test(q))return undefined;const pairs:[string,TabId][]=[['dashboard','dashboard'],['home','dashboard'],['inventory','inventory'],['stock','inventory'],['products','inventory'],['sales','sales'],['sell','sales'],['history','history'],['expenses','expenses'],['settings','settings'],['orders','orders'],['customers','customers'],['suppliers','suppliers'],['goals','goals'],['staff','staff'],['cash drawer','cash-drawer'],['wishlist','wishlist']];return pairs.find(([w])=>q.includes(w))?.[1];}
 
 export function understand(store:StoreData,raw:string,lastProduct?:Product|null,lastIntent?:OperatingIntent):OperatingPlan{
@@ -79,8 +95,8 @@ export function understand(store:StoreData,raw:string,lastProduct?:Product|null,
  if(/\b(?:finance|financial|money|cash flow|cashflow|investment|investments|loan|loans|withdrawal|withdrawals|return on investment|roi)\b/.test(q))return{intent:'finance',confidence:.95,items:[],reason:'finance query'};
  if(/\b(?:order|orders|online order|customer order|customer orders|pending order|new order)\b/.test(q))return{intent:'orders',confidence:.95,items:[],reason:'order query'};
  const action=/^(?:please\s+)?(?:sell|sold|record\s+(?:a\s+)?sale)\b/i.test(text)?'sell':/^(?:please\s+)?(?:restock|receive|stock\s+up|add|increase|buy)\b/i.test(text)?'restock':null;
- if(action){const items=parseItems(store,text);return{intent:action,confidence:items.length?Math.min(.99,.82+items.length*.05):.55,items,product:items[0]?.product,quantity:items[0]?.quantity,reason:items.length>1?'batch operation':'single operation'};}
- if(/^(?:and|also|what about)\b/i.test(text)){const phrase=text.replace(/^(?:and|also|what about)\s*/i,'').trim();const match=resolveProduct(store,phrase.replace(/^\d+(?:\.\d+)?\s*/,'').trim());const qty=extractQty(phrase);if(match)return{intent:lastIntent==='restock'?'restock':lastIntent==='sell'?'sell':'product_lookup',confidence:.92,items:lastIntent==='restock'||lastIntent==='sell'?[{product:match,quantity:qty}]:[],product:match,quantity:qty,reason:'context follow-up'};if(lastProduct)return{intent:lastIntent==='restock'?'restock':lastIntent==='sell'?'sell':'product_lookup',confidence:.82,items:lastIntent==='restock'||lastIntent==='sell'?[{product:{product:lastProduct,score:1,matchedBy:'exact'},quantity:qty}]:[],product:{product:lastProduct,score:1,matchedBy:'exact'},quantity:qty,reason:'context follow-up'};}
+ if(action){const {items,clarification}=parseItems(store,text);return{intent:action,confidence:items.length?Math.min(.99,.82+items.length*.05):.55,items,clarification,product:items[0]?.product,quantity:items[0]?.quantity,reason:clarification?'needs clarification':items.length>1?'batch operation':'single operation'};}
+ if(/^(?:and|also|what about)\b/i.test(text)){const phrase=text.replace(/^(?:and|also|what about)\s*/i,'').trim();const match=resolveProduct(store,phrase.replace(/^\d+(?:\.\d+)?\s*/,'').trim());const qty=extractQty(phrase);if(match)return{intent:lastIntent==='restock'?'restock':lastIntent==='sell'?'sell':'product_lookup',confidence:.92,items:lastIntent==='restock'||lastIntent==='sell'?[{product:match,quantity:qty}]:[],product:match,quantity:qty,reason:'context follow-up'};if(lastProduct&&/^(?:\d+(?:\.\d+)?)(?:\s+(?:more|of (?:it|that)))?$/.test(phrase)&&qty>0)return{intent:lastIntent==='restock'?'restock':lastIntent==='sell'?'sell':'product_lookup',confidence:.82,items:lastIntent==='restock'||lastIntent==='sell'?[{product:{product:lastProduct,score:1,matchedBy:'exact'},quantity:qty}]:[],product:{product:lastProduct,score:1,matchedBy:'exact'},quantity:qty,reason:'context follow-up'};}
  const direct=resolveProduct(store,text);if(direct&&direct.score>=.76)return{intent:'product_lookup',confidence:direct.score,items:[],product:direct,reason:'product match'};
  if(/\b(?:what can you do|help|commands?)\b/.test(q))return{intent:'help',confidence:.9,items:[],reason:'help'};
  // Everything above needs the words spelled correctly. Before giving up and

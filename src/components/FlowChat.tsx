@@ -1,3 +1,4 @@
+import { answerTradeQuestion } from '@/lib/flow-trade-brain';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StoreData, TabId } from '@/types/store';
 import { addProduct, recordSale, receiveStock, importPurchaseOrderByCode } from '@/lib/store-data';
@@ -63,7 +64,7 @@ function parseNewProduct(text: string): AddDraft | null {
   return name ? { name, costPrice: cost ? num(cost) : undefined, sellingPrice: sell ? num(sell) : undefined, quantity: qty ? Number(qty) : undefined, category } : null;
 }
 
-export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowChatProps) {
+export default function FlowChat({ store, orders, onClose, onNavigate, onUpdate }: FlowChatProps) {
   useBodyScrollLock();
   const storeKey = store.id || store.storeId || store.accessCode || 'default';
   const quickActions = useMemo(() => flowQuickActions(store), [store]);
@@ -539,6 +540,9 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
   const ask = (raw: string) => {
     const text = clean(raw); if (!text) return; you(text);
+    const brainStore = orders ? { ...store, orders } as StoreData : store;
+    const tradeAnswer = answerTradeQuestion(brainStore, text);
+    if (tradeAnswer) { flow(tradeAnswer.reply); return; }
     if (handleFlowConversationOrder(text)) return;
     if (handleFlowMessageOrder(text)) return;
     if (handleAppControl(text)) return;
@@ -550,7 +554,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     const flexibleStore = 'nextStore' in flexible ? flexible.nextStore : undefined;
     if (flexibleStore) onUpdate(flexibleStore);
     if (flexible.kind === 'store') {
-      const overview = responseFor(store, { intent: 'store_overview', confidence: 1, items: [], reason: 'flexible store question' });
+      const overview = responseFor(brainStore, { intent: 'store_overview', confidence: 1, items: [], reason: 'flexible store question' });
       flow(overview);
       rememberBrainContext(store, { lastIntent: 'store_overview', lastTopic: 'store', lastAction: 'store overview' });
       return;
@@ -610,7 +614,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
         onClick: () => {
           setLastProductId(product.id);
           rememberBrainContext(store, { lastIntent: 'product_lookup', lastProductId: product.id, lastTopic: 'product', lastAction: 'product selection' });
-          flow(responseFor(store, { intent: 'product_lookup', confidence: 1, items: [], product: { product, score: 1, matchedBy: 'exact' }, reason: 'selected product match' }));
+          flow(responseFor(brainStore, { intent: 'product_lookup', confidence: 1, items: [], product: { product, score: 1, matchedBy: 'exact' }, reason: 'selected product match' }));
         }
       }));
       flow(`I found ${flexible.products.length} products matching **${flexible.query}**. Which one do you mean?`, actions);
@@ -620,7 +624,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       const p = flexible.product;
       setLastProductId(p.id);
       rememberBrainContext(store, { lastIntent: 'product_lookup', lastProductId: p.id, lastTopic: 'product', lastAction: 'flexible product lookup' });
-      flow(responseFor(store, { intent: 'product_lookup', confidence: flexible.score, items: [], product: { product: p, score: flexible.score, matchedBy: 'fuzzy' }, reason: 'flexible product lookup' }));
+      flow(responseFor(brainStore, { intent: 'product_lookup', confidence: flexible.score, items: [], product: { product: p, score: flexible.score, matchedBy: 'fuzzy' }, reason: 'flexible product lookup' }));
       return;
     }
 
@@ -628,6 +632,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     const plan = understand(store, text, lastProduct, lastIntent); setLastIntent(plan.intent);
     if (plan.product) { setLastProductId(plan.product.product.id); rememberBrainContext(store, { lastIntent: plan.intent, lastProductId: plan.product.product.id, lastTopic: plan.intent === 'product_lookup' ? 'product' : plan.intent, lastAction: plan.intent }); }
     else rememberBrainContext(store, { lastIntent: plan.intent, lastTopic: plan.intent });
+    if (plan.clarification) { flow(plan.clarification); return; }
     if (plan.intent === 'navigation' && plan.tab) { onNavigate?.(plan.tab); flow(`Opening **${plan.tab.replace(/-/g, ' ')}**.`); return; }
     if (plan.intent === 'settings') {
       if (handleAppControl(text)) return;
@@ -661,7 +666,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       flow(suggestion.text, suggestion.actions);
       return;
     }
-    flow(responseFor(store, plan));
+    flow(responseFor(brainStore, plan));
   };
 
   useEffect(() => {

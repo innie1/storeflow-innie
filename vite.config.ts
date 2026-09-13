@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -21,11 +21,12 @@ import { VitePWA } from "vite-plugin-pwa";
  * to bump by hand -- change the PNG and the version follows.
  */
 const ICON_FILES = ["public/icons/icon-192.png", "public/icons/icon-512.png"];
+const PROJECT_ROOT = realpathSync.native(__dirname);
 const iconVersion = ICON_FILES
   .reduce(
     // Every icon feeds the hash. It used to read icon-512 alone, so replacing
     // only the 192 left the version unchanged and that icon stayed stale.
-    (hash, file) => hash.update(readFileSync(path.resolve(__dirname, file))),
+    (hash, file) => hash.update(readFileSync(path.resolve(PROJECT_ROOT, file))),
     createHash("sha256"),
   )
   .digest("hex")
@@ -43,6 +44,9 @@ function versionHtmlIcons() {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Keep Rollup's HTML input and Vite's root on the same canonical path when
+  // the repository is opened through a Windows mapped or substituted drive.
+  root: PROJECT_ROOT,
   server: {
     host: "::",
     port: 8080,
@@ -90,7 +94,7 @@ export default defineConfig(({ mode }) => ({
     }),
   ].filter(Boolean),
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    alias: { "@": path.resolve(PROJECT_ROOT, "./src") },
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
   },
 }));

@@ -77,6 +77,7 @@ function smartBuyConversation(store:StoreData,input:string):FlowUnderstanding|nu
 export function understandFlexible(store:StoreData,input:string):FlowUnderstanding{
  const q=norm(input); if(!q)return{kind:'unknown',reply:'What would you like Flow to help you with?'};
  const smart=smartBuyConversation(store,input); if(smart)return smart;
+ if(/^(?:please\s+)?(?:sell|sold|record\s+(?:a\s+)?sale|restock|receive|stock up|add|increase|buy)\b/i.test(q))return{kind:'unknown',reply:''};
  if(isStoreQuestion(q))return{kind:'store',reply:'I’ll give you an overview of your business.'};
  if(isLowStockQuestion(q))return{kind:'topic',topic:'stock',reply:lowStockReply(store)};
  for(const [topic,re,reply] of TOPICS)if(re.test(q)&&tokens(q).length<=3)return{kind:'topic',topic,reply};
