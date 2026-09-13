@@ -42,7 +42,7 @@ serve(async (req) => {
             content: `You are a receipt/invoice scanner. Extract all items from the receipt image.
 For each item, extract:
 - name: the product name (clean, readable)
-- costPrice: estimated cost price (use 60-70% of selling price if not shown)
+- costPrice: total purchase cost explicitly printed for this line on a supplier invoice. Return null when absent or uncertain. Never estimate cost from selling price or a margin.
 - sellingPrice: the price shown on receipt
 - quantity: the quantity purchased (default 1 if not shown)
 - category: categorize as one of: Groceries, Beverages, Toiletries, Snacks, Bakery, Baby, General
@@ -83,7 +83,7 @@ If you cannot read the receipt clearly, return: {"items": [], "error": "Could no
                       type: "object",
                       properties: {
                         name: { type: "string" },
-                        costPrice: { type: "number" },
+                        costPrice: { type: ["number", "null"] },
                         sellingPrice: { type: "number" },
                         quantity: { type: "number" },
                         category: { type: "string", enum: ["Groceries", "Beverages", "Toiletries", "Snacks", "Bakery", "Baby", "General"] },

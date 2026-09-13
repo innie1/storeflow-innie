@@ -304,11 +304,8 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
 /**
  * Tabs the main area actually renders.
  *
- * Each screen is mounted as <div className={tab === 'x' ? 'block' : 'hidden'}>,
- * so a tab id with no branch does not fail — every div simply stays hidden and
- * the page goes completely blank. No error, nothing for the error boundary to
- * catch, and on a phone no obvious way back. This list is what the fallback
- * below checks against, and a test keeps it in step with the markup.
+ * Only the selected, authorized screen mounts. Unknown tab ids use the
+ * fallback below so a stale deep link cannot leave the main area blank.
  */
 const RENDERABLE_TABS = new Set<string>([
   'academy',
@@ -2225,22 +2222,22 @@ export default function Index() {
               <p className="text-xs text-muted-foreground font-display font-medium">Loading module...</p>
             </div>
           }>
-            <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
+            {tab === 'dashboard' && canOpenTab('dashboard', currentUser) && (<div>
               {store.uiMode === 'simple' ? (
                 <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} orders={orders} />
               ) : (
                 <Dashboard store={store} orders={orders} onNavigate={handleNavigate} currentUser={currentUser} />
               )}
-            </div>
-            <div className={tab === 'orders' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'orders' && canOpenTab('orders', currentUser) && (<div>
               <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} focusOrderId={focusOrderId} onFocusHandled={() => setFocusOrderId(null)} notificationAct={notificationAct} onNotificationActHandled={() => setNotificationAct(null)} />
-            </div>
-            <div className={tab === 'laundry-records' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'laundry-records' && canOpenTab('laundry-records', currentUser) && (<div>
               {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (
                 <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} currentUser={currentUser} />
               )}
-            </div>
-            <div className={tab === 'inventory' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'inventory' && canOpenTab('inventory', currentUser) && (<div>
               {isServiceFirst ? (
                 <LaundryPricingSetup store={store} onUpdate={setStore} currentUser={currentUser} />
               ) : (
@@ -2256,81 +2253,81 @@ export default function Index() {
                   onAutoOpenRestockHandled={() => setAutoOpenRestock(false)}
                 />
               )}
-            </div>
-            <div className={tab === 'sales' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'sales' && canOpenTab('sales', currentUser) && (<div>
               <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} isActive={tab === 'sales'} currentUser={currentUser} />
-            </div>
-            <div className={tab === 'expenses' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'expenses' && canOpenTab('expenses', currentUser) && (<div>
               <Expenses store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'manager' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'manager' && canOpenTab('manager', currentUser) && (<div>
               <Manager store={store} orders={orders} onUpdate={setStore} onNavigate={handleNavigate} />
-            </div>
-            <div className={tab === 'pending' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'pending' && canOpenTab('pending', currentUser) && (<div>
               <PendingPayments store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'history' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'history' && canOpenTab('history', currentUser) && (<div>
               <SalesHistory store={store} onUpdate={setStore} currentUser={currentUser} />
-            </div>
-            <div className={tab === 'roi' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'roi' && canOpenTab('roi', currentUser) && (<div>
               <ROITracker store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'settings' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'settings' && canOpenTab('settings', currentUser) && (<div>
               <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} isActive={tab === 'settings'} onSubViewChange={setSettingsSubView} />
-            </div>
-            <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'marketplace' && canOpenTab('marketplace', currentUser) && (<div>
               <Marketplace store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'customers' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'customers' && canOpenTab('customers', currentUser) && (<div>
               <Customers store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'suppliers' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'suppliers' && canOpenTab('suppliers', currentUser) && (<div>
               <Suppliers store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'goals' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'goals' && canOpenTab('goals', currentUser) && (<div>
               <Goals store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'diary' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'diary' && canOpenTab('diary', currentUser) && (<div>
               <Diary store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'documents' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'documents' && canOpenTab('documents', currentUser) && (<div>
               <Documents store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'academy' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'academy' && canOpenTab('academy', currentUser) && (<div>
               <Academy store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'achievements' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'achievements' && canOpenTab('achievements', currentUser) && (<div>
               <Achievements store={store} />
-            </div>
-            <div className={tab === 'wishlist' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'wishlist' && canOpenTab('wishlist', currentUser) && (<div>
               <Wishlist store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'staff' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'staff' && canOpenTab('staff', currentUser) && (<div>
               <StaffManagement store={store} onUpdate={setStore} currentUser={currentUser} />
-            </div>
-            <div className={tab === 'cash-drawer' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'cash-drawer' && canOpenTab('cash-drawer', currentUser) && (<div>
               <CashDrawer store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'communication-center' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'communication-center' && canOpenTab('communication-center', currentUser) && (<div>
               <CommunicationCenter store={store} onUpdate={setStore} currentUser={currentUser} />
-            </div>
-            <div className={tab === 'qr-hub' ? 'block' : 'hidden'}>
+            </div>)}
+            {tab === 'qr-hub' && canOpenTab('qr-hub', currentUser) && (<div>
               <QRHub store={store} onUpdate={setStore} currentUser={currentUser} orders={orders} />
-            </div>
+            </div>)}
             {isGames && (
               <>
-                <div className={tab === 'games-dashboard' ? 'block' : 'hidden'}>
+                {tab === 'games-dashboard' && canOpenTab('games-dashboard', currentUser) && (<div>
                   <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} />
-                </div>
-                <div className={tab === 'games-history' ? 'block' : 'hidden'}>
+                </div>)}
+                {tab === 'games-history' && canOpenTab('games-history', currentUser) && (<div>
                   <GamesHistory store={store} onUpdate={setStore} />
-                </div>
-                <div className={tab === 'games-analytics' ? 'block' : 'hidden'}>
+                </div>)}
+                {tab === 'games-analytics' && canOpenTab('games-analytics', currentUser) && (<div>
                   <GamesAnalytics store={store} />
-                </div>
-                <div className={tab === 'games-settings' ? 'block' : 'hidden'}>
+                </div>)}
+                {tab === 'games-settings' && canOpenTab('games-settings', currentUser) && (<div>
                   <GamesSettings store={store} onUpdate={setStore} />
-                </div>
+                </div>)}
               </>
             )}
 

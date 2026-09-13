@@ -210,6 +210,9 @@ export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, 
       if (data?.error) throw new Error(data.error);
 
       if (data?.items?.length > 0) {
+        if (data.items.some((item: { costPrice?: unknown }) => typeof item.costPrice !== 'number' || !Number.isFinite(item.costPrice) || item.costPrice < 0)) {
+          throw new Error('Purchase costs are missing or unreadable. Use a supplier invoice with costs, or enter these items manually. No items were imported.');
+        }
         showToast(`Parsed ${data.items.length} items from receipt`, 'success');
         startLearningFlow(data.items);
       } else {

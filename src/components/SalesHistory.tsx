@@ -166,7 +166,7 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
             ? firstSale.productName
             : `${isOnlineOrder ? 'Online Order' : 'Sale'} — ${group.length} items`,
           subtitle: group.length === 1 
-            ? `${firstSale.quantity} × ₦${firstSale.unitPrice.toLocaleString()}` 
+            ? (maySeeMoney ? `${firstSale.quantity} × ₦${firstSale.unitPrice.toLocaleString()}` : `${firstSale.quantity} units`)
             : `${totalQty} items${isOnlineOrder ? ' · Online Order' : ''}`,
           amount: total,
           amountColor: 'text-primary',
@@ -183,7 +183,7 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
           type: 'sale',
           date: s.date,
           title: s.productName,
-          subtitle: `${s.quantity} × ₦${s.unitPrice.toLocaleString()}`,
+          subtitle: maySeeMoney ? `${s.quantity} × ₦${s.unitPrice.toLocaleString()}` : `${s.quantity} units`,
           amount: s.total,
           amountColor: 'text-primary',
           icon: <Wallet className="w-4 h-4" />,
@@ -230,7 +230,7 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
           type: 'restock',
           date: r.date,
           title: r.productName,
-          subtitle: `Restocked ${r.quantity} units @ ₦${r.costPrice.toLocaleString()}`,
+          subtitle: maySeeMoney ? `Restocked ${r.quantity} units @ ₦${r.costPrice.toLocaleString()}` : `Restocked ${r.quantity} units`,
           amount: -r.total,
           amountColor: 'text-warning',
           icon: <Package className="w-4 h-4" />,
@@ -257,7 +257,7 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
 
     items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return items;
-  }, [store, filter]);
+  }, [store, filter, maySeeMoney]);
 
   const inDateRange = (dateStr: string) => {
     const { start, end } = dateRangeWindow(dateRange);
@@ -301,18 +301,19 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
     : peopleEntries;
 
   const handleClear = () => {
-    if (store.sales.length === 0) return;
+    if (!mayDelete || store.sales.length === 0) return;
     setConfirmClear(true);
   };
 
   const doClear = () => {
+    if (!mayDelete) return;
     onUpdate(clearSales(store));
     setConfirmClear(false);
     showToast('Sales history cleared (recoverable for 7 days)');
   };
 
   const doDeleteEntry = () => {
-    if (!confirmDelId) return;
+    if (!mayDelete || !confirmDelId) return;
     if (confirmDelId.type === 'sale') {
       onUpdate(deleteSale(store, confirmDelId.id));
     } else if (confirmDelId.type === 'expense') {
@@ -348,7 +349,7 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
 
   return (
     <div className="animate-fade-in space-y-2">
-      {channelSplit.total > 0 && (channelSplit.onlineRevenue > 0 || channelSplit.inStoreRevenue > 0) && (
+      {maySeeMoney && channelSplit.total > 0 && (channelSplit.onlineRevenue > 0 || channelSplit.inStoreRevenue > 0) && (
         <div className="p-3.5 rounded-xl bg-card border border-border">
           <p className="text-[10px] text-muted-foreground uppercase font-bold mb-2">Where Your Sales Come From</p>
           <div className="w-full h-2 rounded-full bg-surface-3 overflow-hidden flex">
@@ -461,21 +462,21 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
           )}
         </button>
         )}
-        <button
-          onClick={() => exportHistoryPDF(store)}
+        {maySeeMoney && <><button
+          onClick={() => maySeeMoney && exportHistoryPDF(store)}
           className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
           title="Export PDF"
         >
           <FileText className="w-4 h-4" />
         </button>
         <button
-          onClick={() => exportHistoryCSV(store)}
+          onClick={() => maySeeMoney && exportHistoryCSV(store)}
           className="px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-xs font-display font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5"
           title="Export CSV"
         >
           <FileSpreadsheet className="w-4 h-4" />
-        </button>
-        {store.sales.length > 0 && (
+        </button></>}
+        {mayDelete && store.sales.length > 0 && (
           <button onClick={handleClear} className="px-3 py-2.5 rounded-lg bg-destructive/10 text-destructive text-xs font-display font-semibold hover:bg-destructive/20 border border-destructive/20">
             Clear Sales
           </button>
@@ -512,6 +513,7 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
             <div
               className="flex-1 min-w-0 cursor-pointer"
               onClick={() => {
+                if (!maySeeMoney) return;
                 if (entry.type === 'sale') setViewReceipt(entry.raw as Sale | Sale[]);
                 else if (entry.type === 'restock') {
                   const r = entry.raw as Restock;
@@ -540,11 +542,11 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
               </div>
               <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(entry.date).toLocaleString()}</p>
             </div>
-            <div className="text-right shrink-0">
+            {maySeeMoney && <div className="text-right shrink-0">
               <p className={`font-display font-bold text-sm ${entry.amountColor}`}>
                 {entry.amount >= 0 ? '+' : '−'}₦{Math.abs(entry.amount).toLocaleString()}
               </p>
-            </div>
+            </div>}
             {mayDelete && (entry.type === 'sale' || entry.type === 'expense') && (
               <button
                 onClick={() => setConfirmDelId(entry)}
@@ -563,11 +565,11 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
         )}
       </div>
 
-      {viewReceipt && (
+      {maySeeMoney && viewReceipt && (
         <SaleReceipt store={store} sale={viewReceipt} onClose={() => setViewReceipt(null)} />
       )}
 
-      {confirmClear && (
+      {mayDelete && confirmClear && (
         <ConfirmAccessCode
           expectedCode={store.accessCode}
           title="Clear all sales history?"
@@ -578,7 +580,7 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
         />
       )}
 
-      {confirmDelId && (
+      {mayDelete && confirmDelId && (
         <ConfirmAccessCode
           expectedCode={store.accessCode}
           title={`Delete this ${confirmDelId.type}?`}
@@ -589,11 +591,11 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
         />
       )}
 
-      {showTrash && (
+      {mayDelete && showTrash && (
         <RecentlyDeleted store={store} onUpdate={onUpdate} onClose={() => setShowTrash(false)} />
       )}
 
-      {viewBatch && (
+      {maySeeMoney && viewBatch && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3 animate-fade-in"
           onClick={() => setViewBatch(null)}
