@@ -3,7 +3,7 @@ import { suggestCustomers } from '@/lib/customer-suggest';
 import { StoreData, Customer } from '@/types/store';
 import { addCustomer, updateCustomer, deleteCustomer } from '@/lib/store-data';
 import { 
-  Users, UserPlus, Phone, MapPin, Search, Trophy, Sparkles, AlertCircle, ChevronDown, Edit, Trash2, Calendar, FileText, MessageCircle
+  Users, UserPlus, Phone, MapPin, Search, Trophy, Sparkles, AlertCircle, ChevronRight, Edit, Trash2, Calendar, FileText, MessageCircle
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 import ContactPickButton from '@/components/ContactPickButton';
@@ -11,18 +11,25 @@ import { getCustomerActivitySignals } from '@/lib/business-insights';
 import { owedByCustomer } from '@/lib/flow-service-brain';
 import { customerStanding, explainStanding } from '@/lib/customer-rhythm';
 import ScrollLock from '@/components/ScrollLock';
+import CustomerSheet from '@/components/customers/CustomerSheet';
+import { canSeeMoney, type ActingUser } from '@/lib/permissions';
 
 interface CustomersProps {
   store: StoreData;
   onUpdate: (s: StoreData) => void;
+  /** The shop's bundles from the cloud, so a customer's page shows ones booked on another phone. */
+  orders?: any[];
+  /** Who is looking, so the takings stay with the people trusted with them. */
+  currentUser?: ActingUser | null;
 }
 
-export default function Customers({ store, onUpdate }: CustomersProps) {
+export default function Customers({ store, onUpdate, orders, currentUser }: CustomersProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  /** One at a time: the point is a list you can scan, not a stack of open cards. */
-  const [expanded, setExpanded] = useState<string | null>(null);
+  /** The customer whose page is open. */
+  const [openId, setOpenId] = useState<string | null>(null);
+  const maySeeMoney = canSeeMoney(currentUser);
   
   // Form fields
   const [name, setName] = useState('');
@@ -50,12 +57,13 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
     resetForm();
   };
 
-  const handleDeleteCustomer = (id: string) => {
-    if (confirm('Are you sure you want to remove this customer?')) {
-      const nextStore = deleteCustomer(store, id);
-      onUpdate(nextStore);
-      showToast('Customer deleted.');
-    }
+  /** True when the customer was removed, so an open page can close behind them. */
+  const handleDeleteCustomer = (id: string): boolean => {
+    if (!confirm('Are you sure you want to remove this customer?')) return false;
+    const nextStore = deleteCustomer(store, id);
+    onUpdate(nextStore);
+    showToast('Customer deleted.');
+    return true;
   };
 
   const resetForm = () => {
@@ -77,6 +85,7 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
   const customers = Array.isArray(store.customers) ? store.customers : [];
   const activitySignals = getCustomerActivitySignals(store);
   const signalByCustomer = new Map(activitySignals.map(signal => [signal.customer.id, signal]));
+  const openCustomer = openId ? customers.find(customer => customer.id === openId) || null : null;
   const filtered = customers.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.phone.includes(searchQuery)
@@ -151,12 +160,8 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
             const inactive = isInactive(c);
             const signal = signalByCustomer.get(c.id);
             const owed = owedByCustomer(store, c);
-            const open = expanded === c.id;
             return (
-              <div
-                key={c.id}
-                className={`rounded-2xl border bg-card transition-colors ${open ? 'border-primary/40' : 'border-border'}`}
-              >
+              <div key={c.id} className="rounded-2xl border border-border bg-card">
                 {/*
                   One line at rest.
                   Every customer used to arrive as seven stacked sections in a
@@ -164,11 +169,12 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
                   last-purchase block and a message with its own send button -
                   so a book of twenty people was a very long scroll of mostly
                   zeroes. What a shop actually scans for is who owes money.
-                  That is the line; the rest opens on a tap.
+                  That is the line. A tap opens the customer's own page: their
+                  bundles, and what they mean to the shop.
                 */}
                 <button
                   type="button"
-                  onClick={() => setExpanded(open ? null : c.id)}
+                  onClick={() => setOpenId(c.id)}
                   className="w-full text-left px-3.5 py-3 flex items-center gap-3"
                 >
                   <span className="min-w-0 flex-1">
@@ -202,63 +208,33 @@ export default function Customers({ store, onUpdate }: CustomersProps) {
                     <span className="text-xs font-display font-black text-amber-500 shrink-0">
                       ₦{owed.toLocaleString()}
                     </span>
-                  ) : Number(c.totalPurchases || 0) > 0 ? (
+                  ) : maySeeMoney && Number(c.totalPurchases || 0) > 0 ? (
                     <span className="text-xs font-display font-bold text-muted-foreground shrink-0">
                       ₦{Number(c.totalPurchases).toLocaleString()}
                     </span>
                   ) : null}
 
-                  <ChevronDown className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                 </button>
-
-                {open && (
-                  <div className="px-3.5 pb-3.5 space-y-3 text-left">
-                    {c.address && (
-                      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <MapPin className="w-3 h-3 shrink-0" /> {c.address}
-                      </p>
-                    )}
-
-                    {/* Plain text, not three bordered boxes. The boxes were
-                        most of the height and said ₦0 three times over for
-                        anyone who had not bought yet. */}
-                    <p className="text-xs text-muted-foreground">
-                      Spent <b className="text-foreground">₦{Number(c.totalPurchases || 0).toLocaleString()}</b>
-                      {owed > 0 && <> · owes <b className="text-amber-500">₦{owed.toLocaleString()}</b></>}
-                      {c.loyaltyPoints > 0 && <> · {c.loyaltyPoints} coins</>}
-                    </p>
-
-                    <p className="text-[11px] text-muted-foreground">{explainStanding(c)}</p>
-                    {c.purchaseHistory && c.purchaseHistory.length > 0 && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Last bought — {c.purchaseHistory[0].items}
-                      </p>
-                    )}
-
-                    {signal && (
-                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-2.5">
-                        <p className="text-[10px] font-black uppercase text-primary">{signal.label}</p>
-                        <p className="mt-1 text-[11px] text-muted-foreground line-clamp-2">{signal.message}</p>
-                        <button type="button" onClick={() => openFollowUp(c)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white">
-                          <MessageCircle className="h-3 w-3" /> Review & send on WhatsApp
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      <button onClick={() => startEdit(c)} className="flex-1 h-9 rounded-xl bg-surface-2 border border-border text-[11px] font-display font-bold flex items-center justify-center gap-1.5">
-                        <Edit className="w-3 h-3" /> Edit
-                      </button>
-                      <button onClick={() => handleDeleteCustomer(c.id)} className="h-9 px-3 rounded-xl bg-surface-2 border border-border text-muted-foreground">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* One customer's page, over the list, so Back returns to where they were. */}
+      {openCustomer && (
+        <CustomerSheet
+          store={store}
+          customer={openCustomer}
+          orders={orders}
+          canSeeMoney={maySeeMoney}
+          signal={signalByCustomer.get(openCustomer.id) || null}
+          onFollowUp={() => openFollowUp(openCustomer)}
+          onEdit={() => { setOpenId(null); startEdit(openCustomer); }}
+          onDelete={() => { if (handleDeleteCustomer(openCustomer.id)) setOpenId(null); }}
+          onClose={() => setOpenId(null)}
+        />
       )}
 
       {/* Add / Edit Modal */}

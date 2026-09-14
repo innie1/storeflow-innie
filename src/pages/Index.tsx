@@ -2297,7 +2297,7 @@ export default function Index() {
               <Marketplace store={store} onUpdate={setStore} />
             </div>
             <div className={tab === 'customers' ? 'block' : 'hidden'}>
-              <Customers store={store} onUpdate={setStore} />
+              <Customers store={store} onUpdate={setStore} orders={orders} currentUser={currentUser} />
             </div>
             <div className={tab === 'suppliers' ? 'block' : 'hidden'}>
               <Suppliers store={store} onUpdate={setStore} />
