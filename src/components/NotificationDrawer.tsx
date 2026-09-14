@@ -2,18 +2,22 @@ import type { TabId } from '@/types/store';
 import { StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
+import { visibleNotifications } from '@/lib/notification-gate';
+import type { ActingUser } from '@/lib/permissions';
 
 interface NotificationDrawerProps {
   store: StoreData;
   onClose: () => void;
   onUpdate: (s: StoreData) => void;
   onNavigate?: (tab: TabId, param?: string) => void;
+  /** Who is looking, so a worker is not shown the owner's money. */
+  currentUser?: ActingUser | null;
 }
 
-export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate }: NotificationDrawerProps) {
+export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate, currentUser }: NotificationDrawerProps) {
   useBodyScrollLock();
   // Only display unread notifications in the tray
-  const notes = (store.flowNotifications || []).filter(n => !n.read);
+  const notes = visibleNotifications(store.flowNotifications || [], currentUser).filter(n => !n.read);
 
   // Closing the tray used to mark every notification read. Since the tray only
   // shows unread ones, opening it and acting on a single alert wiped the rest —
@@ -33,10 +37,13 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
   };
 
   const markAllRead = () => {
+    // Only what this person was shown. The list belongs to the shop, so
+    // marking everything read on a worker's phone would clear the owner's too.
+    const shown = new Set(notes.map(n => n.id));
     const allNotes = store.flowNotifications || [];
     const updated = {
       ...store,
-      flowNotifications: allNotes.map(n => ({ ...n, read: true }))
+      flowNotifications: allNotes.map(n => (shown.has(n.id) ? { ...n, read: true } : n))
     };
     saveStore(updated);
     onUpdate(updated);

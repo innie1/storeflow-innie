@@ -33,9 +33,11 @@ interface Props {
   worker: StaffMember;
   onUpdate: (store: StoreData) => void;
   onClose: () => void;
+  /** Rates and totals are pay, so only for somebody who may see it. */
+  showMoney?: boolean;
 }
 
-export default function RecordWork({ store, worker, onUpdate, onClose }: Props) {
+export default function RecordWork({ store, worker, onUpdate, onClose, showMoney = true }: Props) {
   const [task, setTask] = useState<string | null>(null);
   const [job, setJob] = useState<{ record: LocalLaundryRecord; items: RemainingItem[] } | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -149,7 +151,7 @@ export default function RecordWork({ store, worker, onUpdate, onClose }: Props) 
                       <p className="font-display font-black text-sm truncate">{item.garmentType}</p>
                       <p className="text-[11px] text-muted-foreground">
                         {item.remaining} left of {item.total}
-                        {rate > 0 ? ` · ₦${rate} each` : ' · no rate set'}
+                        {showMoney && (rate > 0 ? ` · ₦${rate} each` : ' · no rate set')}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -187,7 +189,7 @@ export default function RecordWork({ store, worker, onUpdate, onClose }: Props) 
         <div className="shrink-0 border-t border-border p-4">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs text-muted-foreground">{claimPieces} {claimPieces === 1 ? 'piece' : 'pieces'}</span>
-            <span className="font-display font-black text-sm">₦{Math.round(claimTotal).toLocaleString()}</span>
+            {showMoney && <span className="font-display font-black text-sm">₦{Math.round(claimTotal).toLocaleString()}</span>}
           </div>
           <button
             onClick={submit}

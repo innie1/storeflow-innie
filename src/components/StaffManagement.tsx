@@ -15,6 +15,7 @@ import WorkerEarnings from '@/components/laundry/WorkerEarnings';
 import ContactPickButton from '@/components/ContactPickButton';
 import ConfirmModal from '@/components/ConfirmModal';
 import ScrollLock from '@/components/ScrollLock';
+import { canSeeMoney } from '@/lib/permissions';
 
 interface StaffManagementProps {
   store: StoreData;
@@ -44,7 +45,7 @@ function roleOpens(role: string, hasTill: boolean): string[] {
     case 'inventory':
       return ['Stock and stock counts', 'Suppliers and restocking', 'The marketplace and wishlist'];
     case 'supervisor':
-      return ['See all the work on the floor', 'The team list, without changing it', 'Customers and history'];
+      return ['See all the work on the floor', 'The team list, without changing it', 'Customers, and what is owed at hand-over'];
     case 'accountant':
       return ['Expenses and pending payments', 'Reports, ROI and the ledger', 'No changes to stock or prices'];
     case 'manager':
@@ -65,6 +66,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
    * the app feel like it is for somebody else's business.
    */
   const hasTill = runsATill(store);
+  /** Whether whoever has this page open is trusted with the money. */
+  const seesMoney = canSeeMoney(currentUser);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -153,6 +156,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   const [inventoryAccess, setInventoryAccess] = useState(false);
   const [reportsAccess, setReportsAccess] = useState(false);
   const [settingsAccess, setSettingsAccess] = useState(false);
+  /** A supervisor trusted with the money. Off until the owner turns it on. */
+  const [moneyAccess, setMoneyAccess] = useState(false);
 
   // Shift tracking states
   const [activeStaffId, setActiveStaffId] = useState('');
@@ -184,7 +189,9 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
         sales: salesAccess,
         inventory: inventoryAccess,
         reports: reportsAccess,
-        settings: settingsAccess
+        settings: settingsAccess,
+        // Only ever for a supervisor; every other role ignores it.
+        money: role === 'supervisor' && moneyAccess
       }
     });
     onUpdate(nextStore);
@@ -213,7 +220,9 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
         sales: salesAccess,
         inventory: inventoryAccess,
         reports: reportsAccess,
-        settings: settingsAccess
+        settings: settingsAccess,
+        // Only ever for a supervisor; every other role ignores it.
+        money: role === 'supervisor' && moneyAccess
       }
     });
     onUpdate(nextStore);
@@ -281,6 +290,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setInventoryAccess(false);
     setReportsAccess(false);
     setSettingsAccess(false);
+    setMoneyAccess(false);
     setShowAddModal(false);
     setEditingStaff(null);
   };
@@ -299,6 +309,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setInventoryAccess(s.permissions.inventory);
     setReportsAccess(s.permissions.reports);
     setSettingsAccess(s.permissions.settings);
+    setMoneyAccess(Boolean(s.permissions.money));
     setShowAddModal(true);
   };
 
@@ -312,11 +323,12 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
         <RecordWork
           store={store}
           worker={recordingFor}
+          showMoney={seesMoney}
           onUpdate={onUpdate}
           onClose={() => setRecordingFor(null)}
         />
       )}
-      {earningsFor && (
+      {earningsFor && seesMoney && (
         <WorkerEarnings
           store={store}
           worker={earningsFor}
@@ -348,8 +360,9 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Active Shift Tracker */}
-        {hasTill && (
+        {/* Left: Active Shift Tracker. Drawer floats are money, so only for
+            somebody trusted with it. */}
+        {hasTill && seesMoney && (
         <div className="lg:col-span-1 bg-background border border-border p-5 rounded-2xl space-y-4 h-fit">
           <h3 className="font-display font-bold text-base text-foreground">Shift Controller</h3>
           
@@ -454,6 +467,11 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                               per piece
                             </span>
                           )}
+                          {s.role === 'supervisor' && s.permissions.money && (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-success/10 border border-success/30 text-[8px] font-bold text-success uppercase">
+                              sees money
+                            </span>
+                          )}
                         </div>
                       </div>
                       {currentUser?.role === 'owner' && (
@@ -489,17 +507,25 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                         >
                           Record work
                         </button>
-                        <button
-                          onClick={() => setEarningsFor(s)}
-                          className="flex-1 h-9 rounded-lg bg-surface-2 border border-border text-[11px] font-display font-bold"
-                        >
-                          Earnings
-                          {pendingFor(s.id) > 0 && (
-                            <span className="ml-1 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full bg-destructive text-white text-[8px] font-bold">
-                              {pendingFor(s.id)}
-                            </span>
-                          )}
-                        </button>
+                        {/* What a worker is paid is money. Without it, a
+                            supervisor still sees that work is waiting. */}
+                        {seesMoney ? (
+                          <button
+                            onClick={() => setEarningsFor(s)}
+                            className="flex-1 h-9 rounded-lg bg-surface-2 border border-border text-[11px] font-display font-bold"
+                          >
+                            Earnings
+                            {pendingFor(s.id) > 0 && (
+                              <span className="ml-1 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full bg-destructive text-white text-[8px] font-bold">
+                                {pendingFor(s.id)}
+                              </span>
+                            )}
+                          </button>
+                        ) : pendingFor(s.id) > 0 ? (
+                          <span className="flex-1 h-9 rounded-lg bg-surface-2 border border-border text-[11px] font-display font-bold text-muted-foreground flex items-center justify-center">
+                            {pendingFor(s.id)} waiting for approval
+                          </span>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -508,8 +534,9 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
             )}
           </div>
 
-          {/* Shift Records Tally — drawer floats, so only where there is a drawer. */}
-          {hasTill && (
+          {/* Shift Records Tally — drawer floats, so only where there is a
+              drawer, and only for somebody trusted with the money. */}
+          {hasTill && seesMoney && (
           <div className="space-y-3.5">
             <h3 className="font-display font-bold text-base text-foreground">Completed Shift Tally</h3>
             {shifts.length === 0 ? (
@@ -866,6 +893,28 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                         </li>
                       ))}
                     </ul>
+                    {/*
+                      A supervisor runs the floor, not the books. The money -
+                      sales amounts, the cash drawer, what workers are paid -
+                      stays hidden unless the owner trusts this person with it.
+                    */}
+                    {role === 'supervisor' && (
+                      <label className="mt-2.5 pt-2.5 border-t border-border flex items-center justify-between gap-3 cursor-pointer">
+                        <span className="min-w-0">
+                          <span className="block text-xs font-display font-bold text-foreground">Can see money</span>
+                          <span className="block text-[10px] text-muted-foreground leading-snug">
+                            {moneyAccess ? 'Sales amounts, the cash drawer and worker pay.' : 'Off: no sales amounts, cash drawer or worker pay.'}
+                          </span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={moneyAccess}
+                          onChange={e => setMoneyAccess(e.target.checked)}
+                          aria-label="Can see money"
+                          className="rounded accent-yellow-500 w-4 h-4 border border-border shrink-0"
+                        />
+                      </label>
+                    )}
                     <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
                       Pick <b>Custom role</b> if you want to choose each one yourself.
                     </p>

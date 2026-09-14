@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { can, canDelete, canOpenTab, canSeeMoney, canSetPrices, isManagement } from '@/lib/permissions';
+import { visibleNotifications } from '@/lib/notification-gate';
 import { readSource } from './helpers/source';
 
 /**
@@ -261,5 +262,100 @@ describe('the simple home screen asks the role too', () => {
     // It lived inside Index.tsx, so only the navigation could consult it.
     expect(readSource('src/lib/permissions.ts')).toContain('export function canOpenTab');
     expect(readSource('src/pages/Index.tsx')).toContain('canOpenTab(tabId, user)');
+  });
+});
+
+/**
+ * Asked for from the shop: a supervisor or operations worker sees what is
+ * happening on the floor, but does not automatically get the shop's financial
+ * figures. The owner can switch the money on for one person they trust.
+ */
+describe('a supervisor and the money', () => {
+  const supervisor = { role: 'supervisor' };
+  const trusted = { role: 'supervisor', permissions: { money: true } };
+
+  it('is hidden unless the owner has switched it on', () => {
+    expect(canSeeMoney(supervisor)).toBe(false);
+    expect(canSeeMoney({ role: 'supervisor', permissions: { money: false } })).toBe(false);
+    expect(canSeeMoney(trusted)).toBe(true);
+  });
+
+  it('keeps the money ledger and the cash drawer closed without it', () => {
+    expect(canOpenTab('history', supervisor)).toBe(false);
+    expect(canOpenTab('cash-drawer', supervisor)).toBe(false);
+    expect(canOpenTab('history', trusted)).toBe(true);
+    expect(canOpenTab('cash-drawer', trusted)).toBe(true);
+  });
+
+  it('leaves the floor open either way', () => {
+    for (const tabId of ['dashboard', 'orders', 'laundry-records', 'customers', 'staff']) {
+      expect(canOpenTab(tabId, supervisor), tabId).toBe(true);
+    }
+  });
+
+  it('grants nothing else', () => {
+    expect(canDelete(trusted)).toBe(false);
+    expect(canSetPrices(trusted)).toBe(false);
+    expect(can(trusted, 'settings')).toBe(false);
+    expect(can(trusted, 'staff')).toBe(false);
+  });
+
+  it('is a switch for supervisors only', () => {
+    expect(canSeeMoney({ role: 'attendant', permissions: { money: true } })).toBe(false);
+    expect(canSeeMoney({ role: 'cashier', permissions: { money: true } })).toBe(false);
+  });
+
+  it('decides which dashboard a supervisor gets', () => {
+    // Floats and drawer tallies are money too.
+    expect(readSource('src/components/Dashboard.tsx')).toContain('return runsATill(store) && canSeeMoney(currentUser)');
+  });
+
+  it('decides what the staff page shows', () => {
+    const staff = readSource('src/components/StaffManagement.tsx');
+    expect(staff).toContain('const seesMoney = canSeeMoney(currentUser);');
+    expect(staff).toContain('{earningsFor && seesMoney && (');
+    expect(staff).toContain('showMoney={seesMoney}');
+    // Recording work for somebody shows their rates and what the claim is
+    // worth, which is their pay.
+    const recordWork = readSource('src/components/laundry/RecordWork.tsx');
+    expect(recordWork).toContain('{showMoney && (rate > 0 ?');
+    expect(recordWork).toContain('{showMoney && <span className="font-display font-black text-sm">');
+  });
+});
+
+describe('notifications follow the same rule', () => {
+  const note = (id: string, category?: string, actionTab?: string) =>
+    ({ id, text: id, icon: '', tone: 'info', date: '', read: false, category, actionTab }) as any;
+  const all = [
+    note('bill reminder', 'alert'),
+    note('new order', 'customerRequest', 'orders'),
+    note('restock draft', 'recommendation', 'inventory'),
+    note('unlabelled'),
+    note('low stock', 'lowStock', 'inventory'),
+  ];
+
+  it('shows the owner everything', () => {
+    expect(visibleNotifications(all, owner)).toHaveLength(5);
+  });
+
+  it('shows a supervisor the work, and only where they can go', () => {
+    // A supervisor can open orders, but not the stock room.
+    expect(visibleNotifications(all, { role: 'supervisor' }).map(n => n.id)).toEqual(['new order']);
+  });
+
+  it('shows a trusted supervisor everything', () => {
+    expect(visibleNotifications(all, { role: 'supervisor', permissions: { money: true } })).toHaveLength(5);
+  });
+
+  it('shows nobody anything before sign-in', () => {
+    expect(visibleNotifications(all, null)).toEqual([]);
+  });
+
+  it('is what the tray and the dot on the bell both use', () => {
+    expect(readSource('src/components/NotificationDrawer.tsx')).toContain('visibleNotifications(store.flowNotifications || [], currentUser)');
+    expect(readSource('src/pages/Index.tsx')).toContain('visibleNotifications(store.flowNotifications || [], currentUser).filter(n => !n.read).length');
+    // And the pop-up that announces one as it arrives, which reads the session
+    // afresh because the subscription outlives whoever was signed in.
+    expect(readSource('src/pages/Index.tsx')).toContain('if (visibleNotifications([newNotification], readActiveUser()).length) {');
   });
 });

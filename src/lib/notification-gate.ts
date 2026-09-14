@@ -15,6 +15,7 @@
  */
 
 import type { FlowNotification, ManagerSettings, StoreData } from '@/types/store';
+import { canOpenTab, canSeeMoney, type ActingUser } from '@/lib/permissions';
 
 export type NotificationCategory =
   | 'insight'
@@ -66,4 +67,27 @@ export function allowedNotifications<T extends FlowNotification>(
   notifications: T[],
 ): T[] {
   return notifications.filter(notification => wantsNotification(store, notification.category));
+}
+
+/*
+ * What one person is shown.
+ *
+ * The notifications live on the shop, so everybody signed in to it was shown
+ * the owner's: bill and loan reminders with their amounts, restock drafts,
+ * money insights. Somebody who is not trusted with the money sees only the
+ * work - an order coming in, stock running out - and only where it leads to a
+ * screen they can open. Anything else, including a notification that never
+ * said what kind it was, stays with the people who see the money.
+ */
+const WORK_CATEGORIES: NotificationCategory[] = ['customerRequest', 'lowStock'];
+
+export function visibleNotifications<T extends FlowNotification>(
+  notifications: T[],
+  user: ActingUser | null | undefined,
+): T[] {
+  if (canSeeMoney(user)) return notifications;
+  return notifications.filter(notification =>
+    !!notification.category
+    && WORK_CATEGORIES.includes(notification.category)
+    && (!notification.actionTab || canOpenTab(notification.actionTab, user)));
 }

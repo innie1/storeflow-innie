@@ -31,6 +31,8 @@ export interface ActingUser {
     inventory?: boolean;
     reports?: boolean;
     settings?: boolean;
+    /** A supervisor the owner has trusted with the money. */
+    money?: boolean;
   };
 }
 
@@ -72,8 +74,13 @@ export function can(user: ActingUser | null | undefined, capability: Capability)
     return false;
   }
 
-  // attendant, cashier, inventory, supervisor: none of them delete, price, or
-  // see the shop's takings.
+  // A supervisor runs the floor, not the books. They see the money only when
+  // the owner has switched it on for them, and even then they delete nothing
+  // and price nothing.
+  if (role === 'supervisor') return capability === 'money' && !!user?.permissions?.money;
+
+  // attendant, cashier, inventory: none of them delete, price, or see the
+  // shop's takings.
   return false;
 }
 
@@ -116,8 +123,11 @@ export function canOpenTab(tabId: string, user: ActingUser | null | undefined): 
     case 'accountant':
       return ['dashboard', 'expenses', 'roi', 'pending', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
     // A supervisor oversees the shop floor, so they need to see the floor.
+    // History is the money ledger and the cash drawer is the takings, so those
+    // two open only for a supervisor the owner has trusted with the money.
     case 'supervisor':
-      return ['dashboard', 'orders', 'laundry-records', 'customers', 'staff', 'history', 'cash-drawer', 'communication-center'].includes(tabId);
+      if (tabId === 'history' || tabId === 'cash-drawer') return can(user, 'money');
+      return ['dashboard', 'orders', 'laundry-records', 'customers', 'staff', 'communication-center'].includes(tabId);
     case 'custom': {
       if (tabId === 'dashboard') return true;
       // "Sales access" has to mean taking work in at a service business too,

@@ -11,7 +11,7 @@ import { readLinkedTab, readNotificationAct, readOrderDeepLink, stripOrderDeepLi
 import { acknowledgeStockLoss, getStockLossNotice, markStockLossRaised } from '@/lib/stock-loss-notice';
 import { dropBackgroundNotice, enableBackgroundNotices, queueBackgroundNotice, showLocalNotification } from '@/lib/push-notifications';
 import type { NotificationAct } from '@/lib/order-deep-link';
-import { allowedNotifications, wantsNotification } from '@/lib/notification-gate';
+import { allowedNotifications, visibleNotifications, wantsNotification } from '@/lib/notification-gate';
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
@@ -829,7 +829,12 @@ export default function Index() {
             return updated;
           });
 
-          showToast(`${newNotif.title}: ${newNotif.message}`, 'info');
+          // Only for somebody who would be shown it in the tray. The session is
+          // read fresh, because this subscription captured the state it opened
+          // with and somebody else may have signed in since.
+          if (visibleNotifications([newNotification], readActiveUser()).length) {
+            showToast(`${newNotif.title}: ${newNotif.message}`, 'info');
+          }
         }
       )
       .subscribe();
@@ -1204,7 +1209,9 @@ export default function Index() {
     return () => window.removeEventListener(PRACTISED_SIGNAL, check);
   }, [store]);
 
-  const unreadCount = store ? (store.flowNotifications || []).filter(n => !n.read).length : 0;
+  // The same list the tray shows, or a worker would see a dot for
+  // notifications they are never shown.
+  const unreadCount = store ? visibleNotifications(store.flowNotifications || [], currentUser).filter(n => !n.read).length : 0;
 
   const mainTabs = isGames
     ? GAMES_MAIN_TABS
@@ -2648,6 +2655,7 @@ export default function Index() {
       {showNotifications && (
         <NotificationDrawer
           store={store}
+          currentUser={currentUser}
           onClose={() => setShowNotifications(false)}
           onUpdate={setStore}
           onNavigate={(targetTab, param) => {

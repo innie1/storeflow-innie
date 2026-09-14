@@ -1,5 +1,6 @@
 import { StoreData } from '@/types/store';
 import { runsATill } from '@/lib/business-runtime';
+import { canSeeMoney } from '@/lib/permissions';
 import AttendantDashboard from '@/components/dashboards/AttendantDashboard';
 import OwnerDashboard from '@/components/dashboards/OwnerDashboard';
 import ManagerDashboard from '@/components/dashboards/ManagerDashboard';
@@ -49,8 +50,10 @@ export default function Dashboard({ store, orders = [], onNavigate, currentUser 
     // SupervisorDashboard is entirely shift floats and drawer tallies. A shop
     // with no till has none of those, so it rendered an empty screen to
     // somebody whose job is watching the floor; they get the work view there.
+    // Floats and tallies are money too, so a supervisor who has not been
+    // trusted with it gets the work view in any shop.
     case 'supervisor':
-      return runsATill(store)
+      return runsATill(store) && canSeeMoney(currentUser)
         ? <SupervisorDashboard store={store} onNavigate={onNavigate} />
         : <AttendantDashboard store={store} onNavigate={onNavigate} userName={currentUser?.name} />;
     // Without this branch an attendant fell through to `default` and was

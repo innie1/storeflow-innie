@@ -549,6 +549,12 @@ export interface StaffMember {
     inventory: boolean;
     reports: boolean;
     settings: boolean;
+    /**
+     * Whether a supervisor may see the shop's money: sales amounts, the cash
+     * drawer and what workers are paid. Off unless the owner switches it on
+     * for that person. Read only for a supervisor; see permissions.
+     */
+    money?: boolean;
   };
 }
 

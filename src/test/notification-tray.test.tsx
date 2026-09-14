@@ -38,6 +38,9 @@ function store(notifications: any[]): StoreData {
   } as unknown as StoreData;
 }
 
+/** The tray is always opened by somebody; these are the owner's. */
+const owner = { role: 'owner' };
+
 describe('acting on one notification leaves the others alone', () => {
   it('marks only the one acted on, not the whole tray', () => {
     const onUpdate = vi.fn();
@@ -49,6 +52,7 @@ describe('acting on one notification leaves the others alone', () => {
         onClose={() => {}}
         onUpdate={onUpdate}
         onNavigate={() => {}}
+        currentUser={owner}
       />
     );
 
@@ -69,6 +73,7 @@ describe('acting on one notification leaves the others alone', () => {
         onClose={onClose}
         onUpdate={onUpdate}
         onNavigate={() => {}}
+        currentUser={owner}
       />
     );
 
@@ -87,6 +92,7 @@ describe('acting on one notification leaves the others alone', () => {
         onClose={() => {}}
         onUpdate={onUpdate}
         onNavigate={() => {}}
+        currentUser={owner}
       />
     );
 
@@ -95,6 +101,50 @@ describe('acting on one notification leaves the others alone', () => {
     const saved = onUpdate.mock.calls.at(-1)![0] as StoreData;
     expect(Object.fromEntries((saved.flowNotifications || []).map(n => [n.id, n.read])))
       .toEqual({ a: true, b: false });
+  });
+});
+
+/**
+ * The notifications belong to the shop, so every phone signed in to it showed
+ * the owner's: a bill reminder with its amount on a worker's screen. A worker
+ * is shown the work - an order coming in - and nothing about the money.
+ */
+describe('a worker is shown the work, not the money', () => {
+  const bill = note('bill', { category: 'alert', title: 'Bill Reminder', description: 'Rent (₦50,000) is due tomorrow.' });
+  const order = note('order', { category: 'customerRequest', title: 'New order', actionLabel: 'View Orders', actionTab: 'orders' });
+
+  it("keeps the owner's money reminders out of a worker's tray", () => {
+    render(
+      <NotificationDrawer
+        store={store([bill, order])}
+        onClose={() => {}}
+        onUpdate={() => {}}
+        onNavigate={() => {}}
+        currentUser={{ role: 'attendant' }}
+      />
+    );
+
+    expect(screen.queryByText('Bill Reminder')).toBeNull();
+    expect(screen.getByText('New order')).toBeTruthy();
+  });
+
+  it("marks read only what the worker was shown, leaving the owner's tray alone", () => {
+    const onUpdate = vi.fn();
+    render(
+      <NotificationDrawer
+        store={store([bill, order])}
+        onClose={() => {}}
+        onUpdate={onUpdate}
+        onNavigate={() => {}}
+        currentUser={{ role: 'attendant' }}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Mark all read'));
+
+    const saved = onUpdate.mock.calls.at(-1)![0] as StoreData;
+    expect(Object.fromEntries((saved.flowNotifications || []).map(n => [n.id, n.read])))
+      .toEqual({ bill: false, order: true });
   });
 });
 

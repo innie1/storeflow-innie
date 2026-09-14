@@ -39,10 +39,12 @@ describe('the till only appears where there is a till', () => {
   });
 
   it('hides the shift controller and the drawer tally without one', () => {
-    // Both sections are gated on the same flag, so neither can come back on
-    // its own the way the tally did.
-    expect(staff).toContain('{hasTill && (');
-    expect(staff.split('{hasTill && (').length - 1).toBe(2);
+    // Both sections are gated on the same flags, so neither can come back on
+    // its own the way the tally did. A drawer is money as well, so both also
+    // wait for somebody trusted with it.
+    expect(staff).toContain('{hasTill && seesMoney && (');
+    expect(staff.split('{hasTill && seesMoney && (').length - 1).toBe(2);
+    expect(staff).not.toContain('{hasTill && (');
   });
 
   it('never offers a cashier role to a shop with no till', () => {

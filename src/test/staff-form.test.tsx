@@ -136,3 +136,27 @@ describe('the tasks a worker is paid for', () => {
     expect(WORK_TASKS.find(task => task.id === 'folding')?.label).toBe('Folding / Packaging');
   });
 });
+
+describe('trusting a supervisor with the money', () => {
+  const roleSelect = () => form().querySelector('select') as HTMLSelectElement;
+
+  it('is off unless the owner turns it on', () => {
+    fireEvent.change(roleSelect(), { target: { value: 'supervisor' } });
+    expect((screen.getByLabelText('Can see money') as HTMLInputElement).checked).toBe(false);
+    expect(fillAndSave().permissions.money).toBe(false);
+  });
+
+  it('is saved with the account when it is on', () => {
+    fireEvent.change(roleSelect(), { target: { value: 'supervisor' } });
+    fireEvent.click(screen.getByLabelText('Can see money'));
+    expect(fillAndSave().permissions.money).toBe(true);
+  });
+
+  it('is only offered for a supervisor, and never saved for another role', () => {
+    fireEvent.change(roleSelect(), { target: { value: 'supervisor' } });
+    fireEvent.click(screen.getByLabelText('Can see money'));
+    fireEvent.change(roleSelect(), { target: { value: 'attendant' } });
+    expect(screen.queryByLabelText('Can see money')).toBeNull();
+    expect(fillAndSave().permissions.money).toBe(false);
+  });
+});
