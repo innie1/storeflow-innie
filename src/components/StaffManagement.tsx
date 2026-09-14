@@ -5,10 +5,11 @@ import {
   addStaffMember, deleteStaffMember, updateStaffMember, startShift, endShift 
 } from '@/lib/store-data';
 import { 
-  Briefcase, UserPlus, Lock, Key, Shield, Calendar, Play, Square, FileText, CheckSquare, Trash2, Edit
+  Briefcase, UserPlus, Lock, Key, Shield, Calendar, Play, Square, FileText, CheckSquare, Trash2, Edit, Check, X
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 import { ANY_GARMENT, pendingClaims, setPieceRate, taskLabel, WORK_TASKS } from '@/lib/piece-work';
+import { getLaundryPricingConfig } from '@/lib/laundry-pricing';
 import RecordWork from '@/components/laundry/RecordWork';
 import WorkerEarnings from '@/components/laundry/WorkerEarnings';
 import ContactPickButton from '@/components/ContactPickButton';
@@ -78,6 +79,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
   const [pieceRates, setPieceRates] = useState<PieceRate[]>([]);
   const [newRateTask, setNewRateTask] = useState<string>(WORK_TASKS[0].id);
   const [newRateGarment, setNewRateGarment] = useState('');
+  /** The rate typed once in quick setup, before tapping what it is for. */
+  const [rateDraft, setRateDraft] = useState('');
   const [recordingFor, setRecordingFor] = useState<StaffMember | null>(null);
   const [earningsFor, setEarningsFor] = useState<StaffMember | null>(null);
 
@@ -100,16 +103,45 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     const rate = Number(value.replace(/[^0-9]/g, '')) || 0;
     setPieceRates(current => {
       const next = setPieceRate(current, { task, garmentType, rate });
-      // Keep a named garment visible at zero while it is being typed into.
-      if (rate === 0 && garmentType !== ANY_GARMENT && !next.some(r => r.task === task && r.garmentType === garmentType)) {
+      // Keep the row on screen at zero while its box is being retyped; saving
+      // still drops anything left at zero.
+      if (rate === 0 && !next.some(r => r.task === task && r.garmentType === garmentType)) {
         return [...next, { task, garmentType, rate: 0 }];
       }
       return next;
     });
   };
 
-  /** Everything except the catch-alls, which have their own row above. */
-  const namedRates = pieceRates.filter(r => r.garmentType !== ANY_GARMENT);
+  /** The clothes this shop already prices, offered as taps in quick setup. */
+  const clothingTypes = getLaundryPricingConfig(store).garmentTypes;
+
+  const sameItem = (rate: PieceRate, task: string, garmentType: string) =>
+    rate.task === task && rate.garmentType.toLowerCase() === garmentType.toLowerCase();
+
+  /** Puts the typed rate on one item for the chosen task. False when no rate is typed. */
+  const giveRate = (garmentType: string): boolean => {
+    const rate = Number(rateDraft) || 0;
+    if (rate <= 0) {
+      showToast('Type the rate first, then tap what it is for', 'info');
+      return false;
+    }
+    setPieceRates(list => setPieceRate(list, { task: newRateTask, garmentType, rate }));
+    return true;
+  };
+
+  /**
+   * A tap on an item: give it the typed rate, or take it off again if it
+   * already has that rate. A wrong tap is undone by tapping again.
+   */
+  const toggleRate = (garmentType: string) => {
+    const current = pieceRates.find(rate => sameItem(rate, newRateTask, garmentType) && rate.rate > 0);
+    const typed = Number(rateDraft) || 0;
+    if (current && (typed === 0 || typed === current.rate)) {
+      setPieceRates(list => list.filter(rate => !sameItem(rate, newRateTask, garmentType)));
+      return;
+    }
+    giveRate(garmentType);
+  };
   // Whichever role the shop is most likely to be adding: a till shop hires a
   // cashier, a laundry or a barber hires someone to take work in.
   const [role, setRole] = useState<StaffMember['role']>(
@@ -242,6 +274,8 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setPayType('monthly');
     setPieceRates([]);
     setNewRateGarment('');
+    setNewRateTask(WORK_TASKS[0].id);
+    setRateDraft('');
     setRole(runsATill(store) ? 'cashier' : 'attendant');
     setSalesAccess(true);
     setInventoryAccess(false);
@@ -259,6 +293,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
     setSalary(s.monthlySalary ? String(s.monthlySalary) : '');
     setPayType(s.payType || 'monthly');
     setPieceRates(s.pieceRates || []);
+    setRateDraft('');
     setRole(s.role);
     setSalesAccess(s.permissions.sales);
     setInventoryAccess(s.permissions.inventory);
@@ -511,20 +546,29 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
         </div>
       </div>
 
-      {/* Account Creation Modal */}
+      {/*
+        The worker form, as a sheet whose middle scrolls.
+
+        It sat centred in a fixed box with no height limit, and nothing inside
+        it could scroll, so on a phone the top of the form and its Save button
+        were off the screen with no way to reach them. It is never taller than
+        the screen now: the heading stays at the top, Cancel and Save stay at
+        the bottom, and everything between them scrolls. On a phone it rises
+        from the bottom edge, where a thumb already is.
+      */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}><ScrollLock />
+        <div className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowAddModal(false)}><ScrollLock />
           <form 
             onSubmit={editingStaff ? handleEditStaff : handleAddStaff}
-            className="w-full max-w-md bg-card border border-border rounded-2xl p-6 animate-slide-up space-y-4"
+            className="w-full sm:max-w-md max-h-[92dvh] flex flex-col overflow-hidden bg-card border border-border rounded-t-2xl sm:rounded-2xl animate-slide-up"
             onClick={e => e.stopPropagation()}
           >
-            <div>
+            <div className="shrink-0 px-5 pt-5 pb-3 border-b border-border/60">
               <h3 className="font-display font-bold text-lg">{editingStaff ? 'Edit worker' : 'Add a worker'}</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Give them a login and choose what they can open.</p>
             </div>
 
-            <div className="space-y-3.5">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-3.5">
               <div className="space-y-1 text-left">
                 <label className="text-xs text-muted-foreground uppercase font-bold">Name</label>
                 <input 
@@ -568,7 +612,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                   {([
                     ['monthly', 'Monthly'],
                     ['per_piece', 'Per piece'],
-                    ['none', 'No payroll'],
+                    ['none', 'None (owner)'],
                   ] as const).map(([id, label]) => (
                     <button
                       key={id}
@@ -584,7 +628,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
                 </div>
                 <p className="text-[10px] text-muted-foreground">
                   {payType === 'per_piece'
-                    ? 'Paid for each item they finish. Set the rates below.'
+                    ? 'Paid for each item they finish. No rate is set until you type one.'
                     : payType === 'none'
                       ? 'An owner or family member who is not on the payroll.'
                       : 'A fixed wage every month, whatever the shop takes.'}
@@ -592,75 +636,129 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
               </div>
 
               {/*
-                The rates, only where they mean something.
+                The rates, only where they mean something, and quick to set.
 
-                A catch-all first - "ironing, anything, fifty" - because most
-                shops price it that way, and then the few garments that take
-                three times as long can be named on top of it.
+                Pick the task, type the rate once, then tap every item it is
+                for. The items are the shop's own price list, so nobody types
+                "Shirt" out ten times. "Everything else" is the catch-all, for a
+                shop that pays one rate whatever the item. Nothing starts filled
+                in: a rate the owner did not type is a rate nobody agreed to.
               */}
               {payType === 'per_piece' && (
-                <div className="space-y-2 text-left rounded-xl border border-primary/25 bg-primary/5 p-3">
+                <div className="space-y-2.5 text-left rounded-xl border border-primary/25 bg-primary/5 p-3">
                   <p className="text-[11px] font-display font-black text-primary">What they earn per piece</p>
-                  {WORK_TASKS.map(task => (
-                    <div key={task.id} className="flex items-center gap-2">
-                      <span className="text-xs w-16 shrink-0">{task.label}</span>
-                      <div className="flex items-center gap-1 flex-1 h-9 px-2 rounded-lg bg-surface-2 border border-border">
-                        <span className="text-xs text-muted-foreground">₦</span>
-                        <input
-                          inputMode="numeric"
-                          value={rateFor(task.id, ANY_GARMENT)}
-                          onChange={e => changeRate(task.id, ANY_GARMENT, e.target.value)}
-                          placeholder="any item"
-                          className="w-full bg-transparent text-xs outline-none"
-                        />
-                      </div>
-                    </div>
-                  ))}
 
-                  {/* Named garments, for the ones that are not like the rest. */}
-                  {namedRates.map(rate => (
-                    <div key={`${rate.task}-${rate.garmentType}`} className="flex items-center gap-2">
-                      <span className="text-[11px] w-16 shrink-0 truncate text-muted-foreground">{taskLabel(rate.task)}</span>
-                      <span className="text-[11px] flex-1 truncate">{rate.garmentType}</span>
-                      <div className="flex items-center gap-1 w-24 h-9 px-2 rounded-lg bg-surface-2 border border-border">
-                        <span className="text-xs text-muted-foreground">₦</span>
-                        <input
-                          inputMode="numeric"
-                          value={rateFor(rate.task, rate.garmentType)}
-                          onChange={e => changeRate(rate.task, rate.garmentType, e.target.value)}
-                          className="w-full bg-transparent text-xs outline-none"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                  <div className="flex flex-wrap gap-1.5">
+                    {WORK_TASKS.map(task => (
+                      <button
+                        key={task.id}
+                        type="button"
+                        onClick={() => setNewRateTask(task.id)}
+                        aria-pressed={newRateTask === task.id}
+                        className={`h-8 px-2.5 rounded-lg border text-[11px] font-display font-bold transition-colors ${
+                          newRateTask === task.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 border-border text-muted-foreground'
+                        }`}
+                      >
+                        {task.label}
+                      </button>
+                    ))}
+                  </div>
 
-                  <div className="flex gap-1.5 pt-1">
-                    <select
-                      value={newRateTask}
-                      onChange={e => setNewRateTask(e.target.value)}
-                      className="h-9 rounded-lg bg-surface-2 border border-border text-[11px] px-2 outline-none"
-                    >
-                      {WORK_TASKS.map(task => <option key={task.id} value={task.id}>{task.label}</option>)}
-                    </select>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground shrink-0">{taskLabel(newRateTask)} rate</span>
+                    <div className="flex items-center gap-1 flex-1 h-9 px-2 rounded-lg bg-surface-2 border border-border">
+                      <span className="text-xs text-muted-foreground">₦</span>
+                      <input
+                        inputMode="numeric"
+                        value={rateDraft}
+                        onChange={e => setRateDraft(e.target.value.replace(/[^0-9]/g, ''))}
+                        placeholder="per piece"
+                        aria-label="Rate per piece"
+                        className="w-full bg-transparent text-xs outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground">Then tap what this rate is for. Tap again to take it off.</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[ANY_GARMENT, ...clothingTypes].map(garment => {
+                      const set = pieceRates.find(rate => sameItem(rate, newRateTask, garment) && rate.rate > 0);
+                      return (
+                        <button
+                          key={garment}
+                          type="button"
+                          onClick={() => toggleRate(garment)}
+                          aria-pressed={Boolean(set)}
+                          className={`h-8 px-2.5 rounded-full border text-[11px] font-display font-bold flex items-center gap-1 transition-colors ${
+                            set ? 'bg-primary/15 border-primary text-foreground' : 'bg-surface-2 border-border text-muted-foreground'
+                          }`}
+                        >
+                          {set && <Check className="w-3 h-3 text-primary" />}
+                          {garment === ANY_GARMENT ? 'Everything else' : garment}
+                          {set && <span className="text-primary">₦{set.rate}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* An item that is not on the price list yet. */}
+                  <div className="flex gap-1.5">
                     <input
                       value={newRateGarment}
                       onChange={e => setNewRateGarment(e.target.value)}
-                      placeholder="e.g. Native Wear"
-                      className="flex-1 h-9 rounded-lg bg-surface-2 border border-border text-[11px] px-2 outline-none"
+                      placeholder="Other item, e.g. Native Wear"
+                      className="flex-1 min-w-0 h-9 rounded-lg bg-surface-2 border border-border text-[11px] px-2 outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => {
-                        const name = newRateGarment.trim();
-                        if (!name) return;
-                        changeRate(newRateTask, name, '0');
-                        setNewRateGarment('');
+                        const garment = newRateGarment.trim();
+                        if (garment && giveRate(garment)) setNewRateGarment('');
                       }}
                       className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] font-display font-black"
                     >
                       Add
                     </button>
                   </div>
+
+                  {/* Every rate set so far, each one editable on its own. */}
+                  {pieceRates.length > 0 && (
+                    <div className="pt-2 border-t border-primary/15 space-y-1.5">
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground">Rates set · change any one</p>
+                      {WORK_TASKS.flatMap(task => pieceRates
+                        .filter(rate => rate.task === task.id)
+                        .sort((a, b) => (a.garmentType === ANY_GARMENT) === (b.garmentType === ANY_GARMENT)
+                          ? a.garmentType.localeCompare(b.garmentType)
+                          : a.garmentType === ANY_GARMENT ? 1 : -1)
+                        .map(rate => {
+                          const item = rate.garmentType === ANY_GARMENT ? 'Everything else' : rate.garmentType;
+                          return (
+                            <div key={`${rate.task}-${rate.garmentType}`} className="flex items-center gap-2">
+                              <span className="text-[11px] w-20 shrink-0 truncate text-muted-foreground">{task.label}</span>
+                              <span className="text-[11px] flex-1 min-w-0 truncate">{item}</span>
+                              <div className="flex items-center gap-1 w-20 h-8 px-2 rounded-lg bg-surface-2 border border-border">
+                                <span className="text-xs text-muted-foreground">₦</span>
+                                <input
+                                  inputMode="numeric"
+                                  value={rateFor(rate.task, rate.garmentType)}
+                                  onChange={e => changeRate(rate.task, rate.garmentType, e.target.value)}
+                                  aria-label={`${task.label} rate for ${item}`}
+                                  className="w-full bg-transparent text-xs outline-none"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setPieceRates(list => list.filter(entry => !sameItem(entry, rate.task, rate.garmentType)))}
+                                aria-label={`Remove ${task.label} rate for ${item}`}
+                                className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        }))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -776,7 +874,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="shrink-0 flex gap-2 px-5 pt-3 border-t border-border/60" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
               <button type="button" onClick={resetForm} className="flex-1 py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold active:scale-95 transition-all cursor-pointer">
                 Cancel
               </button>

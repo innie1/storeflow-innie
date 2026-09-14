@@ -37,7 +37,8 @@ export const WORK_TASKS: { id: string; label: string }[] = [
   { id: 'washing', label: 'Washing' },
   { id: 'drying', label: 'Drying' },
   { id: 'ironing', label: 'Ironing' },
-  { id: 'folding', label: 'Folding' },
+  // The id stays 'folding', so work already recorded under it still counts.
+  { id: 'folding', label: 'Folding / Packaging' },
 ];
 
 /** The rate that applies to anything not named specifically. */
