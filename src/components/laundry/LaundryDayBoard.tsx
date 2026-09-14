@@ -123,6 +123,28 @@ export default function LaundryDayBoard({ store, orders, onNavigate, canSeeMoney
           </div>
         </button>
       )}
+
+      {/*
+        Money not realised yet: work still in the shop. Beside what is owed
+        because they answer different questions - owed also counts bundles that
+        have left unpaid, and this counts the ones still waiting, paid or not.
+        Opens the whole list, where anything not collected sorts to the top.
+      */}
+      {canSeeMoney && board.waitingCount > 0 && (
+        <button
+          onClick={() => open('all')}
+          className="w-full rounded-2xl border border-border bg-card p-3.5 text-left flex items-center gap-3"
+        >
+          <PackageCheck className="w-4 h-4 text-primary shrink-0" />
+          <div className="min-w-0">
+            <p className="font-display font-black text-sm">Waiting to be collected</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {board.waitingCount} {board.waitingCount === 1 ? 'bundle' : 'bundles'} · ₦{board.waitingValue.toLocaleString()} of work
+              {board.waitingUnpaid > 0 ? ` · ₦${board.waitingUnpaid.toLocaleString()} not paid yet` : ' · all paid'}
+            </p>
+          </div>
+        </button>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { ArrowLeft, BarChart3, CheckCircle2, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, XCircle, type LucideIcon } from 'lucide-react';
-import { receivedBetween, receivedByChannel } from '@/lib/money-figures';
+import { receivedBetween, receivedByChannel, waitingToCollect } from '@/lib/money-figures';
 import type { StoreData } from '@/types/store';
 
 type Range = '7d' | '30d' | 'all';
@@ -168,6 +168,9 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       guests: guests.length,
       revenue,
       workTakenIn,
+      // Work still in the shop and the money on it not realised yet - right
+      // now, whichever stretch is chosen.
+      waiting: waitingToCollect(store),
       /*
        * Customers by their id. Over all time this is the customer book, the
        * same number the dashboard shows; over 7 or 30 days it is the
@@ -217,6 +220,12 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
     { label: 'Came back again', value: analytics.returning, icon: RefreshCw },
     { label: 'Money received', value: money(analytics.revenue), icon: BarChart3, period },
     { label: 'Work taken in', value: money(analytics.workTakenIn), icon: BarChart3, period },
+    {
+      label: 'Waiting to be collected',
+      value: money(analytics.waiting.value),
+      icon: ShoppingBag,
+      period: analytics.waiting.unpaid > 0 ? `Right now · ${money(analytics.waiting.unpaid)} not paid yet` : 'Right now',
+    },
     { label: 'Average job', value: money(average), icon: BarChart3, period },
     // A balance, not a flow: what is owed right now, whichever stretch is chosen.
     { label: 'Still owed', value: money(analytics.outstanding), icon: UserRound, period: 'Right now' },

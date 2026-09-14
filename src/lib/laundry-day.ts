@@ -31,6 +31,12 @@ export interface DayBoard {
   owed: number;
   /** How many bundles that money is spread across. */
   owedCount: number;
+  /** Bundles still in the shop - not yet handed back. */
+  waitingCount: number;
+  /** What those bundles are priced at, paid or not. */
+  waitingValue: number;
+  /** How much of that is not paid yet - money not realised. */
+  waitingUnpaid: number;
   /** Nothing to show. A shop with no records should not see four zeros. */
   empty: boolean;
 }
@@ -53,6 +59,9 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
   let ready = 0;
   let owed = 0;
   let owedCount = 0;
+  let waitingCount = 0;
+  let waitingValue = 0;
+  let waitingUnpaid = 0;
 
   for (const record of records) {
     /*
@@ -69,6 +78,18 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
 
     if (record.stage === 'ready') ready += 1;
 
+    /*
+     * Still in the shop: everything not yet handed back. Its price is work
+     * done or under way, and its unpaid part is money not realised yet - the
+     * same rule as waitingToCollect, read here off the decorated record so it
+     * includes bundles taken on another phone.
+     */
+    if (record.stage !== 'collected') {
+      waitingCount += 1;
+      waitingValue += Number(record.total) || 0;
+      waitingUnpaid += Math.max(0, Number(record.balance) || 0);
+    }
+
     // Owed counts a handed-over bundle too. Money does not stop being owed
     // because the clothes left the shop - that is exactly when it gets
     // forgotten on paper.
@@ -84,6 +105,9 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
     ready,
     owed: Math.round(owed),
     owedCount,
+    waitingCount,
+    waitingValue: Math.round(waitingValue),
+    waitingUnpaid: Math.round(waitingUnpaid),
     empty: records.length === 0,
   };
 }

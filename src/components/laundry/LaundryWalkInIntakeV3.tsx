@@ -130,6 +130,27 @@ function rememberCustomDue(hours: number): void {
   try { localStorage.setItem(CUSTOM_DUE_KEY, String(Math.round(hours))); } catch { /* private mode */ }
 }
 
+/*
+ * The turnaround this shop last chose, per shop, so the next bundle starts on
+ * it. Kept as hours rather than a date: "two days" means two days from each
+ * new bundle, not the date that was two days from the last one.
+ */
+const LAST_DUE_KEY = 'storeflow_laundry_last_due_hours_';
+
+function readLastDue(accessCode: string): number | null {
+  try {
+    const raw = Number(localStorage.getItem(LAST_DUE_KEY + String(accessCode || '').toUpperCase()));
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberLastDue(accessCode: string, hours: number): void {
+  if (!accessCode || !Number.isFinite(hours) || hours <= 0) return;
+  try { localStorage.setItem(LAST_DUE_KEY + String(accessCode).toUpperCase(), String(Math.round(hours))); } catch { /* private mode */ }
+}
+
 function describeHours(hours: number): string {
   const rounded = Math.round(hours);
   if (rounded < 24) return `${rounded} hour${rounded === 1 ? '' : 's'}`;
@@ -223,6 +244,8 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   const [notes, setNotes] = useState('');
   const [promisedFor, setPromisedFor] = useState('');
   const [promisedTouched, setPromisedTouched] = useState(false);
+  /** The turnaround chosen, held as a choice rather than read back off the clock. */
+  const [dueHours, setDueHours] = useState<number | null>(null);
   const [milestone, setMilestone] = useState<MilestoneDef | null>(null);
   const [pickingCustom, setPickingCustom] = useState(false);
   const [shelfLocation, setShelfLocation] = useState('');
@@ -349,7 +372,17 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     setTotalPrice('');
     setPriceTouched(false);
     setNotes('');
-    // Keep the merchant's selected due date until they manually change it.
+    /*
+     * The due date starts on the turnaround last chosen, counted from now.
+     * This used to keep the previous bundle's exact date and time, which
+     * matched no chip a minute later - so the next bundle opened on "Custom".
+     */
+    const lastDue = readLastDue(String(store.accessCode || ''));
+    if (lastDue) {
+      setDueHours(lastDue);
+      setPromisedFor(promisedInHours(lastDue));
+      setPromisedTouched(true);
+    }
     setWashMethodId('manual:hand-wash');
     setDryMethodId('manual:sun-dry');
     setCreated(null);
@@ -525,7 +558,11 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
 
       reassignLaundryPhotos(draftRef, localRecord.clientRef).catch(() => {});
       onRecorded?.(localRecord.clientRef);
-      if (activeHours) recordDueChoice(accessCode, activeHours);
+      if (activeHours) {
+        recordDueChoice(accessCode, activeHours);
+        // Also the default the merchant simply accepted without tapping.
+        rememberLastDue(accessCode, activeHours);
+      }
 
       nextStore = recordLaundryPayment(nextStore, {
         clientRef: localRecord.clientRef,
@@ -625,7 +662,13 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
 
   const canSave = Boolean(customerName.trim() && (!customerPhone.trim() || validPhone(customerPhone)) && selectedService && pieceCount > 0 && Number.isFinite(Number(totalPrice)));
   const saveLabel = practice ? 'Try it (nothing saved)' : 'Record Laundry';
-  const activeHours = activePreset(promisedFor, [
+  /*
+   * The choice the merchant made, held as a choice. This worked out the
+   * selected chip by comparing the due time with the clock, within a minute,
+   * so a chip tapped and then a form that took two minutes to fill showed
+   * "Custom" by the time it was saved.
+   */
+  const activeHours = dueHours ?? activePreset(promisedFor, [
     ...DUE_PRESETS,
     ...(customDue ? [{ label: describeHours(customDue), hours: customDue }] : []),
   ]);
@@ -916,7 +959,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
               <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-0.5 px-0.5 py-0.5">
                 {dueChips.map(chip => {
                   const active = activeHours === chip.hours;
-                  return <button key={chip.label} type="button" onClick={() => { setPromisedFor(promisedInHours(chip.hours)); setPromisedTouched(true); }} aria-pressed={active} className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${active ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'}`}>{chip.label}</button>;
+                  return <button key={chip.label} type="button" onClick={() => { setDueHours(chip.hours); setPromisedFor(promisedInHours(chip.hours)); setPromisedTouched(true); rememberLastDue(String(store.accessCode || ''), chip.hours); }} aria-pressed={active} className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${active ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'}`}>{chip.label}</button>;
                 })}
                 <button type="button" onClick={() => setPickingCustom(current => !current)} aria-expanded={pickingCustom} className={`h-9 shrink-0 px-3 rounded-full border text-xs font-display font-bold transition active:scale-95 ${pickingCustom || activeHours === null ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'}`}>Custom</button>
               </div>
@@ -931,6 +974,10 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
                     if (Number.isFinite(hours) && hours > 0) {
                       rememberCustomDue(hours);
                       setCustomDue(Math.round(hours));
+                      setDueHours(Math.round(hours));
+                      rememberLastDue(String(store.accessCode || ''), hours);
+                    } else {
+                      setDueHours(null);
                     }
                   }} className="w-full bg-transparent py-3 text-sm outline-none" />
                 </div>

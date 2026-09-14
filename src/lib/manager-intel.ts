@@ -1,5 +1,5 @@
 import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
-import { runningCostsBetween } from '@/lib/money-figures';
+import { receivedBetween, runningCostsBetween } from '@/lib/money-figures';
 import { countDebtors } from '@/lib/customer-key';
 import { allowedNotifications, wantsNotification } from '@/lib/notification-gate';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
@@ -295,6 +295,42 @@ function serviceRecords(store: StoreData) {
   } catch {
     return [];
   }
+}
+
+/**
+ * Store Health as a shop sees it: the score, and the last seven days' money.
+ *
+ * The card worked these out for itself and Flow worked out its own - a score
+ * made up from a few stock counts, and profit before any costs - so asking
+ * Flow how the store was doing gave a different number from the card on the
+ * same screen. Both read this now.
+ */
+export interface StoreHealthFigures {
+  score: number;
+  label: string;
+  /** Money received, last 7 days. */
+  revenue: number;
+  /** Running costs, last 7 days, with piece work counted when approved. */
+  expenses: number;
+  /** Sales profit less those costs. */
+  profit: number;
+}
+
+export function storeHealthFigures(store: StoreData, now: number = Date.now()): StoreHealthFigures {
+  const health = healthScore(store);
+  const from = now - 7 * 86400000;
+  const to = Number.MAX_SAFE_INTEGER;
+  const expenses = runningCostsBetween(store, from, to);
+  const salesProfit = (store.sales || [])
+    .filter(sale => new Date(sale.date).getTime() >= from)
+    .reduce((sum, sale) => sum + (Number(sale.profit) || 0), 0);
+  return {
+    score: health.overall,
+    label: health.label,
+    revenue: receivedBetween(store, from, to),
+    expenses,
+    profit: salesProfit - expenses,
+  };
 }
 
 export function healthScore(store: StoreData): HealthScore {

@@ -2,7 +2,7 @@ import { Customer, Product, StoreData, TabId } from '@/types/store';
 import { customerBrief, customerRoundup, findCustomer, isServiceShop, serviceHelp, serviceList, serviceOverview, serviceWorkload } from '@/lib/flow-service-brain';
 import { shopProfileBrief } from '@/lib/flow-shop-profile';
 import { fuzzyIntent } from '@/lib/flow-fuzzy-intent';
-import { inventoryIntelligence } from '@/lib/manager-intel';
+import { inventoryIntelligence, storeHealthFigures } from '@/lib/manager-intel';
 import { loadBrainMemory, resolveBrainAlias } from '@/lib/flow-brain-memory';
 
 export type OperatingIntent = 'sell'|'restock'|'add_product'|'undo'|'store_overview'|'inventory'|'sales'|'profit'|'best_sellers'|'slow_products'|'pricing'|'customers'|'customer_lookup'|'shop_profile'|'expenses'|'finance'|'orders'|'improvement'|'why'|'recommendations'|'navigation'|'settings'|'product_lookup'|'help'|'unknown';
@@ -93,6 +93,8 @@ export function understand(store:StoreData,raw:string,lastProduct?:Product|null,
 
 function recent(store:StoreData,days:number){const cut=Date.now()-days*86400000;return(store.sales||[]).filter(s=>new Date(s.date).getTime()>=cut);}
 function money(n:number){return`₦${Math.round(n||0).toLocaleString()}`;}
+/** Store Health said the way the card says it, from the very same figures. */
+function healthLine(store:StoreData){const h=storeHealthFigures(store);return`Store Health is **${h.score}/100** (${h.label}). Last 7 days: **${money(h.revenue)}** received, **${money(h.profit)}** profit after costs.`;}
 export function storeAnalysis(store:StoreData){
  const products=(store.products||[]).filter(p=>!p.discontinued),s7=recent(store,7),s30=recent(store,30),threshold=store.managerSettings?.criticalStockThreshold??5;const units=new Map<string,number>(),rev=new Map<string,number>();
  for(const s of s30){units.set(s.productId,(units.get(s.productId)||0)+s.quantity);rev.set(s.productId,(rev.get(s.productId)||0)+s.total);}
@@ -109,7 +111,7 @@ export function responseFor(store:StoreData,plan:OperatingPlan){const a=storeAna
  // to account for is work in the shop, promised days and money owed.
  case 'shop_profile':return shopProfileBrief(store);
  case 'customer_lookup':return plan.customer?customerBrief(store,plan.customer):customerRoundup(store);
- case 'store_overview':if(isServiceShop(store))return serviceOverview(store);{const health=Math.max(0,Math.min(100,Math.round(72+(a.revenue7>0?8:-8)-a.out.length*5-a.underpriced.length*2-a.dead.length)));return`Your store is at about **${health}/100**.\n\nRevenue (7 days): **${money(a.revenue7)}**\nProfit (7 days): **${money(a.profit7)}**\nInventory value: **${money(a.stockValue)}**\n${a.low.length+a.out.length?`⚠️ **${a.low.length+a.out.length} products** need restocking.`:'✅ Inventory looks stable.'}\n${a.salesChange>0?`📈 Sales pace is about **${a.salesChange}% higher** than your 30-day pace.`:a.salesChange<0?`📉 Sales pace is about **${Math.abs(a.salesChange)}% lower** than your 30-day pace.`:'Sales pace is stable.'}\n\n**Priority:** ${(()=>{const top=rankedRestocks(store)[0];return top?`restock ${top.product.name}`:a.underpriced.length?`review ${a.underpriced[0].name}'s price`:'keep monitoring sales and stock';})()}.`;}
+ case 'store_overview':if(isServiceShop(store))return`${healthLine(store)}\n\n${serviceOverview(store)}`;{const h=storeHealthFigures(store);return`Store Health is **${h.score}/100** (${h.label}).\n\nRevenue (7 days): **${money(h.revenue)}**\nProfit (7 days, after costs): **${money(h.profit)}**\nInventory value: **${money(a.stockValue)}**\n${a.low.length+a.out.length?`⚠️ **${a.low.length+a.out.length} products** need restocking.`:'✅ Inventory looks stable.'}\n${a.salesChange>0?`📈 Sales pace is about **${a.salesChange}% higher** than your 30-day pace.`:a.salesChange<0?`📉 Sales pace is about **${Math.abs(a.salesChange)}% lower** than your 30-day pace.`:'Sales pace is stable.'}\n\n**Priority:** ${(()=>{const top=rankedRestocks(store)[0];return top?`restock ${top.product.name}`:a.underpriced.length?`review ${a.underpriced[0].name}'s price`:'keep monitoring sales and stock';})()}.`;}
  case 'inventory':if(isServiceShop(store))return serviceWorkload(store);{const list=[...a.out,...a.low].slice(0,8);return list.length?`Products needing stock attention:\n${list.map((p,i)=>`${i+1}. **${p.name}** — ${p.quantity} left`).join('\n')}\n\n${a.out.length?`🔴 ${a.out.length} out of stock.`:''}`:'Your active products are not currently below the low-stock threshold.';}
  case 'best_sellers':if(isServiceShop(store))return serviceList(store);return a.top.length?`Best sellers over the last 30 days:\n${a.top.map((x,i)=>`${i+1}. **${x.product.name}** — ${x.units} units / ${money(x.revenue)}`).join('\n')}`:'I do not have enough sales history yet.';
  case 'slow_products':return a.dead.length?`These products have stock but no recorded sale in 30 days:\n${a.dead.slice(0,8).map(p=>`• **${p.name}** — ${p.quantity} left`).join('\n')}\n\nI would pause new buying until they move.`:'Nothing is completely idle right now.';

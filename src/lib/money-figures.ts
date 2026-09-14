@@ -24,6 +24,7 @@ import type { StoreData } from '@/types/store';
 import { getLocalLaundryRecords, type LocalLaundryRecord } from '@/lib/laundry-offline';
 import { getOperatingExpenses } from '@/lib/store-data';
 import { approvedLabourBetween, PIECE_WORK_CATEGORY } from '@/lib/piece-work';
+import { laundryBalance } from '@/lib/laundry-money';
 
 function timeOf(value: unknown): number {
   const at = new Date(String(value || '')).getTime();
@@ -119,4 +120,43 @@ export function runningCostsBetween(store: Pick<StoreData, 'expenses' | 'pieceWo
     .filter(expense => inside(timeOf(expense.date), from, to))
     .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
   return expenses + approvedLabourBetween(store, from, to);
+}
+
+export interface WaitingToCollect {
+  /** Bundles not yet handed back. */
+  count: number;
+  /** What they are priced at, paid or not. */
+  value: number;
+  /** How much of that has not been paid - money not realised yet. */
+  unpaid: number;
+}
+
+/**
+ * Work still in the shop, and the money on it not realised yet.
+ *
+ * Everything not yet handed back: its price is work the shop has done or is
+ * doing, and its unpaid part is money the shop has earned in effort and not in
+ * cash. Different from what is owed, which also counts bundles that have
+ * already left the shop unpaid.
+ */
+export function waitingToCollect(store: Pick<StoreData, 'accessCode' | 'pendingPayments'>): WaitingToCollect {
+  const accessCode = String(store.accessCode || '');
+  const none = { count: 0, value: 0, unpaid: 0 };
+  if (!accessCode) return none;
+  let records: LocalLaundryRecord[];
+  try {
+    records = getLocalLaundryRecords(accessCode);
+  } catch {
+    return none;
+  }
+  let count = 0;
+  let value = 0;
+  let unpaid = 0;
+  for (const record of records) {
+    if (record.workflowStage === 'collected') continue;
+    count += 1;
+    value += Number(record.total) || 0;
+    unpaid += Math.max(0, laundryBalance(store as StoreData, record.clientRef));
+  }
+  return { count, value: Math.round(value), unpaid: Math.round(unpaid) };
 }

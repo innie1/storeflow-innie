@@ -10,7 +10,7 @@ import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId, AutoPriceE
 import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId } from '@/lib/store-data';
 import PerformanceCalendar from '@/components/PerformanceCalendar';
 import {
-  healthScore, forecastHorizon, generateRecommendations, generateInsights,
+  healthScore, storeHealthFigures, forecastHorizon, generateRecommendations, generateInsights,
   generateAdvice, topCustomerRequests, mostActivePeriods, inventoryIntelligence,
   expenseAnalysis, rentAnalysis, pricingAlerts, analyzeSales, flowGreeting,
   generateNotifications, ActivityRange, ActivityBucket, buildFlowReport, stockCoverLabel, type FlowReport,
@@ -149,12 +149,8 @@ function StoreHealthCard({ store, onOpenBreakdown, animate = true }: { store: St
    * Profit takes those costs off: it used to be the sales profit alone, which
    * for a laundry is the whole payment, so it read the same as Revenue.
    */
-  const weekFrom = Date.now() - 7 * 86400000;
-  const weekTo = Number.MAX_SAFE_INTEGER;
-  const last7Sales = store.sales.filter(s => new Date(s.date).getTime() >= weekFrom);
-  const revenue = receivedBetween(store, weekFrom, weekTo);
-  const expenses = runningCostsBetween(store, weekFrom, weekTo);
-  const profit = last7Sales.reduce((s, x) => s + (Number(x.profit) || 0), 0) - expenses;
+  // The same figures Flow gives when asked how the store is doing.
+  const { revenue, expenses, profit } = storeHealthFigures(store);
 
   const animatedHealth = useCountUp(animate ? health.overall : 0, 1500);
   const displayHealth = animate ? animatedHealth : health.overall;
