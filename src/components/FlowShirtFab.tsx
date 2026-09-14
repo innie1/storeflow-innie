@@ -141,6 +141,34 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
     [store.products],
   );
 
+  /*
+   * True while the page is being scrolled, for a moment after.
+   *
+   * Passive listener and a plain timeout rather than anything clever: this
+   * runs on every scroll of every screen, and a decorative button is not worth
+   * a frame of the merchant's phone.
+   *
+   * Above the return below, like every hook in here. It used to sit after it,
+   * so a store with this button switched off called two fewer hooks than a
+   * store with it on, and switching between the two crashed the whole app
+   * (React error #310). No listener while the button is hidden.
+   */
+  const [scrolling, setScrolling] = useState(false);
+  useEffect(() => {
+    if (!floatingShortcutEnabled) return;
+    let timer: number | undefined;
+    const onScroll = () => {
+      setScrolling(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setScrolling(false), 700);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.clearTimeout(timer);
+    };
+  }, [floatingShortcutEnabled]);
+
   if (!floatingShortcutEnabled) return null;
 
   const commit = (updated: StoreData) => {
@@ -269,29 +297,6 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
     const updated = { ...store, products: store.products.map(product => product.id !== productId ? product : { ...product, voiceAliases: (product.voiceAliases || []).some(existing => existing.toLowerCase() === clean) ? product.voiceAliases : [...(product.voiceAliases || []), clean] }) } as StoreData;
     commit(updated);
   };
-
-
-  /*
-   * True while the page is being scrolled, for a moment after.
-   *
-   * Passive listener and a plain timeout rather than anything clever: this
-   * runs on every scroll of every screen, and a decorative button is not worth
-   * a frame of the merchant's phone.
-   */
-  const [scrolling, setScrolling] = useState(false);
-  useEffect(() => {
-    let timer: number | undefined;
-    const onScroll = () => {
-      setScrolling(true);
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => setScrolling(false), 700);
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.clearTimeout(timer);
-    };
-  }, []);
 
   return (
     <>
