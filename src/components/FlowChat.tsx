@@ -403,8 +403,18 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     const paymentMatch = q.match(/^(?:record|add|log)\s+(?:a\s+)?payment\s+(?:of\s+)?₦?[\d,]+(?:\.\d+)?\s+(?:from|by)\s+(.+)$/i) || q.match(/^(.+?)\s+(?:paid|has paid)\s+₦?[\d,]+(?:\.\d+)?$/i);
     if (paymentMatch) {
       const customerName = paymentMatch[1].trim();
-      const customer = (store.customers || []).find(c => c.name.toLowerCase() === customerName.toLowerCase() || c.name.toLowerCase().includes(customerName.toLowerCase()));
-      const pending = customer ? (store.pendingPayments || []).find(p => p.customerName.toLowerCase() === customer.name.toLowerCase() && p.status === 'pending') : undefined;
+      /*
+       * One customer, or none. This took the first name that matched, so with
+       * two Musa Bellos a payment went against whichever was recorded first.
+       * An exact name beats a partial one, and more than one match is refused
+       * rather than guessed - the same rule the counter follows.
+       */
+      const typed = customerName.toLowerCase();
+      const exact = (store.customers || []).filter(c => c.name.toLowerCase() === typed);
+      const candidates = exact.length > 0 ? exact : (store.customers || []).filter(c => c.name.toLowerCase().includes(typed));
+      if (candidates.length > 1) { flow(`More than one customer is called **${customerName}**. Record this from their debt so it goes against the right person.`); return true; }
+      const customer = candidates[0];
+      const pending = customer ? (store.pendingPayments || []).find(p => p.status === 'pending' && (p.customerId ? p.customerId === customer.id : p.customerName.toLowerCase() === customer.name.toLowerCase())) : undefined;
       if (!pending) { flow(`I couldn't find a pending debt for **${customerName}**. I won't record a payment against the wrong customer.`); return true; }
       const effective = Math.min(amount, pending.balance);
       confirm(`Record ${money(effective)} payment from **${pending.customerName}**?`, () => { rememberUndo(); const next = flowRecordPayment(store, pending.id, effective, 'cash'); onUpdate(next); flow(`Done. **${pending.customerName}** now owes about **${money(Math.max(0, pending.balance - effective))}**.`); showToast('Payment recorded by Flow', 'success'); });

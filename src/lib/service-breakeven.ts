@@ -17,6 +17,7 @@
 
 import type { StoreData } from '@/types/store';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { receivedBetween } from '@/lib/money-figures';
 import { estimateUnitCost, isVariableCost } from '@/lib/cost-estimator';
 import { isStockPurchase } from '@/lib/store-data';
 
@@ -139,23 +140,35 @@ export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthW
 
 export interface PiecesAndRevenue {
   pieces: number;
+  /** Money received this month - payments, by the day they were paid. */
   revenue: number;
+  /** The price of the work taken in this month, paid or not. */
+  workTakenIn: number;
 }
 
-/** What the shop took in, and how many pieces it took in, this month. */
+/** The money that came in this month, the work taken in, and its pieces. */
 export function monthToDate(store: StoreData, window: MonthWindow = monthWindow()): PiecesAndRevenue {
   const accessCode = String(store.accessCode || '');
   const records = accessCode ? getLocalLaundryRecords(accessCode) : [];
 
   let pieces = 0;
-  let revenue = 0;
+  let workTakenIn = 0;
   for (const record of records) {
     if (!inWindow(record.createdAt, window)) continue;
     // Pieces, not bundles: one shirt is one, twenty shirts are twenty.
     pieces += Number(record.pieceCount) || 0;
-    revenue += Number(record.total) || 0;
+    workTakenIn += Number(record.total) || 0;
   }
-  return { pieces, revenue };
+
+  /*
+   * Revenue is money received, not the price of the bundles.
+   *
+   * This added up bundle prices, paid or not, while the Revenue card it sits
+   * on counted payments. So the ring could say the month was covered while
+   * most of that money was still owed, beside a card reading ₦0 for today.
+   */
+  const revenue = receivedBetween(store, window.start, window.end);
+  return { pieces, revenue, workTakenIn };
 }
 
 /**
@@ -176,7 +189,10 @@ export interface BreakEven {
   /** What must be taken this month to cover the fixed costs. */
   target: number;
   fixedCosts: number;
+  /** Money received this month - payments, by the day they were paid. */
   revenue: number;
+  /** The price of the work taken in this month, paid or not. */
+  workTakenIn: number;
   pieces: number;
   /** Revenue less what those pieces consumed. This is what pays the rent. */
   contribution: number;
@@ -206,7 +222,7 @@ export interface BreakEven {
 export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
   const window = monthWindow(at);
   const fixedCosts = monthlyFixedCosts(store, window);
-  const { pieces, revenue } = monthToDate(store, window);
+  const { pieces, revenue, workTakenIn } = monthToDate(store, window);
   const perPiece = variableCostPerPiece(store);
 
   const consumed = perPiece === null ? 0 : perPiece * pieces;
@@ -216,8 +232,13 @@ export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
    * The share of each naira left after what the work consumed. Without enough
    * pieces to know it, the target is the fixed costs alone rather than a
    * guessed margin - understating it is safer than inventing one.
+   *
+   * Taken from the price of the work, not from money received. The margin is
+   * a property of what a job is priced at; money received lags the work, so a
+   * month with a lot still unpaid would read as almost no margin and the
+   * target would balloon to many times the real costs.
    */
-  const marginRate = revenue > 0 && consumed > 0 ? Math.max(0.05, contribution / revenue) : 1;
+  const marginRate = workTakenIn > 0 && consumed > 0 ? Math.max(0.05, (workTakenIn - consumed) / workTakenIn) : 1;
   const target = marginRate > 0 ? fixedCosts / marginRate : fixedCosts;
 
   const remaining = Math.max(0, target - revenue);
@@ -238,6 +259,7 @@ export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
     target,
     fixedCosts,
     revenue,
+    workTakenIn,
     pieces,
     contribution,
     remaining,
@@ -257,7 +279,7 @@ export function breakEvenSentence(state: BreakEven): string {
     return 'Record your rent, salaries and other monthly costs and I can tell you what you need to make.';
   }
   if (state.reached) {
-    return `You have covered this month's costs and taken ₦${Math.round(state.surplus).toLocaleString()} above them.`;
+    return `You have covered this month's costs and brought in ₦${Math.round(state.surplus).toLocaleString()} above them.`;
   }
 
   const perDay = `₦${Math.round(state.perDayNeeded).toLocaleString()} a day for the ${state.daysLeft} ${state.daysLeft === 1 ? 'day' : 'days'} left`;

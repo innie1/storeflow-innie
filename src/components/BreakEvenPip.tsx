@@ -69,10 +69,10 @@ export default function BreakEvenPip({ store, canSeeMoney, onOpen }: Props) {
   const label = !hasTarget ? 'Set costs' : state.reached ? 'Covered' : `${percent}%`;
 
   const title = !hasTarget
-    ? 'Record your rent and monthly costs to see what this month must take'
+    ? 'Record your rent and monthly costs to see what this month must bring in'
     : state.reached
       ? "This month's costs are covered"
-      : `${percent}% of what this month must take · ${state.pace}`;
+      : `${percent}% of the money this month must bring in · ${state.pace}`;
 
   return (
     <button

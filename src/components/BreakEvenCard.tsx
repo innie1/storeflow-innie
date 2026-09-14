@@ -84,7 +84,7 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] uppercase font-black text-muted-foreground flex items-center gap-1.5">
-            <Target className="w-3 h-3" /> This month
+            <Target className="w-3 h-3" /> Received this month
           </p>
           <p className="font-display font-black text-xl mt-1">
             {state.target > 0 ? money(state.revenue) : '—'}
@@ -112,6 +112,14 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
       <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
         {breakEvenSentence(state)}
       </p>
+
+      {/* The price of the work beside the money for it, so a busy month with
+          little paid shows as exactly that. */}
+      {state.target > 0 && state.workTakenIn > 0 && (
+        <p className="text-[10px] text-muted-foreground mt-1">
+          {money(state.workTakenIn)} of work taken in this month.
+        </p>
+      )}
 
       {/*
         Said where the number is, so it is never mistaken for something the

@@ -51,10 +51,11 @@ describe('it reads the counter, not only the storefront', () => {
     expect(analytics).toContain("record.workflowStage === 'collected' ? 'collected'");
   });
 
-  it('keys a walk-in customer by phone, so repeat visits join up', () => {
+  it('keys a walk-in customer by their customer id, so repeat visits join up', () => {
     // Without this every bundle would look like a new person and "came back
-    // again" could never be anything but zero.
-    expect(analytics).toContain('customer_id: record.customerPhone || record.customerName');
+    // again" could never be anything but zero. By id first, because keying by
+    // phone counted one customer with two numbers as two people.
+    expect(analytics).toContain('customer_id: record.customerId || record.customerPhone || record.customerName');
   });
 
   it('merges both sources rather than replacing one with the other', () => {
@@ -82,7 +83,8 @@ describe('the cards describe this trade', () => {
 
   it('leaves a product shop with its original cards', () => {
     expect(analytics).toContain("label: 'Guest buyers'");
-    expect(analytics).toContain("label: 'Order revenue'");
+    // Revenue, because it is now every payment received, in the shop and online.
+    expect(analytics).toContain("label: 'Revenue'");
     expect(analytics).toContain('isService ? serviceCards : retailCards');
   });
 });
@@ -90,6 +92,24 @@ describe('the cards describe this trade', () => {
 describe('what it says', () => {
   it('describes a service shop in its own words', () => {
     expect(analytics).toContain('Who brings you work, what you have handed back, and who comes again.');
+  });
+
+  it('counts money received, the same figure as the dashboard', () => {
+    // It used to add up the price of bundles handed back, paid or not, and so
+    // counted money that was also listed as still owed.
+    expect(analytics).toContain('const revenue = receivedBetween(store, windowFrom, windowTo);');
+    expect(analytics).not.toContain('revenue: revenue || salesRevenue');
+    expect(analytics).toContain("label: 'Money received'");
+    expect(analytics).toContain("label: 'Work taken in'");
+  });
+
+  it('counts the customer book over all time, like the dashboard', () => {
+    expect(analytics).toContain("customers: range === 'all' ? customers.length : new Set(filteredOrders.map(keyFor)).size");
+  });
+
+  it('says what stretch of time each figure covers', () => {
+    expect(analytics).toContain("const period = range === '7d' ? 'Last 7 days' : range === '30d' ? 'Last 30 days' : 'All time';");
+    expect(analytics).toContain("period: 'Right now'");
   });
 
   it('keeps the outstanding balance honest', () => {

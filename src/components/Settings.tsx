@@ -4471,6 +4471,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               ))}
             </ul>
             <p>Tap it for the full figures. To get a target, record what the month costs you: rent under Edit Profile, salaries on each staff member, and the rest as expenses.</p>
+            <p>It fills with money actually received, not the price of bundles still owed, so the month only shows covered when real money covers the costs.</p>
           </div>
         ),
       },

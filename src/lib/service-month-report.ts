@@ -15,6 +15,8 @@ import type { StoreData } from '@/types/store';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { breakEven, monthWindow, monthlyFixedCosts, type MonthWindow } from '@/lib/service-breakeven';
 import { estimateUnitCost } from '@/lib/cost-estimator';
+import { receivedBetween } from '@/lib/money-figures';
+import { laundryBalance } from '@/lib/laundry-money';
 
 const HISTORY_KEY = 'storeflow_month_history_';
 const CELEBRATED_KEY = 'storeflow_breakeven_celebrated_';
@@ -27,7 +29,12 @@ export function monthKey(at: Date = new Date()): string {
 export interface MonthReport {
   key: string;
   label: string;
+  /** Money received this month - payments, by the day they were paid. */
   revenue: number;
+  /** The price of the drop-offs taken in this month, paid or not. */
+  workTakenIn: number;
+  /** Still owed on this month's drop-offs. */
+  owed: number;
   pieces: number;
   /** Drop-offs, which is not the same as pieces and is not used for costing. */
   jobs: number;
@@ -51,7 +58,7 @@ function monthLabel(key: string): string {
 }
 
 /**
- * The day cumulative takings first cleared the month's target.
+ * The day the money received first cleared the month's target.
  *
  * Measured against the month's finished target rather than a target that moves
  * day by day. The margin is only known once the month has traded, so a
@@ -60,18 +67,19 @@ function monthLabel(key: string): string {
  */
 export function breakEvenDate(store: StoreData, window: MonthWindow, target: number): string | null {
   if (target <= 0) return null;
-  const accessCode = String(store.accessCode || '');
-  const records = (accessCode ? getLocalLaundryRecords(accessCode) : [])
-    .filter(record => {
-      const at = new Date(record.createdAt || '').getTime();
+  // Payments, in the order they came in: the costs are covered by money in
+  // hand, not by work still owed.
+  const payments = (store.sales || [])
+    .filter(sale => {
+      const at = new Date(String(sale.date || '')).getTime();
       return Number.isFinite(at) && at >= window.start && at < window.end;
     })
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   let running = 0;
-  for (const record of records) {
-    running += Number(record.total) || 0;
-    if (running >= target) return record.createdAt;
+  for (const sale of payments) {
+    running += Number(sale.total) || 0;
+    if (running >= target) return sale.date;
   }
   return null;
 }
@@ -86,7 +94,14 @@ export function monthReport(store: StoreData, at: Date = new Date()): MonthRepor
     return Number.isFinite(time) && time >= window.start && time < window.end;
   });
 
-  const revenue = records.reduce((sum, record) => sum + (Number(record.total) || 0), 0);
+  /*
+   * Money received this month, not the price of the drop-offs. A month that
+   * took in plenty of work and was paid for little of it has not earned what
+   * it took in, and "you kept" must not say it has.
+   */
+  const revenue = receivedBetween(store, window.start, window.end);
+  const workTakenIn = records.reduce((sum, record) => sum + (Number(record.total) || 0), 0);
+  const owed = records.reduce((sum, record) => sum + laundryBalance(store, record.clientRef), 0);
   const pieces = records.reduce((sum, record) => sum + (Number(record.pieceCount) || 0), 0);
   const jobs = records.length;
 
@@ -102,26 +117,32 @@ export function monthReport(store: StoreData, at: Date = new Date()): MonthRepor
     key,
     label: monthLabel(key),
     revenue,
+    workTakenIn,
+    owed,
     pieces,
     jobs,
-    averageJob: jobs > 0 ? revenue / jobs : 0,
+    // What a drop-off is priced at - the work, not the payments for it.
+    averageJob: jobs > 0 ? workTakenIn / jobs : 0,
     fixedCosts,
     variableCosts,
     profit,
     target,
     breakEvenOn,
-    summary: summarise({ revenue, pieces, jobs, fixedCosts, variableCosts, profit, breakEvenOn }),
+    summary: summarise({ revenue, workTakenIn, owed, pieces, jobs, fixedCosts, variableCosts, profit, breakEvenOn }),
   };
 }
 
 /** Said the way somebody would say it, not as a table read aloud. */
 function summarise(part: {
-  revenue: number; pieces: number; jobs: number;
+  revenue: number; workTakenIn: number; owed: number; pieces: number; jobs: number;
   fixedCosts: number; variableCosts: number; profit: number; breakEvenOn: string | null;
 }): string {
-  if (part.jobs === 0) return 'No work recorded this month.';
+  if (part.jobs === 0 && part.revenue === 0) return 'No work recorded this month.';
 
-  const took = `You took ${money(part.revenue)} across ${part.jobs} ${part.jobs === 1 ? 'drop-off' : 'drop-offs'} and ${part.pieces} ${part.pieces === 1 ? 'piece' : 'pieces'}.`;
+  const work = part.jobs > 0
+    ? ` You took in ${part.jobs} ${part.jobs === 1 ? 'drop-off' : 'drop-offs'} (${part.pieces} ${part.pieces === 1 ? 'piece' : 'pieces'}) worth ${money(part.workTakenIn)}${part.owed > 0 ? `, ${money(part.owed)} of it still owed` : ''}.`
+    : '';
+  const took = `You received ${money(part.revenue)} this month.${work}`;
   const costs = `Running the shop cost ${money(part.fixedCosts)}, and the washing itself ${money(part.variableCosts)}.`;
 
   if (part.profit >= 0) {
@@ -172,7 +193,8 @@ export function recordMonthSnapshot(store: StoreData, at: Date = new Date()): Mo
 
   const report = monthReport(store, previous);
   // Nothing happened in it, so there is nothing worth keeping.
-  if (report.jobs === 0) return history;
+  // A month with payments but no new drop-offs still took in money worth keeping.
+  if (report.jobs === 0 && report.revenue === 0) return history;
 
   const next = [report, ...history].slice(0, 24);
   try { localStorage.setItem(HISTORY_KEY + accessCode, JSON.stringify(next)); } catch { /* private mode */ }

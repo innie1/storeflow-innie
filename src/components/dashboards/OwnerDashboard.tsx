@@ -1,3 +1,4 @@
+import { countDebtors } from '@/lib/customer-key';
 import { useState, useMemo, useEffect } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { getDashboardStats, getTopSellers, getSalesTargetStatus, sumOperatingExpenses, getAvailableBalance } from '@/lib/store-data';
@@ -92,7 +93,8 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
     const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
     return {
       totalOwed: list.reduce((s, p) => s + p.balance, 0),
-      customerCount: new Set(list.map(p => p.customerName.toLowerCase())).size,
+      // By customer, not by name: two customers who share a name are two debtors.
+      customerCount: countDebtors(list),
     };
   }, [store.pendingPayments]);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownType>(null);

@@ -7,6 +7,7 @@ import {
   BalanceAdjustment, SavingsGoal } from '@/types/store';
 import { attribution } from '@/lib/recorded-by';
 import { backfillCustomerBook } from '@/lib/customer-backfill';
+import { countDebtors } from '@/lib/customer-key';
 import { getLowStockThreshold } from '@/lib/settings';
 import { createAutoBackupSnapshot } from '@/lib/backup-system';
 import { generateStoreUrl } from '@/lib/qr-code';
@@ -2087,19 +2088,31 @@ export function recordCheckout(
 
 export function addPaymentToPending(store: StoreData, id: string, amount: number, method: PaymentMethod = 'cash'): StoreData {
   const list = store.pendingPayments || [];
-  // Reduce outstanding customer debt if customer name matches
   const p = list.find(x => x.id === id);
   let updatedCustomers = store.customers || [];
   if (p && p.customerName) {
-    updatedCustomers = updatedCustomers.map(c => {
-      if (c.name.toLowerCase() === p.customerName.toLowerCase()) {
-        return {
-          ...c,
-          outstandingDebt: Math.max(0, c.outstandingDebt - amount)
-        };
-      }
-      return c;
-    });
+    /*
+     * Off the customer the debt belongs to, and nobody else.
+     *
+     * This took the payment off every customer with the debtor's name, so one
+     * Musa Bello paying reduced both Musa Bellos' balances. The debt's customer
+     * id says whose it is. An old debt without one falls back to its number,
+     * then its name - each only when exactly one customer matches, because two
+     * is a coin toss and the wrong guess moves a debt onto a stranger.
+     */
+    const numberOf = (value: unknown) => String(value || '').replace(/\D/g, '');
+    const byNumber = numberOf(p.customerPhone)
+      ? updatedCustomers.filter(c => numberOf(c.phone) === numberOf(p.customerPhone))
+      : [];
+    const byName = updatedCustomers.filter(c => c.name.toLowerCase() === p.customerName.toLowerCase());
+    const payerId = p.customerId
+      || (byNumber.length === 1 ? byNumber[0].id : '')
+      || (byName.length === 1 ? byName[0].id : '');
+    updatedCustomers = updatedCustomers.map(c => (
+      payerId && c.id === payerId
+        ? { ...c, outstandingDebt: Math.max(0, c.outstandingDebt - amount) }
+        : c
+    ));
   }
 
   let cashAdd = 0;
@@ -2156,7 +2169,8 @@ export function deletePendingPayment(store: StoreData, id: string): StoreData {
 export function getPendingSummary(store: StoreData) {
   const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
   const totalOwed = list.reduce((s, p) => s + p.balance, 0);
-  const customerCount = new Set(list.map(p => p.customerName.toLowerCase())).size;
+  // By customer, not by name: two customers who share a name are two debtors.
+  const customerCount = countDebtors(list);
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
   let collectedThisMonth = 0;
   let collectedAllTime = 0;

@@ -55,6 +55,12 @@ export default function MonthReportCard({ store, canSeeMoney }: Props) {
 
   const shown = showing ? history.find(entry => entry.key === showing) || thisMonth : thisMonth;
   const isCurrent = shown.key === thisMonth.key;
+  /*
+   * A month filed before revenue meant money received. Its `revenue` was the
+   * price of the work, and a closed month is never rewritten, so it is shown
+   * under the name of what it actually counted.
+   */
+  const legacy = typeof (shown as Partial<MonthReport>).workTakenIn !== 'number';
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 text-left">
@@ -76,7 +82,7 @@ export default function MonthReportCard({ store, canSeeMoney }: Props) {
 
       {open && (
         <div className="mt-3 pt-3 border-t border-border">
-          <Row label="Taken" value={money(shown.revenue)} />
+          <Row label={legacy ? 'Work taken in' : 'Money received'} value={money(shown.revenue)} />
           <Row label="Running the shop" value={`−${money(shown.fixedCosts)}`} />
           <Row label="Doing the washing" value={`−${money(shown.variableCosts)}`} />
           <Row
@@ -89,6 +95,8 @@ export default function MonthReportCard({ store, canSeeMoney }: Props) {
             <Row label="Drop-offs" value={String(shown.jobs)} />
             <Row label="Pieces" value={String(shown.pieces)} />
             <Row label="Average drop-off" value={money(shown.averageJob)} />
+            {!legacy && <Row label="Work taken in" value={money(shown.workTakenIn)} />}
+            {!legacy && shown.owed > 0 && <Row label="Still owed on it" value={money(shown.owed)} tone="text-warning" />}
             <Row
               label="Costs covered on"
               value={shown.breakEvenOn ? new Date(shown.breakEvenOn).toLocaleDateString() : 'Not yet'}

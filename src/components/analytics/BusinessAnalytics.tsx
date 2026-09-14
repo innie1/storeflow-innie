@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
-import { ArrowLeft, BarChart3, CheckCircle2, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, XCircle } from 'lucide-react';
+import { ArrowLeft, BarChart3, CheckCircle2, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, XCircle, type LucideIcon } from 'lucide-react';
+import { receivedBetween, receivedByChannel } from '@/lib/money-figures';
 import type { StoreData } from '@/types/store';
 
 type Range = '7d' | '30d' | 'all';
 
 type AnyRecord = Record<string, any>;
+
+/** A figure, and - for anything measured over time - the stretch it covers. */
+type Card = { label: string; value: string | number; icon: LucideIcon; period?: string };
 
 function listFromStore(store: StoreData, names: string[]): AnyRecord[] {
   const root = store as any;
@@ -58,7 +62,9 @@ function walkInOrders(store: StoreData): AnyRecord[] {
     order_number: record.tagCode,
     customer_name: record.customerName,
     customer_phone: record.customerPhone,
-    customer_id: record.customerPhone || record.customerName,
+    // The customer's own id first: one customer, one id, however many
+    // numbers or spellings their bundles carry.
+    customer_id: record.customerId || record.customerPhone || record.customerName,
     total: Number(record.total) || 0,
     // A bundle handed back is this trade's completed order.
     status: record.workflowStage === 'collected' ? 'collected' : String(record.workflowStage || 'received'),
@@ -86,9 +92,25 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
     const successful = filteredOrders.filter(isSuccessfulOrder);
     const guests = filteredOrders.filter(o => o.is_guest === true || o.isGuest === true || (!o.customer_uuid && !o.customer_id));
 
+    /*
+     * Each order's customer, worked out once. customerKey falls back to a
+     * random id for an order with nothing to key on, so asking twice would
+     * give two different people.
+     */
+    const keys = new Map<AnyRecord, string>();
+    const keyFor = (order: AnyRecord) => {
+      let key = keys.get(order);
+      if (!key) { key = customerKey(order); keys.set(order, key); }
+      return key;
+    };
+
+    // The stretch the buttons choose, so every money figure reads the same time.
+    const windowFrom = range === 'all' ? 0 : Date.now() - (range === '7d' ? 7 : 30) * 86400000;
+    const windowTo = Number.MAX_SAFE_INTEGER;
+
     const customerMap = new Map<string, AnyRecord>();
     for (const order of orders) {
-      const key = customerKey(order);
+      const key = keyFor(order);
       const existing = customerMap.get(key) || {
         key,
         name: order.customer_name || order.customerName || 'Guest buyer',
@@ -100,12 +122,26 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
         lastPurchase: 0,
       };
       existing.orders += 1;
-      if (isSuccessfulOrder(order)) {
-        existing.successful += 1;
-        existing.spent += Number(order.total || order.amount || order.subtotal || 0);
-      }
+      if (isSuccessfulOrder(order)) existing.successful += 1;
       existing.lastPurchase = Math.max(existing.lastPurchase, dateOf(order));
       customerMap.set(key, existing);
+    }
+
+    /*
+     * What each customer actually paid, from the payments themselves: a
+     * laundry payment names its bundle and a storefront payment names its
+     * order. This used to add up order prices, so a customer who owed for a
+     * bundle was listed as having spent it.
+     */
+    const payerOf = new Map<string, string>();
+    for (const order of orders) {
+      if (order.walkIn) payerOf.set(`laundry-${order.id}`, keyFor(order));
+      else if (order.id) payerOf.set(`order-${order.id}`, keyFor(order));
+    }
+    for (const sale of sales as AnyRecord[]) {
+      const payer = payerOf.get(String(sale.pendingPaymentId || sale.transactionId || ''));
+      const row = payer ? customerMap.get(payer) : undefined;
+      if (row) row.spent += Number(sale.total) || 0;
     }
 
     const customerRows = [...customerMap.values()].sort((a, b) => b.spent - a.spent);
@@ -113,9 +149,16 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       .filter(payment => payment.status === 'pending')
       .reduce((sum, payment) => sum + Math.max(0, Number(payment.balance) || 0), 0);
     const returning = customerRows.filter(c => c.successful > 1);
-    const revenue = successful.reduce((sum, o) => sum + Number(o.total || o.amount || o.subtotal || 0), 0);
-    const salesInRange = sales.filter((s: AnyRecord) => within(dateOf(s), range));
-    const salesRevenue = salesInRange.reduce((sum: number, s: AnyRecord) => sum + Number(s.total || 0), 0);
+    /*
+     * Money received: payments in the window, by the day they were paid - the
+     * same figure as the dashboard's Revenue card. This used to add up the
+     * price of bundles handed back, paid or not, so it counted money that was
+     * also sitting in "Still owed".
+     */
+    const revenue = receivedBetween(store, windowFrom, windowTo);
+    // The price of the work taken in over the same window, paid or not.
+    const workTakenIn = filteredOrders.reduce((sum, order) => sum + Number(order.total || order.amount || order.subtotal || 0), 0);
+    const byChannel = receivedByChannel(store, windowFrom, windowTo);
 
     return {
       scans: filteredScans.length,
@@ -123,8 +166,15 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       orders: filteredOrders.length,
       successful: successful.length,
       guests: guests.length,
-      revenue: revenue || salesRevenue,
-      customers: Math.max(customers.length, customerRows.length),
+      revenue,
+      workTakenIn,
+      /*
+       * Customers by their id. Over all time this is the customer book, the
+       * same number the dashboard shows; over 7 or 30 days it is the
+       * customers who brought work in during that stretch. It used to count
+       * distinct phone numbers and names, and ignored the buttons.
+       */
+      customers: range === 'all' ? customers.length : new Set(filteredOrders.map(keyFor)).size,
       returning: returning.length,
       customerRows,
       outstanding,
@@ -133,49 +183,53 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       // alongside a counter actually needs.
       counter: {
         orders: filteredOrders.filter(order => order.walkIn).length,
-        revenue: successful.filter(order => order.walkIn)
-          .reduce((sum, order) => sum + Number(order.total || order.amount || order.subtotal || 0), 0),
+        revenue: byChannel.counter,
       },
       online: {
         orders: filteredOrders.filter(order => !order.walkIn).length,
-        revenue: successful.filter(order => !order.walkIn)
-          .reduce((sum, order) => sum + Number(order.total || order.amount || order.subtotal || 0), 0),
+        revenue: byChannel.online,
       },
       recentScans: [...filteredScans].sort((a, b) => dateOf(b) - dateOf(a)).slice(0, 20),
     };
   }, [store, range]);
 
   const isService = isServiceFirstBusiness(store);
+  // Said on every figure measured over time, so no number is read as a different stretch.
+  const period = range === '7d' ? 'Last 7 days' : range === '30d' ? 'Last 30 days' : 'All time';
   const money = (value: number) => `₦${Math.round(value).toLocaleString()}`;
-  const average = analytics.successful > 0 ? analytics.revenue / analytics.successful : 0;
+  // What a job is priced at: the work taken in, over the jobs it came from.
+  const average = analytics.orders > 0 ? analytics.workTakenIn / analytics.orders : 0;
 
   /**
    * A shop that never uses the storefront has nothing to say about scans, and
    * eight cards of zero say only that the app is not watching the right thing.
    * The storefront cards appear once there is storefront activity to report.
    */
-  const storefrontCards = [
+  const storefrontCards: Card[] = [
     { label: 'QR / Storefront scans', value: analytics.scans, icon: Eye },
     { label: 'Unique visitors', value: analytics.uniqueScanners, icon: Globe2 },
   ];
 
-  const serviceCards = [
+  const serviceCards: Card[] = [
     { label: 'Jobs taken in', value: analytics.orders, icon: ShoppingBag },
     { label: 'Handed back', value: analytics.successful, icon: CheckCircle2 },
-    { label: 'Customers served', value: analytics.customers, icon: Users },
+    { label: 'Customers served', value: analytics.customers, icon: Users, period },
     { label: 'Came back again', value: analytics.returning, icon: RefreshCw },
-    { label: 'Collected', value: money(analytics.revenue), icon: BarChart3 },
-    { label: 'Average job', value: money(average), icon: BarChart3 },
-    { label: 'Still owed', value: money(analytics.outstanding), icon: UserRound },
+    { label: 'Money received', value: money(analytics.revenue), icon: BarChart3, period },
+    { label: 'Work taken in', value: money(analytics.workTakenIn), icon: BarChart3, period },
+    { label: 'Average job', value: money(average), icon: BarChart3, period },
+    // A balance, not a flow: what is owed right now, whichever stretch is chosen.
+    { label: 'Still owed', value: money(analytics.outstanding), icon: UserRound, period: 'Right now' },
   ];
 
-  const retailCards = [
+  const retailCards: Card[] = [
     { label: 'Orders received', value: analytics.orders, icon: ShoppingBag },
     { label: 'Successful orders', value: analytics.successful, icon: CheckCircle2 },
     { label: 'Guest buyers', value: analytics.guests, icon: UserRound },
-    { label: 'Customers', value: analytics.customers, icon: Users },
+    { label: 'Customers', value: analytics.customers, icon: Users, period },
     { label: 'Returning buyers', value: analytics.returning, icon: RefreshCw },
-    { label: 'Order revenue', value: money(analytics.revenue), icon: BarChart3 },
+    // All money received, in the shop and online - it used to be online order totals only.
+    { label: 'Revenue', value: money(analytics.revenue), icon: BarChart3, period },
   ];
 
   const cards = [
@@ -203,7 +257,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {cards.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-border bg-card p-4"><Icon className="w-4 h-4 text-primary" /><p className="font-display font-black text-2xl mt-2">{value}</p><p className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</p></div>)}
+        {cards.map(({ label, value, icon: Icon, period: stretch }) => <div key={label} className="rounded-2xl border border-border bg-card p-4"><Icon className="w-4 h-4 text-primary" /><p className="font-display font-black text-2xl mt-2">{value}</p><p className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</p>{stretch && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{stretch}</p>}</div>)}
       </div>
 
       <div className="grid grid-cols-3 gap-2">

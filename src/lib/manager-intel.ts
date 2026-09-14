@@ -1,4 +1,6 @@
 import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
+import { runningCostsBetween } from '@/lib/money-figures';
+import { countDebtors } from '@/lib/customer-key';
 import { allowedNotifications, wantsNotification } from '@/lib/notification-gate';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
@@ -314,9 +316,15 @@ export function healthScore(store: StoreData): HealthScore {
     : rev7 > 0 ? `₦${rev7.toLocaleString()} this week` : 'No sales this week';
 
   // 25%: Profit Performance
+  /*
+   * After running costs - the same profit Store Health shows on its card.
+   * Sales profit alone is the whole payment for a laundry, so the margin read
+   * 100% for every service shop whatever it spent.
+   */
+  const netProfit7 = profit7 - runningCostsBetween(store, startOfDay(new Date()).getTime() - 6 * 86400000, Number.MAX_SAFE_INTEGER);
   let profitScore = 50;
-  if (rev7 > 0) { const margin = profit7 / rev7; profitScore = Math.max(0, Math.min(100, margin * 200)); }
-  const profDetail = rev7 > 0 ? `${((profit7 / rev7) * 100).toFixed(1)}% margin` : 'No sales data';
+  if (rev7 > 0) { const margin = netProfit7 / rev7; profitScore = Math.max(0, Math.min(100, margin * 200)); }
+  const profDetail = rev7 > 0 ? `${((netProfit7 / rev7) * 100).toFixed(1)}% margin after costs` : 'No sales data';
 
   // 15%: Inventory Health
   // Previously: healthy = quantity > threshold, score = healthy/total. This
@@ -2377,7 +2385,8 @@ export function getProfitLeaks(store: StoreData): ProfitLeak[] {
   const pending = getPendingSummary(store);
   const overdue = pending.overdue.reduce((sum, p) => sum + p.balance, 0);
   if (overdue > 0) {
-    const names = new Set(pending.overdue.map(p => p.customerName.toLowerCase())).size;
+    // By customer, not by name, so two customers who share one are two.
+    const names = countDebtors(pending.overdue);
     leaks.push({
       kind: 'stuck',
       category: 'unpaid_debt',

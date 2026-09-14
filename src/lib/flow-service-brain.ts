@@ -1,4 +1,5 @@
 import type { Customer, StoreData } from '@/types/store';
+import { debtorKey } from '@/lib/customer-key';
 import { hasGoneQuiet, quietAfterDays, usualGapDays } from '@/lib/customer-rhythm';
 import { getBusinessTemplate, isServiceFirstBusiness } from '@/lib/business-runtime';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
@@ -62,7 +63,7 @@ export function serviceSnapshot(store: StoreData): ServiceSnapshot {
     ready: open.filter(record => record.workflowStage === 'ready').length,
     today: records.filter(record => new Date(record.createdAt).getTime() >= midnight.getTime()).length,
     owed: openDebts(store).reduce((sum, payment) => sum + Math.max(0, Number(payment.balance) || 0), 0),
-    owedBy: debtorNames(store).length,
+    owedBy: debtors(store).length,
     services: (store.products || [])
       .filter(product => product.isService && !product.discontinued)
       .map(product => product.name),
@@ -79,8 +80,12 @@ function openDebts(store: StoreData) {
 
 const normaliseName = (value: unknown) => String(value || '').trim().toLowerCase();
 
-function debtorNames(store: StoreData): string[] {
-  return Array.from(new Set(openDebts(store).map(payment => normaliseName(payment.customerName)).filter(Boolean)));
+/**
+ * The different customers who owe, by who they are - not by name, which
+ * counted two customers who share one as a single debtor.
+ */
+function debtors(store: StoreData): string[] {
+  return Array.from(new Set(openDebts(store).map(debtorKey).filter(Boolean)));
 }
 
 /**

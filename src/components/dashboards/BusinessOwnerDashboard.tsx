@@ -15,6 +15,7 @@ import BreakEvenPip from '@/components/BreakEvenPip';
 import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
 import { requestSpotlight } from '@/lib/spotlight';
 import { canSeeMoney } from '@/lib/permissions';
+import { bundleCount } from '@/lib/money-figures';
 
 interface BusinessOwnerDashboardProps {
   store: StoreData;
@@ -126,7 +127,9 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
         // the strip look like a summary when it was three unrelated numbers.
         { label: serviceNoun, value: String(serviceCount), icon: '🧺' },
         { label: 'Customers', value: String((store.customers || []).length), icon: '👥' },
-        { label: 'Recorded', value: String((store.sales || []).length), icon: '🧾' },
+        // Bundles, not payments: a deposit and a balance are one job, and an
+        // unpaid bundle is still a job.
+        { label: 'Recorded', value: String(bundleCount(store)), icon: '🧾' },
       ]
     : store.storeType === 'gas_filling'
       ? [

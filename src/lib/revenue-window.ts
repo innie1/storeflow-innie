@@ -8,6 +8,7 @@
  */
 
 import type { StoreData } from '@/types/store';
+import { receivedBetween } from '@/lib/money-figures';
 
 export type Range = 'yesterday' | 'today' | 'fortnight' | 'all';
 
@@ -38,9 +39,6 @@ export function revenueInRange(store: StoreData, range: Range, now: number = Dat
   };
   const window = windows[range];
 
-  return (store.sales || []).reduce((sum, sale) => {
-    const at = new Date(String(sale.date || '')).getTime();
-    if (!Number.isFinite(at) || at < window.from || at >= window.to) return sum;
-    return sum + (Number(sale.total) || 0);
-  }, 0);
+  // Money received, from the one definition every screen shares.
+  return receivedBetween(store, window.from, window.to);
 }

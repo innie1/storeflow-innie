@@ -82,7 +82,9 @@ describe('counting pieces, not drop-offs', () => {
     bundle(20, 10_000);
     const totals = monthToDate(store());
     expect(totals.pieces).toBe(21);
-    expect(totals.revenue).toBe(10_500);
+    expect(totals.workTakenIn).toBe(10_500);
+    // Nothing has been paid for, so no money has come in.
+    expect(totals.revenue).toBe(0);
   });
 });
 
@@ -134,8 +136,12 @@ describe('where the month stands', () => {
   });
 
   it('reports the surplus once the month is covered', () => {
+    // Covered by money received: the bundles are paid for, not just taken in.
     for (let i = 0; i < 30; i += 1) bundle(10, 10_000);
-    const s = store({ expenses: [expense(50_000, 'Rent')] as any });
+    const s = store({
+      expenses: [expense(50_000, 'Rent')] as any,
+      sales: [{ id: 'paid', total: 300_000, profit: 300_000, date: today() }] as any,
+    });
     const state = breakEven(s);
     expect(state.reached).toBe(true);
     expect(state.surplus).toBe(250_000);
@@ -150,7 +156,18 @@ describe('where the month stands', () => {
 
   it('never asks for a negative amount per day', () => {
     for (let i = 0; i < 30; i += 1) bundle(10, 10_000);
-    expect(breakEven(store({ expenses: [expense(50_000, 'Rent')] as any })).perDayNeeded).toBe(0);
+    expect(breakEven(store({
+      expenses: [expense(50_000, 'Rent')] as any,
+      sales: [{ id: 'paid', total: 300_000, profit: 300_000, date: today() }] as any,
+    })).perDayNeeded).toBe(0);
+  });
+
+  it('does not call a month covered on work nobody has paid for', () => {
+    // The ring used to count bundle prices, so this read "Covered" at ₦0 received.
+    for (let i = 0; i < 30; i += 1) bundle(10, 10_000);
+    const state = breakEven(store({ expenses: [expense(50_000, 'Rent')] as any }));
+    expect(state.reached).toBe(false);
+    expect(state.remaining).toBe(50_000);
   });
 });
 

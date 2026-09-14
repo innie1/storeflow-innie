@@ -1,3 +1,5 @@
+import { receivedBetween, runningCostsBetween } from '@/lib/money-figures';
+import { debtorKey } from '@/lib/customer-key';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { isServiceFirstBusiness, runsATill } from '@/lib/business-runtime';
 import { createPortal } from 'react-dom';
@@ -5,7 +7,7 @@ import { allowedNotifications } from '@/lib/notification-gate';
 import { SPOTLIGHT_SIGNAL } from '@/lib/spotlight';
 import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
 import { StoreData, CustomerRequest, DEFAULT_MANAGER_SETTINGS, TabId, AutoPriceEvent } from '@/types/store';
-import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId, sumOperatingExpenses } from '@/lib/store-data';
+import { saveStore, getPendingSummary, updateProduct, undoAutoPrice, generateId } from '@/lib/store-data';
 import PerformanceCalendar from '@/components/PerformanceCalendar';
 import {
   healthScore, forecastHorizon, generateRecommendations, generateInsights,
@@ -140,10 +142,19 @@ function HealthBreakdownModal({ store, onClose }: { store: StoreData; onClose: (
 function StoreHealthCard({ store, onOpenBreakdown, animate = true }: { store: StoreData; onOpenBreakdown: () => void; animate?: boolean }) {
   const health = healthScore(store);
   const tone: 'success' | 'primary' | 'warning' | 'danger' = health.overall >= 80 ? 'success' : health.overall >= 60 ? 'primary' : health.overall >= 40 ? 'warning' : 'danger';
-  const last7Sales = store.sales.filter(s => new Date(s.date).getTime() >= Date.now() - 7 * 86400000);
-  const revenue = last7Sales.reduce((s, x) => s + x.total, 0);
-  const profit = last7Sales.reduce((s, x) => s + x.profit, 0);
-  const expenses = sumOperatingExpenses(store, date => new Date(date).getTime() >= Date.now() - 7 * 86400000);
+  /*
+   * The last seven days, said on the card, from the definitions every screen
+   * shares. Revenue is money received. Expenses are running costs, with piece
+   * work counted when it is approved rather than again when it is paid.
+   * Profit takes those costs off: it used to be the sales profit alone, which
+   * for a laundry is the whole payment, so it read the same as Revenue.
+   */
+  const weekFrom = Date.now() - 7 * 86400000;
+  const weekTo = Number.MAX_SAFE_INTEGER;
+  const last7Sales = store.sales.filter(s => new Date(s.date).getTime() >= weekFrom);
+  const revenue = receivedBetween(store, weekFrom, weekTo);
+  const expenses = runningCostsBetween(store, weekFrom, weekTo);
+  const profit = last7Sales.reduce((s, x) => s + (Number(x.profit) || 0), 0) - expenses;
 
   const animatedHealth = useCountUp(animate ? health.overall : 0, 1500);
   const displayHealth = animate ? animatedHealth : health.overall;
@@ -163,7 +174,7 @@ function StoreHealthCard({ store, onOpenBreakdown, animate = true }: { store: St
   return (
     <button onClick={onOpenBreakdown} className="w-full text-left p-4 rounded-2xl bg-card shadow-card hover:border-primary/30 border border-transparent transition-colors">
       <div className="flex items-center justify-between mb-3">
-        <div><h3 className="font-display font-bold text-base">Store Health</h3><p className="text-[10px] text-muted-foreground">Tap to see breakdown</p></div>
+        <div><h3 className="font-display font-bold text-base">Store Health</h3><p className="text-[10px] text-muted-foreground">Last 7 days · tap to see breakdown</p></div>
         <span className="text-muted-foreground">›</span>
       </div>
       <div className="flex items-center gap-4">
@@ -192,10 +203,21 @@ function MoneyOwedCard({ store, onClick }: { store: StoreData; onClick?: () => v
   const advices: string[] = [];
   if (s.totalOwed > 0) advices.push(`Collecting 50% would add ₦${Math.round(s.totalOwed * 0.5).toLocaleString()} this month.`);
   if (s.overdue.length > 0) advices.push(`${s.overdue.length} customer${s.overdue.length === 1 ? ' is' : 's are'} overdue.`);
-  const nameCount = new Map<string, number>();
-  (store.pendingPayments || []).forEach(p => nameCount.set(p.customerName, (nameCount.get(p.customerName) || 0) + 1));
-  const repeat = [...nameCount.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (repeat && repeat[1] >= 2) advices.push(`${repeat[0]} has delayed payment ${repeat[1]} times.`);
+  /*
+   * Grouped by customer, not by name. By name, two customers who share one had
+   * their records added together, so one Musa Bello was said to have delayed
+   * payment four times when two different Musas had two each.
+   */
+  const byCustomer = new Map<string, { name: string; count: number }>();
+  (store.pendingPayments || []).forEach(p => {
+    const key = debtorKey(p);
+    if (!key) return;
+    const entry = byCustomer.get(key) || { name: p.customerName, count: 0 };
+    entry.count += 1;
+    byCustomer.set(key, entry);
+  });
+  const repeat = [...byCustomer.values()].sort((a, b) => b.count - a.count)[0];
+  if (repeat && repeat.count >= 2) advices.push(`${repeat.name} has delayed payment ${repeat.count} times.`);
   return (
     <div
       onClick={onClick}

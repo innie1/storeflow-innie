@@ -45,12 +45,16 @@ describe('how the month went', () => {
     expect(report.averageJob).toBe(5_250);
   });
 
-  it('takes both kinds of cost off the takings', () => {
+  it('takes both kinds of cost off the money received', () => {
     for (let i = 0; i < 5; i += 1) job(10, 20_000);
-    const store = laundry({ expenses: [spend(50_000, 'Rent'), spend(10_000, 'Consumables')] as any });
+    const store = laundry({
+      expenses: [spend(50_000, 'Rent'), spend(10_000, 'Consumables')] as any,
+      sales: [{ id: 'paid', total: 100_000, profit: 100_000, date: today() }] as any,
+    });
     const report = monthReport(store);
 
     expect(report.revenue).toBe(100_000);
+    expect(report.workTakenIn).toBe(100_000);
     expect(report.fixedCosts).toBe(50_000);
     expect(report.variableCosts).toBe(10_000);
     expect(report.profit).toBe(40_000);
@@ -75,14 +79,28 @@ describe('how the month went', () => {
 describe('the day the month was covered', () => {
   beforeEach(() => localStorage.clear());
 
-  it('is the drop-off that took it over the target', () => {
+  it('is the payment that took it over the target', () => {
+    const at = (hour: number) => {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return new Date(d.getTime() + hour * 3_600_000).toISOString();
+    };
+    const store = laundry({
+      sales: [
+        { id: 'p1', total: 40_000, profit: 40_000, date: at(1) },
+        { id: 'p2', total: 40_000, profit: 40_000, date: at(2) },
+        { id: 'p3', total: 40_000, profit: 40_000, date: at(3) },
+      ] as any,
+    });
+    // The third payment crosses 100,000; the second only reaches 80,000.
+    expect(breakEvenDate(store, monthWindow(), 100_000)).toBe(at(3));
+  });
+
+  it('is not the day work was taken in if nobody has paid for it', () => {
     job(10, 40_000);
     job(10, 40_000);
     job(10, 40_000);
-    const found = breakEvenDate(laundry(), monthWindow(), 100_000);
-    expect(found).not.toBeNull();
-    // The third one crosses 100,000; the second only reaches 80,000.
-    expect(new Date(found!).getTime()).toBeGreaterThanOrEqual(0);
+    expect(breakEvenDate(laundry(), monthWindow(), 100_000)).toBeNull();
   });
 
   it('is nothing when the target was never reached', () => {
@@ -119,7 +137,9 @@ describe('keeping the months', () => {
     const history = recordMonthSnapshot(laundry(), now);
     expect(history).toHaveLength(1);
     expect(history[0].key).toBe(monthKey(lastMonth));
-    expect(history[0].revenue).toBe(20_000);
+    // Nothing was paid on it, so it is kept as work taken in, not as money.
+    expect(history[0].workTakenIn).toBe(20_000);
+    expect(history[0].revenue).toBe(0);
   });
 
   it('does not file the same month twice', () => {
