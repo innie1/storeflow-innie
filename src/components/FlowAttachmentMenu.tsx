@@ -46,7 +46,7 @@ export default function FlowAttachmentMenu({ onClose, onCamera, onPickFile, onRe
         className="fixed inset-0 z-[70] bg-black/20 cursor-default"
       />
       <div
-        className="absolute bottom-[4.6rem] left-4 right-4 z-[80] rounded-2xl border border-border bg-background shadow-2xl p-3 animate-slide-up"
+        className="absolute bottom-[4.6rem] left-4 right-4 md:left-1/4 md:right-1/4 z-[80] rounded-2xl border border-border bg-background shadow-2xl p-3 animate-slide-up"
         role="menu"
       >
         <div className="flex items-start justify-between gap-2">

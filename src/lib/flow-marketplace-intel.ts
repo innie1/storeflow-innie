@@ -1,4 +1,5 @@
 import type { StoreData } from '@/types/store';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import {
   analyzeSales,
   inventoryIntelligence,
@@ -231,7 +232,8 @@ export function flowMarketplaceSuggestions(store: StoreData): string[] {
   if ((store.sales || []).length > 0) out.push('What is selling best?');
   if (pricingAlerts(store).some(a => a.type === 'zero_margin' || a.type === 'underpriced')) out.push('Are my prices right?');
   if ((store.expenses || []).length > 0) out.push('Where is my money going?');
-  if ((store.customerRequests || []).length > 0) out.push('What are customers asking for?');
+  // Stock a shop could carry, so never offered to a service shop.
+  if (!isServiceFirstBusiness(store) && (store.customerRequests || []).length > 0) out.push('What are customers asking for?');
   if ((store.sales || []).length > 0) out.push('What should I expect next month?');
   return out.slice(0, 4);
 }

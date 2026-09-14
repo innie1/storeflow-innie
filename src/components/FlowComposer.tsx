@@ -84,7 +84,7 @@ export default function FlowComposer({
       {/* What is attached, and a way to remove it before sending. Picking a
           file used to navigate straight out of the chat, discarding it. */}
       {attachment && (
-        <div className="px-4 pt-3">
+        <div className="px-4 pt-3 md:w-1/2 md:mx-auto">
           <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border bg-surface-2/50 py-1.5 pl-1.5 pr-2">
             {attachment.previewUrl ? (
               <img src={attachment.previewUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
@@ -120,8 +120,11 @@ export default function FlowComposer({
         input, which ate most of a 375px screen and left the send button
         crushed to 16px because it was the one child without shrink-0.
       */}
+      {/* Half the window on a desktop, centred. Flow opens over the whole
+          screen, and a message box running edge to edge on a wide monitor
+          is a long way to read across. Phones keep the full width. */}
       <form
-        className="relative px-3 py-2"
+        className="relative px-3 py-2 md:w-1/2 md:mx-auto"
         onSubmit={e => { e.preventDefault(); submit(); }}
       >
         {/* The focused border was the brand yellow, which drew a bright ring

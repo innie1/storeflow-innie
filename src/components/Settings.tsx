@@ -87,7 +87,7 @@ import {
 import ScrollLock from '@/components/ScrollLock';
 import { downscaleImageToDataUrl } from '@/lib/downscale-image';
 import { speakAsFlow, type FlowVoiceGender } from '@/lib/flow-voice';
-import { getBusinessTemplate, hasBusinessModule } from '@/lib/business-runtime';
+import { getBusinessTemplate, hasBusinessModule, isServiceFirstBusiness } from '@/lib/business-runtime';
 import { clearPin, enrollFingerprint, fingerprintEnrolled, fingerprintSupported, forgetFingerprint, hasPin, PIN_LENGTH, setPin as savePin } from '@/lib/app-lock';
 
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
@@ -2738,7 +2738,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           </div>
           <div className={`${card} px-4 divide-y divide-border`}>
             <ToggleRow label="Weekly Recaps" checked={mgr.weeklyRecap} onChange={v => updateMgr({ weeklyRecap: v })} />
-            <ToggleRow label="Customer Request Tracking" checked={mgr.customerRequests} onChange={v => updateMgr({ customerRequests: v })} />
+            {/* Only where the card it switches exists - the same rule the Flow page uses. */}
+            {!isServiceFirstBusiness(store) && <ToggleRow label="Customer Request Tracking" checked={mgr.customerRequests} onChange={v => updateMgr({ customerRequests: v })} />}
             <ToggleRow label="Savings Planner" checked={mgr.savingsPlanner} onChange={toggleSavings} />
             <ToggleRow
               label="Floating Flow Shortcut"

@@ -1374,7 +1374,10 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
             </div>
           )}
 
-          {settings.customerRequests && (
+          {/* Customer Requests is about stock a shop could carry ("Peak
+              Milk"). A laundry or any other service shop has none, so it is
+              not shown there at all. */}
+          {settings.customerRequests && !isServiceFirstBusiness(store) && (
             <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
               <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><ShoppingCart className="w-4 h-4" /> Customer Requests</h3>
               <div className="flex gap-2">
@@ -1988,7 +1991,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
               <SupplierPanel />
 
               {/* Customer requests */}
-              {settings.customerRequests && requests.length > 0 && (
+              {settings.customerRequests && !isServiceFirstBusiness(store) && requests.length > 0 && (
                 <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
                   <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><ShoppingCart className="w-4 h-4" /> Top Customer Requests</h3>
                   <div className="space-y-1.5">

@@ -30,6 +30,16 @@ interface Props {
 export default function ContactPickButton({ onPick, className = '' }: Props) {
   const available = contactPickerAvailable();
 
+  /*
+   * Centred with auto margins, not a transform, and no shrink when tapped.
+   *
+   * It was centred by nudging it up half its own height, and pressed it
+   * shrank a little. Both are transforms, and on a phone a tap was reported to
+   * leave the icon hanging below the box it belongs in. Auto margins inside a
+   * full-height slot need no transform at all, and the press shows as a colour
+   * instead - so nothing a tap does can move it out of the bar.
+   */
+
   return (
     <button
       type="button"
@@ -43,7 +53,7 @@ export default function ContactPickButton({ onPick, className = '' }: Props) {
       }}
       aria-label="Choose from contacts"
       title={available ? 'Choose from contacts' : 'This phone cannot share its contacts'}
-      className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center transition active:scale-95 ${
+      className={`absolute right-2 inset-y-0 my-auto w-8 h-8 rounded-lg flex items-center justify-center transition-colors active:bg-surface-2 ${
         available ? 'text-muted-foreground hover:text-primary' : 'text-muted-foreground/50'
       } ${className}`}
     >
