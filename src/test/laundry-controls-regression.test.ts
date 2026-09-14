@@ -6,7 +6,7 @@ import {
   requestLaundryWorkspace,
 } from '@/lib/laundry-workspace';
 import { LAUNDRY_SETTLED_STAGES, nextLaundryStage } from '@/lib/laundry-offline';
-import { rankGarmentsByUsage } from '@/components/laundry/LaundryWalkInIntakeV2';
+import { rankGarmentsByUsage } from '@/components/laundry/LaundryWalkInIntakeV3';
 
 describe('laundry control regressions', () => {
   beforeEach(() => window.sessionStorage.clear());

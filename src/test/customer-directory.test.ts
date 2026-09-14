@@ -174,6 +174,17 @@ describe('one person, not several', () => {
     expect(found.filter(entry => entry.phone === '08055556666')).toHaveLength(1);
   });
 
+  it('keeps one customer when a bundle carries a new number for them', () => {
+    // A changed number, or a second phone. The bundle is still them - and the
+    // load-time backfill reads this list, so a second row here would become a
+    // second customer in the book.
+    seedJobs([job('Musa Bello', '08055556666')]);
+    const found = knownCustomers(store({ customers: [bookCustomer('Musa Bello', '08011112222')] }));
+    expect(found).toHaveLength(1);
+    // And the saved number is not quietly replaced by it.
+    expect(found[0].phone).toBe('08011112222');
+  });
+
   it('never touches the store it was given', () => {
     seedJobs([job('Ada Nwosu', '08099887766')]);
     const book = [bookCustomer('Ada Nwosu', '')];

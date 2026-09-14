@@ -176,6 +176,41 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [askingNumber, setAskingNumber] = useState(false);
+
+  /*
+   * Who this bundle will be filed under, worked out as it is typed - the same
+   * answer the save reaches - so a different number can be asked about here,
+   * before saving, rather than decided silently at the moment of saving.
+   *
+   * Adding a number to a customer used to make a brand-new customer: the
+   * phone field forgot who had been picked, and matching skipped anybody who
+   * already had a number. A different number now asks.
+   */
+  const matchTarget = useMemo(() => {
+    const picked = selectedCustomerId && isInCustomerBook({ id: selectedCustomerId })
+      ? book.find(entry => entry.id === selectedCustomerId)
+      : undefined;
+    return picked || matchCustomer(book, { name: customerName.trim(), phone: customerPhone.trim() });
+  }, [book, selectedCustomerId, customerName, customerPhone]);
+
+  const numberChange = useMemo(() => {
+    const local = (value: string) => {
+      const d = String(value || '').replace(/\D/g, '');
+      return d.startsWith('234') && d.length >= 12 ? `0${d.slice(3)}` : d;
+    };
+    const saved = String(matchTarget?.phone || '').trim();
+    const typed = customerPhone.trim();
+    // +2348012345678 and 08012345678 are one number, not a change.
+    if (!matchTarget || !saved || local(typed).length < 7 || local(saved) === local(typed)) return null;
+    return { id: matchTarget.id, name: matchTarget.name.split(' ')[0], saved };
+  }, [matchTarget, customerPhone]);
+
+  /* Keep the saved number unless told otherwise - never replace by default. */
+  const [replaceNumber, setReplaceNumber] = useState(false);
+  /* The rare genuinely different person who shares a name with a customer. */
+  const [newPerson, setNewPerson] = useState(false);
+  // An answer about one customer and one number says nothing about the next.
+  useEffect(() => { setReplaceNumber(false); setNewPerson(false); }, [customerName, customerPhone, selectedCustomerId]);
   const [lateNumber, setLateNumber] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [garmentCounts, setGarmentCounts] = useState<Record<string, number>>(() => emptyCounts(garmentTypes));
@@ -441,7 +476,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
       const picked = selectedCustomerId && isInCustomerBook({ id: selectedCustomerId })
         ? book.find(entry => entry.id === selectedCustomerId)
         : undefined;
-      const existingCustomer = picked || matchCustomer(book, { name, phone });
+      const existingCustomer = newPerson ? undefined : picked || matchCustomer(book, { name, phone });
       let customerId = existingCustomer?.id || '';
       try {
         if (!existingCustomer) {
@@ -451,6 +486,10 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
           const address = customerAddress.trim();
           const learned: Record<string, string> = {};
           if (phone && !String(existingCustomer.phone || '').trim()) learned.phone = phone;
+          // A different number replaces the saved one only on a tap - "Keep
+          // saved number" unless the counter chose otherwise. The bundle itself
+          // always carries the number that was just typed.
+          else if (phone && replaceNumber && numberChange?.id === existingCustomer.id) learned.phone = phone;
           if (address && !String(existingCustomer.address || '').trim()) learned.address = address;
           if (Object.keys(learned).length) nextStore = updateCustomer(nextStore, existingCustomer.id, learned);
         }
@@ -758,7 +797,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
             {practice && (
               <div className="rounded-2xl border border-amber-500/50 bg-amber-500/10 p-3.5 text-left">
                 <p className="font-display font-black text-sm text-amber-500">Practice run — nothing will be saved</p>
-                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">The guide is showing you how this works. Fill it in and press save to see what happens; no job, no customer and no money will be recorded.</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">Fill it in and press save to see how it works. No job, customer or money is recorded.</p>
                 <button onClick={() => setRehearsing(false)} className="mt-2.5 h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black">This is a real customer — record it</button>
               </div>
             )}
@@ -769,14 +808,34 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
               <CustomerSuggestions customers={directory} query={customerName} enabled={showSuggestions && !selectedCustomerId} inline onPick={customer => selectCustomer(customer.id)} />
               </div>
               <div className="relative">
-                <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); setSelectedCustomerId(''); }} placeholder="Phone number — e.g. 08012345678" inputMode="tel" className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm" />
+                <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); }} placeholder="Phone number — e.g. 08012345678" inputMode="tel" className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm" />
                 <ContactPickButton onPick={(phone, name) => {
+                  // A number is something a customer has, not who they are:
+                  // taking it from the phone keeps the customer picked above.
                   setCustomerPhone(phone);
-                  setSelectedCustomerId('');
                   if (name && !customerName.trim()) setCustomerName(name);
                 }} />
               </div>
-              {!customerPhone.trim() && <p className="text-[10px] text-muted-foreground">No phone is fine — you just will not be able to WhatsApp this customer when the clothes are ready.</p>}
+              {/*
+                A different number for somebody who already has one.
+
+                Asked, never assumed. It is usually a changed number or a
+                second phone, and replacing a good number with a mistyped one
+                at a busy counter sends every later message to a stranger. And
+                now and then it really is somebody else who shares the name,
+                which has to stay a separate customer rather than be merged.
+              */}
+              {numberChange && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-2.5 space-y-2">
+                  <p className="text-[11px] text-muted-foreground">{numberChange.name}'s saved number is {numberChange.saved}. Replace it, or is this someone new?</p>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => { setReplaceNumber(true); setNewPerson(false); }} className={`flex-1 h-9 rounded-lg text-[11px] font-display font-black ${replaceNumber && !newPerson ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border'}`}>Replace</button>
+                    <button type="button" onClick={() => { setReplaceNumber(false); setNewPerson(false); }} className={`flex-1 h-9 rounded-lg text-[11px] font-display font-black ${!replaceNumber && !newPerson ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border'}`}>Keep saved number</button>
+                    <button type="button" onClick={() => { setNewPerson(true); setReplaceNumber(false); }} className={`flex-1 h-9 rounded-lg text-[11px] font-display font-black ${newPerson ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border'}`}>Someone new</button>
+                  </div>
+                </div>
+              )}
+              {!customerPhone.trim() && <p className="text-[10px] text-muted-foreground">No phone is fine — you just can't WhatsApp them when the clothes are ready.</p>}
             </section>
 
             <section className="space-y-2 text-left">

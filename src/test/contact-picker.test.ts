@@ -44,7 +44,7 @@ describe('the picker knows when it cannot work', () => {
 
 describe('it is on every phone field a merchant fills in', () => {
   const fields: [string, string][] = [
-    ['the laundry counter', 'src/components/laundry/LaundryWalkInIntakeV2.tsx'],
+    ['the laundry counter', 'src/components/laundry/LaundryWalkInIntakeV3.tsx'],
     ['the customer book', 'src/components/Customers.tsx'],
     ['taking payment', 'src/components/Sales.tsx'],
     ['securing the store', 'src/components/StoreAccess.tsx'],
@@ -70,7 +70,7 @@ describe('picking a contact fills the name too, carefully', () => {
   it('only when the name is still empty', () => {
     // Somebody who has typed a name has already told us who this is, and
     // overwriting it with whatever the phone calls them would be wrong.
-    const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+    const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
     expect(intake).toContain('if (name && !customerName.trim()) setCustomerName(name);');
   });
 });

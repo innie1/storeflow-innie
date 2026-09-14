@@ -32,7 +32,7 @@ import { readSource } from './helpers/source';
 
 const workspace = readSource('src/components/laundry/LaundryWorkspace.tsx');
 const guide = readSource('src/components/SetupGuide.tsx');
-const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
 
 describe('nothing rehearses unless the guide says so', () => {
   beforeEach(() => resetGuideActivity());

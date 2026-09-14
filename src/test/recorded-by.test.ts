@@ -108,7 +108,7 @@ describe('the record types actually carry it', () => {
   it('a laundry record keeps who took it in', () => {
     const offline = readSource('src/lib/laundry-offline.ts');
     expect(offline).toContain('recordedByName: input.recordedByName');
-    expect(readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx')).toContain('...attribution(currentUser)');
+    expect(readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx')).toContain('...attribution(currentUser)');
   });
 
   it('no sale path drops the actor on the floor', () => {

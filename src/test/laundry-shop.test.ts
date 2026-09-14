@@ -90,7 +90,7 @@ describe('a laundry worker gets the shop floor and nothing else', () => {
 });
 
 describe('the screens speak to a laundry worker', () => {
-  const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+  const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
   const pricing = readSource('src/components/laundry/LaundryPricingSetup.tsx');
 
   it('does not name the database at someone folding clothes', () => {

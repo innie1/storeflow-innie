@@ -83,9 +83,28 @@ describe('recognising a customer', () => {
     expect(matchCustomer(book, { name: 'Somebody Else' })).toBeUndefined();
   });
 
-  it('does not match a named person against somebody who has a number', () => {
-    // Musa-with-a-phone is not the same record as a walk-in called Musa.
-    expect(matchCustomer(book, { name: 'Musa Bello' })).toBeUndefined();
+  it('recognises the one customer by that name, whether or not they have a number', () => {
+    /*
+     * The opposite of what this used to say. "Musa with a phone is not the
+     * walk-in called Musa" is exactly the rule that turned every number added
+     * to an existing customer into a brand-new customer. With one Musa in the
+     * book, somebody called Musa is him; two is where it stops.
+     */
+    expect(matchCustomer(book, { name: 'Musa Bello' })?.id).toBe('1');
+  });
+
+  it('keeps the customer when a different number is given for them', () => {
+    // The reported bug, exactly: adding a number to a customer made a new one.
+    expect(matchCustomer(book, { name: 'Musa Bello', phone: '08099990000' })?.id).toBe('1');
+  });
+
+  it('still will not choose between two customers of the same name', () => {
+    const two = [
+      { id: '1', name: 'Musa Bello', phone: '08031234567' },
+      { id: '2', name: 'Musa Bello', phone: '' },
+    ] as Customer[];
+    expect(matchCustomer(two, { name: 'Musa Bello' })).toBeUndefined();
+    expect(matchCustomer(two, { name: 'Musa Bello', phone: '08099990000' })).toBeUndefined();
   });
 
   it('recognises a number given by somebody we had no number for', () => {
@@ -132,12 +151,13 @@ describe('recognising a customer', () => {
 });
 
 describe('everybody the counter names goes in the book', () => {
-  const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+  const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
 
   it('no longer skips the book for a walk-in with no phone', () => {
     // Making the phone optional, this briefly refused to save the customer at
     // all - so the shop typed a name and the app quietly dropped it.
-    expect(intake).toContain('const existingCustomer = picked || matchCustomer(book, { name, phone });');
+    // "Someone new" is the one way past matching - see customer-number-change.
+    expect(intake).toContain('const existingCustomer = newPerson ? undefined : picked || matchCustomer(book, { name, phone });');
     expect(intake).toContain('if (!existingCustomer) {');
     expect(intake).toContain('nextStore = addCustomer(nextStore, { name, phone,');
     expect(intake).not.toContain("if (phone && !customers.some(");

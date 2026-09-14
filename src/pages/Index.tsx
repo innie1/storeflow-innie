@@ -978,7 +978,11 @@ export default function Index() {
           if (existing) {
             updatedCustomers = updatedCustomers.map((c: any) => c.id === existing.id ? {
               ...c,
-              phone: targetOrder.customer_phone || c.phone,
+              // A blank only. Matching now finds a known customer even when
+              // the order carries a different number, and nobody is at a
+              // counter to be asked whether it should replace the saved one -
+              // an order typed on a phone is the likeliest place for a slip.
+              phone: String(c.phone || '').trim() ? c.phone : (targetOrder.customer_phone || ''),
               totalPurchases: c.totalPurchases + orderTotal,
               lastPurchaseDate: nowStr,
               purchaseHistory: [purchase, ...(c.purchaseHistory || [])],

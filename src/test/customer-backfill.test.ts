@@ -72,6 +72,15 @@ describe('everyone served becomes a customer', () => {
     expect(after.customers?.[0].id).toBe('CUST-1');
   });
 
+  it('does not make a second customer out of a new number', () => {
+    // Loading the app used to do exactly this: a bundle with a changed number
+    // became a new customer, and the bundle was filed under them.
+    seedJobs([job('a', 'Musa Bello', '08055556666')]);
+    const after = backfillCustomerBook(store({ customers: [bookCustomer('CUST-1', 'Musa Bello', '08011112222')] }), makeId);
+    expect(after.customers).toHaveLength(1);
+    expect(getLocalLaundryRecords(CODE)[0].customerId).toBe('CUST-1');
+  });
+
   it('picks up somebody who only exists on a debt', () => {
     const after = backfillCustomerBook(store({ pendingPayments: [debt('p1', 'Ngozi Eze', '')] as any }), makeId);
     expect(after.customers?.map(entry => entry.name)).toContain('Ngozi Eze');

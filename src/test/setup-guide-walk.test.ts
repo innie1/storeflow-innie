@@ -19,7 +19,7 @@ const code = (path: string) => readSource(path)
   .replace(/^\s*\/\/.*$/gm, ' ');
 
 const workspace = code('src/components/laundry/LaundryWorkspace.tsx');
-const intake = code('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+const intake = code('src/components/laundry/LaundryWalkInIntakeV3.tsx');
 
 const laundry = {
   id: 's1', storeId: 'SF-G', storeName: 'Guide', accessCode: 'GUIDE1',

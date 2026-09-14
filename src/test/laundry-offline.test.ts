@@ -70,13 +70,13 @@ describe('local-first laundry records', () => {
   });
 
   it('does not offer to WhatsApp a bundle with nowhere to send it', () => {
-    const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+    const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
     expect(intake).toContain('Boolean(created.customerPhone)');
   });
 
   it('checks a number that was typed, because a wrong one is worse than none', () => {
     // A mistyped number sends somebody else's clothes updates to a stranger.
-    const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+    const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
     expect(intake).toContain('if (phone && !validPhone(phone))');
   });
 

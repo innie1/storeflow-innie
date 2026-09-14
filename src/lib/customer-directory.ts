@@ -170,19 +170,27 @@ export function knownCustomers(store: StoreData): Customer[] {
       }
 
       /*
-       * A number for somebody we had no number for.
+       * A number the book does not hold, for a name exactly one entry has.
        *
-       * Only when exactly one entry by that name is missing one. Two Musas
-       * with no numbers between them is a coin toss, and putting a stranger's
-       * number against the wrong Musa sends their clothes' message to
-       * somebody else.
+       * That is still them. A number fills in a customer who had none; one
+       * who already has a number keeps it - replacing it is the counter's
+       * decision, asked on screen, never made quietly here. Treating a new
+       * number as a new person is the bug this replaced: the load-time
+       * backfill reads this list, so a separate row here became a second
+       * customer in the book.
+       *
+       * Two or more by that name and a number none of them has: nothing here
+       * can say which, so it stays its own row rather than a guess.
        */
-      const nameless = (byName.get(norm(seen.name)) || []).filter(entry => !digits(entry.phone));
-      if (nameless.length === 1) {
-        nameless[0].phone = seen.phone;
-        if (!nameless[0].address && seen.address) nameless[0].address = seen.address;
-        byPhone.set(seen.phone, nameless[0]);
-        remember(nameless[0], seen.at);
+      const sameName = byName.get(norm(seen.name)) || [];
+      if (sameName.length === 1) {
+        const one = sameName[0];
+        if (!digits(one.phone)) {
+          one.phone = seen.phone;
+          byPhone.set(seen.phone, one);
+        }
+        if (!one.address && seen.address) one.address = seen.address;
+        remember(one, seen.at);
         continue;
       }
 

@@ -12,7 +12,7 @@ import { readSource } from './helpers/source';
  */
 
 const ticket = readSource('src/components/laundry/ClaimTicket.tsx');
-const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
 const workspace = readSource('src/components/laundry/LaundryWorkspace.tsx');
 
 describe('what is left to pay', () => {

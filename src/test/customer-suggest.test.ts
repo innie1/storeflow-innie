@@ -126,7 +126,7 @@ describe('it is offered everywhere a customer name is typed', () => {
 });
 
 describe('the intake screen uses it', () => {
-  const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+  const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
   const shared = readSource('src/components/CustomerSuggestions.tsx');
 
   it('shows matches under the name field', () => {

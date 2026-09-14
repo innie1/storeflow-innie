@@ -13,7 +13,7 @@ import type { StoreData } from '@/types/store';
  * do twice. The bundle is only a rehearsal.
  */
 
-const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
 
 const laundry = (over: Partial<StoreData> = {}) => ({
   id: 's', storeId: 'SF-L', storeName: 'Shine', accessCode: 'PRAC01',

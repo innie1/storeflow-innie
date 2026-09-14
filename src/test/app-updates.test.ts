@@ -18,7 +18,7 @@ import { readSource } from './helpers/source';
 
 const main = readSource('src/main.tsx');
 const sw = readSource('src/sw.ts');
-const intake = readSource('src/components/laundry/LaundryWalkInIntakeV2.tsx');
+const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
 
 describe('the app asks whether there is a new version', () => {
   it('does not rely on a navigation that an installed app never makes', () => {

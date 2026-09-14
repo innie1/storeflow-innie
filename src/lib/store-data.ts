@@ -2195,22 +2195,31 @@ export function matchCustomer(
   const digits = String(who.phone || '').replace(/\D/g, '');
   const name = String(who.name || '').trim().toLowerCase();
 
-  const nameless = (customers || []).filter(customer =>
-    !String(customer.phone || '').trim() && String(customer.name || '').trim().toLowerCase() === name);
+  /*
+   * Everybody by that name, whether or not they have a number.
+   *
+   * This used to consider only customers with no number, on the grounds that
+   * "Musa with a phone" and "a walk-in called Musa" were different records.
+   * That rule is what turned every number added to an existing customer into
+   * a brand-new customer: the new number matched nobody, and the Musa already
+   * in the book was skipped for having a number at all.
+   */
+  const sameName = (customers || []).filter(customer =>
+    String(customer.name || '').trim().toLowerCase() === name);
 
   if (digits) {
     const sameNumber = (customers || []).find(customer => String(customer.phone || '').replace(/\D/g, '') === digits);
     if (sameNumber) return sameNumber;
     /*
-     * A number for somebody we had no number for.
+     * A number the book has never seen, for a name exactly one customer has.
      *
-     * Ten bundles taken in for a walk-in called Musa, and on the eleventh he
-     * finally gives his number: without this, that number makes a second Musa
-     * and the first one keeps his history and his debt. Only when exactly one
-     * Musa has no number - two of them is a coin toss, and the wrong guess
-     * puts a stranger's number on somebody else's clothes.
+     * That is them: a first number, a changed number or a second phone - not
+     * a second copy of the person, which splits their history and their debt.
+     * Whether the new number replaces the saved one is the counter's call and
+     * is asked on screen; nothing here overwrites anything. Two customers by
+     * that name is a coin toss, so that still matches nobody.
      */
-    if (name && nameless.length === 1) return nameless[0];
+    if (name && sameName.length === 1) return sameName[0];
     return undefined;
   }
 
@@ -2222,7 +2231,7 @@ export function matchCustomer(
    * cannot see and cannot undo. The counter was shown both; not choosing means
    * this is somebody new.
    */
-  return nameless.length === 1 ? nameless[0] : undefined;
+  return sameName.length === 1 ? sameName[0] : undefined;
 }
 
 export function addCustomer(store: StoreData, customer: Omit<Customer, 'id' | 'totalPurchases' | 'outstandingDebt' | 'purchaseHistory' | 'loyaltyPoints' | 'visitsCount'>): StoreData {
