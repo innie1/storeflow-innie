@@ -21,6 +21,8 @@ interface StaffManagementProps {
   store: StoreData;
   onUpdate: (s: StoreData) => void;
   currentUser?: any;
+  /** The shop's bundles from the cloud, for Record work. */
+  orders?: any[];
 }
 
 /**
@@ -55,7 +57,7 @@ function roleOpens(role: string, hasTill: boolean): string[] {
   }
 }
 
-export default function StaffManagement({ store, onUpdate, currentUser }: StaffManagementProps) {
+export default function StaffManagement({ store, onUpdate, currentUser, orders }: StaffManagementProps) {
   /**
    * A laundry has no till.
    *
@@ -324,6 +326,7 @@ export default function StaffManagement({ store, onUpdate, currentUser }: StaffM
           store={store}
           worker={recordingFor}
           showMoney={seesMoney}
+          orders={orders}
           onUpdate={onUpdate}
           onClose={() => setRecordingFor(null)}
         />

@@ -12,7 +12,9 @@ import {
   remainingForTask,
   removePieceWork,
   setPieceRate,
+  shopWorkRecords,
   workerEarnings,
+  workRecordFromOrder,
 } from '@/lib/piece-work';
 
 /**
@@ -133,6 +135,63 @@ describe('a worker cannot invent work', () => {
     }]));
     const store = { accessCode: 'SHOP1', pieceWork: [] } as unknown as StoreData;
     expect(openJobsForTask(store, 'ironing')).toHaveLength(0);
+  });
+});
+
+/**
+ * Record Work read only the bundles kept on the phone it was opened on, so a
+ * bundle taken in on the counter phone was never offered to the worker who
+ * ironed it. It now reads the list the Records page is built from.
+ */
+describe('bundles booked on another phone', () => {
+  beforeEach(() => localStorage.clear());
+
+  const cloudOrder = {
+    id: 'o1', client_ref: 'r2', order_number: 'lt-200', customer_name: 'Ada',
+    workflow_stage: 'ironing', business_type: 'laundry', order_kind: 'service',
+    service_metadata: {
+      source: 'walk_in_laundry', client_ref: 'r2', tag_code: 'LT-200',
+      garment_lines: [{ garmentType: 'Shirt', quantity: 3 }],
+    },
+    order_items: [{ item_name: 'Shirt', quantity: 3, metadata: { source: 'walk_in_laundry' } }],
+  };
+
+  it('are read into the same shape as a bundle kept on this phone', () => {
+    expect(workRecordFromOrder(cloudOrder)).toEqual({
+      clientRef: 'r2', tagCode: 'LT-200', customerName: 'Ada',
+      garments: [{ garmentType: 'Shirt', quantity: 3 }], workflowStage: 'ironing',
+    });
+  });
+
+  it('fall back to the order lines, leaving out delivery and other charges', () => {
+    const order = {
+      ...cloudOrder,
+      service_metadata: { source: 'walk_in_laundry', client_ref: 'r2' },
+      order_items: [
+        { item_name: 'Trouser', quantity: 2, metadata: {} },
+        { item_name: 'Delivery', quantity: 1, metadata: { charge_line: true } },
+      ],
+    };
+    expect(workRecordFromOrder(order)?.garments).toEqual([{ garmentType: 'Trouser', quantity: 2 }]);
+  });
+
+  it("are offered beside this phone's own, each once", () => {
+    const store = shopWithJob();
+    const records = shopWorkRecords('SHOP1', [cloudOrder]);
+    expect(openJobsForTask(store, 'ironing', records).map(entry => entry.record.tagCode).sort()).toEqual(['LT-104', 'LT-200']);
+  });
+
+  it('are still capped at what the customer brought', () => {
+    const store = shopWithJob();
+    const ada = shopWorkRecords('SHOP1', [cloudOrder]).find(record => record.clientRef === 'r2')!;
+    const after = recordPieceWork(store, { worker, record: ada, task: 'ironing', items: [{ garmentType: 'Shirt', quantity: 10 }] });
+    expect(after.pieceWork![0].quantity).toBe(3);
+  });
+
+  it('are left out once collected', () => {
+    const store = shopWithJob();
+    const records = shopWorkRecords('SHOP1', [{ ...cloudOrder, workflow_stage: 'collected' }]);
+    expect(openJobsForTask(store, 'ironing', records).map(entry => entry.record.tagCode)).toEqual(['LT-104']);
   });
 });
 

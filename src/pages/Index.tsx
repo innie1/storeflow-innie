@@ -25,6 +25,7 @@ import AppLockScreen from '@/components/AppLockScreen';
 import { appLockActive } from '@/lib/app-lock';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import NotificationDrawer from '@/components/NotificationDrawer';
+import MyPieceWork from '@/components/laundry/MyPieceWork';
 import Dashboard from '@/components/Dashboard';
 import SimpleModeHome from '@/components/simple/SimpleModeHome';
 import ToggleRow from '@/components/Toggle';
@@ -2237,6 +2238,9 @@ export default function Index() {
             </div>
           }>
             <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
+              {/* A per-piece worker's Record my work and earnings, above
+                  whichever home screen they use. Nobody else sees it. */}
+              <MyPieceWork store={store} orders={orders} currentUser={currentUser} onUpdate={setStore} />
               {store.uiMode === 'simple' ? (
                 <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} orders={orders} />
               ) : (
@@ -2317,7 +2321,7 @@ export default function Index() {
               <Wishlist store={store} onUpdate={setStore} />
             </div>
             <div className={tab === 'staff' ? 'block' : 'hidden'}>
-              <StaffManagement store={store} onUpdate={setStore} currentUser={currentUser} />
+              <StaffManagement store={store} onUpdate={setStore} currentUser={currentUser} orders={orders} />
             </div>
             <div className={tab === 'cash-drawer' ? 'block' : 'hidden'}>
               <CashDrawer store={store} onUpdate={setStore} />

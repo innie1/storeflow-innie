@@ -24,7 +24,8 @@
  */
 
 import type { PieceRate, PieceWorkEntry, StaffMember, StoreData, WorkerPayment } from '@/types/store';
-import { getLocalLaundryRecords, type LocalLaundryRecord } from '@/lib/laundry-offline';
+import { getLocalLaundryRecords, mergeLaundryRecords } from '@/lib/laundry-offline';
+import { parseLaundryRecordMetadata } from '@/lib/laundry-workspace';
 /*
  * These return a new store rather than saving one. Persisting is the caller's
  * job - the same way recordLaundryPayment works - which keeps the rules here
@@ -89,6 +90,56 @@ export interface RemainingItem {
   remaining: number;
 }
 
+/**
+ * A customer's bundle, as far as piece work needs to know it.
+ *
+ * Bundles reach a phone two ways: taken in on that phone and kept on it, or
+ * taken in on another and read back from the cloud. Record Work only read the
+ * first, so a bundle booked on the counter phone was never offered to the
+ * worker who ironed it. Both now arrive in the same shape, from the same list
+ * the Records page is built from.
+ */
+export interface WorkRecord {
+  clientRef: string;
+  tagCode: string;
+  customerName: string;
+  garments: { garmentType: string; quantity: number }[];
+  workflowStage?: string;
+}
+
+/** One bundle in the order shape the Records page uses, or null if it has no reference. */
+export function workRecordFromOrder(order: any): WorkRecord | null {
+  const meta = parseLaundryRecordMetadata(order);
+  const clientRef = String(order?._localClientRef || order?.client_ref || meta.client_ref || '');
+  if (!clientRef) return null;
+
+  // The garment lines as they were taken in; failing those, the order's own
+  // lines, leaving out delivery and any other charge that is not clothing.
+  const lines: any[] = Array.isArray(meta.garment_lines) && meta.garment_lines.length
+    ? meta.garment_lines
+    : (order?.order_items || [])
+      .filter((item: any) => !item?.metadata?.charge_line)
+      .map((item: any) => ({ garmentType: item?.item_name, quantity: item?.quantity }));
+
+  return {
+    clientRef,
+    tagCode: String(meta.tag_code || meta.receipt_number || order?.order_number || '').toUpperCase(),
+    customerName: String(order?.customer_name || 'Walk-in Customer'),
+    garments: lines
+      .map(line => ({ garmentType: String(line?.garmentType || '').trim(), quantity: Math.max(0, Number(line?.quantity) || 0) }))
+      .filter(line => line.garmentType && line.quantity > 0),
+    workflowStage: String(order?.workflow_stage || 'received'),
+  };
+}
+
+/** Every bundle this phone knows about - its own and the cloud's - each once. */
+export function shopWorkRecords(accessCode: string, orders: any[] = []): WorkRecord[] {
+  if (!accessCode) return [];
+  return mergeLaundryRecords(orders, getLocalLaundryRecords(accessCode))
+    .map(workRecordFromOrder)
+    .filter((record): record is WorkRecord => record !== null);
+}
+
 /** Every claim already made against one job and task. */
 function claimedOn(store: Pick<StoreData, 'pieceWork'>, clientRef: string, task: string): Map<string, number> {
   const claimed = new Map<string, number>();
@@ -110,7 +161,7 @@ function claimedOn(store: Pick<StoreData, 'pieceWork'>, clientRef: string, task:
  */
 export function remainingForTask(
   store: Pick<StoreData, 'pieceWork'>,
-  record: Pick<LocalLaundryRecord, 'clientRef' | 'garments'>,
+  record: Pick<WorkRecord, 'clientRef' | 'garments'>,
   task: string,
 ): RemainingItem[] {
   const claimed = claimedOn(store, record.clientRef, task);
@@ -130,11 +181,16 @@ export function remainingForTask(
  * nothing left to iron, and offering it invites a claim on work that either
  * did not happen or was already claimed.
  */
-export function openJobsForTask(store: StoreData, task: string): { record: LocalLaundryRecord; items: RemainingItem[] }[] {
+export function openJobsForTask(
+  store: StoreData,
+  task: string,
+  /** The bundles to choose from; this phone's own when not given. */
+  records?: WorkRecord[],
+): { record: WorkRecord; items: RemainingItem[] }[] {
   const accessCode = String(store.accessCode || '');
-  if (!accessCode) return [];
+  const source: WorkRecord[] = records ?? (accessCode ? getLocalLaundryRecords(accessCode) : []);
 
-  return getLocalLaundryRecords(accessCode)
+  return source
     .filter(record => record.workflowStage !== 'collected')
     .map(record => ({ record, items: remainingForTask(store, record, task) }))
     .filter(job => job.items.length > 0);
@@ -144,7 +200,7 @@ export function openJobsForTask(store: StoreData, task: string): { record: Local
 
 export interface WorkClaim {
   worker: StaffMember;
-  record: Pick<LocalLaundryRecord, 'clientRef' | 'tagCode' | 'customerName' | 'garments'>;
+  record: Pick<WorkRecord, 'clientRef' | 'tagCode' | 'customerName' | 'garments'>;
   task: string;
   /** garmentType -> how many of them. */
   items: { garmentType: string; quantity: number }[];

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Check, ChevronLeft, X } from 'lucide-react';
 import type { StaffMember, StoreData } from '@/types/store';
-import type { LocalLaundryRecord } from '@/lib/laundry-offline';
 import { saveStore } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import {
@@ -9,8 +8,10 @@ import {
   pieceRate,
   recordPieceWork,
   remainingForTask,
+  shopWorkRecords,
   WORK_TASKS,
   type RemainingItem,
+  type WorkRecord,
 } from '@/lib/piece-work';
 
 /**
@@ -35,14 +36,18 @@ interface Props {
   onClose: () => void;
   /** Rates and totals are pay, so only for somebody who may see it. */
   showMoney?: boolean;
+  /** The shop's bundles from the cloud, so ones booked on another phone are offered too. */
+  orders?: any[];
 }
 
-export default function RecordWork({ store, worker, onUpdate, onClose, showMoney = true }: Props) {
+export default function RecordWork({ store, worker, onUpdate, onClose, showMoney = true, orders }: Props) {
   const [task, setTask] = useState<string | null>(null);
-  const [job, setJob] = useState<{ record: LocalLaundryRecord; items: RemainingItem[] } | null>(null);
+  const [job, setJob] = useState<{ record: WorkRecord; items: RemainingItem[] } | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
-  const jobs = useMemo(() => (task ? openJobsForTask(store, task) : []), [store, task]);
+  // The same bundles the Records page shows: this phone's and the cloud's.
+  const records = useMemo(() => shopWorkRecords(String(store.accessCode || ''), orders || []), [store.accessCode, orders]);
+  const jobs = useMemo(() => (task ? openJobsForTask(store, task, records) : []), [store, task, records]);
 
   const claimTotal = useMemo(() => {
     if (!task || !job) return 0;
@@ -156,7 +161,7 @@ export default function RecordWork({ store, worker, onUpdate, onClose, showMoney
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
-                        onClick={() => setCounts(c => ({ ...c, [item.garmentType]: Math.max(0, picked - 1) }))}
+                        onClick={() => setCounts(c => ({ ...c, [item.garmentType]: Math.max(0, (c[item.garmentType] || 0) - 1) }))}
                         className="w-9 h-9 rounded-xl bg-card border border-border font-black"
                         aria-label={`One fewer ${item.garmentType}`}
                       >
@@ -167,9 +172,12 @@ export default function RecordWork({ store, worker, onUpdate, onClose, showMoney
                         Stops at what is left. The button simply will not go
                         past it, so there is no wrong number to type and no
                         error message to read.
+
+                        Counted from the latest count rather than the one the
+                        screen was drawn with, or two quick taps count once.
                       */}
                       <button
-                        onClick={() => setCounts(c => ({ ...c, [item.garmentType]: Math.min(item.remaining, picked + 1) }))}
+                        onClick={() => setCounts(c => ({ ...c, [item.garmentType]: Math.min(item.remaining, (c[item.garmentType] || 0) + 1) }))}
                         disabled={picked >= item.remaining}
                         className="w-9 h-9 rounded-xl bg-card border border-border font-black disabled:opacity-30"
                         aria-label={`One more ${item.garmentType}`}
