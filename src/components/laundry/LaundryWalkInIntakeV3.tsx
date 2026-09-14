@@ -194,6 +194,8 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  /** Other people the customer says may collect. Nothing shows until asked for. */
+  const [collectors, setCollectors] = useState<{ name: string; phone: string }[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [askingNumber, setAskingNumber] = useState(false);
@@ -357,6 +359,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     setCustomerName('');
     setCustomerPhone('');
     setCustomerAddress('');
+    setCollectors([]);
     setSelectedCustomerId('');
     setSelectedServiceId(services[0] ? String(services[0].id) : '');
     setGarmentCounts(emptyCounts(garmentTypes));
@@ -536,6 +539,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
         customerName: name,
         customerPhone: phone,
         customerAddress: customerAddress.trim(),
+        collectors,
         promisedFor,
         washMethodId,
         washMethodName: washOptions.find(item => item.id === washMethodId)?.name || 'Hand wash',
@@ -879,6 +883,29 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
                 </div>
               )}
               {!customerPhone.trim() && <p className="text-[10px] text-muted-foreground">No phone is fine — you just can't WhatsApp them when the clothes are ready.</p>}
+              {/*
+                Somebody else collecting - a brother, a driver. Small on
+                purpose: nearly every bundle is collected by whoever brought
+                it, so this is a quiet link rather than two more boxes on
+                every bundle.
+              */}
+              {collectors.length === 0 ? (
+                <button type="button" onClick={() => setCollectors([{ name: '', phone: '' }])} className="text-[11px] font-display font-bold text-muted-foreground hover:text-primary">
+                  + Someone else may collect
+                </button>
+              ) : (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] uppercase font-black text-muted-foreground">Also allowed to collect</p>
+                  {collectors.map((person, index) => (
+                    <div key={index} className="flex gap-1.5">
+                      <input value={person.name} onChange={event => setCollectors(list => list.map((entry, at) => at === index ? { ...entry, name: event.target.value } : entry))} placeholder="Name" aria-label={`Collector ${index + 1} name`} className="flex-1 min-w-0 h-9 px-2.5 rounded-lg bg-surface-2 border border-border text-xs" />
+                      <input value={person.phone} onChange={event => setCollectors(list => list.map((entry, at) => at === index ? { ...entry, phone: event.target.value } : entry))} placeholder="Phone (optional)" inputMode="tel" aria-label={`Collector ${index + 1} phone`} className="w-32 h-9 px-2.5 rounded-lg bg-surface-2 border border-border text-xs" />
+                      <button type="button" onClick={() => setCollectors(list => list.filter((_, at) => at !== index))} aria-label={`Remove collector ${index + 1}`} className="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-muted-foreground"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setCollectors(list => [...list, { name: '', phone: '' }])} className="text-[11px] font-display font-bold text-primary">+ Another person</button>
+                </div>
+              )}
             </section>
 
             <section className="space-y-2 text-left">

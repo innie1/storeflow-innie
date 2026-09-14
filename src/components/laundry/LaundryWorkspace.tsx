@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { byContributor, recordedByLabel } from '@/lib/recorded-by';
 import RecordedByFilter from '@/components/RecordedByFilter';
 import type { StoreData } from '@/types/store';
@@ -24,6 +24,8 @@ import {
   nextLaundryStage,
   updateLaundryOrderStage,
   type LaundryWorkflowStage,
+  setLocalLaundryCollectedBy,
+  setLocalLaundryCollectors,
 } from '@/lib/laundry-offline';
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
@@ -105,6 +107,12 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
   const [stageBusy, setStageBusy] = useState<string | null>(null);
   /** A bundle about to be handed over with money still owed on it. */
   const [collectGuard, setCollectGuard] = useState<DecoratedRecord | null>(null);
+  /** A bundle being handed over that lists other people who may collect it: who came? */
+  const [collectorAsk, setCollectorAsk] = useState<{ record: DecoratedRecord; force: boolean } | null>(null);
+  /** The person chosen for the hand-over under way, so the money check after it does not ask again. */
+  const handedTo = useRef<{ key: string; name: string } | null>(null);
+  /** The bundle whose list of people who may collect is being changed. */
+  const [collectorEdit, setCollectorEdit] = useState<{ record: DecoratedRecord; list: { name: string; phone: string }[] } | null>(null);
   const [ticket, setTicket] = useState<DecoratedRecord | null>(null);
   // What the guide is displaying, straight from the guide rather than guessed.
   const [guideStep, setGuideStep] = useState<string | null>(() => guideStepOnScreen());
@@ -338,6 +346,11 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
    * unpaid" stays available, and the balance stays on the books.
    */
   const changeStage = useCallback(async (record: DecoratedRecord, stage: LaundryWorkflowStage, force = false) => {
+    // Somebody else may collect this one, so ask who came before anything else.
+    if (stage === 'collected' && (record.collectors || []).length > 0 && handedTo.current?.key !== record.key) {
+      setCollectorAsk({ record, force });
+      return;
+    }
     if (stage === 'collected' && record.balance > 0 && !force) {
       setCollectGuard(record);
       return;
@@ -360,6 +373,8 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
       }
     } finally {
       setStageBusy(null);
+      // The hand-over is over either way; the next one asks afresh.
+      if (stage === 'collected') handedTo.current = null;
     }
   }, [store.accessCode]);
 
@@ -390,10 +405,121 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         />
       )}
 
+      {collectorAsk && (
+        <div
+          className="fixed inset-0 z-[90] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+          onClick={() => setCollectorAsk(null)}
+          role="dialog"
+          aria-label="Who is collecting"
+        >
+          <div className="w-full sm:max-w-sm rounded-3xl bg-card border border-border p-5 space-y-3 text-left" onClick={event => event.stopPropagation()}>
+            <div>
+              <p className="text-[10px] uppercase font-black tracking-wider text-primary">Handing over {collectorAsk.record.tagCode}</p>
+              <h3 className="font-display font-black text-lg leading-tight mt-0.5">Who is collecting?</h3>
+            </div>
+            <div className="space-y-2">
+              {[
+                { name: collectorAsk.record.customerName, detail: 'The customer', isCustomer: true },
+                ...(collectorAsk.record.collectors || []).map(person => ({ name: person.name, detail: person.phone || 'Allowed to collect', isCustomer: false })),
+              ].map(person => (
+                <button
+                  key={`${person.isCustomer ? 'customer' : 'other'}-${person.name}`}
+                  type="button"
+                  onClick={() => {
+                    const { record, force } = collectorAsk;
+                    setLocalLaundryCollectedBy(String(store.accessCode || ''), record.clientRef, person.isCustomer ? '' : person.name);
+                    handedTo.current = { key: record.key, name: person.name };
+                    setCollectorAsk(null);
+                    changeStage(record, 'collected', force);
+                  }}
+                  className="w-full min-h-11 px-3 py-2 rounded-xl bg-surface-2 border border-border text-left active:scale-[0.99] transition"
+                >
+                  <span className="block font-display font-black text-sm">{person.name}</span>
+                  <span className="block text-[11px] text-muted-foreground">{person.detail}</span>
+                </button>
+              ))}
+              <button type="button" onClick={() => setCollectorAsk(null)} className="w-full h-10 rounded-xl text-xs font-display font-bold text-muted-foreground hover:text-foreground transition">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {collectorEdit && (
+        <div
+          className="fixed inset-0 z-[90] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+          onClick={() => setCollectorEdit(null)}
+          role="dialog"
+          aria-label="Who may collect"
+        >
+          <div className="w-full sm:max-w-sm rounded-3xl bg-card border border-border p-5 space-y-3 text-left" onClick={event => event.stopPropagation()}>
+            <div>
+              <p className="text-[10px] uppercase font-black tracking-wider text-primary">{collectorEdit.record.tagCode} · {collectorEdit.record.customerName}</p>
+              <h3 className="font-display font-black text-lg leading-tight mt-0.5">Who else may collect?</h3>
+            </div>
+            {collectorEdit.list.map((person, index) => (
+              <div key={index} className="flex gap-1.5">
+                <input
+                  value={person.name}
+                  onChange={event => { const name = event.target.value; setCollectorEdit(edit => edit && { ...edit, list: edit.list.map((entry, at) => at === index ? { ...entry, name } : entry) }); }}
+                  placeholder="Name"
+                  aria-label={`Collector ${index + 1} name`}
+                  className="flex-1 min-w-0 h-10 px-2.5 rounded-lg bg-surface-2 border border-border text-sm"
+                />
+                <input
+                  value={person.phone}
+                  onChange={event => { const phone = event.target.value; setCollectorEdit(edit => edit && { ...edit, list: edit.list.map((entry, at) => at === index ? { ...entry, phone } : entry) }); }}
+                  placeholder="Phone (optional)"
+                  inputMode="tel"
+                  aria-label={`Collector ${index + 1} phone`}
+                  className="w-32 h-10 px-2.5 rounded-lg bg-surface-2 border border-border text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCollectorEdit(edit => edit && { ...edit, list: edit.list.filter((_, at) => at !== index) })}
+                  aria-label={`Remove collector ${index + 1}`}
+                  className="w-10 h-10 shrink-0 rounded-lg flex items-center justify-center text-muted-foreground text-lg"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setCollectorEdit(edit => edit && { ...edit, list: [...edit.list, { name: '', phone: '' }] })}
+              className="text-[11px] font-display font-bold text-primary"
+            >
+              + Another person
+            </button>
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={() => setCollectorEdit(null)} className="flex-1 h-11 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const saved = setLocalLaundryCollectors(String(store.accessCode || ''), collectorEdit.record.clientRef, collectorEdit.list);
+                  if (!saved) {
+                    showToast('This bundle was taken in on another phone, so who may collect it is kept there.', 'info');
+                    return;
+                  }
+                  setCollectorEdit(null);
+                  showToast('Saved', 'success');
+                }}
+                className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground text-xs font-display font-black"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {collectGuard && (
         <div
           className="fixed inset-0 z-[90] bg-background/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
-          onClick={() => setCollectGuard(null)}
+          onClick={() => { setCollectGuard(null); handedTo.current = null; }}
           role="dialog"
           aria-label="Money still owed"
         >
@@ -428,7 +554,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
               </button>
               <button
                 type="button"
-                onClick={() => setCollectGuard(null)}
+                onClick={() => { setCollectGuard(null); handedTo.current = null; }}
                 className="w-full h-10 rounded-xl text-xs font-display font-bold text-muted-foreground hover:text-foreground transition"
               >
                 Cancel
@@ -728,6 +854,33 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                         {record.address && <p><b className="text-foreground">Address:</b> {record.address}</p>}
                         {(record.washMethod || record.dryMethod) && <p className="mt-1"><b className="text-foreground">Processing:</b> {record.washMethod || 'Not assigned'} · {record.dryMethod || 'Not assigned'}</p>}
                       </div>
+                    )}
+
+                    {/* Who else may collect, kept small, and who actually did. */}
+                    {record.stage === 'collected' ? (
+                      record.collectedBy ? (
+                        <p className="mt-2 text-[11px] text-muted-foreground">Collected by <b className="text-foreground">{record.collectedBy}</b></p>
+                      ) : null
+                    ) : (record.collectors || []).length > 0 ? (
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        Also collecting: {(record.collectors || []).map(person => person.name).join(', ')}
+                        {' · '}
+                        <button
+                          type="button"
+                          onClick={() => setCollectorEdit({ record, list: (record.collectors || []).map(person => ({ name: person.name, phone: person.phone || '' })) })}
+                          className="font-display font-bold text-primary"
+                        >
+                          change
+                        </button>
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setCollectorEdit({ record, list: [{ name: '', phone: '' }] })}
+                        className="mt-2 block text-[11px] font-display font-bold text-muted-foreground hover:text-primary"
+                      >
+                        + Someone else may collect
+                      </button>
                     )}
 
                     <div className="mt-3 flex flex-wrap items-center gap-2">

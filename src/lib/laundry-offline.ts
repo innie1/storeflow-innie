@@ -29,6 +29,12 @@ export function nextLaundryStage(stage: LaundryWorkflowStage): { id: LaundryWork
   return LAUNDRY_WORKFLOW_STAGES[index + 1];
 }
 
+/** Somebody other than the customer who may collect a bundle. */
+export interface LaundryCollector {
+  name: string;
+  phone?: string;
+}
+
 export interface LocalLaundryRecord {
   clientRef: string;
   accessCode: string;
@@ -44,6 +50,14 @@ export interface LocalLaundryRecord {
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
+  /**
+   * Other people the customer has said may collect these clothes - a brother,
+   * a driver. Kept on this phone only: the cloud copy of a bundle is never
+   * given them.
+   */
+  collectors?: LaundryCollector[];
+  /** Who the clothes were handed to, when it was not the customer. */
+  collectedBy?: string;
   /**
    * Where the bundle physically is.
    *
@@ -106,6 +120,8 @@ export interface NewLocalLaundryRecord {
   customerName: string;
   customerPhone: string;
   customerAddress?: string;
+  /** Other people allowed to collect. */
+  collectors?: LaundryCollector[];
   /**
    * Where the bundle physically is.
    *
@@ -202,6 +218,21 @@ function isLaundryWorkflowStage(value: string): value is LaundryWorkflowStage {
   return LAUNDRY_WORKFLOW_STAGES.some(stage => stage.id === value);
 }
 
+/** Named people only, trimmed and each once, with a phone where one was given. */
+export function cleanCollectors(list: LaundryCollector[] | undefined): LaundryCollector[] | undefined {
+  const seen = new Set<string>();
+  const kept: LaundryCollector[] = [];
+  for (const entry of list || []) {
+    const name = String(entry?.name || '').trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    const phone = String(entry?.phone || '').trim();
+    kept.push(phone ? { name, phone } : { name });
+  }
+  return kept.length ? kept : undefined;
+}
+
 export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLaundryRecord {
   const accessCode = normalizeAccessCode(input.accessCode);
   const customerName = input.customerName.trim();
@@ -229,6 +260,7 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     customerName,
     customerPhone,
     customerAddress: (input.customerAddress || '').trim() || undefined,
+    collectors: cleanCollectors(input.collectors),
     shelfLocation: (input.shelfLocation || '').trim() || undefined,
     fulfillment: input.fulfillment,
     runAddress: (input.runAddress || '').trim() || undefined,
@@ -324,6 +356,22 @@ export function setLocalLaundryPhone(accessCode: string, clientRef: string, phon
   return updated;
 }
 
+/** Who else may collect a bundle, set or changed after it was taken in. Null when it is not on this phone. */
+export function setLocalLaundryCollectors(accessCode: string, clientRef: string, collectors: LaundryCollector[]): LocalLaundryRecord | null {
+  if (typeof localStorage === 'undefined') return null;
+  const changed = updateLocalRecord(normalizeAccessCode(accessCode), clientRef, { collectors: cleanCollectors(collectors) });
+  if (changed) emit(LAUNDRY_LOCAL_CHANGED_EVENT, changed);
+  return changed;
+}
+
+/** Who the clothes were handed to. Empty means the customer came for them. */
+export function setLocalLaundryCollectedBy(accessCode: string, clientRef: string, name: string): LocalLaundryRecord | null {
+  if (typeof localStorage === 'undefined') return null;
+  const changed = updateLocalRecord(normalizeAccessCode(accessCode), clientRef, { collectedBy: String(name || '').trim() || undefined });
+  if (changed) emit(LAUNDRY_LOCAL_CHANGED_EVENT, changed);
+  return changed;
+}
+
 export function getLocalLaundryRecord(accessCode: string, clientRef: string): LocalLaundryRecord | null {
   return getLocalLaundryRecords(accessCode).find(record => record.clientRef === clientRef) || null;
 }
@@ -406,6 +454,9 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     tag_code: record.tagCode,
     instructions: record.notes,
     customer_address: record.customerAddress || '',
+    // Read by the Records list. Never part of what is sent to the cloud.
+    collectors: record.collectors,
+    collected_by: record.collectedBy,
     promised_for: record.promisedFor || '',
     wash_method_id: record.washMethodId || '',
     wash_method_name: record.washMethodName || '',
@@ -467,8 +518,14 @@ export function mergeLaundryRecords(cloudOrders: any[], localRecords: LocalLaund
         const localOrder = localLaundryRecordToOrder(local);
         return { ...order, ...localOrder, id: order.id, _laundrySyncStatus: 'pending' };
       }
+      // Who may collect lives only on this phone, so it is carried across from
+      // the local copy, or the Records list would lose it once the bundle syncs.
+      const carried = local && (local.collectors?.length || local.collectedBy)
+        ? { service_metadata: { ...meta, collectors: local.collectors, collected_by: local.collectedBy } }
+        : {};
       return {
         ...order,
+        ...carried,
         _laundrySyncStatus: 'synced',
         _localClientRef: local?.clientRef || clientRef || undefined,
       };

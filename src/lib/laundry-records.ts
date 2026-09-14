@@ -46,6 +46,10 @@ export interface DecoratedRecord {
   runStatus?: LaundryRunStatus;
   /** Every instruction in the bundle, said once. */
   modifiers: string[];
+  /** Other people allowed to collect, as kept on this phone. */
+  collectors?: { name: string; phone?: string }[];
+  /** Who it was handed to, when it was not the customer. */
+  collectedBy?: string;
   synced: boolean;
   whatsapp: ReturnType<typeof buildLaundryWhatsAppPayload>;
   total: number;
@@ -84,6 +88,10 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     fulfillment: meta.fulfillment || undefined,
     runStatus: meta.run_status || undefined,
     modifiers: bundleModifiers(garments.map((item: any) => item?.metadata || {})),
+    collectors: Array.isArray(meta.collectors)
+      ? meta.collectors.filter((entry: any) => entry && String(entry.name || '').trim())
+      : [],
+    collectedBy: meta.collected_by || undefined,
     recordedByName: meta.recorded_by_name || undefined,
     recordedByRole: meta.recorded_by_role || undefined,
     customerPhone: order.customer_phone || '',
