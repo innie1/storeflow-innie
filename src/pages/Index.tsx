@@ -12,6 +12,7 @@ import { acknowledgeStockLoss, getStockLossNotice, markStockLossRaised } from '@
 import { dropBackgroundNotice, enableBackgroundNotices, queueBackgroundNotice, showLocalNotification } from '@/lib/push-notifications';
 import type { NotificationAct } from '@/lib/order-deep-link';
 import { allowedNotifications, visibleNotifications, wantsNotification } from '@/lib/notification-gate';
+import { recordDays } from '@/lib/day-records';
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
@@ -1139,6 +1140,15 @@ export default function Index() {
 
   const businessTemplate = getBusinessTemplate(store);
   const businessType = resolveBusinessType(store);
+
+  /*
+   * The laundry's day, recorded by its date whenever the shop's data changes -
+   * for whoever is signed in, on whichever screen. Nothing is shown here; the
+   * days are read back in Analysis.
+   */
+  useEffect(() => {
+    if (store && businessType === 'laundry') recordDays(store);
+  }, [store, businessType]);
   const isGames = businessType === 'games';
   const isServiceFirst = isServiceFirstBusiness(store);
 

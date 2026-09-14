@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { ArrowLeft, BarChart3, CheckCircle2, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, XCircle, type LucideIcon } from 'lucide-react';
 import { receivedBetween, receivedByChannel, waitingToCollect } from '@/lib/money-figures';
+import { dayKey, describeDay, getDayHistory, recordDays, type DayRecord } from '@/lib/day-records';
 import type { StoreData } from '@/types/store';
 
 type Range = '7d' | '30d' | 'all';
@@ -75,7 +76,18 @@ function walkInOrders(store: StoreData): AnyRecord[] {
 
 export default function BusinessAnalytics({ store, onBack }: { store: StoreData; onBack?: () => void }) {
   const [range, setRange] = useState<Range>('30d');
-  const [tab, setTab] = useState<'overview' | 'customers' | 'scans'>('overview');
+  const [tab, setTab] = useState<'overview' | 'days' | 'customers' | 'scans'>('overview');
+  const isLaundry = String(store.businessType || store.storeType || '').toLowerCase() === 'laundry';
+
+  /*
+   * The laundry's days, each recorded by its date. Brought up to date on
+   * opening, so today is current and any day worked but never recorded is in.
+   */
+  const [days, setDays] = useState<DayRecord[]>(() => getDayHistory(String(store.accessCode || '')));
+  const [pickedDay, setPickedDay] = useState('');
+  useEffect(() => {
+    if (isLaundry) setDays(recordDays(store));
+  }, [store, isLaundry]);
 
   const analytics = useMemo(() => {
     const scans = listFromStore(store, ['scanEvents', 'scan_events', 'qrScans', 'qr_scans']);
@@ -269,8 +281,13 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
         {cards.map(({ label, value, icon: Icon, period: stretch }) => <div key={label} className="rounded-2xl border border-border bg-card p-4"><Icon className="w-4 h-4 text-primary" /><p className="font-display font-black text-2xl mt-2">{value}</p><p className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</p>{stretch && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{stretch}</p>}</div>)}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {([['overview', 'Overview'], ['customers', 'Customers'], ['scans', 'Scan activity']] as const).map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`p-3 rounded-xl border text-xs font-bold ${tab === id ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'}`}>{label}</button>)}
+      <div className={`grid gap-2 ${isLaundry ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+        {([
+          ['overview', 'Overview'],
+          ...(isLaundry ? [['days', 'Day by day'] as const] : []),
+          ['customers', 'Customers'],
+          ['scans', 'Scan activity'],
+        ] as const).map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`p-3 rounded-xl border text-xs font-bold ${tab === id ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'}`}>{label}</button>)}
       </div>
 
       {tab === 'overview' && <div className="grid md:grid-cols-2 gap-3">
@@ -328,6 +345,62 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
           </div>
         </section>
       </div>}
+
+      {tab === 'days' && isLaundry && (() => {
+        const today = dayKey(new Date());
+        const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
+        const shown = pickedDay ? days.filter(day => day.key === pickedDay) : days;
+        return (
+          <section className="rounded-2xl border border-border bg-card overflow-hidden">
+            <div className="p-4 border-b border-border flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="font-display font-bold">Day by day</h2>
+                <p className="text-xs text-muted-foreground mt-1">Every day the shop worked, recorded by its date on its own.</p>
+              </div>
+              <label className="text-[11px] text-muted-foreground">
+                <span className="block mb-1">Go to a date</span>
+                <input
+                  type="date"
+                  value={pickedDay}
+                  max={today}
+                  onChange={event => setPickedDay(event.target.value)}
+                  aria-label="Go to a date"
+                  className="h-9 px-2 rounded-lg bg-surface-2 border border-border text-xs text-foreground"
+                />
+              </label>
+            </div>
+            {shown.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                {pickedDay ? `Nothing was recorded on ${describeDay(pickedDay)}.` : 'No days recorded yet. Each day is added on its own as the shop works.'}
+                {pickedDay && <button type="button" onClick={() => setPickedDay('')} className="block mx-auto mt-2 text-primary font-bold text-xs">Show every day</button>}
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {shown.map(day => (
+                  <div key={day.key} className="p-4 flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-sm">{describeDay(day.key)}{day.key === today ? ' · so far' : ''}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {day.bundlesIn} {day.bundlesIn === 1 ? 'bundle' : 'bundles'} in · {day.piecesIn} {day.piecesIn === 1 ? 'piece' : 'pieces'}
+                        {day.workTakenIn > 0 ? ` · ${naira(day.workTakenIn)} of work` : ''}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-display font-black text-sm text-success">{naira(day.received)}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        received{day.owedOnDay > 0 ? ` · ${naira(day.owedOnDay)} owed` : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {pickedDay && (
+                  <button type="button" onClick={() => setPickedDay('')} className="w-full p-3 text-xs font-bold text-primary">Show every day</button>
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {tab === 'customers' && <section className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="p-4 border-b border-border"><h2 className="font-display font-bold">Customer purchase history</h2><p className="text-xs text-muted-foreground mt-1">See how often each buyer successfully purchased.</p></div>

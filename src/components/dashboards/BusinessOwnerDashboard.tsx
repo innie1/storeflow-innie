@@ -9,7 +9,6 @@ import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
 import BusinessPulse from '@/components/BusinessPulse';
 import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
 import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
-import DayClose from '@/components/laundry/DayClose';
 import RevenueCard from '@/components/RevenueCard';
 import BreakEvenPip from '@/components/BreakEvenPip';
 import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
@@ -191,15 +190,8 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
         />
       )}
 
-      {/* And how it went, once the evening comes round. */}
-      {isLaundry && (
-        <DayClose
-          store={store}
-          orders={orders || []}
-          onNavigate={onNavigate as (tab: any) => void}
-          canSeeMoney={canSeeMoney(currentUser)}
-        />
-      )}
+      {/* The evening "How today went" card lived here. The day is recorded
+          by date on its own now, and read back in Analysis. */}
 
       {primaryAction && (
         <button onClick={() => handleQuickAction(primaryAction)} className="w-full rounded-2xl bg-primary px-4 py-4 text-left text-primary-foreground shadow-sm active:scale-[0.99] transition-transform">

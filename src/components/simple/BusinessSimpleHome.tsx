@@ -5,7 +5,6 @@ import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
 import { requestSpotlight } from '@/lib/spotlight';
 import BreakEvenWatcher from '@/components/BreakEvenWatcher';
 import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
-import DayClose from '@/components/laundry/DayClose';
 import RevenueCard from '@/components/RevenueCard';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
@@ -108,15 +107,8 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
         />
       )}
 
-      {/* And how it went, once the evening comes round. */}
-      {isLaundry && (
-        <DayClose
-          store={store}
-          orders={orders || []}
-          onNavigate={onNavigate}
-          canSeeMoney={canSeeMoney(currentUser)}
-        />
-      )}
+      {/* The evening "How today went" card lived here. The day is recorded
+          by date on its own now, and read back in Analysis. */}
 
       <div className="grid grid-cols-2 gap-3">
         {/* Takings belong to whoever runs the shop. An attendant was
