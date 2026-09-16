@@ -29,6 +29,12 @@ export default function NotificationPreferences() {
 
   return (
     <div className="mt-3 space-y-3">
+      {/* Said plainly, because these used to be one set for the whole phone
+          and somebody who turned a switch off here has a right to know which
+          shop they turned it off for. */}
+      <p className="px-1 text-xs text-muted-foreground">
+        These apply to the shop you have open. Every shop on this phone keeps its own.
+      </p>
       <div className="rounded-2xl bg-surface-2/50 border border-border overflow-hidden">
         <div className={row}><SettingToggle label="All notifications" description="Master switch for StoreFlow background notifications." checked={prefs.enabled} onChange={v => patch('enabled', v)} /></div>
         <div className={row}><SettingToggle label="Order notifications" description="New customer orders and important order updates." checked={prefs.orders} onChange={v => patch('orders', v)} /></div>

@@ -14,6 +14,7 @@ import type { NotificationAct } from '@/lib/order-deep-link';
 import { allowedNotifications, visibleNotifications, wantsNotification } from '@/lib/notification-gate';
 import { recordDays } from '@/lib/day-records';
 import { setFlowMemoryShop } from '@/lib/flow-memory';
+import { setNotificationPreferencesShop } from '@/lib/notification-preferences';
 import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-session';
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
@@ -1141,6 +1142,13 @@ export default function Index() {
    */
   useEffect(() => {
     setFlowMemoryShop(store);
+    /*
+     * The notification switches belong to the shop too. One phone running two
+     * shops had one master switch and one set of quiet hours between them, so
+     * muting the quiet shop muted the busy one. Bound here, with the shop,
+     * rather than asked for by each screen that raises a notification.
+     */
+    setNotificationPreferencesShop(store);
   }, [store?.id, (store as any)?.storeId, store?.accessCode]);
 
   /*
