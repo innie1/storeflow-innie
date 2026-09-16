@@ -1,6 +1,6 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { StoreData, TabId } from '@/types/store';
-import { resolveBusinessType } from '@/lib/business-runtime';
+import { shopMemoryKey, shopMemoryTrade } from '@/lib/screen-memory';
 
 /**
  * Every screen the main area can show, and how to fetch one.
@@ -143,12 +143,17 @@ export function screensForTab(tab: TabId, shape: ScreenShape = {}): ScreenName[]
  *
  * The trade is part of the key because the same shop can be changed from a
  * provision store into a laundry, and those are not the same screens.
+ *
+ * This is shopMemoryKey, from lib/screen-memory, rather than a second way of
+ * saying the same thing: what a screen is allowed to remember and what React
+ * keeps mounted have to be drawn along exactly the same line, or a draft
+ * outlives the screen that owns it. A shop React can still key but that has no
+ * identity to remember anything under falls back here, since a key has to be
+ * some string; nothing is stored for it.
  */
 export function workspaceKeyFor(store: Partial<StoreData> | null | undefined): string {
   if (!store) return 'no-shop:none';
-  const shop = String(store.id || store.storeId || store.accessCode || '').trim() || 'no-shop';
-  const trade = String(resolveBusinessType(store as StoreData) || 'none');
-  return `${shop}:${trade}`;
+  return shopMemoryKey(store) ?? `no-shop:${shopMemoryTrade(store)}`;
 }
 
 const started = new Set<ScreenName>();

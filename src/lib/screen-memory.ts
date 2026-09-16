@@ -8,26 +8,70 @@
  * accident is gone with it.
  *
  * So the few things worth keeping are kept on purpose, here, and they are kept
- * per shop. A cart belongs to the shop it was built in; carrying it into
- * another shop on the same phone would put one shop's goods into another
- * shop's sale. Anything stored through this module is scoped to a shop key and
- * is invisible to every other shop.
+ * against one shop in one trade. A cart belongs to the shop it was built in;
+ * carrying it into another shop on the same phone would put one shop's goods
+ * into another shop's sale. The trade is part of that boundary as well, and for
+ * the same reason: a shop changed from a provision store to a laundry gets
+ * different screens with different meanings, and a cart of goods left over from
+ * the provision store has no business turning up in the laundry's till. It is
+ * the same boundary the mounted screen itself is keyed by - workspaceKeyFor is
+ * this function - so what is mounted and what is remembered can never drift
+ * apart.
  *
  * It is sessionStorage rather than localStorage: a cart abandoned an hour ago
  * on a phone that has been closed and reopened should not come back to life at
  * the counter the next morning.
  */
 
+import type { StoreData } from '@/types/store';
+import { resolveBusinessType } from '@/lib/business-runtime';
+
 const PREFIX = 'storeflow_screen_memory_';
 
-/** The shop a piece of remembered work belongs to. */
-export function shopMemoryKey(store: { id?: string; storeId?: string; accessCode?: string } | null | undefined): string | null {
+/** The trade, from the one place that decides what a shop is. */
+export function shopMemoryTrade(store: Partial<StoreData> | null | undefined): string {
+  return String(resolveBusinessType(store));
+}
+
+/**
+ * The shop and trade a piece of remembered work belongs to.
+ *
+ * Null when there is no shop to belong to, so nothing is stored at all rather
+ * than stored somewhere anonymous that the next shop could read.
+ */
+export function shopMemoryKey(store: Partial<StoreData> | null | undefined): string | null {
   if (!store) return null;
-  const key = String(store.id || store.storeId || store.accessCode || '').trim();
-  return key || null;
+  const shop = String(store.id || store.storeId || store.accessCode || '').trim();
+  if (!shop) return null;
+  return `${shop}:${shopMemoryTrade(store)}`;
+}
+
+/**
+ * Throw away anything left under the old shop-only keys.
+ *
+ * Memory used to be kept against the shop alone, so a draft written before
+ * this change cannot say which trade it was made in. Guessing would mean
+ * handing a provision store's cart to the same shop's laundry till, which is
+ * the thing this boundary exists to prevent. These are half-finished drafts
+ * from the session that is still open, never recorded data, so dropping them
+ * costs somebody a re-typed cart at worst.
+ */
+function dropAmbiguousLegacyMemory(): void {
+  try {
+    const stale: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (!key || !key.startsWith(PREFIX)) continue;
+      // Every key written since carries `shop:trade`; one without a trade is
+      // from before and cannot be placed.
+      if (!key.slice(PREFIX.length).includes(':')) stale.push(key);
+    }
+    stale.forEach(key => sessionStorage.removeItem(key));
+  } catch { /* private mode: there was nothing to read anyway */ }
 }
 
 function read(shopKey: string): Record<string, unknown> {
+  dropAmbiguousLegacyMemory();
   try {
     const raw = sessionStorage.getItem(PREFIX + shopKey);
     if (!raw) return {};
@@ -40,6 +84,7 @@ function read(shopKey: string): Record<string, unknown> {
 }
 
 function write(shopKey: string, memory: Record<string, unknown>): void {
+  dropAmbiguousLegacyMemory();
   try {
     if (Object.keys(memory).length === 0) sessionStorage.removeItem(PREFIX + shopKey);
     else sessionStorage.setItem(PREFIX + shopKey, JSON.stringify(memory));

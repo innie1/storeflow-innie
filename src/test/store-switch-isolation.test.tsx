@@ -89,6 +89,81 @@ describe('switching shops throws the previous shop\'s screen away', () => {
   });
 });
 
+/**
+ * The boundary a draft is kept behind is the boundary the screen is mounted
+ * behind - shop and trade, not shop alone.
+ *
+ * They were drawn along different lines at first: the mounted screen was keyed
+ * by shop and trade while its memory was keyed by shop. A shop changed from a
+ * provision store to a laundry therefore got new screens, correctly, and the
+ * old shop's cart of goods underneath them.
+ */
+describe('remembered work is kept against one shop in one trade', () => {
+  const sameShopAsLaundry = { ...shopA, businessType: 'laundry' } as unknown as StoreData;
+  const sameShopAsProvision = { ...shopA, businessType: 'provision' } as unknown as StoreData;
+  const sameShopAsGames = { ...shopA, businessType: 'games' } as unknown as StoreData;
+
+  beforeEach(() => { sessionStorage.clear(); });
+  afterEach(() => { sessionStorage.clear(); });
+
+  it('gives the same shop in the same trade the same key', () => {
+    const later = { ...sameShopAsLaundry, products: [{ id: 'p1' }] } as unknown as StoreData;
+    expect(shopMemoryKey(later)).toBe(shopMemoryKey(sameShopAsLaundry));
+  });
+
+  it('gives two shops two different keys', () => {
+    expect(shopMemoryKey(shopA)).not.toBe(shopMemoryKey(shopB));
+  });
+
+  it('gives the same shop in a different trade a different key', () => {
+    expect(shopMemoryKey(sameShopAsProvision)).not.toBe(shopMemoryKey(sameShopAsLaundry));
+    expect(shopMemoryKey(sameShopAsLaundry)).not.toBe(shopMemoryKey(sameShopAsGames));
+  });
+
+  it('is the same boundary the mounted screen is keyed by', () => {
+    // If these two ever disagree, a draft outlives the screen that owns it.
+    expect(workspaceKeyFor(sameShopAsLaundry)).toBe(shopMemoryKey(sameShopAsLaundry));
+    expect(workspaceKeyFor(shopB)).toBe(shopMemoryKey(shopB));
+  });
+
+  it('does not hand a provision store\'s cart to the same shop as a laundry', () => {
+    rememberDraft(shopMemoryKey(sameShopAsProvision), 'sales-cart', [{ productId: 'rice', quantity: 2 }]);
+    expect(recallDraft(shopMemoryKey(sameShopAsProvision), 'sales-cart')).toHaveLength(1);
+    // The trade changed; the goods on that cart mean nothing at a laundry till.
+    expect(recallDraft(shopMemoryKey(sameShopAsLaundry), 'sales-cart')).toBeNull();
+  });
+
+  it('does not hand a laundry\'s screen memory to the same shop as a game centre', () => {
+    rememberScroll(shopMemoryKey(sameShopAsLaundry), 'laundry-records', 340);
+    rememberDraft(shopMemoryKey(sameShopAsLaundry), 'sales-cart', [{ productId: 'wash' }]);
+    expect(recallScroll(shopMemoryKey(sameShopAsGames), 'laundry-records')).toBe(0);
+    expect(recallDraft(shopMemoryKey(sameShopAsGames), 'sales-cart')).toBeNull();
+  });
+
+  it('throws away a draft left under the old shop-only key instead of guessing its trade', () => {
+    // Written before memory was scoped by trade: it cannot say whether that
+    // cart was a provision store's or a laundry's, and guessing wrong is the
+    // failure this boundary exists to prevent.
+    sessionStorage.setItem('storeflow_screen_memory_uuid-a', JSON.stringify({ 'sales-cart': [{ productId: 'ambiguous' }] }));
+    expect(recallDraft(shopMemoryKey(sameShopAsLaundry), 'sales-cart')).toBeNull();
+    expect(sessionStorage.getItem('storeflow_screen_memory_uuid-a')).toBeNull();
+  });
+
+  it('leaves current keys alone while clearing the old ones', () => {
+    rememberDraft(shopMemoryKey(sameShopAsLaundry), 'sales-cart', [{ productId: 'wash' }]);
+    sessionStorage.setItem('storeflow_screen_memory_uuid-z', 'from before');
+    expect(recallDraft(shopMemoryKey(sameShopAsLaundry), 'sales-cart')).toHaveLength(1);
+    expect(sessionStorage.getItem('storeflow_screen_memory_uuid-z')).toBeNull();
+  });
+
+  it('stores nothing at all for a shop with nothing to be identified by', () => {
+    const nameless = { businessType: 'laundry' } as unknown as StoreData;
+    expect(shopMemoryKey(nameless)).toBeNull();
+    rememberDraft(shopMemoryKey(nameless), 'sales-cart', [{ productId: 'p1' }]);
+    expect(sessionStorage.length).toBe(0);
+  });
+});
+
 describe('what a screen is allowed to remember is kept per shop', () => {
   beforeEach(() => { sessionStorage.clear(); });
   afterEach(() => { sessionStorage.clear(); });
