@@ -27,7 +27,11 @@ export function compileBackupPayload(): BackupPayload {
     const key = localStorage.key(i);
     if (!key) continue;
 
-    if (key.startsWith('storeflow_') && key !== 'storeflow_index' && key !== 'storeflow_flow_memory' && key !== 'storeflow_session' && key !== 'storeflow_backups_list') {
+    // The shop's own records. A device secret never goes in, and the keys with
+    // a field of their own are picked up by the branches below - they used to
+    // be swallowed here, which is why theme, low stock and the lock timer were
+    // never actually filled in.
+    if (key.startsWith('storeflow_') && !isDeviceSecretKey(key) && !KEYS_WITH_OWN_FIELD.has(key)) {
       stores[key] = localStorage.getItem(key) || '';
     } else if (key === 'storeflow_index') {
       index = localStorage.getItem(key) || '[]';
@@ -58,15 +62,133 @@ export function compileBackupPayload(): BackupPayload {
   };
 }
 
-// ─── XOR Encryption Helpers ──────────────────────────────────────────────────
-export function xorEncrypt(text: string, key: string): string {
-  let result = '';
-  for (let i = 0; i < text.length; i++) {
-    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-  }
-  return btoa(unescape(encodeURIComponent(result)));
+// ─── What never leaves this phone ────────────────────────────────────────────
+
+/**
+ * The keys that guard this device rather than record the shop.
+ *
+ * A backup is made to be copied off the phone - to a laptop, a chat, a drive.
+ * The app-lock PIN, the fingerprint credential, the count of failed attempts
+ * and whoever is signed in right now are none of the shop's business records,
+ * and a file carrying them hands somebody the lock along with the books. They
+ * are left out of every backup, and refused on the way back in.
+ */
+const DEVICE_SECRET_KEYS = new Set([
+  'storeflow_lock_pin',
+  'storeflow_lock_attempts',
+  'storeflow_lock_credential',
+  'storeflow_active_user',
+  'storeflow_session',
+  'storeflow_active_session',
+]);
+
+/**
+ * And anything that reads like one, for whatever gets added next.
+ *
+ * Whole words only: "storeflow_low_stock" is not a lock, and a shop's records
+ * must never go missing from its own backup because of a careless match.
+ */
+const SECRET_WORDS = /(^|_)(pin|lock|session|credential|token|password|secret)(_|$)/i;
+
+export function isDeviceSecretKey(key: string): boolean {
+  if (DEVICE_SECRET_KEYS.has(key)) return true;
+  return SECRET_WORDS.test(key.replace(/^storeflow_/, ''));
 }
 
+/** Keys the payload carries in a field of their own, so they are not swept in twice. */
+const KEYS_WITH_OWN_FIELD = new Set([
+  'storeflow_index',
+  'storeflow_flow_memory',
+  'storeflow_low_stock',
+  'storeflow_lock_timer',
+  'storeflow_theme',
+  'storeflow_backups_list',
+]);
+
+// ─── Encryption ──────────────────────────────────────────────────────────────
+
+/*
+ * A backup is sealed with AES-GCM, under a key derived from the owner's
+ * password with PBKDF2.
+ *
+ * What was here before was a XOR against the password: anybody can undo it in
+ * a few lines, and it cannot tell a tampered file from a real one. A backup
+ * holds every customer, debt and payment a shop has. Files written the old way
+ * still open - see decryptBackup - but nothing writes that format any more.
+ */
+const PBKDF2_ITERATIONS = 210_000;
+const ENCRYPTED_VERSION = '2.0-encrypted';
+
+interface SealedKey { salt: string; iv: string; ciphertext: string; }
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function subtle(): SubtleCrypto {
+  const webCrypto = globalThis.crypto;
+  if (!webCrypto?.subtle) throw new Error('This browser cannot encrypt backups. Save an unencrypted backup instead.');
+  return webCrypto.subtle;
+}
+
+async function keyFromSecret(secret: string, salt: Uint8Array): Promise<CryptoKey> {
+  const material = await subtle().importKey('raw', new TextEncoder().encode(secret), 'PBKDF2', false, ['deriveKey']);
+  return subtle().deriveKey(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}
+
+/** Seals the file's own key, so either the password or the recovery key opens it. */
+async function sealKey(dataKey: Uint8Array, secret: string): Promise<SealedKey> {
+  const salt = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const sealed = await subtle().encrypt({ name: 'AES-GCM', iv }, await keyFromSecret(secret, salt), dataKey);
+  return { salt: bytesToBase64(salt), iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(sealed)) };
+}
+
+async function openKey(sealed: SealedKey, secret: string): Promise<Uint8Array> {
+  const key = await keyFromSecret(secret, base64ToBytes(sealed.salt));
+  const opened = await subtle().decrypt({ name: 'AES-GCM', iv: base64ToBytes(sealed.iv) }, key, base64ToBytes(sealed.ciphertext));
+  return new Uint8Array(opened);
+}
+
+export async function encryptBackup(
+  payload: BackupPayload,
+  ownerPassword: string,
+  emergencyRecoveryKey?: string,
+): Promise<Record<string, unknown>> {
+  const dataKeyBytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  const dataKey = await subtle().importKey('raw', dataKeyBytes, { name: 'AES-GCM' }, false, ['encrypt']);
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await subtle().encrypt({ name: 'AES-GCM', iv }, dataKey, new TextEncoder().encode(JSON.stringify(payload)));
+
+  return {
+    version: ENCRYPTED_VERSION,
+    timestamp: payload.timestamp,
+    kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations: PBKDF2_ITERATIONS },
+    cipher: 'AES-GCM',
+    data: { iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(ciphertext)) },
+    keys: {
+      password: await sealKey(dataKeyBytes, ownerPassword),
+      ...(emergencyRecoveryKey ? { recovery: await sealKey(dataKeyBytes, emergencyRecoveryKey) } : {}),
+    },
+  };
+}
+
+/** Kept so a backup written before AES still opens. Nothing writes this format now. */
 export function xorDecrypt(base64: string, key: string): string {
   const text = decodeURIComponent(escape(atob(base64)));
   let result = '';
@@ -77,23 +199,12 @@ export function xorDecrypt(base64: string, key: string): string {
 }
 
 /** Triggers a browser download of the full backup payload as a JSON file, optionally encrypted */
-export function triggerBackupExport(ownerPassword?: string, emergencyRecoveryKey?: string): void {
+export async function triggerBackupExport(ownerPassword?: string, emergencyRecoveryKey?: string): Promise<void> {
   const payload = compileBackupPayload();
   let fileContent = '';
 
-  if (ownerPassword && emergencyRecoveryKey) {
-    const dataKey = Math.random().toString(36).substring(2, 10);
-    const jsonStr = JSON.stringify(payload);
-    const encryptedData = xorEncrypt(jsonStr, dataKey);
-    const pwHeader = xorEncrypt(dataKey, ownerPassword);
-    const rkHeader = xorEncrypt(dataKey, emergencyRecoveryKey);
-
-    fileContent = JSON.stringify({
-      version: '1.0-encrypted',
-      encryptedData,
-      pwHeader,
-      rkHeader
-    }, null, 2);
+  if (ownerPassword) {
+    fileContent = JSON.stringify(await encryptBackup(payload, ownerPassword, emergencyRecoveryKey), null, 2);
   } else {
     fileContent = JSON.stringify(payload, null, 2);
   }
@@ -118,11 +229,14 @@ export function restoreBackupPayload(payload: BackupPayload): {
   productsMerged: number;
   salesMerged: number;
   expensesMerged: number;
+  /** Bundles, day records and the rest of what a shop owns beside its store record. */
+  domainsRestored: number;
 } {
   let storesRestoredCount = 0;
   let productsMerged = 0;
   let salesMerged = 0;
   let expensesMerged = 0;
+  let domainsRestored = 0;
 
   // Restore non-store global configurations
   if (payload.lowStock) localStorage.setItem('storeflow_low_stock', payload.lowStock);
@@ -288,6 +402,30 @@ export function restoreBackupPayload(payload: BackupPayload): {
     }
   }
 
+  /*
+   * And everything else the shops own on this device.
+   *
+   * The backup carried these all along - laundry bundles, day records, month
+   * reports, due defaults - but restore only ever wrote the store record
+   * itself, so a new phone got the shop with none of its bundles. They are
+   * written only where this device has nothing under that key: a restore must
+   * never write over work that is already here. A secret in an old file is
+   * refused outright.
+   */
+  const restoredCodes = new Set(
+    backupIndexList.map(entry => String(entry?.code || '').toUpperCase()).filter(Boolean),
+  );
+  for (const [key, value] of Object.entries(payload.stores || {})) {
+    if (isDeviceSecretKey(key)) continue;
+    const bare = key.replace(/^storeflow_(store_)?/, '').toUpperCase();
+    if (restoredCodes.has(bare)) continue; // the store record itself, merged above
+    if (localStorage.getItem(key) !== null) continue;
+    try {
+      localStorage.setItem(key, value);
+      domainsRestored++;
+    } catch { /* storage full */ }
+  }
+
   // Update index list in localStorage
   localStorage.setItem('storeflow_index', JSON.stringify(localIndexList));
   return {
@@ -295,10 +433,39 @@ export function restoreBackupPayload(payload: BackupPayload): {
     productsMerged,
     salesMerged,
     expensesMerged,
+    domainsRestored,
   };
 }
 
-export function decryptBackup(encryptedPayload: any, decryptionKey: string): BackupPayload {
+export async function decryptBackup(encryptedPayload: any, decryptionKey: string): Promise<BackupPayload> {
+  if (encryptedPayload?.version === ENCRYPTED_VERSION) {
+    const sealedKeys = encryptedPayload.keys || {};
+    let dataKeyBytes: Uint8Array | null = null;
+    // The password and the recovery key each open the same file.
+    for (const sealed of [sealedKeys.password, sealedKeys.recovery]) {
+      if (!sealed) continue;
+      try {
+        dataKeyBytes = await openKey(sealed, decryptionKey);
+        break;
+      } catch { /* try the other one */ }
+    }
+    if (!dataKeyBytes) throw new Error('Incorrect decryption key');
+
+    const dataKey = await subtle().importKey('raw', dataKeyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+    let opened: ArrayBuffer;
+    try {
+      opened = await subtle().decrypt(
+        { name: 'AES-GCM', iv: base64ToBytes(encryptedPayload.data.iv) },
+        dataKey,
+        base64ToBytes(encryptedPayload.data.ciphertext),
+      );
+    } catch {
+      // AES-GCM checks the file as well as opening it.
+      throw new Error('This backup file has been changed since it was made');
+    }
+    return JSON.parse(new TextDecoder().decode(opened)) as BackupPayload;
+  }
+
   if (encryptedPayload.version !== '1.0-encrypted') {
     return encryptedPayload as BackupPayload;
   }

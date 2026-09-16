@@ -975,17 +975,18 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         let payload = JSON.parse(event.target?.result as string);
-        if (payload.version === '1.0-encrypted') {
+        // Both the old XOR files and the sealed ones.
+        if (String(payload.version || '').endsWith('-encrypted')) {
           const key = prompt("Enter Owner Password or Emergency Recovery Key to decrypt backup:");
           if (!key) {
             showToast('Decryption cancelled', 'error');
             return;
           }
           try {
-            payload = decryptBackup(payload, key);
+            payload = await decryptBackup(payload, key);
           } catch (decErr: any) {
             showToast(decErr.message || 'Incorrect decryption key', 'error');
             return;
@@ -3885,15 +3886,19 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         {/* Global Import/Export actions */}
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => {
+            onClick={async () => {
               const pw = prompt("Enter Owner Password to authorize and encrypt backup:");
               if (!pw) return;
               if (pw !== store.managerSettings?.ownerPassword) {
                 showToast("Incorrect owner password", "error");
                 return;
               }
-              triggerBackupExport(store.managerSettings?.ownerPassword, store.managerSettings?.emergencyRecoveryKey);
-              showToast('Backup file exported');
+              try {
+                await triggerBackupExport(store.managerSettings?.ownerPassword, store.managerSettings?.emergencyRecoveryKey);
+                showToast('Backup file exported');
+              } catch (err: any) {
+                showToast(err?.message || 'Could not write the backup file', 'error');
+              }
             }}
             className="p-4 rounded-2xl bg-card shadow-card flex flex-col items-center justify-center gap-2 hover:ring-1 hover:ring-primary/30 transition-all text-center"
           >
