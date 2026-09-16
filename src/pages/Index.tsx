@@ -14,6 +14,7 @@ import type { NotificationAct } from '@/lib/order-deep-link';
 import { allowedNotifications, visibleNotifications, wantsNotification } from '@/lib/notification-gate';
 import { recordDays } from '@/lib/day-records';
 import { setFlowMemoryShop } from '@/lib/flow-memory';
+import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-session';
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
@@ -351,19 +352,11 @@ const RENDERABLE_TABS = new Set<string>([
  * their role in their own session too. Without this, dropping the role would
  * lock out the very person already using it - the opposite of the point.
  */
-const readActiveUser = (): any => {
-  try {
-    const raw = localStorage.getItem('storeflow_active_user');
-    if (!raw) return null;
-    const user = JSON.parse(raw);
-    if (user?.role !== 'admin') return user;
-    const migrated = { ...user, role: 'manager' };
-    localStorage.setItem('storeflow_active_user', JSON.stringify(migrated));
-    return migrated;
-  } catch {
-    return null;
-  }
-};
+/*
+ * Reading the signed-in person, and the retired 'admin' migration with it,
+ * moved to store-session so the store switcher asks the same question this
+ * screen does - who is this person in the shop being opened.
+ */
 
 // The rule itself lives in permissions.ts so that screens can ask it too, not
 // only the navigation in this file.
@@ -1537,9 +1530,21 @@ export default function Index() {
   }, [store?.stockCountAudits?.length]);
 
   const handleStoreLoaded = useCallback((s: StoreData) => {
-    const activeUser = readActiveUser();
-    if (activeUser) {
-      setCurrentUser(activeUser);
+    /*
+     * The shop and the person are set together, not one and then the other.
+     *
+     * This read the signed-in person and used them as they were, so a switch
+     * could draw the new shop's screens with the old shop's role until an
+     * effect caught up. Their role now comes from the shop being opened.
+     */
+    const identity = identityForStore(s, readActiveUser());
+    if (!identity.ok) {
+      showToast(`You are not on the team at ${s.storeName}.`, 'error');
+      return;
+    }
+    if (identity.user) {
+      writeActiveUser(identity.user);
+      setCurrentUser(identity.user);
     }
     setStore(s);
     saveSession(s.accessCode);

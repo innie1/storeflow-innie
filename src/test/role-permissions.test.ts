@@ -149,8 +149,12 @@ describe('the audit of the staff area', () => {
     // person using it.
     expect(readSource('src/lib/store-data.ts')).toContain('function retireAdminRole');
     expect(readSource('src/lib/store-data.ts')).toContain('store = retireAdminRole(store)');
-    expect(index).toContain('const readActiveUser');
-    expect(index).toContain("user?.role !== 'admin'");
+    // The session's half of that migration now lives in store-session, where
+    // the store switcher reads it too rather than keeping a second copy.
+    const session = readSource('src/lib/store-session.ts');
+    expect(session).toContain('export function readActiveUser');
+    expect(session).toContain("user?.role !== 'admin'");
+    expect(index).toContain('readActiveUser()');
   });
 
   it('lets a supervisor see the floor they supervise', () => {

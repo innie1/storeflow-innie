@@ -4,6 +4,7 @@ import { getStoreIndex, backfillStoreIndexTypes, loadStore, createStore, saveSto
 import { applyBusinessTemplate, businessCategoryFor, listBusinessTypes } from '@/lib/business-templates';
 import { getBusinessTemplate } from '@/lib/business-runtime';
 import { saveSession } from '@/components/Settings';
+import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-session';
 import { showToast } from '@/components/Toast';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 
@@ -32,6 +33,22 @@ export default function StoreSwitcher({ currentCode, onSwitch, onClose }: StoreS
   const switchTo = (storeCode: string) => {
     const store = loadStore(storeCode);
     if (!store) return showToast('Store not found on this device', 'error');
+
+    /*
+     * Who is this person in the shop being opened?
+     *
+     * Asked before anything moves. A worker who is not on that shop's team
+     * stays in the shop they are working in - the app used to switch, notice a
+     * moment later that the record was missing, and sign them out of
+     * everything.
+     */
+    const identity = identityForStore(store, readActiveUser());
+    if (!identity.ok) {
+      return showToast(`You are not on the team at ${store.storeName}. Ask the owner to add you.`, 'error');
+    }
+    // Their role in this shop, before its screens draw.
+    if (identity.user) writeActiveUser(identity.user);
+
     saveSession(store.accessCode);
     showToast(`Switched to ${store.storeName}`);
     onSwitch(store);
