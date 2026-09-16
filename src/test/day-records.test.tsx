@@ -24,6 +24,18 @@ const at = (daysAgo: number, hour = 12) => {
   return date.toISOString();
 };
 
+/**
+ * The Analysis screen reads the real clock, so its fixtures are dated from
+ * today rather than from the fixed moment the lib tests use. A test dated to
+ * the day it was written is a test that fails on Wednesday.
+ */
+const realAt = (daysAgo: number, hour = 1) => {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  date.setHours(hour, 0, 0, 0);
+  return date.toISOString();
+};
+
 const bundle = (clientRef: string, createdAt: string, pieceCount: number, total = 1000) => ({
   clientRef, accessCode: 'DAY001', tagCode: clientRef.toUpperCase(), customerName: 'Musa', customerPhone: '',
   garments: [{ garmentType: 'Shirt', quantity: pieceCount }], serviceId: 's1', serviceName: 'Wash',
@@ -153,8 +165,8 @@ describe('nothing appears', () => {
 
 describe('reading the days back in Analysis', () => {
   it('lists each recorded day by its date', () => {
-    keep(bundle('a', at(0, 10), 3), bundle('b', at(2), 5));
-    const store = laundry({ sales: [sale(1500, at(0, 10), 'a'), sale(2500, at(2), 'b')] as any });
+    keep(bundle('a', realAt(0), 3), bundle('b', realAt(2), 5));
+    const store = laundry({ sales: [sale(1500, realAt(0), 'a'), sale(2500, realAt(2), 'b')] as any });
     render(<BusinessAnalytics store={store} />);
     fireEvent.click(screen.getByRole('button', { name: 'Day by day' }));
     expect(screen.getByText(`${describeDay(dayKey(Date.now()))} · so far`, { exact: false })).toBeTruthy();
@@ -162,8 +174,8 @@ describe('reading the days back in Analysis', () => {
   });
 
   it('goes to a chosen date', () => {
-    keep(bundle('b', at(2), 5));
-    const store = laundry({ sales: [sale(2500, at(2), 'b')] as any });
+    keep(bundle('b', realAt(2), 5));
+    const store = laundry({ sales: [sale(2500, realAt(2), 'b')] as any });
     render(<BusinessAnalytics store={store} />);
     fireEvent.click(screen.getByRole('button', { name: 'Day by day' }));
     fireEvent.change(screen.getByLabelText('Go to a date'), { target: { value: '2001-01-01' } });
