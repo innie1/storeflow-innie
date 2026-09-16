@@ -53,9 +53,12 @@ describe('laundry workspace routing', () => {
 
   it('mounts Laundry Records as a separate Index surface beside Orders', () => {
     const source = readSource('src/pages/Index.tsx');
-    expect(source).toContain("import LaundryWorkspace from '@/components/laundry/LaundryWorkspace';");
-    expect(source).toContain("tab === 'orders'");
-    expect(source).toContain("tab === 'laundry-records'");
+    // Fetched when it is opened rather than imported at the top: every screen
+    // being in the startup bundle is what made the app slow to open. The
+    // workspace is still its own surface, on its own tab, beside Orders.
+    expect(readSource('src/pages/screens.ts')).toContain("LaundryWorkspace: () => import('@/components/laundry/LaundryWorkspace')");
+    expect(source).toContain("case 'orders':");
+    expect(source).toContain("case 'laundry-records':");
     // currentUser rides along so every record taken in is stamped with who
     // took it; without it nothing on the record says who did the work.
     expect(source).toContain('<LaundryWorkspace store={store} orders={orders} onUpdate={setStore} currentUser={currentUser} />');

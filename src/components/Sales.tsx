@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { shopMemoryKey, recallDraft, rememberDraft, forgetDraft } from '@/lib/screen-memory';
 import CustomerSuggestions from '@/components/CustomerSuggestions';
 import { knownCustomers } from '@/lib/customer-directory';
 import { StoreData, Sale, PaymentMethod, ManagerSettings, Product } from '@/types/store';
@@ -81,7 +82,23 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const [pendingSaleMode, setPendingSaleMode] = useState<'wholesale' | 'retail' | null>(null);
   const [saleModeCodeInput, setSaleModeCodeInput] = useState('');
   const [scanning, setScanning] = useState(false);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  /*
+   * The cart survives a trip to another screen, per shop.
+   *
+   * Only the screen being looked at is mounted, so this screen is gone the
+   * moment somebody taps Inventory to check what is left of an item mid-sale -
+   * and a cart with six things counted into it would have gone with it. It is
+   * kept against the shop it was built in and nowhere else: carrying it into
+   * another shop on the same phone would put one shop's goods into another
+   * shop's sale. It is cleared the moment the sale is recorded.
+   */
+  const shopKey = shopMemoryKey(store);
+  const [cart, setCart] = useState<CartItem[]>(() => recallDraft<CartItem[]>(shopKey, 'sales-cart') || []);
+
+  useEffect(() => {
+    if (cart.length === 0) forgetDraft(shopKey, 'sales-cart');
+    else rememberDraft(shopKey, 'sales-cart', cart);
+  }, [cart, shopKey]);
   const [globalSaleMode, setGlobalSaleMode] = useState<'wholesale' | 'retail'>(() => (localStorage.getItem('storeflow_sale_mode') as 'wholesale' | 'retail') || 'retail');
   const [selectedSaleTypes, setSelectedSaleTypes] = useState<Record<string, 'carton' | 'single'>>({});
   const [checkoutOpen, setCheckoutOpen] = useState(false);

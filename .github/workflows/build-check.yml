@@ -30,3 +30,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # The screens are fetched when they are opened rather than shipped in one
+      # file. Nothing in the build itself would notice if that came undone, so
+      # the size of the startup file is checked here, against the build.
+      - run: npm run bundle:check

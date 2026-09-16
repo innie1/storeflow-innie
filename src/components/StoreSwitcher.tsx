@@ -3,8 +3,7 @@ import { StoreData } from '@/types/store';
 import { getStoreIndex, backfillStoreIndexTypes, loadStore, createStore, saveStore, removeStoreFromIndex } from '@/lib/store-data';
 import { applyBusinessTemplate, businessCategoryFor, listBusinessTypes } from '@/lib/business-templates';
 import { getBusinessTemplate } from '@/lib/business-runtime';
-import { saveSession } from '@/components/Settings';
-import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-session';
+import { identityForStore, readActiveUser, writeActiveUser, saveSession } from '@/lib/store-session';
 import { showToast } from '@/components/Toast';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 

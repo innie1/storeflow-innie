@@ -6,12 +6,11 @@ import { readSource } from './helpers/source';
  * error, nothing for the error boundary to catch, and on a phone no obvious way
  * back.
  *
- * Every screen is mounted at once and shown with
- * `<div className={tab === 'x' ? 'block' : 'hidden'}>`. There is no `else`. A
- * tab id with no matching branch does not throw — every div just stays hidden
- * and the main area renders nothing at all. TabId has more members than the
- * markup has branches, and menu group ids like 'finance' share the same type,
- * so it only takes one setTab with the wrong value.
+ * The active screen is chosen by a switch with no `else`. A tab id with no
+ * matching case does not throw - screenFor simply returns null and the main
+ * area renders nothing at all. TabId has more members than that switch has
+ * cases, and menu group ids like 'finance' share the same type, so it only
+ * takes one setTab with the wrong value.
  *
  * These keep the fallback honest: the list it checks against has to match the
  * branches that actually exist, or it would wave through a tab that renders
@@ -20,13 +19,23 @@ import { readSource } from './helpers/source';
 
 const source = () => readSource('src/pages/Index.tsx');
 
-function mainRegion(code: string): string {
-  return code.slice(code.indexOf('<main className='), code.indexOf('</main>'));
+/*
+ * The branches used to be thirty-one divs in the main area, each shown or
+ * hidden with `tab === 'x'`. Only the active screen is mounted now, so the
+ * branches are the cases of the switch in screenFor - the same question, asked
+ * in one place instead of thirty-one. What this file checks is unchanged: the
+ * list the fallback tests against has to match the branches that exist.
+ */
+function screenSwitch(code: string): string {
+  const start = code.indexOf('const screenFor =');
+  if (start < 0) throw new Error('screenFor is gone - what renders a tab now?');
+  const end = code.indexOf('min-h-screen flex flex-col', start);
+  return code.slice(start, end);
 }
 
 function branchTabs(code: string): string[] {
-  const region = mainRegion(code);
-  return [...new Set([...region.matchAll(/tab === '([a-z0-9-]+)'/g)].map(m => m[1]))].sort();
+  const region = screenSwitch(code);
+  return [...new Set([...region.matchAll(/case '([a-z0-9-]+)':/g)].map(m => m[1]))].sort();
 }
 
 function declaredTabs(code: string): string[] {

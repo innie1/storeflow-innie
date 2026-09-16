@@ -28,54 +28,50 @@ import AppLockScreen from '@/components/AppLockScreen';
 import { appLockActive } from '@/lib/app-lock';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import NotificationDrawer from '@/components/NotificationDrawer';
-import MyPieceWork from '@/components/laundry/MyPieceWork';
-import Dashboard from '@/components/Dashboard';
-import SimpleModeHome from '@/components/simple/SimpleModeHome';
+/*
+ * The screens are fetched when they are opened, not at startup.
+ *
+ * Importing them here the ordinary way is what made the app one file of a
+ * megabyte that had to be downloaded and run before anything could be shown.
+ * They are destructured so the markup below reads exactly as it did.
+ */
+import { Screens, screensForTab, preloadScreens, workspaceKeyFor } from './screens';
+import { subscribeWorkInProgress, workInProgress } from '@/lib/work-in-progress';
+
+const {
+  Academy, Achievements, BarcodeScanner, CashDrawer, CommunicationCenter,
+  Customers, Dashboard, Diary, Documents, Expenses,
+  GamesAnalytics, GamesDashboard, GamesHistory, GamesSettings,
+  Goals, Inventory, LaundryPricingSetup, LaundryWorkspace,
+  Manager, Marketplace, MyPieceWork, Orders, PendingPayments,
+  QRHub, ROITracker, ReceiptScanner, Sales, SalesHistory,
+  Settings, SimpleModeHome, StaffManagement, Suppliers, Wishlist,
+} = Screens;
+
+/*
+ * The home screen is what every start shows, so its fetch starts the moment
+ * this file runs rather than waiting for the phone to go idle: it is already
+ * on its way while React is still starting, and the first screen does not wait
+ * on a round trip of its own. Three small pieces - 30kB between them - against
+ * the 600kB that no longer arrives before anything can be drawn. Which home
+ * screen a shop uses is not known until the shop is loaded, so both are asked
+ * for.
+ */
+preloadScreens(['MyPieceWork', 'Dashboard', 'SimpleModeHome']);
 import ToggleRow from '@/components/Toggle';
 import StoreLogo from '@/components/StoreLogo';
 import { ToastContainer, showToast } from '@/components/Toast';
 import InstallPrompt from '@/components/InstallPrompt';
-import Orders from '@/components/Orders';
-import LaundryWorkspace from '@/components/laundry/LaundryWorkspace';
 import LaundrySyncAgent from '@/components/laundry/LaundrySyncAgent';
 import { supabase } from '@/integrations/supabase/client';
 import { autoSubscribeIfGranted, clearAllStoreFlowNotifications } from '@/lib/push-notifications';
 import { forceUnlockBodyScroll } from '@/hooks/use-body-scroll-lock';
 
 // Eager helper imports from settings
-import { saveSession, clearSession, getActiveSession } from '@/components/Settings';
+import { saveSession, clearSession, getActiveSession } from '@/lib/store-session';
 
-import Inventory from '@/components/Inventory';
-import Services from '@/components/Services';
-import LaundryPricingSetup from '@/components/laundry/LaundryPricingSetup';
-import Sales from '@/components/Sales';
-import SalesHistory from '@/components/SalesHistory';
-import ReceiptScanner from '@/components/ReceiptScanner';
-import BarcodeScanner from '@/components/BarcodeScanner';
-import Settings from '@/components/Settings';
-import Expenses from '@/components/Expenses';
-import ROITracker from '@/components/ROITracker';
-import Manager from '@/components/Manager';
-import PendingPayments from '@/components/PendingPayments';
-import Marketplace from '@/components/Marketplace';
-import Customers from '@/components/Customers';
-import Suppliers from '@/components/Suppliers';
-import Goals from '@/components/Goals';
-import Diary from '@/components/Diary';
-import Documents from '@/components/Documents';
-import Academy from '@/components/Academy';
-import Achievements from '@/components/Achievements';
-import Wishlist from '@/components/Wishlist';
-import StaffManagement from '@/components/StaffManagement';
-import CashDrawer from '@/components/CashDrawer';
-import CommunicationCenter from '@/components/CommunicationCenter';
-import QRHub from '@/components/qr/QRHub';
 
 // Games tabs
-import GamesDashboard from '@/components/games/GamesDashboard';
-import GamesSettings from '@/components/games/GamesSettings';
-import GamesHistory from '@/components/games/GamesHistory';
-import GamesAnalytics from '@/components/games/GamesAnalytics';
 import {
   Home,
   Package,
@@ -308,11 +304,11 @@ const renderTabIcon = (id: TabId, isActive: boolean, className = "w-5 h-5") => {
 /**
  * Tabs the main area actually renders.
  *
- * Each screen is mounted as <div className={tab === 'x' ? 'block' : 'hidden'}>,
- * so a tab id with no branch does not fail — every div simply stays hidden and
- * the page goes completely blank. No error, nothing for the error boundary to
- * catch, and on a phone no obvious way back. This list is what the fallback
- * below checks against, and a test keeps it in step with the markup.
+ * The screen being looked at is the only one mounted, chosen by the switch in
+ * screenFor, and a tab id with no case there does not fail — it simply renders
+ * nothing and the page goes completely blank. No error, nothing for the error
+ * boundary to catch, and on a phone no obvious way back. This list is what the
+ * fallback below checks against, and a test keeps it in step with that switch.
  */
 const RENDERABLE_TABS = new Set<string>([
   'academy',
@@ -1177,6 +1173,45 @@ export default function Index() {
   const isGames = businessType === 'games';
   const isServiceFirst = isServiceFirstBusiness(store);
 
+  /*
+   * The shop and the trade the mounted screen belongs to.
+   *
+   * Only the screen being looked at is mounted, and this key is what says
+   * whose screen it is. Switching shops changes the key, so React throws the
+   * previous shop's screen away with everything it was holding instead of
+   * handing it to the shop being opened - a cart, a filter, a half-typed
+   * search belong to the shop they were made in. The trade is part of the key
+   * as well, because the same shop can be changed from a provision store to a
+   * laundry, and those are not the same screens.
+   */
+  const workspaceKey = workspaceKeyFor(store);
+
+  /*
+   * The one screen allowed to stay mounted while something else is on screen.
+   *
+   * This is the only exception to mounting just the active screen, and it
+   * exists for one case: a form somebody is halfway through. An intake with
+   * twelve shirts counted into it has to survive the counter tapping Orders to
+   * check a customer's name. Screens holding unsaved work already say so - the
+   * updater uses the same signal to avoid reloading over a live form - so the
+   * screen that was open when that work began is held until the work is
+   * finished. At most one screen, only while a form is actually open, and it
+   * is let go once the work is done and they have moved on; releasing it any
+   * earlier would remount the screen under the person who just finished.
+   */
+  const [unsavedWorkOpen, setUnsavedWorkOpen] = useState(false);
+  const [heldTab, setHeldTab] = useState<TabId | null>(null);
+
+  useEffect(() => subscribeWorkInProgress(() => setUnsavedWorkOpen(workInProgress())), []);
+
+  useEffect(() => {
+    if (unsavedWorkOpen) {
+      setHeldTab(previous => previous ?? tab);
+      return;
+    }
+    setHeldTab(previous => (previous && previous !== tab ? null : previous));
+  }, [unsavedWorkOpen, tab]);
+
   /**
    * Keep the signed-in session in step with the staff record.
    *
@@ -1278,6 +1313,44 @@ export default function Index() {
   const allowedMoreItems = useMemo(() => {
     return moreItems.filter(t => isTabAllowed(t.id, currentUser));
   }, [moreItems, currentUser]);
+
+  /*
+   * Fetch the screens that are one tap away, once the phone is idle.
+   *
+   * A screen is fetched when it is opened, which is what makes the app start
+   * quickly, and would otherwise make the first tap on each screen wait. So
+   * the screens in this shop's own bottom bar - the ones this trade and this
+   * person are actually allowed - are fetched quietly after the app has
+   * settled, and the tap finds them already there.
+   *
+   * Not on a metered or a slow connection: somebody paying by the megabyte on
+   * 2G should spend it on the screen they asked for, not on five they might
+   * never open.
+   */
+  useEffect(() => {
+    if (!store) return;
+    const connection = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (connection?.saveData) return;
+    if (typeof connection?.effectiveType === 'string' && /2g/i.test(connection.effectiveType)) return;
+
+    const shape = {
+      simpleMode: store.uiMode === 'simple',
+      serviceFirst: isServiceFirst,
+      laundry: businessType === 'laundry',
+      games: isGames,
+    };
+    const wanted = [...new Set(allowedMainTabs.flatMap(item => screensForTab(item.id, shape)))];
+    if (wanted.length === 0) return;
+
+    const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    if (idle) {
+      const handle = idle(() => preloadScreens(wanted), { timeout: 4000 });
+      const cancel = (window as unknown as { cancelIdleCallback?: (handle: number) => void }).cancelIdleCallback;
+      return () => { if (cancel) cancel(handle); };
+    }
+    const timer = window.setTimeout(() => preloadScreens(wanted), 2500);
+    return () => window.clearTimeout(timer);
+  }, [store, allowedMainTabs, isServiceFirst, isGames, businessType]);
 
   const allowedCategories = useMemo(() => {
     if (isGames) {
@@ -1680,6 +1753,106 @@ export default function Index() {
       </>
     );
   }
+
+  /**
+   * The screen a tab shows.
+   *
+   * One tab, one screen: this switch is the whole of it, and what the
+   * mount-count test counts. The same question is answered without rendering
+   * anything by screensForTab in pages/screens, which is what the idle
+   * prefetch asks; a test keeps the two in step.
+   */
+  const screenFor = (which: TabId) => {
+    switch (which) {
+      case 'dashboard':
+        return (
+          <>
+            {/* A per-piece worker's Record my work and earnings, above
+                whichever home screen they use. Nobody else sees it. */}
+            <MyPieceWork store={store} orders={orders} currentUser={currentUser} onUpdate={setStore} />
+            {store.uiMode === 'simple' ? (
+              <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} orders={orders} />
+            ) : (
+              <Dashboard store={store} orders={orders} onNavigate={handleNavigate} currentUser={currentUser} />
+            )}
+          </>
+        );
+      case 'orders':
+        return <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} focusOrderId={focusOrderId} onFocusHandled={() => setFocusOrderId(null)} notificationAct={notificationAct} onNotificationActHandled={() => setNotificationAct(null)} />;
+      case 'laundry-records':
+        return String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry'
+          ? <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} currentUser={currentUser} />
+          : null;
+      case 'inventory':
+        return isServiceFirst ? (
+          <LaundryPricingSetup store={store} onUpdate={setStore} currentUser={currentUser} />
+        ) : (
+          <Inventory
+            store={store}
+            onUpdate={setStore}
+            filterLowStock={filterLowStock}
+            onClearFilter={() => setFilterLowStock(false)}
+            focusProduct={focusProduct}
+            onFocusProductHandled={() => setFocusProduct(null)}
+            currentUser={currentUser}
+            autoOpenRestock={autoOpenRestock}
+            onAutoOpenRestockHandled={() => setAutoOpenRestock(false)}
+          />
+        );
+      case 'sales':
+        return <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} isActive={tab === 'sales'} currentUser={currentUser} />;
+      case 'expenses':
+        return <Expenses store={store} onUpdate={setStore} />;
+      case 'manager':
+        return <Manager store={store} orders={orders} onUpdate={setStore} onNavigate={handleNavigate} />;
+      case 'pending':
+        return <PendingPayments store={store} onUpdate={setStore} />;
+      case 'history':
+        return <SalesHistory store={store} onUpdate={setStore} currentUser={currentUser} />;
+      case 'roi':
+        return <ROITracker store={store} onUpdate={setStore} />;
+      case 'settings':
+        return <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} isActive={tab === 'settings'} onSubViewChange={setSettingsSubView} />;
+      case 'marketplace':
+        return <Marketplace store={store} onUpdate={setStore} />;
+      case 'customers':
+        return <Customers store={store} onUpdate={setStore} orders={orders} currentUser={currentUser} />;
+      case 'suppliers':
+        return <Suppliers store={store} onUpdate={setStore} />;
+      case 'goals':
+        return <Goals store={store} onUpdate={setStore} />;
+      case 'diary':
+        return <Diary store={store} onUpdate={setStore} />;
+      case 'documents':
+        return <Documents store={store} onUpdate={setStore} />;
+      case 'academy':
+        return <Academy store={store} onUpdate={setStore} />;
+      case 'achievements':
+        return <Achievements store={store} />;
+      case 'wishlist':
+        return <Wishlist store={store} onUpdate={setStore} />;
+      case 'staff':
+        return <StaffManagement store={store} onUpdate={setStore} currentUser={currentUser} orders={orders} />;
+      case 'cash-drawer':
+        return <CashDrawer store={store} onUpdate={setStore} />;
+      case 'communication-center':
+        return <CommunicationCenter store={store} onUpdate={setStore} currentUser={currentUser} />;
+      case 'qr-hub':
+        return <QRHub store={store} onUpdate={setStore} currentUser={currentUser} orders={orders} />;
+      case 'games-dashboard':
+        return isGames ? <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} /> : null;
+      case 'games-history':
+        return isGames ? <GamesHistory store={store} onUpdate={setStore} /> : null;
+      case 'games-analytics':
+        return isGames ? <GamesAnalytics store={store} /> : null;
+      case 'games-settings':
+        return isGames ? <GamesSettings store={store} onUpdate={setStore} /> : null;
+      default:
+        // Not a screen. The way back is rendered below, against the same list
+        // of renderable tabs as before.
+        return null;
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-background">
@@ -2288,117 +2461,20 @@ export default function Index() {
               <p className="text-xs text-muted-foreground font-display font-medium">Loading module...</p>
             </div>
           }>
-            <div className={tab === 'dashboard' ? 'block' : 'hidden'}>
-              {/* A per-piece worker's Record my work and earnings, above
-                  whichever home screen they use. Nobody else sees it. */}
-              <MyPieceWork store={store} orders={orders} currentUser={currentUser} onUpdate={setStore} />
-              {store.uiMode === 'simple' ? (
-                <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} orders={orders} />
-              ) : (
-                <Dashboard store={store} orders={orders} onNavigate={handleNavigate} currentUser={currentUser} />
+            <div key={workspaceKey}>
+              {/* The exception, kept in one place: a screen holding unsaved
+                  work stays mounted and steps aside rather than unmounting. */}
+              {heldTab && (
+                <div key={`screen:${heldTab}`} className={tab === heldTab ? 'block' : 'hidden'}>
+                  {screenFor(heldTab)}
+                </div>
+              )}
+              {tab !== heldTab && (
+                <div key={`screen:${tab}`}>
+                  {screenFor(tab)}
+                </div>
               )}
             </div>
-            <div className={tab === 'orders' ? 'block' : 'hidden'}>
-              <Orders store={store} orders={orders} onUpdateOrderStatus={handleUpdateOrderStatus} onUpdate={setStore} focusOrderId={focusOrderId} onFocusHandled={() => setFocusOrderId(null)} notificationAct={notificationAct} onNotificationActHandled={() => setNotificationAct(null)} />
-            </div>
-            <div className={tab === 'laundry-records' ? 'block' : 'hidden'}>
-              {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && (
-                <LaundryWorkspace store={store} orders={orders} onUpdate={setStore} currentUser={currentUser} />
-              )}
-            </div>
-            <div className={tab === 'inventory' ? 'block' : 'hidden'}>
-              {isServiceFirst ? (
-                <LaundryPricingSetup store={store} onUpdate={setStore} currentUser={currentUser} />
-              ) : (
-                <Inventory
-                  store={store}
-                  onUpdate={setStore}
-                  filterLowStock={filterLowStock}
-                  onClearFilter={() => setFilterLowStock(false)}
-                  focusProduct={focusProduct}
-                  onFocusProductHandled={() => setFocusProduct(null)}
-                  currentUser={currentUser}
-                  autoOpenRestock={autoOpenRestock}
-                  onAutoOpenRestockHandled={() => setAutoOpenRestock(false)}
-                />
-              )}
-            </div>
-            <div className={tab === 'sales' ? 'block' : 'hidden'}>
-              <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} isActive={tab === 'sales'} currentUser={currentUser} />
-            </div>
-            <div className={tab === 'expenses' ? 'block' : 'hidden'}>
-              <Expenses store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'manager' ? 'block' : 'hidden'}>
-              <Manager store={store} orders={orders} onUpdate={setStore} onNavigate={handleNavigate} />
-            </div>
-            <div className={tab === 'pending' ? 'block' : 'hidden'}>
-              <PendingPayments store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'history' ? 'block' : 'hidden'}>
-              <SalesHistory store={store} onUpdate={setStore} currentUser={currentUser} />
-            </div>
-            <div className={tab === 'roi' ? 'block' : 'hidden'}>
-              <ROITracker store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'settings' ? 'block' : 'hidden'}>
-              <Settings store={store} onUpdate={setStore} onLock={handleLock} currentUser={currentUser} isActive={tab === 'settings'} onSubViewChange={setSettingsSubView} />
-            </div>
-            <div className={tab === 'marketplace' ? 'block' : 'hidden'}>
-              <Marketplace store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'customers' ? 'block' : 'hidden'}>
-              <Customers store={store} onUpdate={setStore} orders={orders} currentUser={currentUser} />
-            </div>
-            <div className={tab === 'suppliers' ? 'block' : 'hidden'}>
-              <Suppliers store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'goals' ? 'block' : 'hidden'}>
-              <Goals store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'diary' ? 'block' : 'hidden'}>
-              <Diary store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'documents' ? 'block' : 'hidden'}>
-              <Documents store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'academy' ? 'block' : 'hidden'}>
-              <Academy store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'achievements' ? 'block' : 'hidden'}>
-              <Achievements store={store} />
-            </div>
-            <div className={tab === 'wishlist' ? 'block' : 'hidden'}>
-              <Wishlist store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'staff' ? 'block' : 'hidden'}>
-              <StaffManagement store={store} onUpdate={setStore} currentUser={currentUser} orders={orders} />
-            </div>
-            <div className={tab === 'cash-drawer' ? 'block' : 'hidden'}>
-              <CashDrawer store={store} onUpdate={setStore} />
-            </div>
-            <div className={tab === 'communication-center' ? 'block' : 'hidden'}>
-              <CommunicationCenter store={store} onUpdate={setStore} currentUser={currentUser} />
-            </div>
-            <div className={tab === 'qr-hub' ? 'block' : 'hidden'}>
-              <QRHub store={store} onUpdate={setStore} currentUser={currentUser} orders={orders} />
-            </div>
-            {isGames && (
-              <>
-                <div className={tab === 'games-dashboard' ? 'block' : 'hidden'}>
-                  <GamesDashboard store={store} onUpdate={setStore} onGoToSettings={() => setTab('games-settings')} />
-                </div>
-                <div className={tab === 'games-history' ? 'block' : 'hidden'}>
-                  <GamesHistory store={store} onUpdate={setStore} />
-                </div>
-                <div className={tab === 'games-analytics' ? 'block' : 'hidden'}>
-                  <GamesAnalytics store={store} />
-                </div>
-                <div className={tab === 'games-settings' ? 'block' : 'hidden'}>
-                  <GamesSettings store={store} onUpdate={setStore} />
-                </div>
-              </>
-            )}
 
             {/* Nothing matched. Rather than leave the merchant on an empty
                 screen with no way out, say so and offer the way back. */}
@@ -2469,22 +2545,26 @@ export default function Index() {
       </div>
 
       {showScanner && (
-        <ReceiptScanner
-          store={store}
-          onUpdate={setStore}
-          onClose={() => setShowScanner(false)}
-          currentUser={currentUser}
-        />
+        <Suspense fallback={null}>
+          <ReceiptScanner
+            store={store}
+            onUpdate={setStore}
+            onClose={() => setShowScanner(false)}
+            currentUser={currentUser}
+          />
+        </Suspense>
       )}
 
       {showBarcodeScanner && (
         <>
-          <BarcodeScanner
-            title={scanCart.length > 0 ? `Scan more · ${scanCart.length} item${scanCart.length === 1 ? '' : 's'} in cart` : 'Scan to Save or Sell'}
-            subtitle="Existing barcodes are added to cart · new ones open a save form"
-            onClose={() => setShowBarcodeScanner(false)}
-            onDetected={handleBarcodeDetected}
-          />
+          <Suspense fallback={null}>
+            <BarcodeScanner
+              title={scanCart.length > 0 ? `Scan more · ${scanCart.length} item${scanCart.length === 1 ? '' : 's'} in cart` : 'Scan to Save or Sell'}
+              subtitle="Existing barcodes are added to cart · new ones open a save form"
+              onClose={() => setShowBarcodeScanner(false)}
+              onDetected={handleBarcodeDetected}
+            />
+          </Suspense>
           {scanCart.length > 0 && (
             <div className="fixed bottom-0 left-0 right-0 z-[60] bg-card border-t border-success/40 p-3 space-y-2 max-h-[40vh] overflow-y-auto shadow-card">
               <div className="flex items-center justify-between">

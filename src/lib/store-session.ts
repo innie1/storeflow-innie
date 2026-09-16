@@ -80,3 +80,50 @@ export function identityForStore(
     user: { id: record.id, name: record.name, role: record.role, permissions: record.permissions },
   };
 }
+
+/**
+ * How long a shop stays open on this device before it asks again.
+ *
+ * This and the session below were part of the Settings screen. They are read
+ * at startup, long before anybody opens Settings, so keeping them there meant
+ * the biggest screen in the app had to load before the app could tell whether
+ * a shop was already open.
+ */
+export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
+
+const LOCK_TIMER_KEY = 'storeflow_lock_timer';
+const SESSION_KEY = 'storeflow_session';
+
+interface SessionData { accessCode: string; loginAt: number; lockTimer: LockTimer; }
+
+export function saveLockTimer(timer: LockTimer) { localStorage.setItem(LOCK_TIMER_KEY, timer); }
+export function getLockTimer(): LockTimer { return (localStorage.getItem(LOCK_TIMER_KEY) as LockTimer) || '1h'; }
+
+export function saveSession(accessCode: string) {
+  const s: SessionData = { accessCode, loginAt: Date.now(), lockTimer: getLockTimer() };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+}
+
+export function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(ACTIVE_USER_KEY);
+}
+
+export function getActiveSession(): string | null {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try {
+    const session: SessionData = JSON.parse(raw);
+    const timer = getLockTimer();
+    if (timer === 'never') return session.accessCode;
+    let maxMs = 3600000;
+    if (timer === '4h') maxMs = 4 * 3600000;
+    else if (timer === '8h') maxMs = 8 * 3600000;
+    else if (timer === '12h') maxMs = 12 * 3600000;
+    if (Date.now() - session.loginAt > maxMs) {
+      clearSession();
+      return null;
+    }
+    return session.accessCode;
+  } catch { return null; }
+}

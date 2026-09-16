@@ -89,42 +89,19 @@ import { downscaleImageToDataUrl } from '@/lib/downscale-image';
 import { speakAsFlow, type FlowVoiceGender } from '@/lib/flow-voice';
 import { getBusinessTemplate, hasBusinessModule, isServiceFirstBusiness } from '@/lib/business-runtime';
 import { clearPin, enrollFingerprint, fingerprintEnrolled, fingerprintSupported, forgetFingerprint, hasPin, PIN_LENGTH, setPin as savePin } from '@/lib/app-lock';
+import { saveLockTimer, getLockTimer, saveSession, clearSession, type LockTimer } from '@/lib/store-session';
 
-export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
-
-const LOCK_TIMER_KEY = 'storeflow_lock_timer';
-const SESSION_KEY = 'storeflow_session';
-
-interface SessionData { accessCode: string; loginAt: number; lockTimer: LockTimer; }
-
-export function saveLockTimer(timer: LockTimer) { localStorage.setItem(LOCK_TIMER_KEY, timer); }
-export function getLockTimer(): LockTimer { return (localStorage.getItem(LOCK_TIMER_KEY) as LockTimer) || '1h'; }
-export function saveSession(accessCode: string) {
-  const s: SessionData = { accessCode, loginAt: Date.now(), lockTimer: getLockTimer() };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-}
-export function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem('storeflow_active_user');
-}
-export function getActiveSession(): string | null {
-  const raw = localStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
-  try {
-    const session: SessionData = JSON.parse(raw);
-    const timer = getLockTimer();
-    if (timer === 'never') return session.accessCode;
-    let maxMs = 3600000;
-    if (timer === '4h') maxMs = 4 * 3600000;
-    else if (timer === '8h') maxMs = 8 * 3600000;
-    else if (timer === '12h') maxMs = 12 * 3600000;
-    if (Date.now() - session.loginAt > maxMs) {
-      clearSession();
-      return null;
-    }
-    return session.accessCode;
-  } catch { return null; }
-}
+/*
+ * The session helpers live in lib/store-session, not here.
+ *
+ * Index needs saveSession, clearSession and getActiveSession at startup. While
+ * they lived in this file, importing them pulled this whole screen - the
+ * largest in the app - into the startup bundle, which no amount of lazy
+ * loading of the screen itself could undo. They are re-exported so that
+ * anything already importing them from Settings keeps working.
+ */
+export type { LockTimer } from '@/lib/store-session';
+export { saveLockTimer, getLockTimer, saveSession, clearSession, getActiveSession } from '@/lib/store-session';
 
 type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'

@@ -118,7 +118,9 @@ describe('wired in once', () => {
   const index = readSource('src/pages/Index.tsx');
 
   it('above both the full home screen and the simple one', () => {
-    const tab = index.indexOf("<div className={tab === 'dashboard' ? 'block' : 'hidden'}>");
+    // The home screen is a case in screenFor now, not one of thirty-one
+    // hidden divs; the card still sits above whichever home screen is used.
+    const tab = index.indexOf("case 'dashboard':");
     const simple = index.indexOf("{store.uiMode === 'simple' ? (", tab);
     const card = index.indexOf('<MyPieceWork store={store} orders={orders} currentUser={currentUser} onUpdate={setStore} />', tab);
     expect(tab).toBeGreaterThan(-1);
