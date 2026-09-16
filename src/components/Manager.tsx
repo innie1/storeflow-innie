@@ -18,7 +18,7 @@ import {
   getProductInsightBadges, filterDismissedAdvice, dismissAdvice, markAdviceHelpful
 } from '@/lib/manager-intel';
 import { getLowStockThreshold } from '@/lib/settings';
-import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward, hydrateFlowMemoryFromCloud } from '@/lib/flow-memory';
+import { getFlowMemory, recordStreak, getCoins, addCoins, Supplier, addSupplier, deleteSupplier, claimReferral, addFlowReward, hydrateFlowMemoryFromCloud, legacyFlowMemoryAwaitingOwner, claimLegacyFlowMemory } from '@/lib/flow-memory';
 import { showToast } from '@/components/Toast';
 import Mascot, { MascotBadge } from '@/components/Mascot';
 import { FlowIcon } from '@/components/FlowIcon';
@@ -357,6 +357,8 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
 function SupplierPanel() {
   const mem = getFlowMemory();
   const [suppliers, setSuppliers] = useState<Supplier[]>(mem.suppliers);
+  /** Suppliers and coins from the version where every shop shared one pile. */
+  const [legacyWaiting, setLegacyWaiting] = useState(() => legacyFlowMemoryAwaitingOwner());
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', products: '', pricePerUnit: '', unit: '', distance: '', notes: '' });
 
@@ -377,6 +379,32 @@ function SupplierPanel() {
         <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Factory className="w-4 h-4" /> Suppliers</h3>
         <button onClick={() => setAdding(!adding)} className="text-xs px-3 py-1.5 rounded-full bg-primary text-primary-foreground font-display font-bold">+ Add</button>
       </div>
+
+      {/*
+        Flow's suppliers and coins used to be one pile shared by every shop on
+        this phone. They belong to a shop now, and a pile from that older
+        version is left exactly where it is until somebody says whose it is -
+        moving it by guesswork would hand one shop another's suppliers.
+      */}
+      {legacyWaiting && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Suppliers and Flow coins from an older version are still on this phone. Every shop shared them then, so StoreFlow will not guess whose they are.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (!claimLegacyFlowMemory()) return;
+              setSuppliers(getFlowMemory().suppliers);
+              setLegacyWaiting(false);
+              showToast('Moved into this shop');
+            }}
+            className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] font-display font-black"
+          >
+            They belong to this shop
+          </button>
+        </div>
+      )}
       {adding && (
         <div className="space-y-2 p-3 rounded-xl bg-surface-2 border border-border">
           <input placeholder="Supplier name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="w-full p-2 rounded-lg bg-card border border-border text-sm focus:outline-none focus:border-primary" />

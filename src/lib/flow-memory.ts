@@ -46,11 +46,109 @@ export interface FlowMemory {
   claimedReferralCode?: string; // The code this user entered
 }
 
-const KEY = 'storeflow_flow_memory';
+/**
+ * One shop, one memory.
+ *
+ * This was a single key shared by every shop on the phone, while the cloud
+ * target followed whichever shop happened to be open - so a supplier added in
+ * one shop turned up in the next, and a save could write the first shop's
+ * coins and streak into the second shop's cloud record. Both now come from the
+ * same place: the shop set below.
+ *
+ * With no shop set nothing is read and nothing is written. Empty is better
+ * than somebody else's.
+ */
+const KEY_PREFIX = 'storeflow_flow_memory_v2_';
+
+/** The old shared pile. Never written again; see takeOverLegacyMemory. */
+const LEGACY_KEY = 'storeflow_flow_memory';
+
+let shopKey: string | null = null;
+
+function currentKey(): string | null {
+  return shopKey ? KEY_PREFIX + shopKey : null;
+}
+
+function shopsOnThisDevice(): number {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('storeflow_index') || '[]');
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * The older version's shared pile, handed to its owner.
+ *
+ * On a phone with one shop there is no question whose it is, so it moves
+ * across and the old key goes. On a phone with several, guessing would put one
+ * shop's suppliers and coins into another's hands, so it stays where it is
+ * until somebody says - see legacyFlowMemoryAwaitingOwner.
+ */
+function takeOverLegacyMemory(): void {
+  try {
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (!legacy) return;
+    const key = currentKey();
+    if (!key || localStorage.getItem(key)) return;
+    if (shopsOnThisDevice() > 1) return;
+    localStorage.setItem(key, legacy);
+    localStorage.removeItem(LEGACY_KEY);
+  } catch { /* private mode */ }
+}
+
+/** Whether an older version's shared suppliers and coins are still waiting for an owner. */
+export function legacyFlowMemoryAwaitingOwner(): boolean {
+  try {
+    return !!currentKey() && !!localStorage.getItem(LEGACY_KEY);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hands that older pile to the shop that is open, keeping whatever the shop
+ * already has. True when something moved.
+ */
+export function claimLegacyFlowMemory(): boolean {
+  try {
+    const raw = localStorage.getItem(LEGACY_KEY);
+    const key = currentKey();
+    if (!raw || !key) return false;
+
+    const legacy = JSON.parse(raw) as FlowMemory;
+    const mine = localStorage.getItem(key);
+    if (!mine) {
+      localStorage.setItem(key, raw);
+    } else {
+      const current = JSON.parse(mine) as FlowMemory;
+      const suppliers = [...(current.suppliers || [])];
+      for (const supplier of legacy.suppliers || []) {
+        if (!suppliers.some(entry => entry.id === supplier.id)) suppliers.push(supplier);
+      }
+      const merged: FlowMemory = {
+        ...current,
+        suppliers,
+        // The shop keeps the better of the two rather than losing either.
+        flowBalance: Math.max(current.flowBalance || 0, legacy.flowBalance || 0),
+        coins: Math.max(current.flowBalance || 0, legacy.flowBalance || 0),
+        lifetimeFlowEarned: Math.max(current.lifetimeFlowEarned || 0, legacy.lifetimeFlowEarned || 0),
+        streak: Math.max(current.streak || 0, legacy.streak || 0),
+      };
+      localStorage.setItem(key, JSON.stringify(merged));
+    }
+    localStorage.removeItem(LEGACY_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function load(): FlowMemory {
   try {
-    const raw = localStorage.getItem(KEY);
+    const key = currentKey();
+    const raw = key ? localStorage.getItem(key) : null;
     if (raw) {
       const parsed = JSON.parse(raw);
       // Migrate legacy state if needed
@@ -85,9 +183,13 @@ function load(): FlowMemory {
 }
 
 function save(m: FlowMemory) {
+  const key = currentKey();
+  // No shop open means no memory to write to. Saving anywhere else is how this
+  // ended up shared in the first place.
+  if (!key) return;
   try {
     m.coins = m.flowBalance; // keep coins synced
-    localStorage.setItem(KEY, JSON.stringify(m));
+    localStorage.setItem(key, JSON.stringify(m));
   } catch { /* ignore */ }
   scheduleCloudSync(m);
 }
@@ -96,9 +198,19 @@ function save(m: FlowMemory) {
 let syncStoreId: string | null = null;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Call once when the merchant's store loads, so saves know where to sync to. */
-export function setFlowMemorySyncStore(storeId: string | null) {
-  syncStoreId = storeId;
+/**
+ * Which shop Flow's memory belongs to now.
+ *
+ * Called whenever the open shop changes, before anything reads or writes. The
+ * local key and the cloud target are both taken from it, so they can never
+ * point at two different businesses.
+ */
+export function setFlowMemoryShop(
+  store: { id?: string | null; storeId?: string | null; accessCode?: string | null } | null,
+): void {
+  shopKey = store ? String(store.id || store.storeId || store.accessCode || '') || null : null;
+  syncStoreId = store ? String(store.id || store.storeId || '') || null : null;
+  if (shopKey) takeOverLegacyMemory();
 }
 
 function scheduleCloudSync(m: FlowMemory) {
@@ -127,14 +239,17 @@ function scheduleCloudSync(m: FlowMemory) {
  * overwrites more recent local activity with a stale cloud snapshot.
  */
 export async function hydrateFlowMemoryFromCloud(storeId: string): Promise<void> {
-  setFlowMemorySyncStore(storeId);
+  const key = currentKey();
+  // Only ever into the shop that is open.
+  if (!key) return;
+  syncStoreId = storeId || syncStoreId;
   try {
-    const alreadyHasLocalData = !!localStorage.getItem(KEY);
+    const alreadyHasLocalData = !!localStorage.getItem(key);
     if (alreadyHasLocalData) return;
     const { data, error } = await supabase.from('stores').select('data').eq('id', storeId).maybeSingle();
     const blob = data?.data as { flowMemory?: FlowMemory } | null | undefined;
     if (error || !blob?.flowMemory) return;
-    localStorage.setItem(KEY, JSON.stringify(blob.flowMemory));
+    localStorage.setItem(key, JSON.stringify(blob.flowMemory));
   } catch (e) {
     console.warn('[FlowMemory] Cloud hydration failed:', e);
   }

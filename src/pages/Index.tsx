@@ -13,6 +13,7 @@ import { dropBackgroundNotice, enableBackgroundNotices, queueBackgroundNotice, s
 import type { NotificationAct } from '@/lib/order-deep-link';
 import { allowedNotifications, visibleNotifications, wantsNotification } from '@/lib/notification-gate';
 import { recordDays } from '@/lib/day-records';
+import { setFlowMemoryShop } from '@/lib/flow-memory';
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
@@ -1140,6 +1141,18 @@ export default function Index() {
 
   const businessTemplate = getBusinessTemplate(store);
   const businessType = resolveBusinessType(store);
+
+  /*
+   * Flow's suppliers, coins and streak belong to the shop that is open.
+   *
+   * They used to sit under one key shared by every shop on the phone, so
+   * switching shops carried them across and could upload one shop's rewards
+   * into another shop's cloud record. This is the one place that says which
+   * shop they belong to, and it runs before any screen reads them.
+   */
+  useEffect(() => {
+    setFlowMemoryShop(store);
+  }, [store?.id, (store as any)?.storeId, store?.accessCode]);
 
   /*
    * The laundry's day, recorded by its date whenever the shop's data changes -
