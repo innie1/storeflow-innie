@@ -218,7 +218,9 @@ describe('changing a role reaches the device already using it', () => {
   it('moves anyone off a screen their role cannot open', () => {
     // Nothing checked, so a tab reached any other way rendered its screen
     // anyway - which is how a worker saw the price list flash up.
-    expect(index).toContain("if (tab !== 'dashboard' && !isTabAllowed(tab, currentUser)) setTab('dashboard')");
+    // The same guard now also asks what the trade has, so a screen belonging to
+    // another trade cannot open here either.
+    expect(index).toContain("if (!isTabAllowed(tab, currentUser) || !isBusinessTabAllowed(store, tab)) setTab('dashboard');");
   });
 });
 

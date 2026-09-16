@@ -1155,6 +1155,25 @@ export default function Index() {
   }, [store?.id, (store as any)?.storeId, store?.accessCode]);
 
   /*
+   * Switching shops lands on the home screen of the shop you switched to.
+   *
+   * The screen you were last on is remembered so a reload puts you back where
+   * you were - but remembering it across a switch opens one shop's screen in
+   * another, which for a trade-only screen is the wrong trade entirely. The
+   * first shop of a session is left alone; only a change of shop forgets it.
+   */
+  const lastShopKey = useRef<string | null>(null);
+  useEffect(() => {
+    const key = store ? String(store.id || (store as any).storeId || store.accessCode || '') : null;
+    if (!key) return;
+    const previous = lastShopKey.current;
+    lastShopKey.current = key;
+    if (!previous || previous === key) return;
+    try { sessionStorage.removeItem('storeflow-active-tab'); } catch { /* private mode */ }
+    setTab('dashboard');
+  }, [store?.id, (store as any)?.storeId, store?.accessCode, setTab]);
+
+  /*
    * The laundry's day, recorded by its date whenever the shop's data changes -
    * for whoever is signed in, on whichever screen. Nothing is shown here; the
    * days are read back in Analysis.
@@ -1211,7 +1230,11 @@ export default function Index() {
    */
   useEffect(() => {
     if (!store || !currentUser) return;
-    if (tab !== 'dashboard' && !isTabAllowed(tab, currentUser)) setTab('dashboard');
+    if (tab === 'dashboard') return;
+    // What this worker may open, and what this trade has at all. A screen
+    // reached by a link, or left over from another shop, is checked the same
+    // way the navigation is.
+    if (!isTabAllowed(tab, currentUser) || !isBusinessTabAllowed(store, tab)) setTab('dashboard');
   }, [tab, currentUser, store]);
 
   /**

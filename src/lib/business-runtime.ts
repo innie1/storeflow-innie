@@ -31,9 +31,45 @@ const TYPE_ALIASES: Record<string, CanonicalBusinessType> = {
   cleaning_service: 'cleaning',
 };
 
-const TAB_REQUIREMENTS: Partial<Record<TabId, BusinessModule[]>> = {
-  orders: ['orders'],
+/**
+ * What every screen needs from the trade it is opened in.
+ *
+ * This was a partial list, and anything missing from it was allowed. So
+ * laundry-records - a screen only a laundry has - was open to every trade, and
+ * each new trade-only screen was open by default until somebody remembered to
+ * restrict it. A screen reached by a link, or remembered from the last shop,
+ * could then draw another trade's work in this one.
+ *
+ * The list is complete now, and TypeScript will not compile a new TabId that
+ * is missing from it. A screen nobody has classified is closed, not open.
+ *
+ *   'always'   - the app itself: home, settings, messages, the owner's tools.
+ *   'laundry'  - only a laundry.
+ *   'games'    - only a games shop.
+ *   'priced'   - anything that keeps a price list: stock shops, and service
+ *                shops that price their work.
+ *   [modules]  - allowed when the trade has one of these capabilities.
+ */
+type TabPolicy = BusinessModule[] | 'always' | 'laundry' | 'games' | 'priced';
+
+export const TAB_POLICY: Record<TabId, TabPolicy> = {
+  dashboard: 'always',
+  manager: 'always',
+  settings: 'always',
+  'communication-center': 'always',
+  'activity-log': 'always',
+  goals: 'always',
+  diary: 'always',
+  documents: 'always',
+  academy: 'always',
+  achievements: 'always',
+  'qr-hub': 'always',
+  profile: 'always',
+  more: 'always',
+
+  inventory: 'priced',
   sales: ['sales'],
+  orders: ['orders'],
   customers: ['customers'],
   suppliers: ['suppliers'],
   marketplace: ['inventory'],
@@ -41,9 +77,17 @@ const TAB_REQUIREMENTS: Partial<Record<TabId, BusinessModule[]>> = {
   staff: ['staff'],
   expenses: ['finance'],
   pending: ['finance'],
-  'cash-drawer': ['sales'],
   roi: ['finance'],
+  finance: ['finance'],
   history: ['reports'],
+  reports: ['reports'],
+  'cash-drawer': ['sales'],
+
+  'laundry-records': 'laundry',
+  'games-dashboard': 'games',
+  'games-history': 'games',
+  'games-analytics': 'games',
+  'games-settings': 'games',
 };
 
 function normalizeType(value?: string | null): CanonicalBusinessType | null {
@@ -85,20 +129,20 @@ export function getPrimaryInventoryLabel(store?: Partial<StoreData> | null): str
 }
 
 export function isBusinessTabAllowed(store: Partial<StoreData> | null | undefined, tabId: TabId): boolean {
-  if (tabId === 'dashboard' || tabId === 'manager' || tabId === 'settings' || tabId === 'communication-center' || tabId === 'goals' || tabId === 'diary' || tabId === 'documents' || tabId === 'academy' || tabId === 'achievements' || tabId === 'qr-hub' || tabId === 'profile' || tabId === 'more') return true;
+  const policy = TAB_POLICY[tabId];
+  // A screen nobody has classified belongs to nobody.
+  if (!policy) return false;
+  if (policy === 'always') return true;
 
-  const type = resolveBusinessType(store);
-  if (tabId.startsWith('games-')) return type === 'games';
+  if (policy === 'laundry' || policy === 'games') return resolveBusinessType(store) === policy;
 
-  if (tabId === 'inventory') {
+  if (policy === 'priced') {
     const template = getBusinessTemplate(store);
     return template.modules.includes('inventory') || isServiceFirstBusiness(store);
   }
 
-  const required = TAB_REQUIREMENTS[tabId];
-  if (!required) return true;
   const modules = getBusinessTemplate(store).modules;
-  return required.some(module => modules.includes(module));
+  return policy.some(module => modules.includes(module));
 }
 
 /**
