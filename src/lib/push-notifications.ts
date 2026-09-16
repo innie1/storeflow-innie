@@ -41,13 +41,22 @@ export async function getPushSubscriptionState(storeId?: string): Promise<'unsup
     const endpoint = sub.toJSON().endpoint;
     if (!endpoint) return 'not-subscribed';
 
-    const { data, error } = await supabase
+    /*
+     * Asked about this shop, not about the device.
+     *
+     * A phone can be saved for more than one shop now, so "is this endpoint in
+     * the table" is the wrong question - and maybeSingle over the endpoint
+     * alone would start throwing the moment a second shop was added.
+     */
+    let query = supabase
       .from('push_subscriptions')
       .select('id, store_id')
-      .eq('endpoint', endpoint)
-      .maybeSingle();
+      .eq('endpoint', endpoint);
+    if (storeId) query = query.eq('store_id', storeId);
 
-    if (error || !data || (storeId && data.store_id !== storeId)) {
+    const { data, error } = await query.limit(1).maybeSingle();
+
+    if (error || !data) {
       // Browser thinks it's subscribed but our database has no matching
       // row for the currently selected store — this is exactly the "toggle
       // says on, nothing arrives" bug, especially after switching stores.
@@ -97,15 +106,34 @@ export async function subscribeToOrderPush(storeId: string): Promise<{ success: 
       return { success: false, message: 'Could not read push subscription details \u2014 try toggling again.' };
     }
 
-    const { error: upsertError } = await supabase.from('push_subscriptions').upsert(
-      {
-        store_id: storeId,
-        endpoint: json.endpoint,
-        p256dh: json.keys.p256dh,
-        auth: json.keys.auth,
-      },
-      { onConflict: 'endpoint' }
-    );
+    const row = {
+      store_id: storeId,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    };
+
+    /*
+     * One row per shop per device.
+     *
+     * Saving against the endpoint alone is what moved a merchant's order
+     * alerts to whichever shop they had opened last: the same phone, one row,
+     * its store_id rewritten each time.
+     *
+     * The fallback is for the window where this ships before the constraint
+     * does. Postgres refuses an upsert whose conflict target has no matching
+     * unique index (42P10), and until that migration runs the old one-shop
+     * behaviour is a great deal better than a toggle that cannot be turned on
+     * at all.
+     */
+    let { error: upsertError } = await supabase
+      .from('push_subscriptions')
+      .upsert(row, { onConflict: 'store_id,endpoint' });
+    if (upsertError && (upsertError as { code?: string }).code === '42P10') {
+      ({ error: upsertError } = await supabase
+        .from('push_subscriptions')
+        .upsert(row, { onConflict: 'endpoint' }));
+    }
     if (upsertError) {
       console.error('[push] save to Supabase failed:', upsertError);
       return { success: false, message: `Couldn\u2019t save this device: ${upsertError.message}` };
@@ -117,6 +145,8 @@ export async function subscribeToOrderPush(storeId: string): Promise<{ success: 
       .from('push_subscriptions')
       .select('id')
       .eq('endpoint', json.endpoint)
+      .eq('store_id', storeId)
+      .limit(1)
       .maybeSingle();
 
     if (verifyError || !verifyRow) {
@@ -131,7 +161,14 @@ export async function subscribeToOrderPush(storeId: string): Promise<{ success: 
   }
 }
 
-export async function unsubscribeFromOrderPush(): Promise<{ success: boolean; message: string }> {
+/**
+ * Off for one shop, not for the phone.
+ *
+ * A browser has a single push subscription for the whole site, so ending it
+ * takes every shop on the phone with it. The shop's row goes; the subscription
+ * itself is ended only when no shop is left using it.
+ */
+export async function unsubscribeFromOrderPush(storeId?: string): Promise<{ success: boolean; message: string }> {
   if (!isPushSupported()) return { success: false, message: 'Push notifications aren\u2019t supported here.' };
   try {
     const registration = await navigator.serviceWorker.ready;
@@ -139,10 +176,23 @@ export async function unsubscribeFromOrderPush(): Promise<{ success: boolean; me
     if (!subscription) return { success: true, message: 'Already unsubscribed.' };
 
     const endpoint = subscription.endpoint;
-    await subscription.unsubscribe();
-    await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    const remove = supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    await (storeId ? remove.eq('store_id', storeId) : remove);
 
-    return { success: true, message: 'Order push notifications turned off on this device.' };
+    const { data: stillWanted } = await supabase
+      .from('push_subscriptions')
+      .select('id')
+      .eq('endpoint', endpoint)
+      .limit(1);
+
+    if (!stillWanted || stillWanted.length === 0) await subscription.unsubscribe();
+
+    return {
+      success: true,
+      message: stillWanted && stillWanted.length > 0
+        ? 'Order push notifications turned off for this shop. Your other shops still reach this device.'
+        : 'Order push notifications turned off on this device.',
+    };
   } catch (err: any) {
     return { success: false, message: err.message || 'Failed to unsubscribe.' };
   }

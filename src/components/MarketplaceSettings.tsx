@@ -1404,7 +1404,7 @@ function PushNotificationToggle({ store }: { store: StoreData }) {
         showToast(result.message, result.success ? 'success' : 'error');
         setState(await getPushSubscriptionState());
       } else {
-        const result = await unsubscribeFromOrderPush();
+        const result = await unsubscribeFromOrderPush(store.id);
         showToast(result.message, result.success ? 'success' : 'error');
         setState(await getPushSubscriptionState());
       }

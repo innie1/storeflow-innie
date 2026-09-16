@@ -190,10 +190,19 @@ describe('the worker that shows the pushes is told which shop is open', () => {
     expect(preferences[preferences.length - 1].preferences?.orders).toBe(true);
   });
 
-  it('still reads one record, so the worker did not have to change', () => {
-    // The worker gates a push on 'global'. Keeping that as a mirror of the
-    // open shop is what let this change stay on the phone's side.
-    expect(readSource('src/sw.ts')).toContain("objectStore('preferences').get('global')");
+  it('keeps the open shop\'s mirror, which is what an older push is judged by', () => {
+    /*
+     * This started as "the worker did not have to change", and it did not -
+     * until a phone could be reached for more than one shop at a time, at
+     * which point a push from the shop you are not looking at would have been
+     * judged by the switches of the shop you are. The worker now prefers the
+     * record of the shop a push names, and 'global' is what it falls back to:
+     * a push from a sender that does not name one, and anything queued on the
+     * phone itself, is still judged by the shop that is open.
+     */
+    const sw = readSource('src/sw.ts');
+    expect(sw).toContain('get(`shop:${storeId}`)');
+    expect(sw).toContain("await get('global')");
     expect(readSource('src/lib/notification-preferences.ts')).toContain("const DELIVERY_KEY = 'global'");
   });
 });

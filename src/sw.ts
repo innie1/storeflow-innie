@@ -20,7 +20,7 @@ registerRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ c
 registerRoute(({ request }) => ['style','script','worker','image','font'].includes(request.destination), new StaleWhileRevalidate({ cacheName: 'assets' }));
 setCatchHandler(async ({ event }) => event.request.mode === 'navigate' ? ((await matchPrecache('/index.html')) || Response.error()) : Response.error());
 
-interface PushPayload { title?: string; body?: string; tag?: string; url?: string; priority?: 'critical'|'normal'; notification_id?: string; orderId?: string; orderNumber?: string; actions?: { action:string; title:string }[]; type?: string; category?: string; }
+interface PushPayload { title?: string; body?: string; tag?: string; url?: string; priority?: 'critical'|'normal'; notification_id?: string; orderId?: string; orderNumber?: string; actions?: { action:string; title:string }[]; type?: string; category?: string; store_id?: string; }
 interface NotificationPreferences { enabled:boolean; orders:boolean; flowCheckins:boolean; businessInsights:boolean; debtReminders:boolean; sounds:boolean; criticalAlerts:boolean; quietHoursEnabled:boolean; quietStart:string; quietEnd:string; }
 const DEFAULT_PREFS: NotificationPreferences = { enabled:true, orders:true, flowCheckins:true, businessInsights:true, debtReminders:true, sounds:true, criticalAlerts:true, quietHoursEnabled:true, quietStart:'22:00', quietEnd:'07:00' };
 
@@ -121,14 +121,27 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function readPreferences(): Promise<NotificationPreferences> {
+/**
+ * The switches to honour for this push.
+ *
+ * Each shop keeps its own, under `shop:<id>`. A phone can be reached for more
+ * than one shop, so a push carries the shop it is for and is judged by that
+ * shop's switches rather than by whichever shop happens to be open. 'global'
+ * is the open shop's mirror, kept for a push from a sender that has not yet
+ * learned to say which shop it belongs to.
+ */
+async function readPreferences(storeId?: string): Promise<NotificationPreferences> {
   try {
     const db = await openDb();
-    return await new Promise(resolve=>{
-      const req=db.transaction('preferences','readonly').objectStore('preferences').get('global');
-      req.onsuccess=()=>resolve({ ...DEFAULT_PREFS, ...(req.result || {}) } as NotificationPreferences);
-      req.onerror=()=>resolve(DEFAULT_PREFS);
+    const store = db.transaction('preferences','readonly').objectStore('preferences');
+    const get = (key:string) => new Promise<unknown>(resolve=>{
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(undefined);
     });
+    const own = storeId ? await get(`shop:${storeId}`) : undefined;
+    const fallback = own ? undefined : await get('global');
+    return { ...DEFAULT_PREFS, ...((own || fallback || {}) as object) } as NotificationPreferences;
   } catch { return DEFAULT_PREFS; }
 }
 function allowed(data:PushPayload,prefs:NotificationPreferences) {
@@ -245,7 +258,7 @@ self.addEventListener('push', event => {
   const tag = data.tag || data.notification_id || (data.orderId ? `order-${data.orderId}` : 'storeflow-alert');
   const url = notificationUrl(data), priority = data.priority || 'normal';
   event.waitUntil((async () => {
-    const prefs=await readPreferences();
+    const prefs=await readPreferences(data.store_id);
     if (!allowed(data,prefs)) return;
     const clients = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
     const visible = clients.find(c => (c as WindowClient).visibilityState === 'visible') as WindowClient | undefined;

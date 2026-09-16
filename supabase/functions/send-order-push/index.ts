@@ -197,6 +197,9 @@ Deno.serve(async (req: Request) => {
             notification_id: notificationId,
             url: "/?tab=orders",
             orderId: order.id,
+            // Which shop this is about. The phone can be reached for more than
+            // one, and each keeps its own notification switches.
+            store_id: order.store_id,
             priority,
           });
 

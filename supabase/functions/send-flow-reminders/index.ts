@@ -176,6 +176,9 @@ Deno.serve(async (req: Request) => {
             body: `Don't forget to open the shop today — your ${count}-day streak is waiting.`,
             tag: `streak-warning-${sub.store_id}`,
             url: "/?tab=dashboard",
+            // Which shop this is about, so the phone judges it by that shop's
+            // notification switches rather than by whichever shop is open.
+            store_id: sub.store_id,
             actions: [{ action: "open", title: "🔥 Protect Streak" }],
           });
           return webpush.sendNotification(
