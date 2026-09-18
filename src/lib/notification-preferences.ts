@@ -182,7 +182,18 @@ export async function saveFlowNotificationPreferences(patch: Partial<FlowNotific
       tx.onerror = () => reject(tx.error);
     });
   } catch { /* localStorage still has it */ }
-  await mirrorToDelivery(next);
+
+  /*
+   * The worker is told, but the screen does not wait for it.
+   *
+   * mirrorToDelivery waits on navigator.serviceWorker.ready, and that promise
+   * never settles where no worker is registered or one has not activated yet -
+   * a phone on its very first load, a browser with the worker disabled. Waiting
+   * for it before returning left the switch somebody had just tapped still
+   * showing its old position, with the new one already saved: the setting was
+   * right and the screen was lying about it.
+   */
+  void mirrorToDelivery(next);
   return next;
 }
 

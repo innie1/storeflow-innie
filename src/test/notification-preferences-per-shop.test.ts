@@ -190,6 +190,36 @@ describe('the worker that shows the pushes is told which shop is open', () => {
     expect(preferences[preferences.length - 1].preferences?.orders).toBe(true);
   });
 
+  it('answers the screen without waiting for a worker that may never be ready', async () => {
+    /*
+     * navigator.serviceWorker.ready never settles where no worker is
+     * registered, or before one activates on a phone's first load. Waiting on
+     * it before returning left the switch somebody had just tapped showing its
+     * old position while the new one was already saved - the setting right and
+     * the screen lying about it. Seen happening in the browser, not guessed.
+     */
+    const before = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { ready: new Promise(() => { /* never settles */ }) },
+    });
+
+    try {
+      setNotificationPreferencesShop(laundry);
+      const settled = await Promise.race([
+        saveFlowNotificationPreferences({ orders: false }),
+        new Promise(resolve => setTimeout(() => resolve('still waiting on the worker'), 250)),
+      ]);
+
+      expect(settled, 'the save never answered the screen').not.toBe('still waiting on the worker');
+      expect((settled as { orders: boolean }).orders).toBe(false);
+    } finally {
+      // Left in place, this stub would hang the next test that saves.
+      if (before) Object.defineProperty(navigator, 'serviceWorker', before);
+      else delete (navigator as unknown as Record<string, unknown>).serviceWorker;
+    }
+  });
+
   it('keeps the open shop\'s mirror, which is what an older push is judged by', () => {
     /*
      * This started as "the worker did not have to change", and it did not -
