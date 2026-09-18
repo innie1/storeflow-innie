@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { attribution } from '@/lib/recorded-by';
+import { localNumber, peopleOnThisNumber, sameName } from '@/lib/customer-key';
 import { checkNewMilestone, markMilestoneReached, type MilestoneDef } from '@/lib/milestones';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import QRCode from 'qrcode';
@@ -176,6 +177,8 @@ function activePreset(promisedFor: string, chips: { hours: number }[]): number |
   return null;
 }
 
+
+
 export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, onRecorded, practice: guidedPractice = false }: Props) {
   const [rehearsing, setRehearsing] = useState(guidedPractice);
   useEffect(() => { setRehearsing(guidedPractice); }, [guidedPractice]);
@@ -217,14 +220,10 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   }, [book, selectedCustomerId, customerName, customerPhone]);
 
   const numberChange = useMemo(() => {
-    const local = (value: string) => {
-      const d = String(value || '').replace(/\D/g, '');
-      return d.startsWith('234') && d.length >= 12 ? `0${d.slice(3)}` : d;
-    };
     const saved = String(matchTarget?.phone || '').trim();
     const typed = customerPhone.trim();
     // +2348012345678 and 08012345678 are one number, not a change.
-    if (!matchTarget || !saved || local(typed).length < 7 || local(saved) === local(typed)) return null;
+    if (!matchTarget || !saved || localNumber(typed).length < 7 || localNumber(saved) === localNumber(typed)) return null;
     return { id: matchTarget.id, name: matchTarget.name.split(' ')[0], saved };
   }, [matchTarget, customerPhone]);
 
@@ -232,8 +231,35 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   const [replaceNumber, setReplaceNumber] = useState(false);
   /* The rare genuinely different person who shares a name with a customer. */
   const [newPerson, setNewPerson] = useState(false);
+
+  /*
+   * The mirror of numberChange: one number, two names.
+   *
+   * A number the book already holds used to decide who the bundle belonged to
+   * on its own, whatever name was typed - so a household phone or a shop line
+   * quietly filed the second person's clothes, and the second person's debt,
+   * against the first person's record. They vanished from the customer book
+   * entirely: searching their name found nobody while their money sat under
+   * somebody else's.
+   *
+   * Nothing in the data can tell a shared phone from a regular whose name was
+   * typed differently today. The counter can, so the counter is asked, and only
+   * when the two actually disagree.
+   */
+  const sharedNumber = useMemo(
+    () => peopleOnThisNumber(book, customerPhone.trim(), customerName.trim()),
+    [book, customerName, customerPhone],
+  );
+
+  /* Unanswered until the counter answers it; nothing is assumed either way. */
+  const [sharedAnswer, setSharedAnswer] = useState<'' | 'same' | 'different'>('');
+  /* Chosen when they are one person under two names: which name is theirs. */
+  const [renameTo, setRenameTo] = useState('');
+  const phoneInput = useRef<HTMLInputElement | null>(null);
+
   // An answer about one customer and one number says nothing about the next.
   useEffect(() => { setReplaceNumber(false); setNewPerson(false); }, [customerName, customerPhone, selectedCustomerId]);
+  useEffect(() => { setSharedAnswer(''); setRenameTo(''); }, [customerName, customerPhone, selectedCustomerId]);
   const [lateNumber, setLateNumber] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [garmentCounts, setGarmentCounts] = useState<Record<string, number>>(() => emptyCounts(garmentTypes));
@@ -512,7 +538,12 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
       const picked = selectedCustomerId && isInCustomerBook({ id: selectedCustomerId })
         ? book.find(entry => entry.id === selectedCustomerId)
         : undefined;
-      const existingCustomer = newPerson ? undefined : picked || matchCustomer(book, { name, phone });
+      /*
+       * Two different people on one number: this one is their own customer,
+       * with their own id, so their bundles and what they owe stay theirs.
+       */
+      const twoPeople = sharedAnswer === 'different';
+      const existingCustomer = newPerson || twoPeople ? undefined : picked || matchCustomer(book, { name, phone });
       let customerId = existingCustomer?.id || '';
       try {
         if (!existingCustomer) {
@@ -527,6 +558,13 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
           // always carries the number that was just typed.
           else if (phone && replaceNumber && numberChange?.id === existingCustomer.id) learned.phone = phone;
           if (address && !String(existingCustomer.address || '').trim()) learned.address = address;
+          /*
+           * One person under two names, and the counter picked this one. The
+           * book follows the name they chose; bundles already taken in keep
+           * the name they were written under, because that is what is on the
+           * tag in the basket.
+           */
+          if (renameTo && !sameName(existingCustomer.name, renameTo)) learned.name = renameTo;
           if (Object.keys(learned).length) nextStore = updateCustomer(nextStore, existingCustomer.id, learned);
         }
       } catch (customerError) {
@@ -855,7 +893,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
               <CustomerSuggestions customers={directory} query={customerName} enabled={showSuggestions && !selectedCustomerId} inline onPick={customer => selectCustomer(customer.id)} />
               </div>
               <div className="relative">
-                <input value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); }} placeholder="Phone number — e.g. 08012345678" inputMode="tel" className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm" />
+                <input ref={phoneInput} value={customerPhone} onChange={event => { setCustomerPhone(event.target.value); }} placeholder="Phone number — e.g. 08012345678" inputMode="tel" className="w-full h-11 pl-3 pr-11 rounded-xl bg-surface-2 border border-border text-sm" />
                 <ContactPickButton onPick={(phone, name) => {
                   // A number is something a customer has, not who they are:
                   // taking it from the phone keeps the customer picked above.
@@ -880,6 +918,88 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
                     <button type="button" onClick={() => { setReplaceNumber(false); setNewPerson(false); }} className={`flex-1 h-9 rounded-lg text-[11px] font-display font-black ${!replaceNumber && !newPerson ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border'}`}>Keep saved number</button>
                     <button type="button" onClick={() => { setNewPerson(true); setReplaceNumber(false); }} className={`flex-1 h-9 rounded-lg text-[11px] font-display font-black ${newPerson ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border'}`}>Someone new</button>
                   </div>
+                </div>
+              )}
+              {sharedNumber && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-2.5 space-y-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    This number is saved for {sharedNumber.savedName}. Same person, or two different people?
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => { setSharedAnswer('same'); setRenameTo(''); }}
+                      className={`flex-1 h-9 rounded-lg text-[11px] font-display font-black ${sharedAnswer === 'same' ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border'}`}
+                    >
+                      Same person
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSharedAnswer('different'); setRenameTo(''); }}
+                      className={`flex-1 h-9 rounded-lg text-[11px] font-display font-black ${sharedAnswer === 'different' ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border'}`}
+                    >
+                      Two different people
+                    </button>
+                  </div>
+
+                  {/*
+                    One person under two names: which one is theirs from now
+                    on. Where several people already share the number, the
+                    typed name cannot rename one of them without saying which,
+                    so the choice is between the people who are already there.
+                  */}
+                  {sharedAnswer === 'same' && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] text-muted-foreground">
+                        {sharedNumber.many ? 'Which of them is it?' : 'Which name should we use for them?'}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sharedNumber.holders.map(holder => (
+                          <button
+                            key={holder.id}
+                            type="button"
+                            onClick={() => { setRenameTo(''); setSelectedCustomerId(holder.id); setCustomerName(String(holder.name || '').trim()); }}
+                            className="flex-1 min-w-[45%] h-9 rounded-lg text-[11px] font-display font-black bg-surface-2 border border-border"
+                          >
+                            {String(holder.name || '').trim()}
+                          </button>
+                        ))}
+                        {!sharedNumber.many && (
+                          <button
+                            type="button"
+                            onClick={() => setRenameTo(customerName.trim())}
+                            className={`flex-1 min-w-[45%] h-9 rounded-lg text-[11px] font-display font-black ${renameTo ? 'bg-primary text-primary-foreground' : 'bg-surface-2 border border-border'}`}
+                          >
+                            {customerName.trim()}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Two people. Their own number if they have one; the shared
+                      one is fine if they do not - they stay separate either way. */}
+                  {sharedAnswer === 'different' && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] text-muted-foreground">Do you want to give {customerName.trim() || 'them'} a different number?</p>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => { setCustomerPhone(''); setSharedAnswer(''); phoneInput.current?.focus(); }}
+                          className="flex-1 h-9 rounded-lg text-[11px] font-display font-black bg-surface-2 border border-border"
+                        >
+                          Change the number
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSharedAnswer('different')}
+                          className="flex-1 h-9 rounded-lg text-[11px] font-display font-black bg-primary text-primary-foreground"
+                        >
+                          Keep the same number
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {!customerPhone.trim() && <p className="text-[10px] text-muted-foreground">No phone is fine — you just can't WhatsApp them when the clothes are ready.</p>}

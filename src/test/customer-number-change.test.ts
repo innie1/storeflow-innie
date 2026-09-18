@@ -17,7 +17,7 @@ const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
 describe('adding a number to a customer keeps the customer', () => {
   it('does not forget the customer picked when a number is typed', () => {
     // The phone field and the contacts button, up to the hint beneath them.
-    const field = intake.slice(intake.indexOf('<input value={customerPhone}'), intake.indexOf('No phone is fine'));
+    const field = intake.slice(intake.indexOf('<input ref={phoneInput} value={customerPhone}'), intake.indexOf('This number is saved for'));
     expect(field.length).toBeGreaterThan(0);
     expect(field).not.toContain("setSelectedCustomerId('')");
   });
@@ -44,7 +44,7 @@ describe('adding a number to a customer keeps the customer', () => {
   it('lets a genuinely different person with the same name stay separate', () => {
     // Asked, not merged: never silently join people who only share a name.
     expect(intake).toContain('Someone new');
-    expect(intake).toContain('const existingCustomer = newPerson ? undefined : picked || matchCustomer(book, { name, phone });');
+    expect(intake).toContain('const existingCustomer = newPerson || twoPeople ? undefined : picked || matchCustomer(book, { name, phone });');
   });
 
   it('forgets an answer given about a different customer or number', () => {
@@ -52,7 +52,10 @@ describe('adding a number to a customer keeps the customer', () => {
   });
 
   it('does not treat +234 and 0 forms of one number as a change', () => {
-    expect(intake).toContain("d.startsWith('234') && d.length >= 12 ? `0${d.slice(3)}` : d");
+    // Read through the one helper both questions share, so a number typed
+    // either way is the same number to each of them.
+    expect(intake).toContain('localNumber(typed).length < 7 || localNumber(saved) === localNumber(typed)');
+    expect(readSource('src/lib/customer-key.ts')).toContain("digits.startsWith('234') && digits.length >= 12 ? `0${digits.slice(3)}` : digits");
   });
 });
 

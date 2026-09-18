@@ -2222,8 +2222,21 @@ export function matchCustomer(
     String(customer.name || '').trim().toLowerCase() === name);
 
   if (digits) {
-    const sameNumber = (customers || []).find(customer => String(customer.phone || '').replace(/\D/g, '') === digits);
-    if (sameNumber) return sameNumber;
+    /*
+     * Everybody on that number, not the first of them.
+     *
+     * A number can belong to more than one person - a household phone, a shop
+     * line - once the counter has said so at intake. Handing back whichever
+     * was recorded first would file this bundle, and its money, against the
+     * wrong one of them, so the name decides between them. No name match among
+     * them still means the person on that number, which is what a shop with
+     * one customer per number has always had.
+     */
+    const onThatNumber = (customers || []).filter(customer => String(customer.phone || '').replace(/\D/g, '') === digits);
+    if (onThatNumber.length) {
+      const byName = onThatNumber.find(customer => String(customer.name || '').trim().toLowerCase() === name);
+      return byName || onThatNumber[0];
+    }
     /*
      * A number the book has never seen, for a name exactly one customer has.
      *

@@ -156,8 +156,9 @@ describe('everybody the counter names goes in the book', () => {
   it('no longer skips the book for a walk-in with no phone', () => {
     // Making the phone optional, this briefly refused to save the customer at
     // all - so the shop typed a name and the app quietly dropped it.
-    // "Someone new" is the one way past matching - see customer-number-change.
-    expect(intake).toContain('const existingCustomer = newPerson ? undefined : picked || matchCustomer(book, { name, phone });');
+    // "Someone new", and "two different people" on one number, are the two
+    // ways past matching - see customer-number-change and shared-phone-customers.
+    expect(intake).toContain('const existingCustomer = newPerson || twoPeople ? undefined : picked || matchCustomer(book, { name, phone });');
     expect(intake).toContain('if (!existingCustomer) {');
     expect(intake).toContain('nextStore = addCustomer(nextStore, { name, phone,');
     expect(intake).not.toContain("if (phone && !customers.some(");
