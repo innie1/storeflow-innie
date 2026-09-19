@@ -45,11 +45,12 @@ describe('buying stock is not an operating expense', () => {
     expect(isStockPurchase({ category: 'Salaries', source: 'manual' })).toBe(false);
   });
 
-  it('books opening stock as capital, not as a purchase', () => {
+  it('honours balance funding even before the first sale', () => {
     const store = receiveStock(newShop(), [{ productId: 'p1', quantity: 100, costPrice: 600 }]);
     expect(store.products.find(p => p.id === 'p1')?.quantity).toBe(100);
-    expect((store.investments || []).reduce((s, i) => s + i.amount, 0)).toBe(60_000);
-    expect(sumStockPurchases(store)).toBe(0);
+    expect((store.investments || []).reduce((s, i) => s + i.amount, 0)).toBe(0);
+    expect(store.cashBalance).toBe(40_000);
+    expect(sumStockPurchases(store)).toBe(60_000);
   });
 
   it('takes reorder money out of cash — the shop really did pay the supplier', () => {
@@ -64,7 +65,7 @@ describe('buying stock is not an operating expense', () => {
     const store = receiveStock(tradingShop(), [{ productId: 'p1', quantity: 50, costPrice: 600 }]);
 
     // The supplier payment is recorded and stays visible...
-    expect(sumStockPurchases(store)).toBe(30_000);
+    expect(sumStockPurchases(store)).toBe(90_000);
     // ...but it is not a running cost.
     expect(sumOperatingExpenses(store)).toBe(0);
   });
@@ -79,7 +80,7 @@ describe('buying stock is not an operating expense', () => {
     // Before the fix this was 20,000: the 30,000 reorder was subtracted here
     // as well as inside each sale's profit — the same stock charged twice.
     expect(stats.netIncome).toBe(50_000);
-    expect(stats.stockPurchases).toBe(30_000);
+    expect(stats.stockPurchases).toBe(90_000);
   });
 
   it('still counts genuine running costs against profit', () => {
@@ -97,10 +98,10 @@ describe('buying stock is not an operating expense', () => {
   it('keeps the tracked cash balance right, whatever the dashboard chooses to show', () => {
     // The dashboard's Business Balance card is the merchant's own preference
     // and is asserted nowhere here. What must stay true is the underlying
-    // money: 100,000 opening cash + 50,000 collected - 30,000 to the supplier.
+    // money: 100,000 opening cash - 60,000 first purchase + 50,000 collected - 30,000 reorder.
     const store = receiveStock(tradingShop(), [{ productId: 'p1', quantity: 50, costPrice: 600 }]);
     const moneyOnHand = (store.cashBalance || 0) + (store.bankBalance || 0) + (store.walletBalance || 0);
-    expect(moneyOnHand).toBe(120_000);
+    expect(moneyOnHand).toBe(60_000);
   });
 
   it('honours "new money" instead of draining the till', () => {

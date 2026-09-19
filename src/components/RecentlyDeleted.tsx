@@ -57,7 +57,8 @@ export default function RecentlyDeleted({ store, onUpdate, onClose }: RecentlyDe
   const list = filter === 'all' ? trash : trash.filter(t => t.kind === filter);
 
   const handleRestore = (item: TrashItem) => {
-    onUpdate(restoreTrashItem(store, item.id));
+    try { onUpdate(restoreTrashItem(store, item.id)); }
+    catch (error) { return showToast(error instanceof Error ? error.message : 'Restore failed', 'error'); }
     showToast(`${KIND_META[item.kind].label} restored`);
   };
 

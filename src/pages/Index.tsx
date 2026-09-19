@@ -18,7 +18,7 @@ import { setNotificationPreferencesShop } from '@/lib/notification-preferences';
 import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-session';
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
-import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordSale, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
+import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordCashCheckout, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
 import StreakDetailsPanel from '@/components/streaks/StreakDetailsPanel';
@@ -1709,12 +1709,10 @@ export default function Index() {
 
   const handleCheckoutScanCart = () => {
     if (!store || scanCart.length === 0) return;
-    let updated = store;
-    for (const item of scanCart) {
-      updated = recordSale(updated, item.product.id, item.qty, currentUser?.name, currentUser?.role);
-    }
-    setStore(updated);
-    const total = scanCart.reduce((s, c) => s + c.product.sellingPrice * c.qty, 0);
+    const result = recordCashCheckout(store, scanCart.map(item => ({ productId: item.product.id, quantity: item.qty })), currentUser?.name, currentUser?.role);
+    if (result.error) return showToast(result.error, 'error');
+    setStore(result.store);
+    const total = result.total;
     showToast(`Sold ${scanCart.length} item${scanCart.length === 1 ? '' : 's'} — ₦${total.toLocaleString()}`);
     setScanCart([]);
     setShowBarcodeScanner(false);

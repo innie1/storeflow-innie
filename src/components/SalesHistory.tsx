@@ -570,9 +570,9 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
       {confirmClear && (
         <ConfirmAccessCode
           expectedCode={store.accessCode}
-          title="Clear all sales history?"
-          message={`This will move all ${store.sales.length} sale record${store.sales.length === 1 ? '' : 's'} to the trash (recoverable for 7 days).`}
-          confirmLabel="Clear History"
+          title="Reverse all sales?"
+          message={`This will move all ${store.sales.length} sale record${store.sales.length === 1 ? '' : 's'} to the trash, reverse their payments and debts, and return stock (recoverable for 7 days).`}
+          confirmLabel="Reverse All Sales"
           onConfirm={doClear}
           onCancel={() => setConfirmClear(false)}
         />

@@ -1,3 +1,6 @@
+import { mergeStoreSnapshot, serializeStoreSync } from '@/lib/store-sync-guard';
+import { money, stockPrecision, packSize, stockBase, saleUnits, salePrice, historicalUnits, paymentAllocation, legacyAllocation } from '@/lib/inventory-sale-math';
+import type { PaymentAllocation } from '@/types/store';
 import {
   Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind,
   Investment, StoreCategory, StoreType, GameService, GameSession,
@@ -79,7 +82,8 @@ export function getAvailableBalance(store: StoreData): number {
   // Goods handed over on credit are not money in hand until the customer pays.
   const collected = (store.sales || [])
     .filter(sale => !sale.pendingPaymentId)
-    .reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
+    .reduce((sum, sale) => sum + (Number(sale.total) || 0), 0)
+    + (store.pendingPayments || []).reduce((sum, payment) => sum + (Number(payment.paid) || 0), 0);
 
   const running = sumOperatingExpenses(store);
 
@@ -178,7 +182,7 @@ export function recordInventoryMovement(
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
     productId,
     movementType,
-    quantity: Math.round(quantity * 100) / 100,
+    quantity: stockPrecision(quantity),
     date: new Date().toISOString(),
     user: user || 'Staff',
     source: source || 'System',
@@ -205,7 +209,7 @@ export function syncProductPerformance(store: StoreData): StoreData {
 
   const updatedProducts = store.products.map(p => {
     const productSales = sales.filter(s => s.productId === p.id);
-    const unitsSold = productSales.reduce((sum, s) => sum + s.quantity, 0);
+    const unitsSold = productSales.reduce((sum, s) => sum + historicalUnits(s, p), 0);
     const totalRevenue = productSales.reduce((sum, s) => sum + s.total, 0);
     const totalProfit = productSales.reduce((sum, s) => sum + s.profit, 0);
 
@@ -895,6 +899,15 @@ function retireAdminRole(store: any): any {
 }
 
 export function loadStore(code: string): StoreData | null {
+  if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return null;
+  const journal = localStorage.getItem('storeflow_transfer_journal');
+  if (journal) {
+    const pair = JSON.parse(journal);
+    for (const value of [pair.source, pair.destination]) localStorage.setItem(STORE_PREFIX + value.accessCode, JSON.stringify(value));
+    localStorage.removeItem('storeflow_transfer_journal');
+    saveStore(pair.source, { cloudBase: pair.sourceBase });
+    saveStore(pair.destination, { cloudBase: pair.destinationBase });
+  }
   if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') {
     return null;
   }
@@ -932,7 +945,8 @@ export function loadStore(code: string): StoreData | null {
   return store;
 }
 
-export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean }): void {
+export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean; cloudBase?: StoreData }): void {
+  const before = options?.cloudBase ? JSON.stringify(options.cloudBase) : typeof localStorage !== 'undefined' ? localStorage.getItem(STORE_PREFIX + store.accessCode) : null;
   const synced = syncStoreData(store);
   const scheduled = runScheduledSavingsDeduction(synced);
   Object.assign(store, scheduled);
@@ -955,7 +969,18 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean 
   // would silently re-upload the entire store record right after a
   // deliberately small update, defeating the point.
   if (!options?.skipCloudSync && (store.storeId || store.managerSettings?.multiDeviceSync)) {
-    import('@/integrations/supabase/client').then(async ({ supabase }) => {
+    // Capture now, not after async authentication. A later sale must not mutate
+    // an earlier upload while it is waiting for the network.
+    const snapshot = JSON.parse(JSON.stringify(store)) as StoreData;
+    const base = before ? JSON.parse(before) as StoreData : undefined;
+    const recoveryKey = `storeflow_sync_pending_${store.accessCode}`;
+    const held = localStorage.getItem(recoveryKey);
+    const recoveryBefore = held ? JSON.parse(held) : null;
+    try { localStorage.setItem(recoveryKey, JSON.stringify({ base: recoveryBefore?.base || base, next: snapshot })); }
+    catch (error) { console.warn('Sync recovery storage is full; primary store record is saved.', error); }
+    void serializeStoreSync(store.accessCode, async () => {
+      const store = snapshot;
+      const { supabase } = await import('@/integrations/supabase/client');
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !session || !session.user) {
@@ -984,7 +1009,6 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean 
           business_type: store.storeType || store.category || 'retail',
           logo: store.profile?.logoStyle || 'minimalist',
           access_code: store.accessCode,
-          owner_password: store.managerSettings?.ownerPassword || '',
           data: cloudStore as any,
           store_id: storeId,
           qr_code: storeUrl,
@@ -994,27 +1018,35 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean 
 
         const { data: existingStore, error: fetchError } = await supabase
           .from('stores')
-          .select('id')
+          .select('id, data, updated_at')
           .eq('access_code', store.accessCode)
           .maybeSingle();
 
-        if (fetchError) {
-          console.warn('Cloud Sync: Failed to query existing store row ID:', fetchError);
+        if (fetchError) throw fetchError;
+        const blocked = localStorage.getItem(recoveryKey);
+        const recovery = blocked ? JSON.parse(blocked) : null;
+        const originalBase = recovery?.base || base;
+        if (existingStore) {
+          const remote = (existingStore.data || {}) as Record<string, unknown>;
+          const baseData = originalBase ? prepareStoreForMarketplacePublish(originalBase, originalBase.marketplaceSettings || {}) : {};
+          payload.data = mergeStoreSnapshot(baseData as unknown as Record<string, unknown>, cloudStore as unknown as Record<string, unknown>, remote);
+          // Compare-and-swap: a write after our read must not be overwritten.
+          let query = supabase.from('stores').update(payload).eq('id', existingStore.id);
+          query = existingStore.updated_at ? query.eq('updated_at', existingStore.updated_at) : query.is('updated_at', null);
+          const { data, error } = await query.select('id');
+          if (error) throw error;
+          if (!data?.length) throw new Error('Another device saved first. Your local copy is kept; retry after reconciling.');
+        } else {
+          // An insert racing another device must fail, never become an upsert.
+          const { error } = await supabase.from('stores').insert(payload);
+          if (error) throw error;
         }
-
-        if (existingStore && existingStore.id) {
-          payload.id = existingStore.id;
-        }
-
-        const { error: upsertError } = await supabase
-          .from('stores')
-          .upsert(payload, { onConflict: 'access_code' });
-
-        if (upsertError) {
-          console.error('Supabase multi-device sync error during background auto-save:', upsertError);
-        }
+        const latest = JSON.parse(localStorage.getItem(recoveryKey) || 'null');
+        if (JSON.stringify(latest?.next) === JSON.stringify(snapshot)) localStorage.removeItem(recoveryKey);
+        else if (latest) localStorage.setItem(recoveryKey, JSON.stringify({ base: snapshot, next: latest.next }));
       } catch (err) {
         console.error('Cloud Sync background execution failed:', err);
+        void import('@/components/Toast').then(({ showToast }) => showToast(err instanceof Error ? err.message : 'Cloud sync paused. Your records are saved on this device.', 'error'));
       }
     }).catch(err => console.error('Failed to load supabase client for sync:', err));
   }
@@ -1202,7 +1234,12 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
         if (updates.costPrice !== undefined && updates.costPrice !== p.costPrice && updates.costPrice > 0) {
           newHistory.push({ costPrice: updates.costPrice, date: new Date().toISOString() });
         }
-        return { ...p, ...updates, priceHistory: newHistory };
+        const next = { ...p, ...updates, priceHistory: newHistory };
+        if (packSize(next) !== packSize(p)) {
+          if (updates.quantity === undefined || updates.quantity === p.quantity) next.quantity = stockBase(p) / packSize(next);
+          next.backorderedQty = stockPrecision((p.backorderedQty || 0) * packSize(p)) / packSize(next);
+        }
+        return next;
       }
       return p;
     }),
@@ -1228,31 +1265,9 @@ export function updateProduct(store: StoreData, id: string, updates: Partial<Pro
 
 export function deleteProduct(store: StoreData, id: string, actorName?: string, actorRole?: string): StoreData {
   const product = store.products.find(p => p.id === id);
-  if (!product) return store;
-
-  // Wipe all associated sales, planned restocks, learned mappings, and product entry
-  let updated: StoreData = {
-    ...store,
-    products: store.products.filter(p => p.id !== id),
-    sales: (store.sales || []).filter(s => s.productId !== id),
-    plannedRestocks: (store.plannedRestocks || []).filter(r => r.productId !== id),
-    learnedProducts: (store.learnedProducts || []).filter(lp => lp.id !== id),
-    trash: pushTrash(store, 'product', product),
-  };
-
-  if (actorName) {
-    updated = recordActivityLog(updated, actorName, actorRole, `Deleted product: ${product.name} (wiped financial and sales history)`);
-  }
-  if (product.quantity > 0) {
-    updated = recordInventoryMovement(
-      updated,
-      id,
-      'Adjustment',
-      -product.quantity,
-      actorName,
-      'Delete Product'
-    );
-  }
+  if (!product || product.discontinued) return store;
+  let updated: StoreData = { ...store, products: store.products.map(p => p.id === id ? { ...p, discontinued: true } : p), trash: pushTrash(store, 'product', product) };
+  updated = recordActivityLog(updated, actorName, actorRole, `Archived product: ${product.name}; sales history retained`);
   saveStore(updated);
   return updated;
 }
@@ -1285,98 +1300,67 @@ export function clearInventory(store: StoreData): StoreData {
   return updated;
 }
 
-export function deleteSale(store: StoreData, id: string): StoreData {
-  const salesToDelete = store.sales.filter(s => s.id === id || (s.transactionId && s.transactionId === id));
-  if (salesToDelete.length === 0) return store;
-
-  let nextTrash = store.trash || [];
-  for (const sale of salesToDelete) {
-    const item: TrashItem = {
-      id: generateId(),
-      kind: 'sale',
-      deletedAt: new Date().toISOString(),
-      payload: sale,
+export function deleteSale(store: StoreData, id: string, deferSave = false): StoreData {
+  const selected = store.sales.find(s => s.id === id || s.transactionId === id);
+  if (!selected) return store;
+  // A credit invoice and its payments are indivisible. Delete the transaction,
+  // even when a caller passed one of its line IDs.
+  const sales = store.sales.filter(s => s.id === selected.id || (!!selected.transactionId && s.transactionId === selected.transactionId) || (!!selected.pendingPaymentId && s.pendingPaymentId === selected.pendingPaymentId));
+  const ids = new Set(sales.map(s => s.id));
+  const pending = (store.pendingPayments || []).filter(p => sales.some(s => s.pendingPaymentId === p.id) || (p.saleIds || []).some(id => ids.has(id)));
+  const allocation = { cash: 0, bank: 0 };
+  for (const payment of pending) {
+    let accounted = 0;
+    for (const event of payment.events || []) {
+      const split = event.allocation || legacyAllocation(event.amount, event.method || selected.paymentMethod);
+      allocation.cash += split.cash; allocation.bank += split.bank; accounted += event.amount;
+    }
+    if (payment.paid > accounted) {
+      const split = legacyAllocation(payment.paid - accounted, selected.paymentMethod);
+      allocation.cash += split.cash; allocation.bank += split.bank;
+    }
+  }
+  for (const sale of sales.filter(s => !pending.some(p => p.id === s.pendingPaymentId || (p.saleIds || []).includes(s.id)))) {
+    const split = sale.paymentAllocation || legacyAllocation(sale.total, sale.paymentMethod);
+    allocation.cash += split.cash; allocation.bank += split.bank;
+  }
+  const stock: NonNullable<TrashItem['saleUndo']>['stock'] = [];
+  let updated: StoreData = { ...store, products: store.products.map(p => ({ ...p })) };
+  for (const sale of sales) {
+    const product = updated.products.find(p => p.id === sale.productId);
+    if (!product || sale.pendingPaymentId?.startsWith('laundry-')) continue;
+    const backorderQuantity = sale.backorderQuantity || 0;
+    const baseQuantity = Math.max(0, historicalUnits(sale, product) - backorderQuantity);
+    stock.push({ productId: product.id, baseQuantity, backorderQuantity });
+    product.quantity = stockPrecision(stockBase(product) + baseQuantity) / packSize(product);
+    product.backorderedQty = Math.max(0, stockPrecision((product.backorderedQty || 0) * packSize(product) - backorderQuantity)) / packSize(product);
+    updated = recordInventoryMovement(updated, product.id, 'Return', baseQuantity / packSize(product), 'Staff', 'Sale reversal');
+  }
+  const customerIds = new Set(sales.map(s => s.customerId).filter(Boolean));
+  for (const payment of pending) {
+    const matches = (store.customers || []).filter(c => payment.customerId ? c.id === payment.customerId : payment.customerPhone ? c.phone.replace(/\D/g, '') === payment.customerPhone.replace(/\D/g, '') : c.name.toLowerCase() === payment.customerName.toLowerCase());
+    if (matches.length === 1) customerIds.add(matches[0].id);
+  }
+  const customerDeltas = [...customerIds].map(customerId => {
+    const customer = (store.customers || []).find(c => c.id === customerId);
+    return {
+      id: customerId!,
+      purchases: money(Math.min(customer?.totalPurchases || 0, sales.reduce((sum, s) => sum + s.total, 0))),
+      debt: money(Math.min(customer?.outstandingDebt || 0, pending.reduce((sum, p) => sum + p.balance, 0))),
+      visits: Math.min(customer?.visitsCount || 0, 1),
+      points: Math.min(customer?.loyaltyPoints || 0, Math.floor(sales.reduce((sum, s) => sum + s.total, 0) / 1000)),
+      history: (customer?.purchaseHistory || []).filter(p => p.transactionId && p.transactionId === selected.transactionId),
     };
-    nextTrash = [item, ...nextTrash];
-  }
-
-  let cashDeduct = 0;
-  let bankDeduct = 0;
-  for (const sale of salesToDelete) {
-    const method = sale.paymentMethod || 'cash';
-    if (method === 'cash') {
-      cashDeduct += sale.total;
-    } else {
-      bankDeduct += sale.total;
-    }
-  }
-
-  const nextProducts = [...store.products];
-  let nextMovements = store.inventoryMovements || [];
-
-  for (const sale of salesToDelete) {
-    const pIndex = nextProducts.findIndex(p => p.id === sale.productId);
-    if (pIndex >= 0) {
-      const p = nextProducts[pIndex];
-      const isSingle = sale.productName.endsWith(' (Single)');
-      const singles = p.singlesPerCarton || 1;
-      const qtyToRestore = isSingle ? (sale.quantity / singles) : sale.quantity;
-
-      const unitsSold = Math.max(0, (p.units_sold || 0) - sale.quantity);
-      const totalRevenue = Math.max(0, (p.total_revenue || 0) - sale.total);
-      const totalProfit = (p.total_profit || 0) - sale.profit;
-
-      nextProducts[pIndex] = {
-        ...p,
-        quantity: Math.round((p.quantity + qtyToRestore) * 100) / 100,
-        units_sold: Math.round(unitsSold * 100) / 100,
-        total_revenue: Math.round(totalRevenue * 100) / 100,
-        total_profit: Math.round(totalProfit * 100) / 100,
-      };
-
-      nextMovements = [
-        {
-          id: generateId(),
-          productId: p.id,
-          movementType: 'Return',
-          quantity: qtyToRestore,
-          date: new Date().toISOString(),
-          user: 'Staff',
-          source: 'Refund/Return',
-        },
-        ...nextMovements,
-      ];
-    }
-  }
-
-  const remainingSales = store.sales.filter(s => s.id !== id && (!s.transactionId || s.transactionId !== id));
-  const affectedProductIds = Array.from(new Set(salesToDelete.map(s => s.productId)));
-  for (const pid of affectedProductIds) {
-    const pIndex = nextProducts.findIndex(p => p.id === pid);
-    if (pIndex >= 0) {
-      const p = nextProducts[pIndex];
-      const productSales = remainingSales.filter(s => s.productId === pid);
-      if (productSales.length > 0) {
-        const sortedSales = [...productSales].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        p.first_sale_at = sortedSales[0].date;
-        p.last_sold_at = sortedSales[sortedSales.length - 1].date;
-      } else {
-        p.first_sale_at = undefined;
-        p.last_sold_at = undefined;
-      }
-    }
-  }
-
-  const updated = {
-    ...store,
-    products: nextProducts,
-    inventoryMovements: nextMovements,
-    sales: remainingSales,
-    trash: nextTrash,
-    cashBalance: Math.max(0, (store.cashBalance || 0) - cashDeduct),
-    bankBalance: Math.max(0, (store.bankBalance || 0) - bankDeduct),
+  });
+  updated = { ...updated,
+    sales: store.sales.filter(s => !ids.has(s.id)),
+    pendingPayments: (store.pendingPayments || []).filter(p => !pending.some(x => x.id === p.id)),
+    cashBalance: money((store.cashBalance || 0) - allocation.cash), bankBalance: money((store.bankBalance || 0) - allocation.bank),
+    customers: (store.customers || []).map(c => { const delta = customerDeltas.find(d => d.id === c.id); return delta ? { ...c, purchaseHistory: (c.purchaseHistory || []).filter(p => !p.transactionId || !delta.history.some(h => h.transactionId === p.transactionId)), totalPurchases: money(Math.max(0, c.totalPurchases - delta.purchases)), outstandingDebt: money(Math.max(0, c.outstandingDebt - delta.debt)), visitsCount: Math.max(0, c.visitsCount - delta.visits), loyaltyPoints: Math.max(0, c.loyaltyPoints - delta.points) } : c; }),
+    trash: [{ id: generateId(), kind: 'sale', deletedAt: new Date().toISOString(), payload: selected, saleUndo: { sales, pending, allocation, stock, customers: customerDeltas } }, ...(store.trash || [])],
   };
-  saveStore(updated);
+  updated = syncProductPerformance(updated);
+  if (!deferSave) saveStore(updated);
   return updated;
 }
 
@@ -1387,47 +1371,58 @@ export function recordSale(
   actorName?: string,
   actorRole?: string,
   transactionId?: string,
-  saleType?: 'carton' | 'single'
+  saleType?: 'carton' | 'single',
+  deferSave = false
 ): StoreData {
   const product = store.products.find(p => p.id === productId);
-  if (!product) return store;
-  if (quantity <= 0) return store;
+  if (!product || product.discontinued) return store;
+  if (!Number.isFinite(quantity) || quantity <= 0) return store;
+  if ((saleType === 'single' || packSize(product) > 1) && !Number.isInteger(saleUnits(product, quantity, saleType))) return store;
 
-  let unitPrice = product.sellingPrice;
+  let unitPrice = salePrice(product, saleType);
   let costPrice = product.costPrice;
   let qtyDeduction = quantity;
   const isSingle = saleType === 'single' && product.isCartonSingleEnabled;
 
   if (isSingle) {
     const singles = product.singlesPerCarton || 1;
-    unitPrice = product.singleSellingPrice ?? (product.sellingPrice / singles);
+    unitPrice = salePrice(product, saleType);
     costPrice = product.costPrice / singles;
     qtyDeduction = quantity / singles;
   }
 
   const backorderEnabled = !!store.managerSettings?.backorderSellingEnabled;
-  const shortfall = Math.round(Math.max(0, qtyDeduction - product.quantity) * 100) / 100;
+  const baseQuantity = saleUnits(product, quantity, saleType);
+  const shortfallBase = Math.max(0, stockPrecision(baseQuantity - stockBase(product)));
+  const shortfall = shortfallBase / packSize(product);
   if (shortfall > 0 && !backorderEnabled) return store;
 
   const sale: Sale = {
     id: generateId(),
     productId,
     productName: product.name + (isSingle ? ' (Single)' : ''),
-    quantity: Math.round(quantity * 100) / 100, // Round to 2 decimal places
+    quantity: stockPrecision(quantity), // Preserve weighed quantities and fractional cartons
     unitPrice: Math.round(unitPrice * 100) / 100,
     total: Math.round(unitPrice * quantity * 100) / 100,
     profit: Math.round((unitPrice - costPrice) * quantity * 100) / 100,
     date: new Date().toISOString(),
     transactionId,
     channel: 'in_store',
+    saleType: isSingle ? 'single' : 'carton',
+    stockQuantity: qtyDeduction,
+    baseQuantity,
+    unitsPerStockUnit: packSize(product),
+    backorderQuantity: shortfallBase,
+    costAtSale: costPrice,
+    ...(deferSave ? {} : { paymentMethod: 'cash' as const, paymentAllocation: { cash: money(unitPrice * quantity), bank: 0 } }),
     // The actor reached this function already; it was spent on a log line and
     // thrown away, so nothing could say who sold what.
     ...attribution({ name: actorName, role: actorRole }),
   };
 
-  const newQty = Math.max(0, Math.round((product.quantity - qtyDeduction) * 100) / 100);
-  const newBackorderedQty = Math.round((((product.backorderedQty || 0) + shortfall)) * 100) / 100;
-  const newUnitsSold = Math.round(((product.units_sold || 0) + sale.quantity) * 100) / 100;
+  const newQty = Math.max(0, stockPrecision(stockBase(product) - baseQuantity)) / packSize(product);
+  const newBackorderedQty = stockPrecision((product.backorderedQty || 0) + shortfall);
+  const newUnitsSold = stockPrecision((product.units_sold || 0) + baseQuantity);
   const newTotalRevenue = Math.round(((product.total_revenue || 0) + sale.total) * 100) / 100;
   const newTotalProfit = Math.round(((product.total_profit || 0) + sale.profit) * 100) / 100;
 
@@ -1444,13 +1439,14 @@ export function recordSale(
       last_sold_at: sale.date
     } : p),
     sales: [sale, ...store.sales],
+    cashBalance: money((store.cashBalance || 0) + (deferSave ? 0 : sale.total)),
   };
 
   updated = recordInventoryMovement(
     updated,
     productId,
     'Sale',
-    -qtyDeduction,
+    -(baseQuantity - shortfallBase) / packSize(product),
     actorName,
     'Sales Checkout'
   );
@@ -1460,7 +1456,7 @@ export function recordSale(
     const backorderNote = shortfall > 0 ? ' [backorder]' : '';
     updated = recordActivityLog(updated, actorName, actorRole, `Completed sale: ${product.name} × ${displayQty} (Total: ₦${sale.total.toLocaleString()})${backorderNote}`);
   }
-  saveStore(updated);
+  if (!deferSave) saveStore(updated);
   return updated;
 }
 
@@ -1469,17 +1465,19 @@ export function recordSale(
 export function syncBackorder(store: StoreData, productId: string): StoreData {
   const product = store.products.find(p => p.id === productId);
   if (!product || !product.backorderedQty) return store;
-
-  const newQty = Math.max(0, Math.round((product.quantity - product.backorderedQty) * 100) / 100);
-
-  const updated = {
-    ...store,
-    products: store.products.map(p => p.id === productId ? {
-      ...p,
-      quantity: newQty,
-      backorderedQty: 0,
-    } : p),
-  };
+  const owed = stockPrecision(product.backorderedQty * packSize(product));
+  const fulfilled = Math.min(stockBase(product), owed);
+  let remaining = fulfilled;
+  const sales = [...store.sales].reverse().map(sale => {
+    if (sale.productId !== productId || !sale.backorderQuantity) return sale;
+    const applied = Math.min(remaining, sale.backorderQuantity);
+    remaining -= applied;
+    return { ...sale, backorderQuantity: stockPrecision(sale.backorderQuantity - applied) };
+  }).reverse();
+  let updated = { ...store, sales, products: store.products.map(p => p.id === productId ? {
+    ...p, quantity: stockPrecision(stockBase(p) - fulfilled) / packSize(p), backorderedQty: stockPrecision(owed - fulfilled) / packSize(p),
+  } : p) };
+  updated = recordInventoryMovement(updated, productId, 'Sale', -fulfilled / packSize(product), 'Staff', 'Backorder fulfilment');
   saveStore(updated);
   return updated;
 }
@@ -1498,11 +1496,8 @@ export function clearBackorder(store: StoreData, productId: string): StoreData {
 }
 
 export function clearSales(store: StoreData): StoreData {
-  const trash = store.sales.reduce<TrashItem[]>((acc, s) => {
-    acc.unshift({ id: generateId(), kind: 'sale', deletedAt: new Date().toISOString(), payload: s });
-    return acc;
-  }, []);
-  const updated = { ...store, sales: [], trash: [...trash, ...(store.trash || [])] };
+  let updated = store;
+  while (updated.sales.length) updated = deleteSale(updated, updated.sales[0].id, true);
   saveStore(updated);
   return updated;
 }
@@ -1601,6 +1596,15 @@ export function receiveStock(
   actorName?: string,
   actorRole?: string
 ): StoreData {
+  const grouped = new Map<string, RestockEntry>();
+  for (const entry of entries) {
+    const product = store.products.find(p => p.id === entry.productId);
+    if (!product || !Number.isFinite(entry.quantity) || entry.quantity <= 0 || !Number.isFinite(entry.costPrice) || entry.costPrice < 0) throw new Error('Check the restock products, quantities and costs.');
+    if (packSize(product) > 1 && !Number.isInteger(saleUnits(product, entry.quantity))) throw new Error('Pack stock must contain whole pieces.');
+    const old = grouped.get(entry.productId);
+    grouped.set(entry.productId, old ? { ...entry, quantity: old.quantity + entry.quantity, costPrice: (old.quantity * old.costPrice + entry.quantity * entry.costPrice) / (old.quantity + entry.quantity) } : entry);
+  }
+  entries = [...grouped.values()];
   const now = new Date().toISOString();
   const batchId = generateId();
   const newRestocks: Restock[] = [];
@@ -1629,8 +1633,8 @@ export function receiveStock(
       : currentPriceHistory;
     return {
       ...p,
-      quantity: Math.round((p.quantity + entry.quantity) * 100) / 100,
-      costPrice: entry.costPrice > 0 ? entry.costPrice : p.costPrice,
+      quantity: stockPrecision(stockBase(p) + saleUnits(p, entry.quantity)) / packSize(p),
+      costPrice: (Math.max(0, p.quantity) * p.costPrice + entry.quantity * entry.costPrice) / (Math.max(0, p.quantity) + entry.quantity),
       initialQuantity: p.initialQuantity ?? p.quantity,
       priceHistory: newPriceHistory,
       restock_count: (p.restock_count || 0) + 1,
@@ -1646,20 +1650,7 @@ export function receiveStock(
   let newWalletBalance = store.walletBalance ?? 0;
 
   if (restockTotal > 0) {
-    // Initial import check: no sales yet and no existing restock expenses
-    const isInitialImport = (store.sales || []).length === 0 &&
-      (store.expenses || []).filter(e => e.source === 'restock').length === 0;
-
-    if (isInitialImport) {
-      newInvestments.push({
-        id: generateId(),
-        amount: Math.round(restockTotal * 100) / 100,
-        note: `Initial Inventory Setup via Invoice Import`,
-        source: 'Inventory Restock',
-        date: now,
-        type: 'initial',
-      });
-    } else {
+    {
       const availableCash = newCashBalance + newBankBalance + newWalletBalance;
       let autoInvestedAmt = 0;
       let cashDeduction = 0;
@@ -1816,14 +1807,31 @@ export function restoreTrashItem(store: StoreData, trashId: string): StoreData {
   let updated: StoreData = { ...store, trash: remaining };
   if (item.kind === 'product') {
     const p = item.payload as Product;
-    if (!updated.products.some(x => x.id === p.id)) {
-      updated = { ...updated, products: [...updated.products, p] };
-    }
+    updated = { ...updated, products: updated.products.some(x => x.id === p.id) ? updated.products.map(x => x.id === p.id ? { ...x, discontinued: false } : x) : [...updated.products, p] };
   } else if (item.kind === 'sale') {
-    const s = item.payload as Sale;
-    if (!updated.sales.some(x => x.id === s.id)) {
-      updated = { ...updated, sales: [s, ...updated.sales] };
+    const undo = item.saleUndo;
+    // Old trash lacks the payment/stock reversal snapshot. Guessing here can
+    // invent cash or goods (old Clear Sales did not reverse either).
+    if (!undo) throw new Error('This older sale has no reversal record. Re-enter it after checking stock and payments.');
+    if (undo.sales.some(s => updated.sales.some(existing => existing.id === s.id))) throw new Error('This transaction is already restored.');
+    const required = new Map<string, number>();
+    for (const delta of undo.stock) required.set(delta.productId, (required.get(delta.productId) || 0) + delta.baseQuantity);
+    for (const [productId, units] of required) {
+      const product = updated.products.find(p => p.id === productId);
+      if (!product || stockBase(product) + 1e-8 < units) throw new Error('Not enough stock to restore this sale. Restore or restock the product first.');
     }
+    updated = { ...updated, products: updated.products.map(p => ({ ...p })) };
+    for (const delta of undo.stock) {
+      const p = updated.products.find(p => p.id === delta.productId)!;
+      p.quantity = stockPrecision(stockBase(p) - delta.baseQuantity) / packSize(p);
+      p.backorderedQty = stockPrecision((p.backorderedQty || 0) * packSize(p) + delta.backorderQuantity) / packSize(p);
+      updated = recordInventoryMovement(updated, p.id, 'Sale', -delta.baseQuantity / packSize(p), 'Staff', 'Restored transaction');
+    }
+    updated = { ...updated, sales: [...undo.sales, ...updated.sales], pendingPayments: [...undo.pending, ...(updated.pendingPayments || [])],
+      cashBalance: money((updated.cashBalance || 0) + undo.allocation.cash), bankBalance: money((updated.bankBalance || 0) + undo.allocation.bank),
+      customers: (updated.customers || []).map(c => { const delta = undo.customers.find(d => d.id === c.id); return delta ? { ...c, purchaseHistory: [...(delta.history || []), ...(c.purchaseHistory || [])], totalPurchases: money(c.totalPurchases + delta.purchases), outstandingDebt: money(c.outstandingDebt + delta.debt), visitsCount: c.visitsCount + delta.visits, loyaltyPoints: c.loyaltyPoints + delta.points } : c; }),
+    };
+    updated = syncProductPerformance(updated);
   } else if (item.kind === 'expense') {
     const e = item.payload as Expense;
     const list = updated.expenses || [];
@@ -1854,7 +1862,7 @@ export function getTopSellers(store: StoreData, limit = 5): { name: string; tota
   const map = new Map<string, { name: string; totalSold: number; revenue: number }>();
   store.sales.forEach(s => {
     const existing = map.get(s.productId) || { name: s.productName, totalSold: 0, revenue: 0 };
-    existing.totalSold += s.quantity;
+    existing.totalSold += historicalUnits(s, store.products.find(p => p.id === s.productId));
     existing.revenue += s.total;
     map.set(s.productId, existing);
   });
@@ -1869,7 +1877,7 @@ export function getDashboardStats(store: StoreData) {
   const threshold = getLowStockThreshold();
   const lowStockProducts = activeProducts.filter(p => p.quantity <= threshold);
   const totalSales = store.sales.length;
-  const inventoryValue = activeProducts.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
+  const inventoryValue = store.products.reduce((sum, p) => sum + p.costPrice * p.quantity, 0);
   const totalExpenses = sumOperatingExpenses(store);
   const stockPurchases = sumStockPurchases(store);
   const savingsSaved = store.savingsGoal?.saved || 0;
@@ -1918,235 +1926,127 @@ function pid(): string { return Date.now().toString(36) + Math.random().toString
  */
 export function recordCheckout(
   store: StoreData,
-  items: { productId: string; quantity: number; saleType?: 'carton' | 'single' }[],
+  items: { productId: string; quantity: number; saleType?: 'carton' | 'single'; expectedUnitPrice?: number }[],
   opts: {
-    paid: number;
-    method: PaymentMethod;
-    customerName?: string;
-    customerPhone?: string;
-    customerNote?: string;
-    dueDate?: string;
-    discount?: number;
-    actorName?: string;
-    actorRole?: string;
+    paid: number; method: PaymentMethod; allocation?: PaymentAllocation;
+    customerId?: string; customerName?: string; customerPhone?: string; customerNote?: string;
+    dueDate?: string; discount?: number; actorName?: string; actorRole?: string;
   }
-): { store: StoreData; sales: Sale[]; pending?: PendingPayment } {
-  let updated = store;
-  const newSales: Sale[] = [];
-  const pendingItems: PendingPaymentItem[] = [];
-  const transactionId = pid();
-
-  for (const it of items) {
-    const p = updated.products.find(p => p.id === it.productId);
-    if (!p) continue;
-
-    let qtyDeduction = it.quantity;
-    if (it.saleType === 'single' && p.isCartonSingleEnabled && p.singlesPerCarton) {
-      qtyDeduction = it.quantity / p.singlesPerCarton;
+): { store: StoreData; sales: Sale[]; pending?: PendingPayment; error?: string; subtotal: number; total: number; discount: number; paid: number; balance: number } {
+  const failed = (error: string) => ({ store, sales: [] as Sale[], error, subtotal: 0, total: 0, discount: 0, paid: 0, balance: 0 });
+  try {
+    if (!items.length) return failed('Add an item before checkout.');
+    if (!Number.isFinite(opts.paid) || opts.paid < 0 || !Number.isFinite(opts.discount ?? 0) || (opts.discount ?? 0) < 0) return failed('Check the payment and discount amounts.');
+    const needed = new Map<string, number>();
+    for (const item of items) {
+      const product = store.products.find(p => p.id === item.productId && !p.discontinued);
+      if (!product) return failed('An item is no longer available. Review your cart.');
+      if (!Number.isFinite(item.quantity) || item.quantity <= 0) return failed(`Enter a valid quantity for ${product.name}.`);
+      const units = saleUnits(product, item.quantity, item.saleType);
+      if ((packSize(product) > 1 || item.saleType === 'single') && !Number.isInteger(units)) return failed(`${product.name} must be sold in whole pieces.`);
+      if (item.expectedUnitPrice !== undefined && money(item.expectedUnitPrice) !== salePrice(product, item.saleType)) return failed(`The price of ${product.name} changed. Remove it and add it again.`);
+      if (!Number.isFinite(product.costPrice) || product.costPrice < 0 || !Number.isFinite(salePrice(product, item.saleType)) || salePrice(product, item.saleType) < 0) return failed(`Check the price of ${product.name}.`);
+      needed.set(product.id, (needed.get(product.id) || 0) + units);
+      if (!store.managerSettings?.backorderSellingEnabled && needed.get(product.id)! > stockBase(product) + 1e-8) return failed(`Not enough stock for ${product.name}. Nothing was sold.`);
     }
-    if (p.quantity < qtyDeduction) continue;
-
-    updated = recordSale(updated, it.productId, it.quantity, opts.actorName, opts.actorRole, transactionId, it.saleType);
-    const created = updated.sales[0];
-    newSales.push(created);
-    pendingItems.push({
-      productId: p.id,
-      productName: created.productName,
-      quantity: it.quantity,
-      unitPrice: created.unitPrice,
+    const customerName = opts.customerName?.trim();
+    const customers = store.customers || [];
+    const phone = String(opts.customerPhone || '').replace(/\D/g, '');
+    let customer = opts.customerId ? customers.find(c => c.id === opts.customerId) : undefined;
+    if (opts.customerId && !customer) return failed('Select the customer again.');
+    if (!customer && customerName) {
+      const matches = phone ? customers.filter(c => String(c.phone || '').replace(/\D/g, '') === phone) : customers.filter(c => c.name.trim().toLowerCase() === customerName.toLowerCase());
+      if (matches.length > 1) return failed('More than one customer matches. Select the correct customer.');
+      customer = matches[0];
+    }
+    const customerId = customer?.id || (customerName ? pid() : undefined);
+    const transactionId = pid();
+    let updated = store;
+    for (const item of items) updated = recordSale(updated, item.productId, item.quantity, opts.actorName, opts.actorRole, transactionId, item.saleType, true);
+    const rawSales = updated.sales.filter(s => s.transactionId === transactionId);
+    if (rawSales.length !== items.length) return failed('The cart could not be recorded. Nothing was sold.');
+    const subtotal = money(rawSales.reduce((sum, sale) => sum + sale.total, 0));
+    const discount = money(opts.discount || 0);
+    if (discount > subtotal) return failed('Discount cannot exceed the sale total.');
+    const total = money(subtotal - discount);
+    const paid = money(Math.min(opts.paid, total));
+    const balance = money(total - paid);
+    if (balance > 0 && !customerName) return failed('Enter a customer for the unpaid balance.');
+    const allocation = paymentAllocation(paid, opts.method, opts.allocation);
+    let remainingDiscount = Math.round(discount * 100);
+    let remainingCash = Math.round(allocation.cash * 100);
+    let remainingBank = Math.round(allocation.bank * 100);
+    const pendingId = balance > 0 ? pid() : undefined;
+    const sales = rawSales.map((sale, index) => {
+      const last = index === rawSales.length - 1;
+      const discountCents = last ? remainingDiscount : Math.min(remainingDiscount, Math.floor(discount * 100 * sale.total / (subtotal || 1)));
+      remainingDiscount -= discountCents;
+      const saleTotal = money(sale.total - discountCents / 100);
+      const cash = last ? remainingCash : Math.min(remainingCash, Math.floor(allocation.cash * 100 * saleTotal / (total || 1)));
+      const bank = last ? remainingBank : Math.min(remainingBank, Math.floor(allocation.bank * 100 * saleTotal / (total || 1)));
+      remainingCash -= cash; remainingBank -= bank;
+      return { ...sale, total: saleTotal, profit: money(sale.profit - discountCents / 100), customerId, pendingPaymentId: pendingId, paymentMethod: opts.method, paymentAllocation: { cash: cash / 100, bank: bank / 100 } };
     });
-  }
-  const subtotal = newSales.reduce((s, x) => s + x.total, 0);
-  const total = Math.max(0, subtotal - (opts.discount || 0));
-  const paid = Math.min(opts.paid, total);
-  const balance = Math.max(0, total - paid);
-
-  // Distribute the discount proportionally across sales
-  if (opts.discount && opts.discount > 0 && subtotal > 0) {
-    const ratio = total / subtotal;
-    const saleIds = newSales.map(s => s.id);
-    updated = {
-      ...updated,
-      sales: updated.sales.map(s => {
-        if (saleIds.includes(s.id)) {
-          const newTotal = Math.round(s.total * ratio * 100) / 100;
-          const discountAmt = s.total - newTotal;
-          const newProfit = Math.round((s.profit - discountAmt) * 100) / 100;
-          return {
-            ...s,
-            total: newTotal,
-            profit: newProfit,
-          };
-        }
-        return s;
-      }),
-    };
-    newSales.forEach(s => {
-      const origTotal = s.total;
-      s.total = Math.round(s.total * ratio * 100) / 100;
-      const discountAmt = origTotal - s.total;
-      s.profit = Math.round((s.profit - discountAmt) * 100) / 100;
-    });
-  }
-
-  let pending: PendingPayment | undefined;
-  if (balance > 0 && opts.customerName) {
-    const id = pid();
-    const event: PendingPaymentEvent = { date: new Date().toISOString(), amount: paid, method: opts.method };
-    pending = {
-      id,
-      customerName: opts.customerName,
-      customerPhone: opts.customerPhone,
-      customerNote: opts.customerNote,
-      items: pendingItems,
-      total,
-      paid,
-      balance,
-      dueDate: opts.dueDate,
-      createdAt: new Date().toISOString(),
-      status: 'pending',
-      events: paid > 0 ? [event] : [],
-      saleIds: newSales.map(s => s.id),
-    };
-    // tag sales
-    updated = {
-      ...updated,
-      sales: updated.sales.map(s => pending!.saleIds.includes(s.id) ? { ...s, pendingPaymentId: id, paymentMethod: opts.method } : s),
-      pendingPayments: [pending, ...(updated.pendingPayments || [])],
-    };
-  } else {
-    updated = {
-      ...updated,
-      sales: updated.sales.map(s => newSales.some(x => x.id === s.id) ? { ...s, paymentMethod: opts.method } : s),
-    };
-  }
-
-  let cashAdd = 0;
-  let bankAdd = 0;
-  if (paid > 0) {
-    if (opts.method === 'cash') {
-      cashAdd = paid;
-    } else if (opts.method === 'pos' || opts.method === 'transfer') {
-      bankAdd = paid;
-    } else if (opts.method === 'mixed') {
-      cashAdd = paid / 2;
-      bankAdd = paid / 2;
+    const now = new Date().toISOString();
+    const pending: PendingPayment | undefined = pendingId ? {
+      id: pendingId, customerId, customerName: customerName!, customerPhone: opts.customerPhone || customer?.phone,
+      customerNote: opts.customerNote, dueDate: opts.dueDate, createdAt: now,
+      items: sales.map(s => ({ productId: s.productId, productName: s.productName, quantity: s.quantity, unitPrice: s.unitPrice })),
+      total, paid, balance, status: 'pending', saleIds: sales.map(s => s.id),
+      events: paid > 0 ? [{ date: now, amount: paid, method: opts.method, allocation }] : [],
+    } : undefined;
+    updated = { ...updated, sales: [...sales, ...store.sales],
+      pendingPayments: pending ? [pending, ...(store.pendingPayments || [])] : store.pendingPayments,
+      cashBalance: money((store.cashBalance || 0) + allocation.cash), bankBalance: money((store.bankBalance || 0) + allocation.bank) };
+    if (customerName && customerId) {
+      const purchase = { date: now, amount: total, items: sales.map(s => `${s.productName} (x${s.quantity})`).join(', '), transactionId };
+      const nextCustomer: Customer = {
+        ...(customer || {}), id: customerId, name: customer?.name || customerName, phone: customer?.phone || opts.customerPhone || '',
+        totalPurchases: money((customer?.totalPurchases || 0) + total), outstandingDebt: money((customer?.outstandingDebt || 0) + balance),
+        lastPurchaseDate: now, purchaseHistory: [purchase, ...(customer?.purchaseHistory || [])],
+        visitsCount: (customer?.visitsCount || 0) + 1, loyaltyPoints: (customer?.loyaltyPoints || 0) + Math.floor(total / 1000),
+      };
+      updated = { ...updated, customers: customer ? customers.map(c => c.id === customerId ? nextCustomer : c) : [nextCustomer, ...customers] };
     }
+    updated = syncProductPerformance(updated);
+    saveStore(updated);
+    return { store: updated, sales, pending, subtotal, total, discount, paid, balance };
+  } catch (error) {
+    return failed(error instanceof Error ? error.message : 'Checkout failed. Your cart has been kept.');
   }
-
-  updated = {
-    ...updated,
-    cashBalance: Math.round(((updated.cashBalance || 0) + cashAdd) * 100) / 100,
-    bankBalance: Math.round(((updated.bankBalance || 0) + bankAdd) * 100) / 100,
-  };
-
-  // Update customer record
-  if (opts.customerName) {
-    const nowStr = new Date().toISOString();
-    const customers = updated.customers || [];
-    const cust = customers.find(c => c.name.toLowerCase() === opts.customerName!.toLowerCase());
-    const itemsSummary = pendingItems.map(pi => `${pi.productName} (x${pi.quantity})`).join(', ');
-    const purchase = { date: nowStr, amount: total, items: itemsSummary };
-
-    if (cust) {
-      const updatedCust: Customer = {
-        ...cust,
-        phone: opts.customerPhone || cust.phone,
-        totalPurchases: cust.totalPurchases + total,
-        outstandingDebt: cust.outstandingDebt + balance,
-        lastPurchaseDate: nowStr,
-        purchaseHistory: [purchase, ...(cust.purchaseHistory || [])],
-        visitsCount: cust.visitsCount + 1,
-        loyaltyPoints: cust.loyaltyPoints + Math.floor(total / 1000)
-      };
-      updated = {
-        ...updated,
-        customers: customers.map(c => c.id === cust!.id ? updatedCust : c)
-      };
-    } else {
-      const newCust: Customer = {
-        id: pid(),
-        name: opts.customerName,
-        phone: opts.customerPhone || '',
-        totalPurchases: total,
-        outstandingDebt: balance,
-        lastPurchaseDate: nowStr,
-        purchaseHistory: [purchase],
-        visitsCount: 1,
-        loyaltyPoints: Math.floor(total / 1000)
-      };
-      updated = {
-        ...updated,
-        customers: [newCust, ...customers]
-      };
-    }
-  }
-
-  saveStore(updated);
-  return { store: updated, sales: newSales, pending };
 }
 
-export function addPaymentToPending(store: StoreData, id: string, amount: number, method: PaymentMethod = 'cash'): StoreData {
-  const list = store.pendingPayments || [];
-  const p = list.find(x => x.id === id);
-  let updatedCustomers = store.customers || [];
-  if (p && p.customerName) {
-    /*
-     * Off the customer the debt belongs to, and nobody else.
-     *
-     * This took the payment off every customer with the debtor's name, so one
-     * Musa Bello paying reduced both Musa Bellos' balances. The debt's customer
-     * id says whose it is. An old debt without one falls back to its number,
-     * then its name - each only when exactly one customer matches, because two
-     * is a coin toss and the wrong guess moves a debt onto a stranger.
-     */
-    const numberOf = (value: unknown) => String(value || '').replace(/\D/g, '');
-    const byNumber = numberOf(p.customerPhone)
-      ? updatedCustomers.filter(c => numberOf(c.phone) === numberOf(p.customerPhone))
-      : [];
-    const byName = updatedCustomers.filter(c => c.name.toLowerCase() === p.customerName.toLowerCase());
-    const payerId = p.customerId
-      || (byNumber.length === 1 ? byNumber[0].id : '')
-      || (byName.length === 1 ? byName[0].id : '');
-    updatedCustomers = updatedCustomers.map(c => (
-      payerId && c.id === payerId
-        ? { ...c, outstandingDebt: Math.max(0, c.outstandingDebt - amount) }
-        : c
-    ));
-  }
+/** Atomic cash checkout used by barcode, voice and receipt entry points. */
+export function recordCashCheckout(store: StoreData, items: { productId: string; quantity: number }[], actorName?: string, actorRole?: string) {
+  const total = items.reduce((sum, item) => { const p = store.products.find(p => p.id === item.productId); return sum + (p ? money(salePrice(p) * item.quantity) : 0); }, 0);
+  return recordCheckout(store, items, { paid: money(total), method: 'cash', actorName, actorRole });
+}
 
-  let cashAdd = 0;
-  let bankAdd = 0;
-  if (amount > 0) {
-    if (method === 'cash') {
-      cashAdd = amount;
-    } else if (method === 'pos' || method === 'transfer') {
-      bankAdd = amount;
-    } else if (method === 'mixed') {
-      cashAdd = amount / 2;
-      bankAdd = amount / 2;
-    }
-  }
-
-  const updated: StoreData = {
-    ...store,
-    customers: updatedCustomers,
-    cashBalance: Math.round(((store.cashBalance || 0) + cashAdd) * 100) / 100,
-    bankBalance: Math.round(((store.bankBalance || 0) + bankAdd) * 100) / 100,
-    pendingPayments: list.map(p => {
-      if (p.id !== id) return p;
-      const newPaid = Math.min(p.total, p.paid + Math.max(0, amount));
-      const balance = Math.max(0, p.total - newPaid);
-      const event: PendingPaymentEvent = { date: new Date().toISOString(), amount, method };
-      return {
-        ...p,
-        paid: newPaid,
-        balance,
-        status: balance <= 0 ? 'paid' : 'pending',
-        events: [event, ...(p.events || [])],
-      };
+export function addPaymentToPending(store: StoreData, id: string, amount: number, method: PaymentMethod = 'cash', split?: PaymentAllocation): StoreData {
+  const p = (store.pendingPayments || []).find(x => x.id === id);
+  if (!p || p.balance <= 0) throw new Error('This payment is no longer outstanding.');
+  if (!Number.isFinite(amount) || amount <= 0 || money(amount) > money(p.balance)) throw new Error('Enter an amount no greater than the outstanding balance.');
+  amount = money(amount);
+  const allocation = paymentAllocation(amount, method, split);
+  const numberOf = (value: unknown) => String(value || '').replace(/\D/g, '');
+  const customers = store.customers || [];
+  const byNumber = numberOf(p.customerPhone) ? customers.filter(c => numberOf(c.phone) === numberOf(p.customerPhone)) : [];
+  const byName = customers.filter(c => c.name.toLowerCase() === p.customerName.toLowerCase());
+  const payerId = p.customerId || (byNumber.length === 1 ? byNumber[0].id : '') || (byName.length === 1 ? byName[0].id : '');
+  const date = new Date().toISOString();
+  const updated: StoreData = { ...store,
+    customers: customers.map(c => c.id === payerId ? { ...c, outstandingDebt: money(Math.max(0, c.outstandingDebt - amount)) } : c),
+    cashBalance: money((store.cashBalance || 0) + allocation.cash), bankBalance: money((store.bankBalance || 0) + allocation.bank),
+    pendingPayments: (store.pendingPayments || []).map(entry => entry.id !== id ? entry : {
+      ...entry, paid: money(entry.paid + amount), balance: money(entry.balance - amount), status: money(entry.balance - amount) === 0 ? 'paid' : 'pending',
+      events: [...(entry.events || []), { date, amount, method, allocation }],
     }),
   };
+  // Laundry sales are receipts, whereas inventory sales are invoices. Preserve
+  // the laundry receipt convention when a bundle is paid from this screen.
+  if (id.startsWith('laundry-')) {
+    updated.sales = [...store.sales, { id: pid(), productId: p.items[0]?.productId || id, productName: p.items[0]?.productName || 'Laundry payment', quantity: 1, unitPrice: amount, total: amount, profit: amount, date, pendingPaymentId: id, paymentMethod: method, paymentAllocation: allocation, channel: 'in_store' }];
+  }
   saveStore(updated);
   return updated;
 }
@@ -2158,9 +2058,13 @@ export function markPendingPaid(store: StoreData, id: string, method: PaymentMet
 }
 
 export function deletePendingPayment(store: StoreData, id: string): StoreData {
-  const updated: StoreData = {
-    ...store,
-    pendingPayments: (store.pendingPayments || []).filter(p => p.id !== id),
+  // A write-off forgives the debt; it is not a payment and must retain history.
+  const pending = (store.pendingPayments || []).find(p => p.id === id);
+  if (!pending || pending.balance <= 0) return store;
+  const candidates = (store.customers || []).filter(c => pending.customerId ? c.id === pending.customerId : pending.customerPhone ? c.phone.replace(/\D/g, '') === pending.customerPhone.replace(/\D/g, '') : c.name.toLowerCase() === pending.customerName.toLowerCase());
+  const updated: StoreData = { ...store,
+    customers: (store.customers || []).map(c => candidates.length === 1 && c.id === candidates[0].id ? { ...c, outstandingDebt: money(Math.max(0, c.outstandingDebt - pending.balance)) } : c),
+    pendingPayments: (store.pendingPayments || []).map(p => p.id === id ? { ...p, writtenOffAmount: money((p.writtenOffAmount || 0) + p.balance), writtenOffAt: new Date().toISOString(), balance: 0, status: 'written_off' } : p),
   };
   saveStore(updated);
   return updated;
@@ -2561,11 +2465,8 @@ export function recordStockCountAudit(store: StoreData, productId: string, produ
   // Adjust the product's actual stock quantity in the inventory to match actual count
   const updatedProducts = store.products.map(p => p.id === productId ? { ...p, quantity: actual } : p);
 
-  const updated = {
-    ...store,
-    products: updatedProducts,
-    stockCountAudits: [auditEntry, ...(store.stockCountAudits || [])]
-  };
+  if (!Number.isFinite(actual) || actual < 0) throw new Error('Enter a valid stock count.');
+  const updated = recordInventoryMovement({ ...store, products: updatedProducts, stockCountAudits: [auditEntry, ...(store.stockCountAudits || [])] }, productId, 'Adjustment', variance, 'Staff', 'Stock count');
   saveStore(updated);
   return updated;
 }
@@ -2578,14 +2479,19 @@ export function transferStock(
   destStoreCode: string
 ): StoreData {
   const product = sourceStore.products.find(p => p.id === productId);
-  if (!product || product.quantity < quantity || quantity <= 0) return sourceStore;
+  if (!product || !Number.isFinite(quantity) || quantity <= 0 || stockBase(product) + 1e-8 < saleUnits(product, quantity)) throw new Error('Check the transfer quantity.');
+  if (destStoreCode.toUpperCase() === sourceStore.accessCode.toUpperCase()) throw new Error('Choose another store.');
+  const destStore = loadStore(destStoreCode);
+  if (!destStore) throw new Error('Destination store is unavailable. Nothing was transferred.');
+  const units = saleUnits(product, quantity);
+  if (packSize(product) > 1 && !Number.isInteger(units)) throw new Error('Transfer whole pieces only.');
 
   const now = new Date().toISOString();
 
   // Decrease source stock
   let updatedSource: StoreData = {
     ...sourceStore,
-    products: sourceStore.products.map(p => p.id === productId ? { ...p, quantity: Math.round((p.quantity - quantity) * 100) / 100 } : p),
+    products: sourceStore.products.map(p => p.id === productId ? { ...p, quantity: stockPrecision(stockBase(p) - units) / packSize(p) } : p),
     transfers: [
       {
         id: generateId(),
@@ -2610,18 +2516,19 @@ export function transferStock(
   );
 
   // Load and update destination store
-  const destStore = loadStore(destStoreCode);
   if (destStore) {
     let destProducts = [...destStore.products];
-    const destProd = destProducts.find(p => p.name.toLowerCase() === product.name.toLowerCase() || (product.barcode && p.barcode === product.barcode));
+    const destProd = destProducts.find(p => (product.barcode ? p.barcode === product.barcode : p.name.toLowerCase() === product.name.toLowerCase() && p.unit === product.unit && packSize(p) === packSize(product)));
     let targetProductId = destProd ? destProd.id : '';
 
     if (destProd) {
-      destProducts = destProducts.map(p => p.id === destProd.id ? { ...p, quantity: Math.round((p.quantity + quantity) * 100) / 100 } : p);
+      destProducts = destProducts.map(p => p.id === destProd.id ? { ...p, quantity: stockPrecision(stockBase(p) + units) / packSize(p), costPrice: (p.quantity * p.costPrice + quantity * product.costPrice) / (p.quantity + units / packSize(p)) } : p);
     } else {
       targetProductId = generateId();
       // Add product as new in destination store
       destProducts.push({
+        ...product,
+        units_sold: 0, total_revenue: 0, total_profit: 0, first_sale_at: undefined, last_sold_at: undefined, backorderedQty: 0, discontinued: false,
         id: targetProductId,
         name: product.name,
         costPrice: product.costPrice,
@@ -2656,14 +2563,22 @@ export function transferStock(
       updatedDest,
       targetProductId,
       'Transfer',
-      quantity,
+      units / (destProd ? packSize(destProd) : packSize(product)),
       'Staff',
       `From Store ${sourceStore.accessCode}`
     );
-    saveStore(updatedDest);
+    // Keep a recovery journal until BOTH local stores are durable. A reload
+    // completes an interrupted pair; retries must not re-apply the movement.
+    const key = 'storeflow_transfer_journal';
+    localStorage.setItem(key, JSON.stringify({ source: updatedSource, destination: updatedDest, sourceBase: sourceStore, destinationBase: destStore }));
+    saveStore(updatedDest, { skipCloudSync: true });
+    saveStore(updatedSource, { skipCloudSync: true });
+    localStorage.removeItem(key);
+    saveStore(updatedDest, { cloudBase: destStore });
+
   }
 
-  saveStore(updatedSource);
+  saveStore(updatedSource, { cloudBase: sourceStore });
   return updatedSource;
 }
 

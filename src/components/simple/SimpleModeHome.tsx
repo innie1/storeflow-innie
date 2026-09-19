@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { recordSale, saveStore, generateId, getSalesTargetStatus } from '@/lib/store-data';
+import { recordCashCheckout, saveStore, generateId, getSalesTargetStatus } from '@/lib/store-data';
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
@@ -53,25 +53,20 @@ function ProductSimpleHome({ store, setStore, currentUser, onNavigate }: SimpleM
     const product = store.products.find(p => p.id === productId);
     if (!product) return;
     if (product.quantity < quantity && !store.managerSettings?.backorderSellingEnabled) return showToast('Not enough stock for that quantity', 'error');
-    const updated = recordSale(store, productId, quantity, currentUser?.name, currentUser?.role);
-    saveStore(updated); setStore(updated); markSaleQueuedIfOffline(store.accessCode);
+    const result = recordCashCheckout(store, [{ productId, quantity }], currentUser?.name, currentUser?.role);
+    if (result.error) return showToast(result.error, 'error');
+    const updated = result.store;
+    setStore(updated); markSaleQueuedIfOffline(store.accessCode);
     const newMilestone = checkNewMilestone(updated);
     if (newMilestone) setActiveMilestone(newMilestone);
     if (!store.simpleModeSettings?.skipCostPricePrompt && (!product.costPrice || product.costPrice <= 0)) setCostPricePromptProductId(productId);
   };
 
   const handleConfirmMultiSale = (items: { productId: string; quantity: number }[]) => {
-    let updated = store;
-    let blockedAny = false;
-    const transactionId = generateId();
-    items.forEach(({ productId, quantity }) => {
-      const product = updated.products.find(p => p.id === productId);
-      if (!product) return;
-      if (product.quantity < quantity && !updated.managerSettings?.backorderSellingEnabled) { blockedAny = true; return; }
-      updated = recordSale(updated, productId, quantity, currentUser?.name, currentUser?.role, transactionId);
-    });
-    saveStore(updated); setStore(updated); markSaleQueuedIfOffline(store.accessCode); playSoldSound();
-    if (blockedAny) showToast('Some items didn\'t have enough stock and were skipped', 'error');
+    const result = recordCashCheckout(store, items, currentUser?.name, currentUser?.role);
+    if (result.error) return showToast(result.error, 'error');
+    const updated = result.store;
+    setStore(updated); markSaleQueuedIfOffline(store.accessCode); playSoldSound();
     const newMilestone = checkNewMilestone(updated);
     if (newMilestone) setActiveMilestone(newMilestone);
   };

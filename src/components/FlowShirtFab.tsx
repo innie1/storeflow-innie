@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle, Mic, Send, Shirt, X } from 'lucide-react';
 import type { Product, StoreData, TabId } from '@/types/store';
-import { generateId, recordSale, saveStore } from '@/lib/store-data';
+import { generateId, recordCashCheckout, saveStore } from '@/lib/store-data';
 import { isBusinessTabAllowed, resolveBusinessType } from '@/lib/business-runtime';
 import { createFlowShirtCode, parseFlowShirtText, type FlowShirtDraftItem } from '@/lib/flow-shirt';
 import { showToast } from '@/components/Toast';
@@ -235,16 +235,15 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
     if (!draft.length) return;
     let updated = store;
     const transactionCode = createFlowShirtCode();
-    const blocked: string[] = [];
+    const lines: { productId: string; quantity: number }[] = [];
 
     for (const item of draft) {
       let productId = item.product?.id;
       if (productId) {
         const currentProduct = updated.products.find(product => product.id === productId);
-        if (!currentProduct) continue;
+        if (!currentProduct) return showToast('A product is no longer available', 'error');
         if (currentProduct.quantity < item.quantity && !updated.managerSettings?.backorderSellingEnabled) {
-          blocked.push(currentProduct.name);
-          continue;
+          return showToast(`Not enough stock for ${currentProduct.name}. Nothing was sold.`, 'error');
         }
       } else {
         const price = Math.max(0, Number(item.priceGuess) || 0);
@@ -261,30 +260,29 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
         updated = { ...updated, products: [...updated.products, newProduct] };
         productId = newProduct.id;
       }
-      if (productId) updated = recordSale(updated, productId, item.quantity, currentUser?.name, currentUser?.role, transactionCode);
+      if (productId) lines.push({ productId, quantity: item.quantity });
     }
 
-    commit(updated);
+    const result = recordCashCheckout(updated, lines, currentUser?.name, currentUser?.role);
+    if (result.error) return showToast(result.error, 'error');
+    commit(result.store);
     setText(''); setDraft([]); setOpen(false);
-    showToast(blocked.length ? `Saved ${transactionCode}. Skipped low stock: ${blocked.join(', ')}` : `Sale saved — ${transactionCode}`, blocked.length ? 'info' : 'success');
+    showToast(`Sale saved — ${result.sales[0]?.transactionId}`);
   };
 
   const confirmVoiceSale = (productId: string, quantity: number) => {
     const product = store.products.find(item => item.id === productId);
     if (!product) return;
     if (product.quantity < quantity && !store.managerSettings?.backorderSellingEnabled) return showToast('Not enough stock for that quantity', 'error');
-    commit(recordSale(store, productId, quantity, currentUser?.name, currentUser?.role, createFlowShirtCode()));
+    const result = recordCashCheckout(store, [{ productId, quantity }], currentUser?.name, currentUser?.role);
+    if (result.error) return showToast(result.error, 'error');
+    commit(result.store);
   };
 
   const confirmVoiceMultiSale = (items: { productId: string; quantity: number }[]) => {
-    let updated = store; const transactionCode = createFlowShirtCode(); let soldAny = false;
-    for (const item of items) {
-      const product = updated.products.find(candidate => candidate.id === item.productId);
-      if (!product) continue;
-      if (product.quantity < item.quantity && !updated.managerSettings?.backorderSellingEnabled) continue;
-      updated = recordSale(updated, item.productId, item.quantity, currentUser?.name, currentUser?.role, transactionCode); soldAny = true;
-    }
-    if (soldAny) commit(updated);
+    const result = recordCashCheckout(store, items, currentUser?.name, currentUser?.role);
+    if (result.error) return showToast(result.error, 'error');
+    commit(result.store);
   };
 
   const createVoiceProduct = (name: string, sellingPrice: number, costPrice: number, quantity: number): Product => {

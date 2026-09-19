@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StoreData, TabId } from '@/types/store';
-import { addProduct, recordSale, receiveStock, importPurchaseOrderByCode } from '@/lib/store-data';
+import { addProduct, recordCashCheckout, receiveStock, importPurchaseOrderByCode } from '@/lib/store-data';
 import { flowAddExpense, flowRecordPayment, flowAddInvestment, flowAddLoan, flowAddWithdrawal, flowReceiveStock } from '@/lib/flow-finance-actions';
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
@@ -193,12 +193,13 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
   const executeSales = (items: FlowLineItem[]) => {
     if (!items.length) { flow('I could not match those products to your catalog. Try the exact product name, or teach me an alias.'); return; }
-    rememberUndo(); let next = store; let total = 0; let profit = 0; const done: string[] = [];
-    for (const item of items) {
-      const p = next.products.find(x => x.id === item.product.product.id); if (!p) continue;
-      if (p.quantity < item.quantity && !next.managerSettings?.backorderSellingEnabled) { flow(`I stopped before changing anything. **${p.name}** only has ${p.quantity} in stock, but you asked for ${item.quantity}.`); setLastUndo(null); return; }
-      next = recordSale(next, p.id, item.quantity, 'Flow', 'FlowChat'); total += item.quantity * p.sellingPrice; profit += item.quantity * (p.sellingPrice - p.costPrice); done.push(`${item.quantity} ${p.name}`);
-    }
+    rememberUndo();
+    const result = recordCashCheckout(store, items.map(item => ({ productId: item.product.product.id, quantity: item.quantity })), 'Flow', 'FlowChat');
+    if (result.error) { flow(result.error); setLastUndo(null); return; }
+    const next = result.store;
+    const total = result.total;
+    const profit = result.sales.reduce((sum, sale) => sum + sale.profit, 0);
+    const done = result.sales.map(sale => `${sale.quantity} ${sale.productName}`);
     onUpdate(next);
     if (items.length === 1) { const p = next.products.find(x => x.id === items[0].product.product.id)!; setLastProductId(p.id); rememberBrainContext(next, { lastIntent: 'sell', lastProductId: p.id, lastTopic: 'sales', lastAction: 'sell' }); flow(`Done — sold **${items[0].quantity} ${p.name}**.\nTotal: **${money(total)}**\nProfit: **${money(profit)}**\nStock: **${p.quantity} remaining**${p.quantity === 0 ? '\n⚠️ Now out of stock.' : ''}`); }
     else { rememberBrainContext(next, { lastIntent: 'sell', lastTopic: 'sales', lastAction: 'batch sell' }); flow(`Done — **${done.length} products sold**.\n${done.map(x => `• ${x}`).join('\n')}\n\nTotal: **${money(total)}**\nProfit: **${money(profit)}**`); }

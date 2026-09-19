@@ -176,10 +176,8 @@ describe('Product Performance Analytics & Inventory Movements', () => {
     });
     const pid = storeA.products[0].id;
 
-    // We stub loadStore and saveStore globally for destination store if needed, 
-    // but transferStock uses localStorage in loadStore. Since window/localStorage is empty,
-    // destStore won't be found but updatedSource will still be returned.
-    // Let's test updatedSource.
+    const storeB = { ...createMockStore(), accessCode: 'STOREB' };
+    localStorage.setItem('storeflow_STOREB', JSON.stringify(storeB));
     storeA = transferStock(storeA, pid, 10, 'STOREB');
 
     expect(storeA.products[0].quantity).toBe(40);

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { StoreData, Product, LearnedProduct } from '@/types/store';
-import { recordSale, saveStore, recordInventoryMovement } from '@/lib/store-data';
+import { recordCashCheckout, saveStore, recordInventoryMovement } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { interpretProductName, lookupStoreMemory } from '@/lib/import-intel';
@@ -442,31 +442,12 @@ export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, 
   };
 
   const handleSell = () => {
-    let updated = { ...store };
-    let sold = 0;
-
-    for (const item of items) {
-      const existing = updated.products.find(
-        p => p.name.toLowerCase() === item.name.toLowerCase()
-      );
-
-      if (existing && existing.quantity >= item.quantity) {
-        // The one sale path that dropped the actor: every other caller
-        // passes it, so a scanned receipt was the only sale nobody owned.
-        updated = recordSale(updated, existing.id, item.quantity, currentUser?.name, currentUser?.role);
-        sold++;
-      } else if (existing) {
-        showToast(`Not enough stock for ${item.name}`, 'error');
-      } else {
-        showToast(`${item.name} not in inventory`, 'error');
-      }
-    }
-
-    if (sold > 0) {
-      onUpdate(updated);
-      showToast(`${sold} sales recorded`);
-      onClose();
-    }
+    const lines = items.map(item => ({ productId: store.products.find(p => p.name.toLowerCase() === item.name.toLowerCase())?.id || '', quantity: item.quantity }));
+    const result = recordCashCheckout(store, lines, currentUser?.name, currentUser?.role);
+    if (result.error) return showToast(result.error, 'error');
+    onUpdate(result.store);
+    showToast(`${result.sales.length} sales recorded`);
+    onClose();
   };
 
   const inputClass = "w-full p-2.5 rounded-xl bg-surface-2 border border-border text-foreground focus:outline-none focus:border-primary text-xs placeholder:text-muted-foreground";

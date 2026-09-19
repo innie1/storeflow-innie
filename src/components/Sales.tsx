@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
+import { money, salePrice, packSize, stockBase } from '@/lib/inventory-sale-math';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { shopMemoryKey, recallDraft, rememberDraft, forgetDraft } from '@/lib/screen-memory';
 import CustomerSuggestions from '@/components/CustomerSuggestions';
 import { knownCustomers } from '@/lib/customer-directory';
@@ -135,6 +136,9 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
    */
   const directory = useMemo(() => knownCustomers(store), [store]);
   const [customerName, setCustomerName] = useState('');
+  const [customerId, setCustomerId] = useState<string | undefined>();
+  const [mixedCash, setMixedCash] = useState('');
+  const confirming = useRef(false);
   const [pickedCustomer, setPickedCustomer] = useState(false);
   /* Only once the field is touched: the recent few would otherwise sit over
      the due date and notes the moment the credit panel opened. */
@@ -185,7 +189,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       }
       return s + c.quantity;
     }, 0);
-    return product.quantity - inCart;
+    return stockBase(product) / packSize(product) - inCart;
   };
 
   const getStockDisplay = (p: Product) => {
@@ -206,8 +210,8 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   };
 
   const visibleProducts = useMemo(() => {
-    const sorted = [...store.products]
-      .filter(p => p.quantity > 0)
+    const sorted = store.products.filter(p => !p.discontinued)
+      .filter(p => p.quantity > 0 || store.managerSettings?.backorderSellingEnabled)
       .sort((a, b) => {
         const aTop = topSellerIds.has(a.id) ? 0 : 1;
         const bTop = topSellerIds.has(b.id) ? 0 : 1;
@@ -220,7 +224,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       const matchLow = !filterLowStock || p.quantity <= 3;
       return matchCat && matchSearch && matchLow;
     });
-  }, [store.products, topSellerIds, category, search, filterLowStock]);
+  }, [store.products, store.managerSettings?.backorderSellingEnabled, topSellerIds, category, search, filterLowStock]);
 
   const addToCart = (productId: string, qty: number, explicitSaleType?: 'carton' | 'single') => {
     const product = store.products.find(p => p.id === productId);
@@ -240,7 +244,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       cartonEquivalent = qty / product.singlesPerCarton;
     }
 
-    if (cartonEquivalent > getAvailableQty(productId)) {
+    if (!store.managerSettings?.backorderSellingEnabled && cartonEquivalent > getAvailableQty(productId) + 1e-8) {
       showToast('Not enough stock', 'error');
       return false;
     }
@@ -251,9 +255,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + qty };
       setCart(updated);
     } else {
-      const unitPrice = saleType === 'single' && product.singleSellingPrice !== undefined
-        ? product.singleSellingPrice
-        : (saleType === 'single' && product.singlesPerCarton ? Math.round(product.sellingPrice / product.singlesPerCarton) : product.sellingPrice);
+      const unitPrice = salePrice(product, saleType);
 
       const costPrice = saleType === 'single' && product.singlesPerCarton
         ? product.costPrice / product.singlesPerCarton
@@ -280,7 +282,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     if (saleType === 'single' && product.singlesPerCarton) {
       minDeduction = 1 / product.singlesPerCarton;
     }
-    if (getAvailableQty(productId) < minDeduction) return showToast('Out of stock', 'error');
+    if (!store.managerSettings?.backorderSellingEnabled && getAvailableQty(productId) + 1e-8 < minDeduction) return showToast('Out of stock', 'error');
     addToCart(productId, 1, saleType as 'carton' | 'single');
   };
 
@@ -293,13 +295,13 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     if (saleType === 'single' && product.singlesPerCarton) {
       minDeduction = 1 / product.singlesPerCarton;
     }
-    if (product.quantity < minDeduction) return showToast('Out of stock', 'error');
+    if (!store.managerSettings?.backorderSellingEnabled && product.quantity + 1e-8 < minDeduction) return showToast('Out of stock', 'error');
 
-    let unitPrice = product.sellingPrice;
+    let unitPrice = salePrice(product, saleType);
     let costPrice = product.costPrice;
     if (saleType === 'single') {
       const singles = product.singlesPerCarton || 1;
-      unitPrice = product.singleSellingPrice ?? (product.sellingPrice / singles);
+      unitPrice = salePrice(product, saleType);
       costPrice = product.costPrice / singles;
     }
 
@@ -344,7 +346,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         nextCartonEquiv = next / product.singlesPerCarton;
       }
 
-      if (nextCartonEquiv + otherInCartCartonEquiv > product.quantity) {
+      if (!store.managerSettings?.backorderSellingEnabled && nextCartonEquiv + otherInCartCartonEquiv > product.quantity + 1e-8) {
         return showToast('Not enough stock', 'error');
       }
     }
@@ -436,32 +438,38 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     setDiscount(initialDiscount > 0 ? String(initialDiscount) : '');
     setMethod((localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer');
     setSaveAs('paid');
+    setCustomerId(undefined); setMixedCash(''); confirming.current = false;
     setCustomerName(''); setCustomerPhone(''); setDueDate(''); setCustomerNote('');
     setPaidAmount(String(Math.max(0, sub - initialDiscount)));
     setCheckoutOpen(true);
   };
 
   const handleConfirm = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || confirming.current) return;
     if (balance > 0 && saveAs === 'pending' && !customerName.trim()) {
       return showToast('Customer name is required for pending payment', 'error');
     }
     if (balance > 0 && saveAs === 'paid') {
       return showToast('Balance remains — switch to Pending Payment or top up the amount', 'error');
     }
+    if (method === 'mixed' && !mixedCash.trim()) return showToast('Enter the cash portion, including 0 if all was paid to bank.', 'error');
+    confirming.current = true;
     const result = recordCheckout(store,
-      cart.map(c => ({ productId: c.productId, quantity: c.quantity, saleType: c.saleType })),
+      cart.map(c => ({ productId: c.productId, quantity: c.quantity, saleType: c.saleType, expectedUnitPrice: c.unitPrice })),
       {
         paid: paidNum,
         method,
         discount: discountNum,
-        customerName: saveAs === 'pending' ? customerName.trim() : undefined,
-        customerPhone: saveAs === 'pending' ? customerPhone.trim() || undefined : undefined,
+        allocation: method === 'mixed' ? { cash: Number(mixedCash), bank: money(Math.min(paidNum, total) - Number(mixedCash)) } : undefined,
+        customerId,
+        customerName: (saveAs === 'pending' || customerOpen) ? customerName.trim() || undefined : undefined,
+        customerPhone: (saveAs === 'pending' || customerOpen) ? customerPhone.trim() || undefined : undefined,
         dueDate: saveAs === 'pending' && dueDate ? new Date(dueDate).toISOString() : undefined,
         customerNote: saveAs === 'pending' ? customerNote.trim() || undefined : undefined,
         actorName: currentUser?.name,
         actorRole: currentUser?.role,
       });
+    if (result.error) { confirming.current = false; return showToast(result.error, 'error'); }
     onUpdate(result.store);
     if (result.sales.length > 0) {
       playSoldSound();
@@ -469,7 +477,6 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       if (newMilestone) setActiveMilestone(newMilestone);
       setLastSales(result.sales);
       if (managerSettings?.autoPrintReceipt) {
-        const totalSum = result.sales.reduce((sum, s) => sum + s.total, 0);
         const receiptData = {
           storeName: store.storeName,
           storeType: store.profile?.storeType,
@@ -485,11 +492,11 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             unitPrice: s.unitPrice,
             total: s.total
           })),
-          subtotal: totalSum,
-          discount: discountNum,
-          total: Math.max(0, totalSum - discountNum),
-          paid: paidNum,
-          balance: balance,
+          subtotal: result.subtotal,
+          discount: result.discount,
+          total: result.total,
+          paid: result.paid,
+          balance: result.balance,
           paymentMethod: method,
           footerMessage: managerSettings.receiptFooterMessage || 'Thank you for your patronage! 🙏',
           receiptCurrency: managerSettings.receiptCurrency || '₦',
@@ -499,7 +506,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         });
       }
     }
-    showToast(result.pending ? `Saved as pending · balance ₦${result.pending.balance.toLocaleString()}` : `Sale complete — ₦${total.toLocaleString()}`);
+    showToast(result.pending ? `Saved as pending · balance ₦${result.pending.balance.toLocaleString()}` : `Sale complete — ₦${result.total.toLocaleString()}`);
     setCart([]); setCheckoutOpen(false);
   };
 
@@ -779,10 +786,10 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
             
             const currentSaleType = selectedSaleTypes[p.id] || (globalSaleMode === 'retail' ? 'single' : 'carton');
             const cartonPrice = p.sellingPrice;
-            const singlePrice = p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : p.sellingPrice);
+            const singlePrice = salePrice(p, 'single');
             const activePrice = currentSaleType === 'single' ? singlePrice : cartonPrice;
-            const isSingleStockAvailable = p.singlesPerCarton ? (avail * p.singlesPerCarton >= 1) : (avail >= 1);
-            const canSell = currentSaleType === 'single' ? isSingleStockAvailable : (avail >= 1);
+            const isSingleStockAvailable = p.singlesPerCarton ? (avail * p.singlesPerCarton + 1e-8 >= 1) : (avail >= 1);
+            const canSell = !!store.managerSettings?.backorderSellingEnabled || (currentSaleType === 'single' ? isSingleStockAvailable : avail + 1e-8 >= 1);
 
             return (
               <div key={p.id} className="relative rounded-2xl bg-card border border-border/40 p-3.5 flex flex-col justify-between min-h-[195px]">
@@ -928,7 +935,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                               type="button"
                               onClick={() => {
                                 const nextType = item.saleType === 'carton' ? 'single' : 'carton';
-                                const unit = nextType === 'carton' ? p.sellingPrice : (p.singleSellingPrice ?? (p.singlesPerCarton ? Math.round(p.sellingPrice / p.singlesPerCarton) : p.sellingPrice));
+                                const unit = salePrice(p, nextType);
                                 const cost = nextType === 'carton' ? p.costPrice : (p.costPrice / (p.singlesPerCarton || 1));
                                 const updated = [...cart];
                                 updated[i] = { ...item, saleType: nextType, unitPrice: unit, costPrice: cost };
@@ -991,7 +998,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                   </div>
                 )}
 
-                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Profit</span><span className="text-success">₦{cartProfit.toLocaleString()}</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Profit</span><span className="text-success">₦{money(cartProfit - discountNum).toLocaleString()}</span></div>
                 <div className="flex justify-between font-display font-bold pt-1 border-t border-border text-sm">
                   <span>Total</span><span className="text-primary">₦{total.toLocaleString()}</span>
                 </div>
@@ -1036,6 +1043,15 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                 </div>
               </div>
 
+              {method === 'mixed' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs">Cash received
+                    <input aria-label="Cash portion" type="number" min="0" step="0.01" value={mixedCash} onChange={e => setMixedCash(e.target.value)} className="w-full p-2 rounded border border-border bg-card" />
+                  </label>
+                  <p className="text-xs">Bank / card: ₦{money(Math.min(paidNum, total) - (Number(mixedCash) || 0)).toLocaleString()}</p>
+                </div>
+              )}
+
               {/* Save as */}
               {balance > 0 && (
                 <div className="space-y-1.5">
@@ -1073,11 +1089,11 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                       whatever is typed, so a second spelling is a second
                       person who never appears to owe anything. */}
                   <div className="grid grid-cols-2 gap-1.5 relative">
-                    <input placeholder="Name" value={customerName} onChange={e => { setCustomerName(e.target.value); setPickedCustomer(false); setNameFocused(true); }}
+                    <input placeholder="Name" value={customerName} onChange={e => { setCustomerName(e.target.value); setCustomerId(undefined); setPickedCustomer(false); setNameFocused(true); }}
                       onFocus={() => setNameFocused(true)}
                       className="p-1.5 rounded bg-card border border-border text-xs w-full" />
                     <div className="relative">
-                      <input placeholder="Phone" value={customerPhone} onChange={e => { setCustomerPhone(e.target.value); setPickedCustomer(false); }}
+                      <input placeholder="Phone" value={customerPhone} onChange={e => { setCustomerPhone(e.target.value); setCustomerId(undefined); setPickedCustomer(false); }}
                         className="p-1.5 pr-9 rounded bg-card border border-border text-xs w-full" />
                       <ContactPickButton className="right-0.5 w-7 h-7" onPick={(phone, pickedName) => {
                         setCustomerPhone(phone);
@@ -1090,6 +1106,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                       query={customerName}
                       enabled={nameFocused && !pickedCustomer}
                       onPick={customer => {
+                        setCustomerId(store.customers?.some(c => c.id === customer.id) ? customer.id : undefined);
                         setCustomerName(customer.name);
                         setCustomerPhone(customer.phone || '');
                         setPickedCustomer(true);
@@ -1163,7 +1180,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                   <p className="text-[10px] text-muted-foreground mt-0.5">Price per Single</p>
                 </div>
                 <span className="text-xs font-display font-bold text-yellow-500">
-                  ₦{(variantPickerProduct.singleSellingPrice ?? Math.round(variantPickerProduct.sellingPrice / (variantPickerProduct.singlesPerCarton || 1))).toLocaleString()}
+                  ₦{(salePrice(variantPickerProduct, 'single')).toLocaleString()}
                 </span>
               </button>
             </div>
@@ -1310,7 +1327,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                     </div>
                     <div className="flex justify-between text-xs">
                       <span>Single Selling Price</span>
-                      <strong className="text-foreground">₦{(p.singleSellingPrice ?? Math.round(p.sellingPrice / (p.singlesPerCarton || 1))).toLocaleString()}</strong>
+                      <strong className="text-foreground">₦{(salePrice(p, 'single')).toLocaleString()}</strong>
                     </div>
                   </div>
                 )}

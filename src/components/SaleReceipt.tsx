@@ -30,6 +30,10 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   const subtotalBeforeDiscount = salesList.reduce((sum, s) => sum + s.quantity * s.unitPrice, 0);
   const totalAfterDiscount = salesList.reduce((sum, s) => sum + s.total, 0);
   const totalDiscount = Math.max(0, subtotalBeforeDiscount - totalAfterDiscount);
+  const pending = (store.pendingPayments || []).find(p => p.id === salesList[0]?.pendingPaymentId);
+  const paid = pending && !pending.id.startsWith('laundry-') ? pending.paid : totalAfterDiscount;
+  const balance = pending && !pending.id.startsWith('laundry-') ? pending.balance : 0;
+
 
   const generateReceiptText = () => {
     let receipt = `==============================\n`;
@@ -55,6 +59,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
       receipt += `Discount: -₦${totalDiscount.toLocaleString()}\n`;
     }
     receipt += `TOTAL: ₦${totalAfterDiscount.toLocaleString()}\n`;
+    receipt += `Paid: ₦${paid.toLocaleString()}\nBalance: ₦${balance.toLocaleString()}\n`;
     receipt += `==============================\n`;
     receipt += `  ${settings.receiptFooterMessage || 'Thank you for your patronage! 🙏'}\n`;
     return receipt;
@@ -101,8 +106,8 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
       subtotal: subtotalBeforeDiscount,
       discount: totalDiscount,
       total: totalAfterDiscount,
-      paid: totalAfterDiscount,
-      balance: 0,
+      paid,
+      balance,
       paymentMethod: salesList[0]?.paymentMethod || 'transfer',
       footerMessage: settings.receiptFooterMessage || 'Thank you for your patronage! 🙏',
       receiptCurrency: settings.receiptCurrency || '₦',

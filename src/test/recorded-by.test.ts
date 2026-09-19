@@ -114,7 +114,7 @@ describe('the record types actually carry it', () => {
   it('no sale path drops the actor on the floor', () => {
     // A scanned receipt was the only sale nobody owned.
     const scanner = readSource('src/components/ReceiptScanner.tsx');
-    expect(scanner).toContain('recordSale(updated, existing.id, item.quantity, currentUser?.name, currentUser?.role)');
+    expect(scanner).toContain('recordCashCheckout(store, lines, currentUser?.name, currentUser?.role)');
   });
 });
 

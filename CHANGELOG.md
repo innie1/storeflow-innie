@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-19 — Sales and inventory integrity
+
+- Validate complete carts before saving; use the same checkout for counter, barcode, voice, Flow and receipt imports.
+- Calculate carton stock changes in pieces, retain sale-time conversions, use consistent piece prices and weight restock costs by remaining inventory.
+- Honour restock funding before the first sale; aggregate repeated restock lines and preserve unfulfilled backorders.
+- Include credit deposits and repayments in available balance. Reject excess repayments, record actual mixed-payment splits and ask for the method before settling debt.
+- Keep customer IDs on transactions. Archive products without deleting sales, reverse/restore whole transactions, and retain debt write-offs separately from payments.
+- Correct discounted automatic receipts and paid/balance figures on reprinted credit receipts.
+- Validate stock-transfer destinations and preserve packaging; journal both local store writes for crash recovery.
+- Serialize background cloud saves, use conditional updates and retain local recovery snapshots when remote edits conflict. Conflicts stop automatic sync for reconciliation instead of overwriting remote records.
+
+Compatibility: carton quantities remain available to existing screens, with piece-based arithmetic at transaction boundaries. Existing sales are not bulk rewritten. Old trash without reversal metadata requires manual reconciliation; previous rounding losses and missing historical pack sizes cannot be reliably reconstructed automatically. Cloud conflict handling is covered by local regression tests, not a live two-device production exercise.
+
 [2026-07-26] v0.1.0 — Simple Mode: shop-type onboarding, animated processing screen, offline queue banner, cost price prompt, new-user default flipped to Simple Mode — no severity (feature build)
 [2026-07-26] v0.1.1 — Fixed onboarding wrongly triggering for existing stores + added progress bar to onboarding — 🟠 High fixed
 [2026-07-26] v0.1.2 — Added 3x3 quick-sell tile grid to Simple Mode Home (onboarding top products + best-sellers) — feature

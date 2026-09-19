@@ -70,7 +70,17 @@ export interface Restock {
 
 export type PaymentMethod = 'cash' | 'transfer' | 'pos' | 'mixed';
 
+export interface PaymentAllocation { cash: number; bank: number; }
+
 export interface Sale {
+  saleType?: 'carton' | 'single';
+  stockQuantity?: number; // historical stock-unit deduction
+  baseQuantity?: number; // pieces for packs; native units otherwise
+  unitsPerStockUnit?: number;
+  backorderQuantity?: number; // still unfulfilled, in base units
+  costAtSale?: number;
+  paymentAllocation?: PaymentAllocation;
+  customerId?: string;
   id: string;
   productId: string;
   productName: string;
@@ -102,6 +112,7 @@ export interface PendingPaymentItem {
 }
 
 export interface PendingPaymentEvent {
+  allocation?: PaymentAllocation;
   date: string;
   amount: number;
   method?: PaymentMethod;
@@ -109,6 +120,8 @@ export interface PendingPaymentEvent {
 }
 
 export interface PendingPayment {
+  writtenOffAmount?: number;
+  writtenOffAt?: string;
   id: string;
   /**
    * Which customer this is owed by, by internal id.
@@ -131,7 +144,7 @@ export interface PendingPayment {
   balance: number;
   dueDate?: string;
   createdAt: string;
-  status: 'pending' | 'paid';
+  status: 'pending' | 'paid' | 'written_off';
   events: PendingPaymentEvent[];
   saleIds: string[];
 }
@@ -254,6 +267,13 @@ export interface TrashItem {
   kind: TrashKind;
   deletedAt: string;   // ISO
   payload: Product | Sale | Expense;
+  saleUndo?: {
+    sales: Sale[];
+    pending: PendingPayment[];
+    allocation: PaymentAllocation;
+    stock: { productId: string; baseQuantity: number; backorderQuantity: number }[];
+    customers: { id: string; purchases: number; debt: number; visits: number; points: number; history?: Customer['purchaseHistory'] }[];
+  };
 }
 
 export interface Investment {
@@ -410,7 +430,7 @@ export interface Customer {
   totalPurchases: number;
   outstandingDebt: number;
   lastPurchaseDate?: string;
-  purchaseHistory: { date: string; amount: number; items: string }[];
+  purchaseHistory: { date: string; amount: number; items: string; transactionId?: string }[];
   loyaltyPoints: number;
   visitsCount: number;
 }

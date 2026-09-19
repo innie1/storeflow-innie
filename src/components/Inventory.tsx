@@ -1055,11 +1055,11 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     if (!confirmDelete) return;
     onUpdate(deleteProduct(store, confirmDelete.id, currentUser?.name, currentUser?.role));
     setConfirmDelete(null);
-    showToast('Product deleted');
+    showToast('Product archived — sales history kept');
   };
 
   const handleDeleteSelected = () => {
-    const updatedProducts = store.products.filter(p => !selectedProductIds.includes(p.id));
+    const updatedProducts = store.products.map(p => selectedProductIds.includes(p.id) ? { ...p, discontinued: true } : p);
     const updatedStore = {
       ...store,
       products: updatedProducts
@@ -1068,7 +1068,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
     saveStore(updatedStore);
     setSelectedProductIds([]);
     setShowSelectedDeleteModal(false);
-    showToast(`Deleted ${selectedProductIds.length} selected product(s)`);
+    showToast(`Archived ${selectedProductIds.length} selected product(s)`);
   };
 
   const handleRestock = () => {
@@ -3740,7 +3740,9 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
                   return showToast(`Store code "${destCode}" not found in system`, 'error');
                 }
 
-                const updated = transferStock(store, selectedTransferProduct.id, qty, destCode);
+                let updated: StoreData;
+                try { updated = transferStock(store, selectedTransferProduct.id, qty, destCode); }
+                catch (error) { return showToast(error instanceof Error ? error.message : 'Transfer failed', 'error'); }
                 onUpdate(updated);
                 setSelectedTransferProduct(null);
                 setTransferQty('');
@@ -4039,7 +4041,7 @@ export default function Inventory({ store, onUpdate, filterLowStock, onClearFilt
         <ConfirmAccessCode
           expectedCode={store.accessCode}
           title={`Delete "${confirmDelete.name}"?`}
-          message="Are you sure you want to delete this product? If you delete this product, it will permanently wipe all financial data relating to it (sales, revenue, profit, ROI) so that it is no longer calculated in the app's overall finances. Enter your store access code to confirm."
+          message="Archive this product? It will no longer be available for sale. Stock and financial history will be kept. Enter your store access code to confirm."
           confirmLabel="Delete Product"
           onConfirm={doDelete}
           onCancel={() => setConfirmDelete(null)}

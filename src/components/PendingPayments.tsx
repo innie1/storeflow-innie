@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { StoreData, PendingPayment, PaymentMethod } from '@/types/store';
-import { addPaymentToPending, markPendingPaid, deletePendingPayment, getPendingSummary } from '@/lib/store-data';
+import { addPaymentToPending, deletePendingPayment, getPendingSummary } from '@/lib/store-data';
 import { getRepaymentInsights, CustomerRepaymentInsight } from '@/lib/manager-intel';
 import { showToast } from '@/components/Toast';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -21,7 +21,8 @@ export default function PendingPayments({ store, onUpdate }: Props) {
   const [partialAmt, setPartialAmt] = useState('');
   const [pendingDeleteRecord, setPendingDeleteRecord] = useState<PendingPayment | null>(null);
   const [partialMethod, setPartialMethod] = useState<PaymentMethod>(() => {
-    return (localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer';
+    const saved = localStorage.getItem('storeflow_last_payment_method');
+    return saved === 'cash' || saved === 'pos' ? saved : 'transfer';
   });
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export default function PendingPayments({ store, onUpdate }: Props) {
 
   const all = store.pendingPayments || [];
   const list = useMemo(() => {
-    if (filter === 'paid') return all.filter(p => p.status === 'paid');
+    if (filter === 'paid') return all.filter(p => p.status === 'paid' || p.status === 'written_off');
     if (filter === 'overdue') return all.filter(p => p.status === 'pending' && p.dueDate && new Date(p.dueDate) < new Date());
     return all.filter(p => p.status === 'pending');
   }, [all, filter]);
@@ -54,16 +55,18 @@ export default function PendingPayments({ store, onUpdate }: Props) {
   };
 
   const handleMarkPaid = (p: PendingPayment) => {
-    const updated = markPendingPaid(store, p.id);
-    onUpdate(updated);
-    showToast(`${p.customerName} marked as paid`);
+    setPartialFor(p);
+    setPartialAmt(String(p.balance));
   };
 
   const handlePartial = () => {
     if (!partialFor) return;
     const amt = Number(partialAmt);
     if (!amt || amt <= 0) return showToast('Enter a valid amount', 'error');
-    const updated = addPaymentToPending(store, partialFor.id, amt, partialMethod);
+    if (amt > partialFor.balance) return showToast('Amount exceeds the outstanding balance', 'error');
+    let updated: StoreData;
+    try { updated = addPaymentToPending(store, partialFor.id, amt, partialMethod); }
+    catch (error) { return showToast(error instanceof Error ? error.message : 'Payment failed', 'error'); }
     onUpdate(updated);
     showToast(`Recorded ₦${amt.toLocaleString()} from ${partialFor.customerName}`);
     setPartialFor(null); setPartialAmt('');
@@ -76,14 +79,14 @@ export default function PendingPayments({ store, onUpdate }: Props) {
   const confirmDeletePending = () => {
     if (!pendingDeleteRecord) return;
     onUpdate(deletePendingPayment(store, pendingDeleteRecord.id));
-    showToast(`Deleted pending record for ${pendingDeleteRecord.customerName}`);
+    showToast(`Written off outstanding balance for ${pendingDeleteRecord.customerName}`);
     setPendingDeleteRecord(null);
   };
 
   const call = (phone?: string) => phone ? window.open(`tel:${phone}`) : showToast('No phone number on file', 'error');
   const wa = (p: PendingPayment) => {
     if (!p.customerPhone) return showToast('No phone number on file', 'error');
-    const msg = encodeURIComponent(`Hi ${p.customerName}, this is a friendly reminder about your outstanding balance of ₦${p.balance.toLocaleString()} at ${store.storeName}. Thank you!`);
+    const msg = encodeURIComponent(`Hi ${p.customerName}{p.writtenOffAmount ? ' · Written off' : ''}, this is a friendly reminder about your outstanding balance of ₦${p.balance.toLocaleString()} at ${store.storeName}. Thank you!`);
     window.open(`https://wa.me/${p.customerPhone.replace(/\D/g, '')}?text=${msg}`, '_blank');
   };
 
@@ -175,7 +178,7 @@ export default function PendingPayments({ store, onUpdate }: Props) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="font-display font-bold text-sm truncate">{p.customerName}</p>
+                      <p className="font-display font-bold text-sm truncate">{p.customerName}{p.writtenOffAmount ? ' · Written off' : ''}</p>
                       {rel !== null && ins!.sampleSize >= 2 && (
                         <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-display font-bold ${relChipClass}`}>
                           {rel}% reliable
@@ -228,9 +231,9 @@ export default function PendingPayments({ store, onUpdate }: Props) {
                   <div className="grid grid-cols-5 gap-1.5 pt-1">
                     <button onClick={() => call(p.customerPhone)} className="p-2 rounded-lg bg-surface-2 text-[10px] font-display font-semibold">📞 Call</button>
                     <button onClick={() => wa(p)} className="p-2 rounded-lg bg-success/15 text-success text-[10px] font-display font-semibold">💬 WhatsApp</button>
-                    <button onClick={() => { setPartialFor(p); setPartialAmt(''); setPartialMethod((localStorage.getItem('storeflow_last_payment_method') as PaymentMethod) || 'transfer'); }} className="p-2 rounded-lg bg-primary/15 text-primary text-[10px] font-display font-semibold">+ Partial</button>
+                    <button onClick={() => { setPartialFor(p); setPartialAmt(''); setPartialMethod(localStorage.getItem('storeflow_last_payment_method') === 'cash' ? 'cash' : localStorage.getItem('storeflow_last_payment_method') === 'pos' ? 'pos' : 'transfer'); }} className="p-2 rounded-lg bg-primary/15 text-primary text-[10px] font-display font-semibold">+ Partial</button>
                     <button onClick={() => handleMarkPaid(p)} className="p-2 rounded-lg bg-success text-white text-[10px] font-display font-semibold">✓ Paid</button>
-                    <button onClick={() => handleDelete(p)} className="p-2 rounded-lg bg-destructive/15 text-destructive text-[10px] font-display font-semibold">🗑</button>
+                    <button aria-label="Write off remaining debt" onClick={() => handleDelete(p)} className="p-2 rounded-lg bg-destructive/15 text-destructive text-[10px] font-display font-semibold">🗑</button>
                   </div>
                 )}
               </div>
@@ -244,7 +247,7 @@ export default function PendingPayments({ store, onUpdate }: Props) {
         <div className="fixed inset-0 z-50 bg-background/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setPartialFor(null)}><ScrollLock />
           <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
             <div>
-              <p className="text-xs text-muted-foreground">Partial payment from</p>
+              <p className="text-xs text-muted-foreground">Record payment from</p>
               <p className="font-display font-bold">{partialFor.customerName}</p>
               <p className="text-xs text-muted-foreground">Balance: <span className="text-warning font-semibold">₦{partialFor.balance.toLocaleString()}</span></p>
             </div>
@@ -269,9 +272,9 @@ export default function PendingPayments({ store, onUpdate }: Props) {
 
       <ConfirmModal
         isOpen={Boolean(pendingDeleteRecord)}
-        title="Delete Pending Payment Record?"
-        description={pendingDeleteRecord ? `Are you sure you want to delete the pending payment record for ${pendingDeleteRecord.customerName}?` : ''}
-        confirmText="Delete Record"
+        title="Write off outstanding debt?"
+        description={pendingDeleteRecord ? `Forgive the remaining ₦${pendingDeleteRecord.balance.toLocaleString()} owed by ${pendingDeleteRecord.customerName}? Payments and sale history will be kept.` : ''}
+        confirmText="Write off debt"
         cancelText="Cancel"
         variant="danger"
         icon="💳"
