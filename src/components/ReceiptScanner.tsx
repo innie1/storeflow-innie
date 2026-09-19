@@ -1,6 +1,7 @@
+import { commitCashCheckout } from '@/lib/committed-checkout';
 import { useState, useRef, useEffect } from 'react';
 import { StoreData, Product, LearnedProduct } from '@/types/store';
-import { recordCashCheckout, saveStore, recordInventoryMovement } from '@/lib/store-data';
+import { saveStore, recordInventoryMovement } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { interpretProductName, lookupStoreMemory } from '@/lib/import-intel';
@@ -441,9 +442,9 @@ export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, 
     setLearningStep('success');
   };
 
-  const handleSell = () => {
+  const handleSell = async () => {
     const lines = items.map(item => ({ productId: store.products.find(p => p.name.toLowerCase() === item.name.toLowerCase())?.id || '', quantity: item.quantity }));
-    const result = recordCashCheckout(store, lines, currentUser?.name, currentUser?.role);
+    const result = await commitCashCheckout(store, lines, currentUser?.name, currentUser?.role);
     if (result.error) return showToast(result.error, 'error');
     onUpdate(result.store);
     showToast(`${result.sales.length} sales recorded`);

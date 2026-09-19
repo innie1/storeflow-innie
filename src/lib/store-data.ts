@@ -1,4 +1,4 @@
-import { mergeStoreSnapshot, serializeStoreSync } from '@/lib/store-sync-guard';
+import { queueStoreSync } from '@/lib/store-cloud-sync';
 import { money, stockPrecision, packSize, stockBase, saleUnits, salePrice, historicalUnits, paymentAllocation, legacyAllocation } from '@/lib/inventory-sale-math';
 import type { PaymentAllocation } from '@/types/store';
 import {
@@ -962,93 +962,8 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean;
     createAutoBackupSnapshot().catch(() => {});
   }
 
-  // Always sync to cloud if the store has a storeId (QR code) — customers need the row
-  // to exist in Supabase when they scan. Also sync if multiDeviceSync is explicitly on.
-  // Skipped when the caller already pushed a smaller, targeted patch to the
-  // cloud itself (see merge_store_data usage in Index.tsx) -- doing both
-  // would silently re-upload the entire store record right after a
-  // deliberately small update, defeating the point.
   if (!options?.skipCloudSync && (store.storeId || store.managerSettings?.multiDeviceSync)) {
-    // Capture now, not after async authentication. A later sale must not mutate
-    // an earlier upload while it is waiting for the network.
-    const snapshot = JSON.parse(JSON.stringify(store)) as StoreData;
-    const base = before ? JSON.parse(before) as StoreData : undefined;
-    const recoveryKey = `storeflow_sync_pending_${store.accessCode}`;
-    const held = localStorage.getItem(recoveryKey);
-    const recoveryBefore = held ? JSON.parse(held) : null;
-    try { localStorage.setItem(recoveryKey, JSON.stringify({ base: recoveryBefore?.base || base, next: snapshot })); }
-    catch (error) { console.warn('Sync recovery storage is full; primary store record is saved.', error); }
-    void serializeStoreSync(store.accessCode, async () => {
-      const store = snapshot;
-      const { supabase } = await import('@/integrations/supabase/client');
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session || !session.user) {
-          console.warn('Cloud Sync: No active authenticated session found.', sessionError);
-          return;
-        }
-
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('auth_user_id', session.user.id)
-          .maybeSingle();
-
-        if (profileError || !profile || !profile.id) {
-          console.warn('Cloud Sync: Active owner profile is missing or missing ID.', profileError);
-          return;
-        }
-
-        const storeId = store.storeId || store.accessCode;
-        const storeUrl = generateStoreUrl(storeId);
-        const cloudStore = prepareStoreForMarketplacePublish(store, store.marketplaceSettings || {});
-
-        const payload: any = {
-          owner_id: profile.id,
-          business_name: store.storeName,
-          business_type: store.storeType || store.category || 'retail',
-          logo: store.profile?.logoStyle || 'minimalist',
-          access_code: store.accessCode,
-          data: cloudStore as any,
-          store_id: storeId,
-          qr_code: storeUrl,
-          barcode: storeId,
-          updated_at: new Date().toISOString()
-        };
-
-        const { data: existingStore, error: fetchError } = await supabase
-          .from('stores')
-          .select('id, data, updated_at')
-          .eq('access_code', store.accessCode)
-          .maybeSingle();
-
-        if (fetchError) throw fetchError;
-        const blocked = localStorage.getItem(recoveryKey);
-        const recovery = blocked ? JSON.parse(blocked) : null;
-        const originalBase = recovery?.base || base;
-        if (existingStore) {
-          const remote = (existingStore.data || {}) as Record<string, unknown>;
-          const baseData = originalBase ? prepareStoreForMarketplacePublish(originalBase, originalBase.marketplaceSettings || {}) : {};
-          payload.data = mergeStoreSnapshot(baseData as unknown as Record<string, unknown>, cloudStore as unknown as Record<string, unknown>, remote);
-          // Compare-and-swap: a write after our read must not be overwritten.
-          let query = supabase.from('stores').update(payload).eq('id', existingStore.id);
-          query = existingStore.updated_at ? query.eq('updated_at', existingStore.updated_at) : query.is('updated_at', null);
-          const { data, error } = await query.select('id');
-          if (error) throw error;
-          if (!data?.length) throw new Error('Another device saved first. Your local copy is kept; retry after reconciling.');
-        } else {
-          // An insert racing another device must fail, never become an upsert.
-          const { error } = await supabase.from('stores').insert(payload);
-          if (error) throw error;
-        }
-        const latest = JSON.parse(localStorage.getItem(recoveryKey) || 'null');
-        if (JSON.stringify(latest?.next) === JSON.stringify(snapshot)) localStorage.removeItem(recoveryKey);
-        else if (latest) localStorage.setItem(recoveryKey, JSON.stringify({ base: snapshot, next: latest.next }));
-      } catch (err) {
-        console.error('Cloud Sync background execution failed:', err);
-        void import('@/components/Toast').then(({ showToast }) => showToast(err instanceof Error ? err.message : 'Cloud sync paused. Your records are saved on this device.', 'error'));
-      }
-    }).catch(err => console.error('Failed to load supabase client for sync:', err));
+    queueStoreSync(store, before ? JSON.parse(before) : undefined);
   }
 }
 
@@ -1926,11 +1841,11 @@ function pid(): string { return Date.now().toString(36) + Math.random().toString
  */
 export function recordCheckout(
   store: StoreData,
-  items: { productId: string; quantity: number; saleType?: 'carton' | 'single'; expectedUnitPrice?: number }[],
+  items: { productId: string; quantity: number; saleType?: 'carton' | 'single'; expectedUnitPrice?: number; agreedUnitPrice?: number }[],
   opts: {
     paid: number; method: PaymentMethod; allocation?: PaymentAllocation;
     customerId?: string; customerName?: string; customerPhone?: string; customerNote?: string;
-    dueDate?: string; discount?: number; actorName?: string; actorRole?: string;
+    dueDate?: string; discount?: number; actorName?: string; actorRole?: string; deferSave?: boolean;
   }
 ): { store: StoreData; sales: Sale[]; pending?: PendingPayment; error?: string; subtotal: number; total: number; discount: number; paid: number; balance: number } {
   const failed = (error: string) => ({ store, sales: [] as Sale[], error, subtotal: 0, total: 0, discount: 0, paid: 0, balance: 0 });
@@ -1942,6 +1857,7 @@ export function recordCheckout(
       const product = store.products.find(p => p.id === item.productId && !p.discontinued);
       if (!product) return failed('An item is no longer available. Review your cart.');
       if (!Number.isFinite(item.quantity) || item.quantity <= 0) return failed(`Enter a valid quantity for ${product.name}.`);
+      if (item.agreedUnitPrice !== undefined && (!opts.deferSave || !Number.isFinite(item.agreedUnitPrice) || item.agreedUnitPrice < 0)) return failed('Invalid agreed order price.');
       const units = saleUnits(product, item.quantity, item.saleType);
       if ((packSize(product) > 1 || item.saleType === 'single') && !Number.isInteger(units)) return failed(`${product.name} must be sold in whole pieces.`);
       if (item.expectedUnitPrice !== undefined && money(item.expectedUnitPrice) !== salePrice(product, item.saleType)) return failed(`The price of ${product.name} changed. Remove it and add it again.`);
@@ -1962,7 +1878,12 @@ export function recordCheckout(
     const customerId = customer?.id || (customerName ? pid() : undefined);
     const transactionId = pid();
     let updated = store;
-    for (const item of items) updated = recordSale(updated, item.productId, item.quantity, opts.actorName, opts.actorRole, transactionId, item.saleType, true);
+    for (const item of items) {
+      const original = updated.products.find(p => p.id === item.productId)!;
+      if (item.agreedUnitPrice !== undefined) updated = { ...updated, products: updated.products.map(p => p.id === item.productId ? { ...p, ...(item.saleType === 'single' ? { singleSellingPrice: item.agreedUnitPrice } : { sellingPrice: item.agreedUnitPrice }) } : p) };
+      updated = recordSale(updated, item.productId, item.quantity, opts.actorName, opts.actorRole, transactionId, item.saleType, true);
+      if (item.agreedUnitPrice !== undefined) updated = { ...updated, products: updated.products.map(p => p.id === item.productId ? { ...p, sellingPrice: original.sellingPrice, singleSellingPrice: original.singleSellingPrice } : p) };
+    }
     const rawSales = updated.sales.filter(s => s.transactionId === transactionId);
     if (rawSales.length !== items.length) return failed('The cart could not be recorded. Nothing was sold.');
     const subtotal = money(rawSales.reduce((sum, sale) => sum + sale.total, 0));
@@ -2009,7 +1930,7 @@ export function recordCheckout(
       updated = { ...updated, customers: customer ? customers.map(c => c.id === customerId ? nextCustomer : c) : [nextCustomer, ...customers] };
     }
     updated = syncProductPerformance(updated);
-    saveStore(updated);
+    if (!opts.deferSave) saveStore(updated);
     return { store: updated, sales, pending, subtotal, total, discount, paid, balance };
   } catch (error) {
     return failed(error instanceof Error ? error.message : 'Checkout failed. Your cart has been kept.');

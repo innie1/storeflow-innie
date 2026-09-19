@@ -1,6 +1,7 @@
+import { commitCashCheckout } from '@/lib/committed-checkout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StoreData, TabId } from '@/types/store';
-import { addProduct, recordCashCheckout, receiveStock, importPurchaseOrderByCode } from '@/lib/store-data';
+import { addProduct, receiveStock, importPurchaseOrderByCode } from '@/lib/store-data';
 import { flowAddExpense, flowRecordPayment, flowAddInvestment, flowAddLoan, flowAddWithdrawal, flowReceiveStock } from '@/lib/flow-finance-actions';
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
@@ -191,10 +192,10 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     ask(text);
   };
 
-  const executeSales = (items: FlowLineItem[]) => {
+  const executeSales = async (items: FlowLineItem[]) => {
     if (!items.length) { flow('I could not match those products to your catalog. Try the exact product name, or teach me an alias.'); return; }
     rememberUndo();
-    const result = recordCashCheckout(store, items.map(item => ({ productId: item.product.product.id, quantity: item.quantity })), 'Flow', 'FlowChat');
+    const result = await commitCashCheckout(store, items.map(item => ({ productId: item.product.product.id, quantity: item.quantity })), 'Flow', 'FlowChat');
     if (result.error) { flow(result.error); setLastUndo(null); return; }
     const next = result.store;
     const total = result.total;

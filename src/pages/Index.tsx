@@ -1,3 +1,8 @@
+import { commitCashCheckout } from '@/lib/committed-checkout';
+import StoreIntegrityPanel from '@/components/StoreIntegrityPanel';
+import { cloudSnapshot, getPendingStoreSync, requireStoreSynced, STORE_SYNC_EVENT } from '@/lib/store-cloud-sync';
+import { prepareInventoryOrder } from '@/lib/inventory-orders';
+import { same } from '@/lib/store-sync-guard';
 import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { canOpenTab } from '@/lib/permissions';
 import SetupGuide from '@/components/SetupGuide';
@@ -18,7 +23,7 @@ import { setNotificationPreferencesShop } from '@/lib/notification-preferences';
 import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-session';
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
-import { matchCustomer, loadStore, findProductByBarcode, addProduct, recordCashCheckout, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
+import { matchCustomer, loadStore, findProductByBarcode, addProduct, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
 import StreakDetailsPanel from '@/components/streaks/StreakDetailsPanel';
@@ -837,226 +842,56 @@ export default function Index() {
     };
   }, [store?.id, store?.marketplaceSettings?.alertSound, store?.marketplaceSettings?.notifNewOrders, playOrderAlertSound]);
 
-  // Order status transition callback
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const { code, store: accepted } = (event as CustomEvent).detail || {};
+      if (accepted && code === store?.accessCode) setStore(accepted);
+    };
+    window.addEventListener(STORE_SYNC_EVENT, receive);
+    return () => window.removeEventListener(STORE_SYNC_EVENT, receive);
+  }, [store?.accessCode]);
+  const orderCommitBusy = useRef(false);
+  // Store and order changes share a server transaction. No local side effects
+  // are published until the server accepts the complete proposal.
   const handleUpdateOrderStatus = useCallback(async (orderId: string, newStatus: string, metadata?: any) => {
+    if (!store || orderCommitBusy.current) return;
+    orderCommitBusy.current = true;
     try {
+      // Service controls have already committed their own server workflow RPC.
+      if (metadata?.serviceSession) {
+        const { data, error } = await supabase.from('orders').select('*, order_items(*)').eq('id', orderId).single();
+        if (error) throw error;
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...data, status: getNormalizedStatus(data.status) } : o));
+        return;
+      }
+      await requireStoreSynced(store.accessCode);
+      const local = loadStore(store.accessCode) || store;
       const targetOrder = orders.find(o => o.id === orderId);
-      if (!targetOrder) return;
-
-      let updatedStore = store;
-      let parsedNotes: any = {};
-      if (targetOrder.notes) {
-        try {
-          parsedNotes = JSON.parse(targetOrder.notes);
-        } catch {
-          parsedNotes = { instructions: targetOrder.notes };
-        }
-      }
-
-      // 1. Reserve Stock if transitioning to Accepted
-      if (newStatus === 'Accepted' && store) {
-        const updatedProducts = store.products.map((p: any) => {
-          const item = (targetOrder.order_items || []).find((oi: any) => oi.product_id === p.id);
-          if (item) {
-            return {
-              ...p,
-              quantity: Math.max(0, p.quantity - Number(item.quantity))
-            };
-          }
-          return p;
-        });
-
-        updatedStore = { ...store, products: updatedProducts };
-
-        // Update stores table in cloud DB -- only the products field changed,
-        // so only send that, not the entire store record (sales, customers,
-        // expenses, settings, history all stay exactly as they already are
-        // in the cloud row).
-        const { error: storeErr } = await supabase
-          .rpc('merge_store_data', { p_store_id: store.id, p_patch: { products: updatedProducts } });
-        if (storeErr) throw storeErr;
-
-        setStore(updatedStore);
-        saveStore(updatedStore, { skipCloudSync: true }); // Local persistence only -- cloud already synced above
-      }
-
-      // 2. Release Stock if previously accepted (Accepted/Preparing/Ready) but now rejected/cancelled
-      const wasAccepted = targetOrder.status === 'Accepted' || targetOrder.status === 'Preparing' || targetOrder.status === 'Ready';
-      if ((newStatus === 'Rejected' || newStatus === 'Cancelled') && wasAccepted && store) {
-        const updatedProducts = store.products.map((p: any) => {
-          const item = (targetOrder.order_items || []).find((oi: any) => oi.product_id === p.id);
-          if (item) {
-            return {
-              ...p,
-              quantity: p.quantity + Number(item.quantity)
-            };
-          }
-          return p;
-        });
-
-        updatedStore = { ...store, products: updatedProducts };
-
-        // Update stores table in cloud DB -- targeted patch, same reasoning as Accept above.
-        const { error: storeErr } = await supabase
-          .rpc('merge_store_data', { p_store_id: store.id, p_patch: { products: updatedProducts } });
-        if (storeErr) throw storeErr;
-
-        setStore(updatedStore);
-        saveStore(updatedStore, { skipCloudSync: true }); // Local persistence only -- cloud already synced above
-      }
-
-      // 3. Register as a Sale when an order is marked Completed. Stock was
-      // already deducted when the order was Accepted (see above), so this
-      // only records the revenue/profit — it must NOT touch product
-      // quantity again. Without this, orders placed through the storefront
-      // never showed up in Sales History, dashboard revenue, profit,
-      // expense-vs-revenue ratios, or the fast/slow/never-sold
-      // classification used by Smart Restock and the Restock Score —
-      // meaning a product could be selling well through Orders and still
-      // get flagged as "dead stock" because none of that revenue was ever
-      // recorded as a sale.
-      if (newStatus === 'Completed' && store) {
-        const items = targetOrder.order_items || [];
-        // Every item in this order shares one transactionId, the same way
-        // a multi-item in-store checkout does (see recordCheckout) -- this
-        // is what makes Sales History group them into a single receipt
-        // instead of one row per product. Also tagged with channel:
-        // 'online_order' so the receipt is labeled distinctly from
-        // in-store sales, and so Sales History can show what percentage
-        // of revenue comes from online orders vs walk-in/in-store sales.
-        const orderTransactionId = `order-${targetOrder.id}`;
-        const newSales = items.map((item: any) => {
-          const product = store.products.find((p: any) => p.id === item.product_id);
-          const unitPrice = Number(item.price) || product?.sellingPrice || 0;
-          const qty = Number(item.quantity) || 0;
-          const costPrice = product?.costPrice || 0;
-          return {
-            id: `order-${targetOrder.id}-${item.id || item.product_id}`,
-            productId: item.product_id,
-            productName: product?.name || 'Unknown Product',
-            quantity: qty,
-            unitPrice: Math.round(unitPrice * 100) / 100,
-            total: Math.round(unitPrice * qty * 100) / 100,
-            profit: Math.round((unitPrice - costPrice) * qty * 100) / 100,
-            date: new Date().toISOString(),
-            paymentMethod: 'transfer' as const,
-            transactionId: orderTransactionId,
-            channel: 'online_order' as const,
-          };
-        });
-
-        // Also bump each product's units_sold so per-product performance
-        // stats (fast/slow mover classification) reflect order sales.
-        const updatedProductsForSale = store.products.map((p: any) => {
-          const soldItem = items.find((oi: any) => oi.product_id === p.id);
-          if (!soldItem) return p;
-          return { ...p, units_sold: (p.units_sold || 0) + Number(soldItem.quantity) };
-        });
-
-        // Track online-order customers the same way walk-in customers are
-        // tracked at checkout, so the merchant can see who's ordering
-        // online, how often, and how much they've contributed — this
-        // previously only happened for in-store sales, so every online
-        // order was invisible in the Customers list no matter how many
-        // times the same person ordered.
-        const orderTotal = Number(targetOrder.total || 0);
-        let updatedCustomers = store.customers || [];
-        if (targetOrder.customer_phone || targetOrder.customer_name) {
-          const nowStr = new Date().toISOString();
-          const itemsSummary = items
-            .map((it: any) => `${store.products.find((p: any) => p.id === it.product_id)?.name || 'Item'} (x${it.quantity})`)
-            .join(', ');
-          const purchase = { date: nowStr, amount: orderTotal, items: itemsSummary };
-          // The same rule the counter uses, rather than a second copy of it:
-          // by number when there is one, by name when there is not.
-          const existing = matchCustomer(updatedCustomers, {
-            name: targetOrder.customer_name,
-            phone: targetOrder.customer_phone,
-          });
-          if (existing) {
-            updatedCustomers = updatedCustomers.map((c: any) => c.id === existing.id ? {
-              ...c,
-              // A blank only. Matching now finds a known customer even when
-              // the order carries a different number, and nobody is at a
-              // counter to be asked whether it should replace the saved one -
-              // an order typed on a phone is the likeliest place for a slip.
-              phone: String(c.phone || '').trim() ? c.phone : (targetOrder.customer_phone || ''),
-              totalPurchases: c.totalPurchases + orderTotal,
-              lastPurchaseDate: nowStr,
-              purchaseHistory: [purchase, ...(c.purchaseHistory || [])],
-              visitsCount: (c.visitsCount || 0) + 1,
-              loyaltyPoints: (c.loyaltyPoints || 0) + Math.floor(orderTotal / 1000),
-            } : c);
-          } else {
-            updatedCustomers = [{
-              id: `cust-order-${targetOrder.id}`,
-              name: targetOrder.customer_name || 'Online Customer',
-              phone: targetOrder.customer_phone || '',
-              totalPurchases: orderTotal,
-              outstandingDebt: 0,
-              lastPurchaseDate: nowStr,
-              purchaseHistory: [purchase],
-              visitsCount: 1,
-              loyaltyPoints: Math.floor(orderTotal / 1000),
-            }, ...updatedCustomers];
-          }
-        }
-
-        updatedStore = { ...store, products: updatedProductsForSale, sales: [...newSales, ...(store.sales || [])], customers: updatedCustomers };
-
-        // Update stores table in cloud DB -- only these 3 fields changed
-        // (products, sales, customers). Everything else in the store record
-        // (expenses, staff, settings, notifications, history, etc.) is left
-        // untouched in the cloud row rather than being re-uploaded.
-        const { error: storeErr } = await supabase
-          .rpc('merge_store_data', {
-            p_store_id: store.id,
-            p_patch: { products: updatedStore.products, sales: updatedStore.sales, customers: updatedStore.customers } as unknown as Json
-          });
-        if (storeErr) throw storeErr;
-
-        setStore(updatedStore);
-        saveStore(updatedStore, { skipCloudSync: true }); // Local persistence only -- cloud already synced above
-      }
-
-      // Merge additional metadata (rejection reason or change request message)
-      if (metadata) {
-        Object.assign(parsedNotes, metadata);
-      }
-
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          status: newStatus,
-          notes: JSON.stringify(parsedNotes),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
+      if (!targetOrder) throw new Error('Order not found.');
+      const proposal = prepareInventoryOrder(local, targetOrder, newStatus, metadata);
+      const { data, error } = await (supabase as any).rpc('commit_store_snapshot', {
+        p_store_id: store.id,
+        p_base: cloudSnapshot(local), p_next: cloudSnapshot(proposal.store),
+        p_order: { id: orderId, expected_updated_at: targetOrder.updated_at, status: newStatus, notes: JSON.stringify(proposal.notes) },
+      });
       if (error) throw error;
+      // Counter activity may have continued while the request was in flight.
+      // Keep that copy queued for review rather than replacing it.
+      const latest = loadStore(store.accessCode);
+      if (!getPendingStoreSync(store.accessCode) && (!latest || same(latest, local))) {
+        const accepted = { ...proposal.store, ...data.data, managerSettings: { ...proposal.store.managerSettings, ...data.data.managerSettings } };
+        localStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(accepted));
+        setStore(accepted);
+      } else {
+        showToast('Order saved. Newer counter records are kept on this device for sync review.', 'info');
+      }
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...data.order, status: getNormalizedStatus(data.order.status) } : o));
       showToast(`Order status updated to ${newStatus}`);
-
-      // Explicitly notify the CUSTOMER via Edge Function.
-      // initiated_by: "merchant" ensures the merchant does NOT get a push for their own action.
-      supabase.functions.invoke('send-order-push', {
-        body: {
-          order_id: orderId,
-          new_status: newStatus,
-          old_status: targetOrder.status,
-          is_customer_update: true,
-          initiated_by: 'merchant'
-        }
-      }).catch(err => console.warn('[Push] Failed to invoke send-order-push:', err));
-
-      // Update local state directly
-      setOrders(prev =>
-        prev.map(o => o.id === orderId ? { ...o, status: getNormalizedStatus(newStatus), notes: JSON.stringify(parsedNotes) } : o)
-      );
-
+      // The existing database trigger sends customer status notifications.
     } catch (err: any) {
-      showToast('Failed to update order status: ' + err.message, 'error');
-    }
-  }, [store, orders]);
+      showToast('Order was not confirmed: ' + err.message, 'error');
+    } finally { orderCommitBusy.current = false; }
+  }, [store, orders, getNormalizedStatus]);
 
   const setTab = useCallback((targetTab: TabId) => {
     setTabState(targetTab);
@@ -1707,9 +1542,9 @@ export default function Index() {
     }
   }, [store]);
 
-  const handleCheckoutScanCart = () => {
+  const handleCheckoutScanCart = async () => {
     if (!store || scanCart.length === 0) return;
-    const result = recordCashCheckout(store, scanCart.map(item => ({ productId: item.product.id, quantity: item.qty })), currentUser?.name, currentUser?.role);
+    const result = await commitCashCheckout(store, scanCart.map(item => ({ productId: item.product.id, quantity: item.qty })), currentUser?.name, currentUser?.role);
     if (result.error) return showToast(result.error, 'error');
     setStore(result.store);
     const total = result.total;
@@ -2428,6 +2263,7 @@ export default function Index() {
         )}
 
         <main className={`flex-1 ${store.uiMode === 'simple' && tab === 'dashboard' ? 'px-3 pt-1 pb-16 md:pt-2 space-y-3' : 'px-4 pt-2 pb-20 md:px-6 md:pt-3 md:pb-6 space-y-4'} w-full max-w-5xl lg:max-w-6xl mx-auto`} style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))' }}>
+          <StoreIntegrityPanel store={store} owner={currentUser?.role === 'owner'} />
           {/* Back, on every screen that is not the dashboard.
               It used to sit in the header, wedged against the StoreFlow
               wordmark and the store name, which crowded the one part of the

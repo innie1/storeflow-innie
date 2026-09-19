@@ -1,6 +1,7 @@
+import { commitCashCheckout } from '@/lib/committed-checkout';
 import { useMemo, useState } from 'react';
 import { StoreData, Product } from '@/types/store';
-import { recordCashCheckout, saveStore, generateId, getSalesTargetStatus } from '@/lib/store-data';
+import { saveStore, generateId, getSalesTargetStatus } from '@/lib/store-data';
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
@@ -49,11 +50,11 @@ function ProductSimpleHome({ store, setStore, currentUser, onNavigate }: SimpleM
   const [costPricePromptProductId, setCostPricePromptProductId] = useState<string | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<MilestoneDef | null>(null);
 
-  const handleConfirmSale = (productId: string, quantity: number) => {
+  const handleConfirmSale = async (productId: string, quantity: number) => {
     const product = store.products.find(p => p.id === productId);
     if (!product) return;
     if (product.quantity < quantity && !store.managerSettings?.backorderSellingEnabled) return showToast('Not enough stock for that quantity', 'error');
-    const result = recordCashCheckout(store, [{ productId, quantity }], currentUser?.name, currentUser?.role);
+    const result = await commitCashCheckout(store, [{ productId, quantity }], currentUser?.name, currentUser?.role);
     if (result.error) return showToast(result.error, 'error');
     const updated = result.store;
     setStore(updated); markSaleQueuedIfOffline(store.accessCode);
@@ -62,8 +63,8 @@ function ProductSimpleHome({ store, setStore, currentUser, onNavigate }: SimpleM
     if (!store.simpleModeSettings?.skipCostPricePrompt && (!product.costPrice || product.costPrice <= 0)) setCostPricePromptProductId(productId);
   };
 
-  const handleConfirmMultiSale = (items: { productId: string; quantity: number }[]) => {
-    const result = recordCashCheckout(store, items, currentUser?.name, currentUser?.role);
+  const handleConfirmMultiSale = async (items: { productId: string; quantity: number }[]) => {
+    const result = await commitCashCheckout(store, items, currentUser?.name, currentUser?.role);
     if (result.error) return showToast(result.error, 'error');
     const updated = result.store;
     setStore(updated); markSaleQueuedIfOffline(store.accessCode); playSoldSound();

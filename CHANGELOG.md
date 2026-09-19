@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-19 — Atomic inventory commits and recovery
+
+- Confirm connected counter, barcode, voice and receipt-import checkouts on the server before showing success. Retain offline/lost-response proposals for idempotent retry.
+- Lock the store row and check stock, cash/bank, sales, debt and customer ledgers as one conflict domain. Reject competing snapshots rather than combining inconsistent totals.
+- Commit retail online-order reservations, releases, sales, payment/debt records and order status together. Honour agreed order prices, aggregate repeated lines, require payment confirmation and avoid a second product-table deduction.
+- Show pending sync, retry on reconnect, compare/export device and cloud copies, and preserve an archived recovery copy before an owner explicitly switches to cloud records. Protect pending data during cloud sign-in.
+- Add read-only historical checks for fractional stock, missing products/debt links, payment discrepancies and customer debt mismatches. Findings include correction guidance; no historical balances are guessed or bulk rewritten.
+- Add PostgreSQL regression tests for competing snapshots, lost-response retries, order rollback, projection rollback and authorization to CI (`npm run test:db`).
+
+Rollout: apply `20260919212741_atomic_inventory_commits.sql` before deploying the client. Offline devices can still sell overlapping physical stock; their conflicting uploads remain blocked for owner review. Historical corrections require receipts/physical counts. Tests simulate competing clients and PostgreSQL failures; they do not create test sales in a real shop.
+
 ## 2026-09-19 — Sales and inventory integrity
 
 - Validate complete carts before saving; use the same checkout for counter, barcode, voice, Flow and receipt imports.

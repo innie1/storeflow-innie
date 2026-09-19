@@ -61,8 +61,8 @@ describe('adding a number to a customer keeps the customer', () => {
 
 describe('an online order does not overwrite a saved number', () => {
   it('fills a blank only, because there is nobody at a counter to ask', () => {
-    const index = readSource('src/pages/Index.tsx');
-    expect(index).toContain("phone: String(c.phone || '').trim() ? c.phone : (targetOrder.customer_phone || ''),");
-    expect(index).not.toContain('phone: targetOrder.customer_phone || c.phone,');
+    const checkout = readSource('src/lib/store-data.ts');
+    expect(checkout).toContain("phone: customer?.phone || opts.customerPhone || ''");
+    expect(readSource('src/lib/inventory-orders.ts')).toContain('recordCheckout(updated, checkoutItems');
   });
 });

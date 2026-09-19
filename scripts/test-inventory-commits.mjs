@@ -1,0 +1,61 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+const db = new PGlite();
+await db.exec(`create role anon; create role authenticated; create schema auth;
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $$;
+create function public.deduct_inventory_on_order_completion() returns trigger language plpgsql as $$ begin raise exception 'legacy deduction should not run'; end $$;
+create table products(id uuid primary key,store_id uuid,quantity numeric,units_sold numeric,total_revenue numeric,total_profit numeric,updated_at timestamptz);
+create table profiles(id uuid primary key, auth_user_id uuid);
+create table stores(id uuid primary key, owner_id uuid references profiles, data jsonb, business_name text, business_type text, updated_at timestamptz default now());
+create table orders(id uuid primary key, store_id uuid references stores, status text, notes text, service_metadata jsonb default '{}', updated_at timestamptz default now());
+insert into profiles values('10000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002');
+insert into stores(id,owner_id,data) values('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','{"products":[{"id":"p","quantity":1}],"sales":[],"cashBalance":0}');
+insert into orders(id,store_id,status,notes,updated_at) values('30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','Pending',null,'2026-09-19T00:00:00Z');
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000002',false);`);
+await db.exec(readFileSync(new URL('../supabase/migrations/20260919212741_atomic_inventory_commits.sql', import.meta.url),'utf8'));
+const id='20000000-0000-0000-0000-000000000001';
+const base={products:[{id:'p',quantity:1}],sales:[],cashBalance:0};
+const next={products:[{id:'p',quantity:0}],sales:[{id:'sale1',total:100}],cashBalance:100};
+const commit=(a,b,o=null)=>db.query('select public.commit_store_snapshot($1,$2,$3,$4) as result',[id,a,b,o]);
+await commit(base,next);
+await commit(base,next); // Lost response: same sale is accepted, never duplicated.
+await assert.rejects(commit(base,{...next,sales:[{id:'sale2',total:100}]}), /Another device/);
+assert.equal((await db.query('select data from stores')).rows[0].data.sales.length,1);
+// A changed stock dependency rejects a stale sale even if its stock result equals remote.
+await db.query('update stores set data=$1',[base]);
+await db.query('update stores set data=$1',[{...base,products:[{id:'p',quantity:0}]}]);
+await assert.rejects(commit(base,next),/Another device/);
+// Order and store roll back together when status validation fails.
+await db.query('update stores set data=$1',[base]);
+await assert.rejects(commit(base,next,{id:'30000000-0000-0000-0000-000000000001',status:'Completed',expected_updated_at:'2026-09-19T00:00:00Z',notes:'{}'}),/Invalid order/);
+assert.deepEqual((await db.query('select data from stores')).rows[0].data,base);
+const order={id:'30000000-0000-0000-0000-000000000001',status:'Accepted',expected_updated_at:'2026-09-19T00:00:00Z',notes:'{}'};
+await commit(base,{...base,products:[{id:'p',quantity:0}]},order);
+assert.equal((await db.query('select status from orders')).rows[0].status,'Accepted');
+// An AFTER trigger failure must undo BOTH tables.
+await db.exec(`create function reject_projection() returns trigger language plpgsql as $$ begin raise exception 'Projection failed'; end $$;
+create trigger reject_projection after update on orders for each row execute function reject_projection();`);
+const accepted=(await db.query('select data from stores')).rows[0].data;
+const stamp=(await db.query('select updated_at::text as stamp from orders')).rows[0].stamp;
+await assert.rejects(commit(accepted,{...accepted,storeName:'Changed'},{...order,status:'Preparing',expected_updated_at:stamp}),/Projection failed/);
+assert.deepEqual((await db.query('select data from stores')).rows[0].data,accepted);
+assert.equal((await db.query('select status from orders')).rows[0].status,'Accepted');
+// Snapshot completion updates an existing product projection exactly once.
+await db.exec('drop trigger reject_projection on orders');
+const productId='40000000-0000-0000-0000-000000000001';
+const projectionBase={products:[{id:productId,quantity:1}],sales:[],cashBalance:0};
+await db.query('update stores set data=$1',[projectionBase]);
+await db.query('insert into products(id,store_id,quantity) values($1,$2,1)',[productId,id]);
+await db.exec("update orders set status='Ready'");
+const readyStamp=(await db.query('select updated_at::text as stamp from orders')).rows[0].stamp;
+await commit(projectionBase,{products:[{id:productId,quantity:0,units_sold:1}],sales:[{id:'final'}],cashBalance:100},{...order,status:'Completed',expected_updated_at:readyStamp,notes:JSON.stringify({inventoryItems:[]})});
+assert.equal(Number((await db.query('select quantity from products')).rows[0].quantity),0);
+assert.equal((await db.query('select status from orders')).rows[0].status,'Completed');
+await db.exec("select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000099',false)");
+await assert.rejects(commit(accepted,accepted), /owner account/);
+await db.exec("select set_config('request.jwt.claim.sub','',false)");
+await assert.rejects(commit(accepted,accepted), /Sign in/);
+assert.equal((await db.query("select has_function_privilege('anon','public.commit_store_snapshot(uuid,jsonb,jsonb,jsonb)','execute') as allowed")).rows[0].allowed,false);
+console.log('PASS: SQL migration, idempotent retry, competing sale rejection, stock dependency conflict, order transition rollback, trigger failure rollback, owner authorization, anonymous execute denied.');
+await db.close();

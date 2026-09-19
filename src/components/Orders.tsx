@@ -89,6 +89,9 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [quickMsgMenuFor, setQuickMsgMenuFor] = useState<string | null>(null);
   const [receiptOrder, setReceiptOrder] = useState<any | null>(null);
+  const [completingOrder, setCompletingOrder] = useState<any | null>(null);
+  const [received, setReceived] = useState('');
+  const [receivedMethod, setReceivedMethod] = useState<'cash' | 'transfer' | 'pos'>('cash');
 
   const [pushDismissed, setPushDismissed] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
@@ -844,7 +847,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
                         <button onClick={() => onUpdateOrderStatus(order.id, 'Ready')} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">{meta?.delivery_type === 'delivery' ? 'Ready for Delivery' : 'Ready for Pickup'}</button>
                       )}
                       {normStatus === 'Ready' && (
-                        <button onClick={() => onUpdateOrderStatus(order.id, 'Completed')} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">{meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}</button>
+                        <button onClick={() => { setCompletingOrder(order); setReceived(''); }} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-focus text-primary-foreground text-xs font-display font-bold transition active:scale-95 cursor-pointer">{meta?.delivery_type === 'delivery' ? 'Mark Delivered' : 'Mark Collected'}</button>
                       )}
                     </div>
                   )}
@@ -895,6 +898,22 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
         </div>
       )}
 
+      {completingOrder && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Confirm order payment">
+          <div className="bg-card p-5 rounded-2xl space-y-4 w-full max-w-sm">
+            <h2 className="font-bold">Confirm payment received</h2>
+            <p className="text-sm">Order total: ₦{Number(completingOrder.total).toLocaleString()}. Any unpaid amount will be recorded as customer debt.</p>
+            <label className="block text-sm">Amount received<input autoFocus type="number" min="0" max={completingOrder.total} value={received} onChange={e => setReceived(e.target.value)} className="block w-full bg-background border rounded p-2" /></label>
+            <label className="block text-sm">Payment method<select value={receivedMethod} onChange={e => setReceivedMethod(e.target.value as typeof receivedMethod)} className="block w-full bg-background border rounded p-2"><option value="cash">Cash</option><option value="transfer">Bank transfer</option><option value="pos">POS</option></select></label>
+            <div className="flex gap-3"><button onClick={() => setCompletingOrder(null)}>Cancel</button><button className="bg-primary text-primary-foreground rounded px-4 py-2" onClick={() => {
+              const paid = Number(received);
+              if (!received.trim() || !Number.isFinite(paid) || paid < 0 || paid > Number(completingOrder.total)) return showToast('Enter an amount between zero and the order total.', 'error');
+              onUpdateOrderStatus(completingOrder.id, 'Completed', { confirmedPayment: { paid, method: receivedMethod } });
+              setCompletingOrder(null);
+            }}>Confirm completion</button></div>
+          </div>
+        </div>
+      )}
       {receiptOrder && (
         <OrderReceipt store={store} order={receiptOrder} onClose={() => setReceiptOrder(null)} />
       )}

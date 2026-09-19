@@ -29,6 +29,7 @@ jobs:
       # sitting on 255 of them, several of which were live bugs.
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:db
       - run: npm run build
       # The screens are fetched when they are opened rather than shipped in one
       # file. Nothing in the build itself would notice if that came undone, so

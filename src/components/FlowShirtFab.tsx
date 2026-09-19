@@ -1,7 +1,8 @@
+import { commitCashCheckout } from '@/lib/committed-checkout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle, Mic, Send, Shirt, X } from 'lucide-react';
 import type { Product, StoreData, TabId } from '@/types/store';
-import { generateId, recordCashCheckout, saveStore } from '@/lib/store-data';
+import { generateId, saveStore } from '@/lib/store-data';
 import { isBusinessTabAllowed, resolveBusinessType } from '@/lib/business-runtime';
 import { createFlowShirtCode, parseFlowShirtText, type FlowShirtDraftItem } from '@/lib/flow-shirt';
 import { showToast } from '@/components/Toast';
@@ -231,7 +232,7 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
       : item));
   };
 
-  const saveTypedSale = () => {
+  const saveTypedSale = async () => {
     if (!draft.length) return;
     let updated = store;
     const transactionCode = createFlowShirtCode();
@@ -263,24 +264,24 @@ export default function FlowShirtFab({ store, onUpdate, onNavigate, currentUser 
       if (productId) lines.push({ productId, quantity: item.quantity });
     }
 
-    const result = recordCashCheckout(updated, lines, currentUser?.name, currentUser?.role);
+    const result = await commitCashCheckout(updated, lines, currentUser?.name, currentUser?.role, store);
     if (result.error) return showToast(result.error, 'error');
     commit(result.store);
     setText(''); setDraft([]); setOpen(false);
     showToast(`Sale saved — ${result.sales[0]?.transactionId}`);
   };
 
-  const confirmVoiceSale = (productId: string, quantity: number) => {
+  const confirmVoiceSale = async (productId: string, quantity: number) => {
     const product = store.products.find(item => item.id === productId);
     if (!product) return;
     if (product.quantity < quantity && !store.managerSettings?.backorderSellingEnabled) return showToast('Not enough stock for that quantity', 'error');
-    const result = recordCashCheckout(store, [{ productId, quantity }], currentUser?.name, currentUser?.role);
+    const result = await commitCashCheckout(store, [{ productId, quantity }], currentUser?.name, currentUser?.role);
     if (result.error) return showToast(result.error, 'error');
     commit(result.store);
   };
 
-  const confirmVoiceMultiSale = (items: { productId: string; quantity: number }[]) => {
-    const result = recordCashCheckout(store, items, currentUser?.name, currentUser?.role);
+  const confirmVoiceMultiSale = async (items: { productId: string; quantity: number }[]) => {
+    const result = await commitCashCheckout(store, items, currentUser?.name, currentUser?.role);
     if (result.error) return showToast(result.error, 'error');
     commit(result.store);
   };

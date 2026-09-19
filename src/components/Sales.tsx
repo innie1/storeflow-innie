@@ -1,10 +1,11 @@
+import { commitCheckout } from '@/lib/committed-checkout';
 import { money, salePrice, packSize, stockBase } from '@/lib/inventory-sale-math';
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { shopMemoryKey, recallDraft, rememberDraft, forgetDraft } from '@/lib/screen-memory';
 import CustomerSuggestions from '@/components/CustomerSuggestions';
 import { knownCustomers } from '@/lib/customer-directory';
 import { StoreData, Sale, PaymentMethod, ManagerSettings, Product } from '@/types/store';
-import { recordCheckout, getTopSellers, findProductByBarcode, recordLostSale, logScanEvent } from '@/lib/store-data';
+import { getTopSellers, findProductByBarcode, recordLostSale, logScanEvent } from '@/lib/store-data';
 import { checkNewMilestone, markMilestoneReached, MilestoneDef } from '@/lib/milestones';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { showToast } from '@/components/Toast';
@@ -444,7 +445,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     setCheckoutOpen(true);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (cart.length === 0 || confirming.current) return;
     if (balance > 0 && saveAs === 'pending' && !customerName.trim()) {
       return showToast('Customer name is required for pending payment', 'error');
@@ -454,7 +455,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
     }
     if (method === 'mixed' && !mixedCash.trim()) return showToast('Enter the cash portion, including 0 if all was paid to bank.', 'error');
     confirming.current = true;
-    const result = recordCheckout(store,
+    const result = await commitCheckout(store,
       cart.map(c => ({ productId: c.productId, quantity: c.quantity, saleType: c.saleType, expectedUnitPrice: c.unitPrice })),
       {
         paid: paidNum,

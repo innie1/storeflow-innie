@@ -1,3 +1,4 @@
+import { getPendingStoreSync } from '@/lib/store-cloud-sync';
 import { useState, useEffect, useMemo } from 'react';
 import { createStore, loadStore, saveStore, getStoreIndex } from '@/lib/store-data';
 import { getBusinessTemplate } from '@/lib/business-runtime';
@@ -631,7 +632,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       if (remoteStores && remoteStores.length > 0) {
         const selectedRow = remoteStores[0];
         if (selectedRow && selectedRow.data) {
-          const remoteStore = selectedRow.data as StoreData;
+          const remoteStore = getPendingStoreSync(selectedRow.data.accessCode)?.next || selectedRow.data as StoreData;
           // Previously this wrote raw cloud data to a mismatched localStorage
           // key (`storeflow_store_${code}` instead of the key loadStore()
           // actually reads, `storeflow_${code}`), so it was never found on
@@ -642,7 +643,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           // runScheduledSavingsDeduction() check the local path gets, so a
           // due savings deduction is never missed just because someone
           // logged in via cloud recovery instead of the local cache.
-          saveStore(remoteStore);
+          saveStore(remoteStore, { skipCloudSync: true });
           setAccessMood('happy' as any);
           showToast('Cloud backup loaded successfully!', 'success');
           proceedWithStore(loadStore(remoteStore.accessCode) || remoteStore);
@@ -1108,12 +1109,12 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     setAccessMood('thinking');
 
     try {
-      const storeData = storeRow.data as StoreData;
+      const storeData = getPendingStoreSync(storeRow.data.accessCode)?.next || storeRow.data as StoreData;
       if (storeData.managerSettings) {
         storeData.managerSettings.multiDeviceSync = true;
       }
 
-      localStorage.setItem('storeflow_store_' + storeData.accessCode, JSON.stringify(storeData));
+      saveStore(storeData, { skipCloudSync: true });
 
       const role = activeProfile?.role || 'owner';
       const sessionUser = {

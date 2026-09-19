@@ -69,8 +69,8 @@ describe('laundry control regressions', () => {
   });
 
   it('keeps the cloud business type aligned with the actual store type', () => {
-    const source = readSource('src/lib/store-data.ts');
-    expect(source).toContain("business_type: store.storeType || store.category || 'retail'");
+    const source = readSource('src/lib/store-cloud-sync.ts');
+    expect(source).toContain("business_type: held.next.storeType || held.next.category || 'retail'");
   });
 
   it('mounts exactly one floating Flow Shirt entry point in the main app shell', () => {
