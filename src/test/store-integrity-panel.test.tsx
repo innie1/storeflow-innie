@@ -6,6 +6,9 @@ beforeEach(()=>{localStorage.clear();vi.spyOn(navigator,'onLine','get').mockRetu
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 it('shows the owner a read-only historical stock check',()=>{
  const store=createStore('Preview','retail');store.products=[{id:'p',name:'Soap',quantity:0.04,costPrice:1,sellingPrice:2,category:'Goods',isCartonSingleEnabled:true,singlesPerCarton:12}];
+ // A shop with nothing waiting draws nothing at all now - no status line, no
+ // Refresh - so this gives it something waiting before asking for the checks.
+ localStorage.setItem('storeflow_sync_pending_'+store.accessCode,JSON.stringify({base:store,next:store,state:'pending'}));
  const before=JSON.stringify(store);render(<StoreIntegrityPanel store={store} owner />);
  fireEvent.click(screen.getByRole('button',{name:'Check records'}));expect(screen.getByText(/does not represent valid whole pieces/)).toBeInTheDocument();expect(JSON.stringify(store)).toBe(before);
 });

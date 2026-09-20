@@ -39,11 +39,20 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
    * cannot work, teaches them the app is broken.
    */
   const unsent = pending && !pending.awaitingAccount ? pending : null;
-  if (!unsent && !owner) return null;
+  /*
+   * Nothing to say about a shop with nothing waiting.
+   *
+   * It used to say so - "No records waiting to sync", beside a Refresh button
+   * for records that did not need refreshing - as a permanent fixture above
+   * the day's takings, earned by nothing having gone wrong. A shop with
+   * everything saved now sees nothing here at all, which is the true state of
+   * affairs and the quieter screen.
+   */
+  if (!unsent) return null;
   return <section className="rounded-xl border border-border bg-card p-3 text-sm space-y-2" aria-label="Store sync and record checks">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <span role="status">{unsent ? unsent.state === 'syncing' ? 'Syncing saved records…' : unsent.state === 'conflict' ? 'Sync needs review — saved on this device' : 'Records waiting to sync — saved on this device' : 'No records waiting to sync'}</span>
-      <div className="flex gap-3">{!unsent && owner && (store.storeId || store.managerSettings?.multiDeviceSync) && <button disabled={busy} onClick={() => void act(() => refreshStoreFromCloud(store.accessCode))}>Refresh cloud records</button>}{unsent && <button disabled={busy || unsent.state === 'syncing'} onClick={() => void act(() => retryStoreSync(store.accessCode))}>Retry sync</button>}{owner && <button onClick={() => setOpen(v => !v)}>{open ? 'Close checks' : 'Check records'}</button>}</div>
+      <span role="status">{unsent.state === 'syncing' ? 'Syncing saved records…' : unsent.state === 'conflict' ? 'Sync needs review — saved on this device' : 'Records waiting to sync — saved on this device'}</span>
+      <div className="flex gap-3"><button disabled={busy || unsent.state === 'syncing'} onClick={() => void act(() => retryStoreSync(store.accessCode))}>Retry sync</button>{owner && <button onClick={() => setOpen(v => !v)}>{open ? 'Close checks' : 'Check records'}</button>}</div>
     </div>
     {unsent?.error && <p className="text-muted-foreground">{unsent.error}</p>}
     {open && owner && <div className="space-y-3">

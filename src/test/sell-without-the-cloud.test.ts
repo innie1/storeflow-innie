@@ -139,7 +139,23 @@ describe('the shop is not told its records are stuck when they are not', () => {
   it('says nothing is waiting when there is no cloud account to wait for', async () => {
     const panel = (await import('./helpers/source')).readSource('src/components/StoreIntegrityPanel.tsx');
     expect(panel).toContain('const unsent = pending && !pending.awaitingAccount ? pending : null;');
-    // The Retry button belongs to records that can actually be retried.
-    expect(panel).toContain('{unsent && <button disabled={busy || unsent.state === ');
+  });
+
+  it('says nothing about a shop with nothing waiting', async () => {
+    /*
+     * A shop with everything saved had a line telling it so, and a Refresh
+     * button for records that did not need refreshing, sitting above the day's
+     * takings on every single visit. It is drawn now only when there is
+     * something to act on, and is absent otherwise - which is both the true
+     * state of affairs and the quieter screen.
+     */
+    const panel = (await import('./helpers/source')).readSource('src/components/StoreIntegrityPanel.tsx');
+    // What it draws, not what it says about itself: the comment above the
+    // change quotes the old wording on purpose.
+    const markup = panel.slice(panel.indexOf('return <section'));
+    expect(markup).not.toContain('No records waiting to sync');
+    expect(markup).not.toContain('Refresh cloud records');
+    // Drawn only when there is something waiting; otherwise nothing at all.
+    expect(panel).toContain('if (!unsent) return null;');
   });
 });
