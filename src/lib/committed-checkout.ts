@@ -23,8 +23,19 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
     const result = recordCheckout(store, items, { ...options, deferSave: true });
     if (result.error) return result;
     const { supabase } = await import('@/integrations/supabase/client');
-    const { data: row, error: lookupError } = await supabase.from('stores').select('id').eq('access_code', store.accessCode).single();
-    if (lookupError || !row) return failure('Connect this store to your cloud account before confirming online sales.');
+    const { data: row, error: lookupError } = await supabase.from('stores').select('id').eq('access_code', store.accessCode).maybeSingle();
+    if (lookupError || !row) {
+      /*
+       * This device cannot commit for this shop - no cloud account signed in,
+       * no row of its own yet, or no permission to read one. None of that is a
+       * reason to refuse a customer. The sale is written down here and mirrored
+       * when there is somewhere to mirror it to, which is exactly what the
+       * laundry does with a bundle.
+       */
+      localStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(result.store));
+      queueStoreSync(result.store, baseStore);
+      return result;
+    }
     // A durable journal covers a closed tab or lost response. Until accepted it
     // is visibly pending, and retries submit the same IDs and complete snapshot.
     const journal = { base: baseStore, next: result.store, state: 'syncing' };

@@ -10,6 +10,14 @@ export interface PendingStoreSync {
   state: 'pending' | 'syncing' | 'conflict' | 'error';
   error?: string;
   uncertainCheckout?: StoreData;
+  /**
+   * There is no cloud account on this device to send these to.
+   *
+   * Not a failure and not the shop's problem: most shops run entirely on the
+   * phone in the drawer. Records stay saved and stay ready, and nothing about
+   * them is reported as wrong or allowed to stand in front of a sale.
+   */
+  awaitingAccount?: boolean;
 }
 const keyFor = (code: string) => `storeflow_sync_pending_${code}`;
 const signal = (code: string, store?: StoreData) => {
@@ -51,12 +59,23 @@ export async function retryStoreSync(code: string): Promise<void> {
     const held = getPendingStoreSync(code);
     if (!held) return;
     if (held.uncertainCheckout) return;
+    /*
+     * A conflict is settled by somebody comparing the two copies, never by
+     * sending the same proposal again. Retrying one would also rewrite its
+     * state and lose the reason it is being held - which is exactly what made
+     * a refused change quietly look like an ordinary unsent record.
+     */
+    if (held.state === 'conflict') return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) { writePending(code, { ...held, state: 'pending' }); return; }
     writePending(code, { ...held, state: 'syncing', error: undefined });
     try {
       const { supabase } = await import('@/integrations/supabase/client');
       const { data: { session }, error: authError } = await supabase.auth.getSession();
-      if (authError || !session?.user) throw new Error('Sign in to your cloud account to sync these records.');
+      if (authError || !session?.user) {
+        // Nothing is wrong here. There is simply nowhere to send them yet.
+        writePending(code, { ...held, state: 'pending', awaitingAccount: true, error: undefined });
+        return;
+      }
       const { data: existing, error: fetchError } = await supabase.from('stores').select('id').eq('access_code', code).maybeSingle();
       if (fetchError) throw fetchError;
       const next = cloudSnapshot(held.next);
@@ -79,6 +98,9 @@ export async function retryStoreSync(code: string): Promise<void> {
         remote = data.data as Record<string, any>;
       }
       const latest = getPendingStoreSync(code);
+      // It reached the cloud, so whatever this record said about waiting for an
+      // account is out of date.
+      if (latest?.awaitingAccount) writePending(code, { ...latest, awaitingAccount: false });
       const localRaw = localStorage.getItem(`storeflow_${code}`);
       const local = localRaw ? JSON.parse(localRaw) : held.next;
       if (latest && same(latest.next, held.next) && (same(local, held.next) || same(local, held.base))) {
@@ -95,16 +117,29 @@ export async function retryStoreSync(code: string): Promise<void> {
       }
     } catch (error: any) {
       const latest = getPendingStoreSync(code);
-      if (latest) writePending(code, { ...latest, state: error?.code === '40001' || /another device|conflict/i.test(error?.message || '') ? 'conflict' : 'error', error: error?.message || 'Sync failed. Your records remain saved on this device.' });
+      if (latest) writePending(code, { ...latest, awaitingAccount: false, state: error?.code === '40001' || /another device|conflict/i.test(error?.message || '') ? 'conflict' : 'error', error: error?.message || 'Sync failed. Your records remain saved on this device.' });
     }
   });
 }
 
 /** Flush first so an order never commits over unsynced counter sales. */
+/**
+ * What must be settled before this device may commit to the cloud.
+ *
+ * Only a real disagreement: the cloud refused a change, or a sale went out
+ * and its answer was lost so the same money may already be recorded there.
+ * Records that are merely waiting to be sent - the ordinary state of a shop
+ * with no cloud account, or one whose signal comes and goes - are not a
+ * reason to stop anybody working. A till that refuses to sell until a phone
+ * can reach a server is worse than a stock figure that settles a minute late,
+ * which is the bargain the laundry's intake has always made.
+ */
 export async function requireStoreSynced(code: string) {
   await retryStoreSync(code);
   const pending = getPendingStoreSync(code);
-  if (pending) throw new Error(pending.error || 'Sync your saved records before changing this online order.');
+  if (pending && (pending.state === 'conflict' || pending.uncertainCheckout)) {
+    throw new Error(pending.error || 'Review your saved records before changing this online order.');
+  }
 }
 
 export async function inspectStoreConflict(code: string) {

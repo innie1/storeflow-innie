@@ -33,13 +33,19 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
     try { await action(); } catch (error: any) { showToast(error.message || 'Could not load recovery records.', 'error'); }
     finally { setBusy(false); }
   };
-  if (!pending && !owner) return null;
+  /*
+   * A shop with no cloud account has nothing stuck. Saying "records waiting to
+   * sync" to somebody who has never asked for syncing, above a Retry that
+   * cannot work, teaches them the app is broken.
+   */
+  const unsent = pending && !pending.awaitingAccount ? pending : null;
+  if (!unsent && !owner) return null;
   return <section className="rounded-xl border border-border bg-card p-3 text-sm space-y-2" aria-label="Store sync and record checks">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <span role="status">{pending ? pending.state === 'syncing' ? 'Syncing saved records…' : pending.state === 'conflict' ? 'Sync needs review — saved on this device' : 'Records waiting to sync — saved on this device' : 'No records waiting to sync'}</span>
-      <div className="flex gap-3">{!pending && owner && (store.storeId || store.managerSettings?.multiDeviceSync) && <button disabled={busy} onClick={() => void act(() => refreshStoreFromCloud(store.accessCode))}>Refresh cloud records</button>}{pending && <button disabled={busy || pending.state === 'syncing'} onClick={() => void act(() => retryStoreSync(store.accessCode))}>Retry sync</button>}{owner && <button onClick={() => setOpen(v => !v)}>{open ? 'Close checks' : 'Check records'}</button>}</div>
+      <span role="status">{unsent ? unsent.state === 'syncing' ? 'Syncing saved records…' : unsent.state === 'conflict' ? 'Sync needs review — saved on this device' : 'Records waiting to sync — saved on this device' : 'No records waiting to sync'}</span>
+      <div className="flex gap-3">{!unsent && owner && (store.storeId || store.managerSettings?.multiDeviceSync) && <button disabled={busy} onClick={() => void act(() => refreshStoreFromCloud(store.accessCode))}>Refresh cloud records</button>}{unsent && <button disabled={busy || unsent.state === 'syncing'} onClick={() => void act(() => retryStoreSync(store.accessCode))}>Retry sync</button>}{owner && <button onClick={() => setOpen(v => !v)}>{open ? 'Close checks' : 'Check records'}</button>}</div>
     </div>
-    {pending?.error && <p className="text-muted-foreground">{pending.error}</p>}
+    {unsent?.error && <p className="text-muted-foreground">{unsent.error}</p>}
     {open && owner && <div className="space-y-3">
       <p>These checks flag inconsistent records. Verify receipts and physical stock before making historical corrections.</p>
       <button className="underline" onClick={() => download(`storeflow-record-checks-${store.accessCode}.json`, { date: new Date().toISOString(), issues })}>Download findings</button>
