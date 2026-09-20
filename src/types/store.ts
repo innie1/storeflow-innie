@@ -92,6 +92,18 @@ export interface Sale {
   pendingPaymentId?: string;
   paymentMethod?: PaymentMethod;
   transactionId?: string;
+  /**
+   * What the customer actually handed over, and what went back to them.
+   *
+   * The shop is paid the price of the goods; the rest is the customer's money
+   * passing through the drawer, so neither figure is income and neither is
+   * added to anything. They are written once per checkout, on the row that
+   * opens it, because a customer hands over one amount for the whole basket
+   * and not one per line - putting it on every line would have each of three
+   * items claiming the same 2,000.
+   */
+  amountTendered?: number;
+  changeGiven?: number;
   channel?: 'in_store' | 'online_order'; // where the sale came from — powers the Online vs In-Store split in Sales History
   /**
    * Who put this record in, and the role they held at the time.

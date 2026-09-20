@@ -33,6 +33,9 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   const pending = (store.pendingPayments || []).find(p => p.id === salesList[0]?.pendingPaymentId);
   const paid = pending && !pending.id.startsWith('laundry-') ? pending.paid : totalAfterDiscount;
   const balance = pending && !pending.id.startsWith('laundry-') ? pending.balance : 0;
+  // Written once per checkout, on the row that opens it.
+  const tendered = salesList[0]?.amountTendered || 0;
+  const changeGiven = salesList[0]?.changeGiven || 0;
 
 
   const generateReceiptText = () => {
@@ -60,6 +63,9 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
     }
     receipt += `TOTAL: ₦${totalAfterDiscount.toLocaleString()}\n`;
     receipt += `Paid: ₦${paid.toLocaleString()}\nBalance: ₦${balance.toLocaleString()}\n`;
+    if (changeGiven > 0) {
+      receipt += `Cash received: ₦${tendered.toLocaleString()}\nChange: ₦${changeGiven.toLocaleString()}\n`;
+    }
     receipt += `==============================\n`;
     receipt += `  ${settings.receiptFooterMessage || 'Thank you for your patronage! 🙏'}\n`;
     return receipt;

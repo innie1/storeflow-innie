@@ -1846,8 +1846,10 @@ export function recordCheckout(
     paid: number; method: PaymentMethod; allocation?: PaymentAllocation;
     customerId?: string; customerName?: string; customerPhone?: string; customerNote?: string;
     dueDate?: string; discount?: number; actorName?: string; actorRole?: string; deferSave?: boolean;
+    /** What the customer handed over, when it is more than the goods cost. */
+    tendered?: number;
   }
-): { store: StoreData; sales: Sale[]; pending?: PendingPayment; error?: string; subtotal: number; total: number; discount: number; paid: number; balance: number } {
+): { store: StoreData; sales: Sale[]; pending?: PendingPayment; error?: string; subtotal: number; total: number; discount: number; paid: number; balance: number; tendered?: number; changeGiven?: number } {
   const failed = (error: string) => ({ store, sales: [] as Sale[], error, subtotal: 0, total: 0, discount: 0, paid: 0, balance: 0 });
   try {
     if (!items.length) return failed('Add an item before checkout.');
@@ -1892,6 +1894,13 @@ export function recordCheckout(
     const total = money(subtotal - discount);
     const paid = money(Math.min(opts.paid, total));
     const balance = money(total - paid);
+    /*
+     * Change is the customer's own money going back to them: never income,
+     * never added to the drawer. The shop is paid the price of the goods, and
+     * that is what `paid` above already is.
+     */
+    const tendered = Number.isFinite(opts.tendered as number) ? money(Math.max(0, opts.tendered as number)) : paid;
+    const changeGiven = money(Math.max(0, tendered - total));
     if (balance > 0 && !customerName) return failed('Enter a customer for the unpaid balance.');
     const allocation = paymentAllocation(paid, opts.method, opts.allocation);
     let remainingDiscount = Math.round(discount * 100);
@@ -1908,6 +1917,8 @@ export function recordCheckout(
       remainingCash -= cash; remainingBank -= bank;
       return { ...sale, total: saleTotal, profit: money(sale.profit - discountCents / 100), customerId, pendingPaymentId: pendingId, paymentMethod: opts.method, paymentAllocation: { cash: cash / 100, bank: bank / 100 } };
     });
+    // Once per checkout, on the row that opens it - see Sale.amountTendered.
+    if (changeGiven > 0 && sales.length) sales[0] = { ...sales[0], amountTendered: tendered, changeGiven };
     const now = new Date().toISOString();
     const pending: PendingPayment | undefined = pendingId ? {
       id: pendingId, customerId, customerName: customerName!, customerPhone: opts.customerPhone || customer?.phone,
@@ -1931,7 +1942,7 @@ export function recordCheckout(
     }
     updated = syncProductPerformance(updated);
     if (!opts.deferSave) saveStore(updated);
-    return { store: updated, sales, pending, subtotal, total, discount, paid, balance };
+    return { store: updated, sales, pending, subtotal, total, discount, paid, balance, tendered, changeGiven };
   } catch (error) {
     return failed(error instanceof Error ? error.message : 'Checkout failed. Your cart has been kept.');
   }

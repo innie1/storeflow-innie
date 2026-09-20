@@ -359,8 +359,18 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   const cartCount = cart.reduce((s, c) => s + c.quantity, 0);
   const discountNum = Math.max(0, Number(discount) || 0);
   const total = Math.max(0, cartSubtotal - discountNum);
-  const paidNum = Math.min(total, Math.max(0, Number(paidAmount) || 0));
+  /*
+   * What was handed over, and what the shop keeps.
+   *
+   * A customer holding out 2,000 for 1,500 of goods is not paying 2,000; the
+   * shop is paid 1,500 and hands 500 back. Only the first of those is money
+   * the shop has taken, which is why `paidNum` is still capped at the total -
+   * but the counter has to be told the 500, and somebody has to write it down.
+   */
+  const tendered = Math.max(0, Number(paidAmount) || 0);
+  const paidNum = Math.min(total, tendered);
   const balance = Math.max(0, total - paidNum);
+  const change = money(Math.max(0, tendered - total));
 
   const handleRecordLostSale = () => {
     if (!lostSaleName.trim() || Number(lostSaleQty) <= 0) {
@@ -459,6 +469,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       cart.map(c => ({ productId: c.productId, quantity: c.quantity, saleType: c.saleType, expectedUnitPrice: c.unitPrice })),
       {
         paid: paidNum,
+        tendered,
         method,
         discount: discountNum,
         allocation: method === 'mixed' ? { cash: Number(mixedCash), bank: money(Math.min(paidNum, total) - Number(mixedCash)) } : undefined,
@@ -1019,7 +1030,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
                   {[1000, 2000, 5000, 10000].map(v => (
-                    <button key={v} onClick={() => onPaidChange(String(paidNum + v))}
+                    <button key={v} onClick={() => onPaidChange(String(tendered + v))}
                       className="py-1 rounded-lg border border-primary/20 text-primary text-[10px] font-display font-semibold">+{v / 1000}k</button>
                   ))}
                 </div>
@@ -1027,6 +1038,14 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                   <span className="text-muted-foreground">Balance</span>
                   <span className={`font-display font-bold ${balanceTone}`}>₦{balance.toLocaleString()}</span>
                 </div>
+                {/* The one number the counter needs before the customer walks
+                    away, said plainly rather than left as mental arithmetic. */}
+                {change > 0 && (
+                  <div className="flex justify-between items-baseline text-sm pt-0.5">
+                    <span className="text-muted-foreground">Change to give</span>
+                    <span className="font-display font-black text-warning">₦{change.toLocaleString()}</span>
+                  </div>
+                )}
               </div>
 
               {/* Method */}
