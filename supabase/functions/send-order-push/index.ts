@@ -1,5 +1,21 @@
 // send-order-push
 //
+// NOT THE DEPLOYED SOURCE. This copy predates the security hardening and is
+// kept only for reference: the function that actually runs is in the
+// storeflow-customer repository, at the same path, where it was last changed
+// by "Security: harden guest push, tracking, ratings and analytics".
+//
+// What runs in production is internal-only - the orders triggers call it
+// through pg_net with a secret held in Supabase Vault, and a browser can no
+// longer choose the order, the target, the status, the phone number or the
+// notification body. This file still has the old initiated_by router, which
+// pushed to BOTH parties when the field was omitted. Deploying it would undo
+// all of that.
+//
+// Deploy with verify_jwt false: a database trigger presents that secret
+// header, not a JWT, and the gateway rejects it before the function runs
+// otherwise.
+//
 // Production-grade push notification router for StoreFlow.
 //
 // KEY DESIGN PRINCIPLE: Never notify the user who initiated the action.
@@ -197,9 +213,6 @@ Deno.serve(async (req: Request) => {
             notification_id: notificationId,
             url: "/?tab=orders",
             orderId: order.id,
-            // Which shop this is about. The phone can be reached for more than
-            // one, and each keeps its own notification switches.
-            store_id: order.store_id,
             priority,
           });
 

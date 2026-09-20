@@ -210,19 +210,25 @@ describe('turning it off for one shop leaves the others alone', () => {
 describe('a push is judged by the switches of the shop it is for', () => {
   const sw = readSource('src/sw.ts');
 
-  it('carries the shop on the payload', () => {
+  it('reads the shop from the payload when a sender names it', () => {
     expect(sw).toContain('store_id?: string');
-
-    // Scoped to the payload the merchant's phone receives. Searched across the
-    // whole file, `store_id: order.store_id` also matches the in-app
-    // notification row inserted a few lines below, which would wave through a
-    // payload that had lost it.
-    const orderFn = readSource('supabase/functions/send-order-push/index.ts');
-    const merchantPush = orderFn.slice(orderFn.indexOf('merchantSubs } = await'), orderFn.indexOf('merchantSent = await'));
-    expect(merchantPush.length, 'the merchant push block moved; this test is reading nothing').toBeGreaterThan(0);
-    expect(merchantPush).toContain('store_id: order.store_id');
-
+    // The streak reminders are sent from this repo's copy, which is the one
+    // that runs.
     expect(readSource('supabase/functions/send-flow-reminders/index.ts')).toContain('store_id: sub.store_id');
+  });
+
+  it('does not pretend this repo holds the order sender', () => {
+    /*
+     * It does not. The deployed send-order-push lives in storeflow-customer,
+     * where the security hardening was done; the copy here predates it and
+     * would undo that hardening if anybody deployed it. The live one was given
+     * the shop on its payload directly, and says so at the top of this copy so
+     * the next person does not repeat the mistake.
+     */
+    const stale = readSource('supabase/functions/send-order-push/index.ts');
+    expect(stale).toContain('NOT THE DEPLOYED SOURCE');
+    expect(stale).toContain('storeflow-customer repository');
+    expect(stale).toContain('Deploy with verify_jwt false');
   });
 
   it('reads that shop\'s switches, not whichever shop is open', () => {
