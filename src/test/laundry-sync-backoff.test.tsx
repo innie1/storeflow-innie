@@ -164,15 +164,15 @@ describe('waiting after a failure', () => {
     bundle('WAIT3', 'Ada');
     answer = () => quota;
     render(<LaundrySyncAgent store={laundry('WAIT3')} />);
-    await pause(50);
+    // The refusal itself, not just the request: until it is written down the
+    // send is still in flight, and changing the answer now would change it.
+    await vi.waitFor(() => expect(getLocalLaundryRecords('WAIT3')[0]?.lastSyncError).toBe('exceed_egress_quota'), { timeout: 2000 });
     expect(sends()).toHaveLength(1);
 
     answer = () => works;
     window.dispatchEvent(new Event('online'));
-    await pause(50);
-
+    await vi.waitFor(() => expect(getLocalLaundryRecords('WAIT3').every(record => record.syncStatus === 'synced')).toBe(true), { timeout: 2000 });
     expect(sends()).toHaveLength(2);
-    expect(getLocalLaundryRecords('WAIT3').every(record => record.syncStatus === 'synced')).toBe(true);
   });
 
   it('still gives a bundle recorded at the counter its own try, and sends the rest when it works', async () => {
@@ -186,9 +186,9 @@ describe('waiting after a failure', () => {
     answer = () => works;
     const fresh = bundle('WAIT4', 'Musa');
     await syncLaundryRecord('WAIT4', fresh.clientRef);
-    await pause(50);
-
-    expect(getLocalLaundryRecords('WAIT4').map(record => record.syncStatus)).toEqual(['synced', 'synced', 'synced']);
+    // Waits for the answer rather than a fixed time: on a busy machine the
+    // sends behind it can take longer than any short pause.
+    await vi.waitFor(() => expect(getLocalLaundryRecords('WAIT4').map(record => record.syncStatus)).toEqual(['synced', 'synced', 'synced']), { timeout: 2000 });
   });
 });
 

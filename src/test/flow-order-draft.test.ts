@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 
+import { readSource } from './helpers/source';
+import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import {
   applyFlowConversationOrderLocalEffects,
   buildFlowConversationWhatsAppMessage,
+  createFlowConversationOrder,
   draftFromCustomerName,
   flowConversationDraftExamples,
   flowDraftBalance,
@@ -258,5 +261,81 @@ describe('Flow conversational order drafts', () => {
     expect(message).toContain('Balance: ₦2,500');
     expect(message).toContain('Fulfilment: Pickup');
     expect(message).toContain('Store phone: 08011112222');
+  });
+});
+
+describe('a laundry bundle through Flow with no phone number', () => {
+  /*
+   * The counter saves a bundle for a walk-in who will not give a number, and
+   * the cloud stores it with none. Flow asked for one before it would save
+   * anything, in every trade, so the one place a bundle could not be taken
+   * without a number was the assistant.
+   */
+  it('does not ask for a number before the clothes', () => {
+    const store = laundryStore();
+    const draft = draftFromCustomerName(store, 'timi');
+    expect(nextFlowDraftQuestion(draft, store)).toBe('What items or services does the customer want?');
+  });
+
+  it('is ready to save with a name and the clothes', () => {
+    const store = laundryStore();
+    let draft = draftFromCustomerName(store, 'timi');
+    draft = mergeFlowConversationOrderDraft(store, draft, 'trousers').draft;
+    expect(draft.customerPhone).toBe('');
+    expect(nextFlowDraftQuestion(draft, store)).toBeNull();
+  });
+
+  it('saves it into the laundry book like any other bundle', async () => {
+    localStorage.clear();
+    const store = laundryStore();
+    let draft = draftFromCustomerName(store, 'timi');
+    draft = mergeFlowConversationOrderDraft(store, draft, 'trousers').draft;
+
+    const order = await createFlowConversationOrder(store, draft);
+
+    const saved = getLocalLaundryRecords('ABC123');
+    expect(saved).toHaveLength(1);
+    expect(saved[0].customerPhone).toBe('');
+    expect(saved[0].tagCode).toBe(order.order_number);
+  });
+
+  it('still takes a number when one is given', () => {
+    const store = laundryStore();
+    let draft = draftFromCustomerName(store, 'timi');
+    draft = mergeFlowConversationOrderDraft(store, draft, '09034246467').draft;
+    expect(draft.customerPhone).toBe('09034246467');
+  });
+
+  it('says a number is optional, in the counter\'s words, only while there is none', () => {
+    const store = laundryStore(['Trousers', 'Jeans']);
+    let draft = draftFromCustomerName(store, 'timi');
+    draft = mergeFlowConversationOrderDraft(store, draft, 'trousers').draft;
+    expect(flowConversationDraftExamples(store, draft)).toContain("No phone is fine — you just can't WhatsApp them when the clothes are ready.");
+
+    draft = mergeFlowConversationOrderDraft(store, draft, '09034246467').draft;
+    expect(flowConversationDraftExamples(store, draft)).not.toContain('No phone is fine');
+  });
+
+  it('still asks every other trade for a number', () => {
+    // Their orders go to the cloud's order path, which needs one.
+    const store = restaurantStore();
+    const draft = parseFlowConversationOrder(store, 'Create an order for Ada, 2 Jollof Rice');
+    expect(nextFlowDraftQuestion(draft, store)).toContain('phone number');
+    expect(flowConversationDraftExamples(store, draft)).not.toContain('No phone is fine');
+  });
+
+  it('is asked with the shop everywhere Flow decides whether an order is ready', () => {
+    // Without the shop the question falls back to asking for a number, so a
+    // call that forgets it would quietly put the requirement back.
+    const chat = readSource('src/components/FlowChat.tsx');
+    const calls = chat.match(/nextFlowDraftQuestion\([^)]*\)/g) || [];
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) expect(call).toMatch(/, store\)$/);
+    expect(readSource('src/lib/flow-order-draft.ts')).toContain('const missing = nextFlowDraftQuestion(draft, store);');
+  });
+
+  it('offers WhatsApp after saving only when there is a number to message', () => {
+    const chat = readSource('src/components/FlowChat.tsx');
+    expect(chat).toContain("...(order?.customer_phone ? [{ label: 'WhatsApp customer'");
   });
 });

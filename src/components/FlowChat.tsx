@@ -241,7 +241,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
 
   const presentFlowOrderDraft = (draft: FlowConversationOrderDraft, note?: string) => {
     setActiveFlowOrderDraft(draft);
-    const question = nextFlowDraftQuestion(draft);
+    const question = nextFlowDraftQuestion(draft, store);
     const prefix = note ? note + '\n\n' : '';
     if (question) {
       flow(prefix + formatFlowConversationDraft(draft) + '\n\n' + question, [
@@ -271,7 +271,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       else flow('That order draft is no longer active.');
       return;
     }
-    const question = nextFlowDraftQuestion(latest);
+    const question = nextFlowDraftQuestion(latest, store);
     if (question) {
       presentFlowOrderDraft(latest, question);
       return;
@@ -282,8 +282,9 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
       const nextStore = applyFlowConversationOrderLocalEffects(store, order, latest);
       onUpdate(nextStore);
       setActiveFlowOrderDraft(null);
+      // A laundry bundle may have no number; a button that can only say so is clutter.
       flow('Order created ✅\n\n' + formatFlowConversationReceipt(store, order, latest), [
-        { label: 'WhatsApp customer', onClick: () => sendFlowConversationOrderToWhatsApp(order, latest) },
+        ...(order?.customer_phone ? [{ label: 'WhatsApp customer', onClick: () => sendFlowConversationOrderToWhatsApp(order, latest) }] : []),
         { label: 'Open Orders', onClick: () => onNavigate?.('orders') },
       ]);
       showToast('Order ' + order.order_number + ' created by Flow', 'success');
@@ -316,7 +317,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
         return false;
       }
       if (/^\s*(?:yes|yes\s+create|create|create\s+(?:the\s+)?order|confirm|confirm\s+(?:the\s+)?order|save|save\s+(?:the\s+)?order|place\s+(?:the\s+)?order)\s*[.!]?\s*$/i.test(text)) {
-        const question = nextFlowDraftQuestion(active);
+        const question = nextFlowDraftQuestion(active, store);
         if (question) presentFlowOrderDraft(active, question);
         else void finalizeFlowConversationOrder(active);
         return true;
@@ -332,7 +333,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
         return true;
       }
 
-      const question = nextFlowDraftQuestion(active);
+      const question = nextFlowDraftQuestion(active, store);
       flow(formatFlowConversationDraft(active) + '\n\n' + (question || 'I still have this order open. Tell me what to change, or say **create order** when it is correct.'), [
         ...(question ? [] : [{ label: 'Create order', onClick: () => void finalizeFlowConversationOrder(active) }]),
         { label: 'Cancel order', onClick: cancelFlowOrderDraft },

@@ -541,9 +541,14 @@ export function mergeFlowConversationOrderDraft(store: StoreData, current: FlowC
   return { draft, changed, note: notes.join(' ') || undefined };
 }
 
-export function nextFlowDraftQuestion(draft: FlowConversationOrderDraft): string | null {
+/**
+ * `phoneOptional` is for a laundry bundle, which the counter already takes with
+ * no phone number - a walk-in who will not give one still has clothes to wash.
+ * Every other trade's order goes to the cloud's order path, which needs one.
+ */
+export function nextFlowDraftQuestion(draft: FlowConversationOrderDraft, options: { phoneOptional?: boolean } = {}): string | null {
   if (!draft.customerName.trim()) return 'What is the customer name?';
-  if (!draft.customerPhone.trim()) return `I have ${draft.customerName}. What is the customer phone number?`;
+  if (!options.phoneOptional && !draft.customerPhone.trim()) return `I have ${draft.customerName}. What is the customer phone number?`;
   if (!draft.items.length) return 'What items or services does the customer want?';
   if (draft.fulfillment.mode === 'delivery' && !draft.fulfillment.address?.trim()) return 'What delivery address should I use?';
   return null;
@@ -586,7 +591,12 @@ export function flowConversationDraftExamples(store: StoreData, draft: FlowConve
   }
 
   examples.push('**paid ₦5,000 cash**', '**delivery to 12 Airport Road**');
-  return `You can still say things like ${examples.slice(0, 5).join(', ')} before creating it.`;
+  const said = `You can still say things like ${examples.slice(0, 5).join(', ')} before creating it.`;
+  // The same words the counter uses, so the two never disagree about it.
+  if (resolveBusinessType(store) === 'laundry' && !draft.customerPhone.trim()) {
+    return `${said}\n\nNo phone is fine — you just can't WhatsApp them when the clothes are ready. If they have one, just say it.`;
+  }
+  return said;
 }
 
 function detailsPayload(draft: FlowConversationOrderDraft) {

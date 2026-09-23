@@ -163,8 +163,13 @@ export function mergeFlowConversationOrderDraft(
   return result;
 }
 
-export function nextFlowDraftQuestion(draft: FlowConversationOrderDraft): string | null {
-  const coreQuestion = nextCoreFlowDraftQuestion(draft);
+/**
+ * Pass the store wherever there is one: a laundry saves a bundle with no phone
+ * number, the way its counter does. Without the store this asks for a number,
+ * as every other trade does.
+ */
+export function nextFlowDraftQuestion(draft: FlowConversationOrderDraft, store?: StoreData): string | null {
+  const coreQuestion = nextCoreFlowDraftQuestion(draft, { phoneOptional: Boolean(store && resolveBusinessType(store) === 'laundry') });
   if (coreQuestion) return coreQuestion;
   const pending = pendingLaundryClarifications(draft);
   return pending.length ? clarificationPrompt(pending) : null;
@@ -182,7 +187,7 @@ export async function createFlowConversationOrder(
   store: StoreData,
   draft: FlowConversationOrderDraft,
 ): Promise<CreatedFlowOrder & { flow_details?: any }> {
-  const missing = nextFlowDraftQuestion(draft);
+  const missing = nextFlowDraftQuestion(draft, store);
   if (missing) throw new Error(missing);
 
   if (resolveBusinessType(store) !== 'laundry') {
