@@ -238,7 +238,7 @@ export function forecastHorizon(store: StoreData, horizonDays: number): Forecast
   // under. The range and the percentage now come from the same calculation, so
   // they can no longer disagree.
   const spread = revenueBand;
-  let confidencePct = Math.round(100 - revenueBand * 100);
+  const confidencePct = Math.round(100 - revenueBand * 100);
   const confidence: Forecast['confidence'] =
     confidencePct >= 80 ? 'High' : confidencePct >= 60 ? 'Medium' : 'Low';
 

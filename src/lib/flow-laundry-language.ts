@@ -195,7 +195,7 @@ export function matchFlowLaundryGarments(text: string, garmentTypes: string[]): 
  */
 export function suggestFlowLaundryGarment(text: string, garmentTypes: string[]): FlowLaundryGarmentSuggestion | null {
   if (!garmentTypes.length) return null;
-  let phrase = normalizeFlowLaundryText(text)
+  const phrase = normalizeFlowLaundryText(text)
     .replace(/\b(?:customer|wants|needs|ordered|would|like|please|add|another|one|item|items|piece|pieces|service|treatment)\b/g, ' ')
     .replace(/\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/g, ' ')
     .replace(/\s+/g, ' ')

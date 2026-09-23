@@ -118,7 +118,8 @@ export function toSpeakable(text: string): string {
     // ₦1,500 -> 1,500 naira. Said after the number, the way it is spoken.
     .replace(/₦\s*([\d,]+(?:\.\d+)?)/g, '$1 naira')
     // Emoji and pictographs are punctuation for the eye; they have no sound.
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{27BF}\u{FE0F}\u{2B00}-\u{2BFF}]/gu, ' ')
+    // The emoji variation selector goes on its own, outside the brackets.
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{27BF}\u{2B00}-\u{2BFF}]|\u{FE0F}/gu, ' ')
     // Markdown, including the bullets and rules that would be read as symbols.
     .replace(/[*#_`>[\]]/g, '')
     .replace(/^\s*[-•]\s*/gm, '')

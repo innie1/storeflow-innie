@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { StoreData } from '@/types/store';
-import { cloudSnapshot, getPendingStoreSync, inspectStoreConflict, retryStoreSync, refreshStoreFromCloud, STORE_SYNC_EVENT, useReviewedCloudCopy } from '@/lib/store-cloud-sync';
+import { cloudSnapshot, getPendingStoreSync, inspectStoreConflict, retryStoreSync, STORE_SYNC_EVENT, adoptReviewedCloudCopy } from '@/lib/store-cloud-sync';
 import { inspectStoreRecords } from '@/lib/store-reconciliation';
 import { showToast } from './Toast';
 
@@ -74,7 +74,7 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
           <button className="underline" onClick={() => download(`storeflow-sync-review-${store.accessCode}.json`, { base: review.base ? cloudSnapshot(review.base) : null, device: cloudSnapshot(review.next), cloud: review.remote, uncertainCheckout: review.uncertainCheckout ? cloudSnapshot(review.uncertainCheckout) : undefined })}>Download both copies for review</button>
           <p>Using the cloud copy removes unuploaded changes from the active device records. A recovery copy is retained on this device.</p>
           <label className="flex gap-2"><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} />I have reviewed the differences and want to use the cloud copy.</label>
-          <button disabled={!acknowledged || busy} className="border rounded p-2 disabled:opacity-50" onClick={() => void act(async () => { await useReviewedCloudCopy(store.accessCode, review); setReview(null); setAcknowledged(false); })}>Keep recovery copy and use cloud records</button>
+          <button disabled={!acknowledged || busy} className="border rounded p-2 disabled:opacity-50" onClick={() => void act(async () => { await adoptReviewedCloudCopy(store.accessCode, review); setReview(null); setAcknowledged(false); })}>Keep recovery copy and use cloud records</button>
         </div>}
       </>}
     </div>}

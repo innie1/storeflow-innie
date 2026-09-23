@@ -45,6 +45,14 @@ describe('what Flow says out loud', () => {
     expect(spoken).not.toMatch(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{27BF}]/u);
   });
 
+  it('drops the invisible half of an emoji too', () => {
+    // A red heart is two characters: the heart and a variation selector.
+    const spoken = toSpeakable('Thank you ❤️ see you soon');
+    expect(spoken).not.toContain('❤');
+    expect(spoken).not.toContain('️');
+    expect(spoken).toContain('Thank you');
+  });
+
   it('says the currency instead of swallowing it', () => {
     expect(toSpeakable('You took ₦12,500 today.')).toContain('12,500 naira');
     expect(toSpeakable('You took ₦12,500 today.')).not.toContain('₦');

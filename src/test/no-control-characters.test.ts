@@ -20,6 +20,8 @@ const ROOT = process.cwd();
 const SRC = path.join(ROOT, 'src');
 
 /** Tab and newline are legitimate; the rest of C0 is not. */
+// Matching control characters is the point of this test.
+// eslint-disable-next-line no-control-regex
 const FORBIDDEN = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]');
 
 function sourceFiles(dir: string): string[] {

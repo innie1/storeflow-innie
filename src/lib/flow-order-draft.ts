@@ -129,7 +129,7 @@ export function mergeFlowConversationOrderDraft(
   const result = mergeCoreFlowConversationOrderDraft(store, current, interpreted);
   if (result.cancelled) return result;
 
-  let pending = before.filter(row => {
+  const pending = before.filter(row => {
     if (explicitRemoval(text, row.family)) return false;
     const selected = row.candidates.some(candidate => {
       const candidateText = normalizePhrase(candidate);

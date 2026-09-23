@@ -600,7 +600,8 @@ const setAside = new Map<string, string>();
 const runs = new Map<string, Promise<void>>();
 const runAgain = new Set<string>();
 
-type SendOutcome = 'sent' | 'nothing-to-send' | 'busy' | 'offline' | 'set-aside' | 'failed';
+/** 'overtaken': it reached the cloud, but the bundle changed on the way and needs one more send. */
+type SendOutcome = 'sent' | 'overtaken' | 'nothing-to-send' | 'busy' | 'offline' | 'set-aside' | 'failed';
 
 function isWaiting(code: string): boolean {
   return (waits.get(code)?.until || 0) > Date.now();
@@ -660,9 +661,10 @@ export async function syncLaundryRecord(accessCode: string, clientRef: string): 
   const wait = waits.get(code);
   if (wait?.unknownShop && wait.until > Date.now()) return false;
   const outcome = await sendLaundryRecord(code, clientRef);
-  // It works again, so what was waiting behind the failure can go too.
-  if (outcome === 'sent' && wait) void syncPendingLaundryRecords(code).catch(() => {});
-  return outcome === 'sent' || outcome === 'nothing-to-send';
+  // It works again, so what was waiting behind the failure can go too - and a
+  // bundle that changed on its way goes again with the change.
+  if ((outcome === 'sent' && wait) || outcome === 'overtaken') void syncPendingLaundryRecords(code).catch(() => {});
+  return outcome === 'sent' || outcome === 'overtaken' || outcome === 'nothing-to-send';
 }
 
 async function sendLaundryRecord(normalized: string, clientRef: string): Promise<SendOutcome> {
@@ -707,9 +709,16 @@ async function sendLaundryRecord(normalized: string, clientRef: string): Promise
 
     const stageData = await syncLaundryStage(normalized, record);
     const cloudOrderId = String(stageData?.order_id || data?.order_id || '');
+    /*
+     * Somebody moved the bundle on while this was on its way - a stage tapped,
+     * a run started, a number added. The cloud has the older copy. Marking it
+     * done here would have left the cloud on the old stage for good while the
+     * phone showed the new one, so it stays waiting for one more send.
+     */
+    const current = getLocalLaundryRecord(normalized, clientRef);
+    const overtaken = Boolean(current && bundleVersion(current) !== bundleVersion(record));
     const updated = noteSend(normalized, clientRef, {
-      syncStatus: 'synced',
-      syncedAt: new Date().toISOString(),
+      ...(overtaken ? {} : { syncStatus: 'synced' as LaundrySyncStatus, syncedAt: new Date().toISOString() }),
       cloudOrderId,
       lastSyncError: undefined,
     });
@@ -720,7 +729,7 @@ async function sendLaundryRecord(normalized: string, clientRef: string): Promise
       window.dispatchEvent(new CustomEvent('storeflow:order-created', { detail: { orderId: cloudOrderId } }));
     }
     emit(LAUNDRY_SYNC_CHANGED_EVENT, updated || record);
-    return 'sent';
+    return overtaken ? 'overtaken' : 'sent';
   } catch (error: any) {
     return noteFailure(normalized, clientRef, record, error);
   } finally {
@@ -788,6 +797,8 @@ async function sendWaitingBundles(code: string): Promise<void> {
     if (record.syncStatus === 'synced') continue;
     if (setAside.get(`${code}:${record.clientRef}`) === bundleVersion(record)) continue;
     const outcome = await sendLaundryRecord(code, record.clientRef);
+    // Changed on its way: one more pass sends the newer copy.
+    if (outcome === 'overtaken') runAgain.add(code);
     // Stop at the first answer about the shop or the line: the rest would get it too.
     if (outcome === 'failed' || outcome === 'offline' || isWaiting(code)) return;
   }

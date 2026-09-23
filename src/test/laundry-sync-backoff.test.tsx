@@ -277,6 +277,52 @@ describe('one bundle the cloud will not take', () => {
   });
 });
 
+describe('a bundle moved on while it is being sent', () => {
+  /*
+   * The send goes out with the bundle as it was. If a stage is tapped while it
+   * is on its way, marking it done afterwards left the cloud on the old stage
+   * for good while the phone showed the new one.
+   */
+  const stageSent = () => calls.filter(call => call.name === 'update_laundry_walkin_stage').map(call => call.args.p_stage);
+
+  it('sends it again with the change, in the background', async () => {
+    const record = bundle('MOVED1', 'Ada');
+    let tapped = false;
+    answer = (name) => {
+      // The cloud is answering the first send; meanwhile, at the counter...
+      if (name === 'create_laundry_walkin_v2' && !tapped) { tapped = true; setLocalLaundryStage('MOVED1', record.clientRef, 'washing'); }
+      return works;
+    };
+
+    await syncPendingLaundryRecords('MOVED1');
+
+    expect(stageSent()).toEqual(['received', 'washing']);
+    expect(getLocalLaundryRecord('MOVED1', record.clientRef)?.syncStatus).toBe('synced');
+    expect(getLocalLaundryRecord('MOVED1', record.clientRef)?.workflowStage).toBe('washing');
+  });
+
+  it('sends it again after a send made from the counter, too', async () => {
+    const record = bundle('MOVED2', 'Ada');
+    let tapped = false;
+    answer = (name) => {
+      if (name === 'create_laundry_walkin_v2' && !tapped) { tapped = true; setLocalLaundryStage('MOVED2', record.clientRef, 'ready'); }
+      return works;
+    };
+
+    await syncLaundryRecord('MOVED2', record.clientRef);
+    await vi.waitFor(() => expect(getLocalLaundryRecord('MOVED2', record.clientRef)?.syncStatus).toBe('synced'), { timeout: 2000 });
+
+    expect(stageSent()).toEqual(['received', 'ready']);
+  });
+
+  it('marks it done at once when nothing changed on the way', async () => {
+    const record = bundle('MOVED3', 'Ada');
+    await syncPendingLaundryRecords('MOVED3');
+    expect(sends()).toHaveLength(1);
+    expect(getLocalLaundryRecord('MOVED3', record.clientRef)?.syncStatus).toBe('synced');
+  });
+});
+
 describe('one run per shop at a time', () => {
   it('sends each bundle once however many times it is asked', async () => {
     bundle('ONCE1', 'Ada');

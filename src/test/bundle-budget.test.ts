@@ -26,7 +26,9 @@ describe.skipIf(!built)('the startup bundle stays split', () => {
     const measured = measureBundle(assetsDir);
     expect(measured.entry, 'no index-*.js in the build').toBeTruthy();
     expect(measured.entry!.gzipKb).toBeLessThanOrEqual(ENTRY_GZIP_BUDGET_KB);
-  });
+  // Compressing every built file to weigh it takes a few seconds on a busy
+  // machine, past the default five; slow is not the same as over budget.
+  }, 30_000);
 
   it('gives the big screens chunks of their own', () => {
     const measured = measureBundle(assetsDir);

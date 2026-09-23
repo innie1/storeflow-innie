@@ -152,7 +152,7 @@ export async function inspectStoreConflict(code: string) {
 }
 
 /** Explicit recovery only: retain the full local journal before switching copies. */
-export async function useReviewedCloudCopy(code: string, reviewed: Awaited<ReturnType<typeof inspectStoreConflict>>): Promise<StoreData> {
+export async function adoptReviewedCloudCopy(code: string, reviewed: Awaited<ReturnType<typeof inspectStoreConflict>>): Promise<StoreData> {
   if (!reviewed) throw new Error('Load the comparison first.');
   return new Promise((resolve, reject) => {
     void serializeStoreSync(code, async () => {

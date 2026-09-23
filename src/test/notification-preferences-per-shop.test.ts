@@ -273,7 +273,9 @@ describe('Flow\'s own check-ins follow the shop that is open', () => {
     setNotificationPreferencesShop(provisions);
     expect(notifyFlowCheckIn({ ...check, id: 'low-stock-other' }), 'the other shop did not').toBe(true);
     expect(raised).toHaveLength(1);
-  });
+  // The first import of flow-checkins pulls in much of Flow, which on a busy
+  // machine takes longer than the default five seconds.
+  }, 30_000);
 });
 
 describe('quiet hours still mean what they meant', () => {

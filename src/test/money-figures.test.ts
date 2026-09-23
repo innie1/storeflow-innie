@@ -100,7 +100,9 @@ describe('money received', () => {
 describe('what "Recorded" counts', () => {
   it('counts bundles, not payments', () => {
     // A deposit and a balance are one job; an unpaid bundle is still a job.
-    let { store, record } = takeIn(shop(), 10, 5_000, 2_000);
+    const taken = takeIn(shop(), 10, 5_000, 2_000);
+    let store = taken.store;
+    const record = taken.record;
     store = recordLaundryPayment(store, {
       clientRef: record.clientRef, tagCode: record.tagCode,
       customerName: record.customerName, customerPhone: record.customerPhone,

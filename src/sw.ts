@@ -18,7 +18,14 @@ self.addEventListener('activate', event => event.waitUntil(Promise.all([self.cli
  */
 registerRoute(({ request }) => request.mode === 'navigate', new NetworkFirst({ cacheName: 'html', networkTimeoutSeconds: 5 }));
 registerRoute(({ request }) => ['style','script','worker','image','font'].includes(request.destination), new StaleWhileRevalidate({ cacheName: 'assets' }));
-setCatchHandler(async ({ event }) => event.request.mode === 'navigate' ? ((await matchPrecache('/index.html')) || Response.error()) : Response.error());
+setCatchHandler(async ({ event }) => (event as FetchEvent).request.mode === 'navigate' ? ((await matchPrecache('/index.html')) || Response.error()) : Response.error());
+
+/**
+ * A button on a notification. TypeScript dropped this type from its own lists
+ * because only Chromium browsers support it - which is where the merchant app
+ * runs - so it is spelled out here. `type: 'text'` is Chrome's reply field.
+ */
+interface NotificationAction { action: string; title: string; icon?: string; type?: 'button' | 'text'; placeholder?: string }
 
 interface PushPayload { title?: string; body?: string; tag?: string; url?: string; priority?: 'critical'|'normal'; notification_id?: string; orderId?: string; orderNumber?: string; actions?: { action:string; title:string }[]; type?: string; category?: string; store_id?: string; }
 interface NotificationPreferences { enabled:boolean; orders:boolean; flowCheckins:boolean; businessInsights:boolean; debtReminders:boolean; sounds:boolean; criticalAlerts:boolean; quietHoursEnabled:boolean; quietStart:string; quietEnd:string; }
