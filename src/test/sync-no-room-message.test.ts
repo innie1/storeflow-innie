@@ -24,11 +24,19 @@ const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 beforeEach(() => {
   toasts.length = 0;
   localStorage.clear();
-  const realSetItem = localStorage.setItem.bind(localStorage);
-  // The phone refuses the spare copy, as it does when its storage is full.
-  vi.spyOn(localStorage, 'setItem').mockImplementation((key: string, value: string) => {
+  /*
+   * The phone refuses the spare copy, as it does when its storage is full.
+   *
+   * Where the environment supplies a real Storage (CI does), setItem lives on
+   * Storage.prototype, and assigning over it on the instance only stores an
+   * item called "setItem". Where the test setup's stand-in is used, it lives on
+   * the object. Refuse at whichever one is really answering.
+   */
+  const owner: Storage = typeof Storage !== 'undefined' && localStorage instanceof Storage ? Storage.prototype : localStorage;
+  const realSetItem = owner.setItem;
+  vi.spyOn(owner, 'setItem').mockImplementation(function (this: Storage, key: string, value: string) {
     if (key.startsWith('storeflow_sync_pending_')) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    return realSetItem(key, value);
+    return realSetItem.call(this, key, value);
   });
 });
 
