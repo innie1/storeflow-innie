@@ -3,12 +3,16 @@ import { useEffect, useState } from 'react';
 interface ToastMessage {
   id: number;
   message: string;
-  type: 'success' | 'error' | 'info' | 'warning';
+  type: ToastTone;
   /** Makes the toast tappable — for a message that offers to do something. */
   onTap?: () => void;
 }
 
-export type ToastTone = 'success' | 'error' | 'info' | 'warning';
+/**
+ * 'quiet' is for something worth knowing that nobody has to act on right now:
+ * grey, no symbol, nothing that reads as the app having broken.
+ */
+export type ToastTone = 'success' | 'error' | 'info' | 'warning' | 'quiet';
 
 /** Long enough to read a sentence, short enough not to sit in the way. */
 const DEFAULT_MS = 3000;
@@ -66,10 +70,11 @@ export function ToastContainer() {
             t.type === 'success' ? 'bg-surface-2 border-success/30 text-success' :
             t.type === 'error' ? 'bg-surface-2 border-destructive/30 text-destructive' :
             t.type === 'warning' ? 'bg-surface-2 border-amber-500/40 text-amber-500' :
+            t.type === 'quiet' ? 'bg-surface-2 border-border text-muted-foreground text-xs font-sans' :
             'bg-surface-2 border-primary/30 text-primary'
           }`}
         >
-          {t.type === 'success' ? '✓' : t.type === 'error' ? '✗' : 'ℹ'} {t.message}
+          {t.type === 'quiet' ? t.message : `${t.type === 'success' ? '✓' : t.type === 'error' ? '✗' : 'ℹ'} ${t.message}`}
         </div>
       ))}
     </div>

@@ -42,14 +42,25 @@ export function cloudSnapshot(store: StoreData): Record<string, any> {
   }
   return next;
 }
+/** Shops already told, this visit, that the cloud copy could not be kept. */
+const toldNoRoom = new Set<string>();
 export function queueStoreSync(store: StoreData, base?: StoreData): void {
   const next = JSON.parse(JSON.stringify(store)) as StoreData;
   try {
     const held = getPendingStoreSync(store.accessCode);
     writePending(store.accessCode, { uncertainCheckout: held?.uncertainCheckout, base: held ? held.base : base, next, state: held?.state === 'conflict' ? 'conflict' : 'pending', error: held?.error });
   } catch (error) {
-    // Never report a completed local checkout as failed after its primary save.
-    void import('@/components/Toast').then(({ showToast }) => showToast('Saved on this device, but sync recovery storage is unavailable. Export a backup.', 'error'));
+    /*
+     * The shop itself is already saved; only the spare copy kept for the cloud
+     * could not be written. This was a red "sync recovery storage is
+     * unavailable" on every single save, which read as the app failing when
+     * nothing the shop did had been lost. Now it is said once per shop per
+     * visit, quietly, in words a shopkeeper can follow.
+     */
+    if (!toldNoRoom.has(store.accessCode)) {
+      toldNoRoom.add(store.accessCode);
+      void import('@/components/Toast').then(({ showToast }) => showToast('Saved on this phone. The copy for the cloud could not be kept — phone storage may be full.', 'quiet', 5000));
+    }
     return;
   }
   void retryStoreSync(store.accessCode);
