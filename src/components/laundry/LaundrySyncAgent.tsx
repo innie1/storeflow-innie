@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { StoreData } from '@/types/store';
-import { LAUNDRY_LOCAL_CHANGED_EVENT, syncPendingLaundryRecords } from '@/lib/laundry-offline';
+import { clearLaundrySyncWait, LAUNDRY_LOCAL_CHANGED_EVENT, syncPendingLaundryRecords } from '@/lib/laundry-offline';
 
 interface Props {
   store: StoreData;
@@ -10,6 +10,11 @@ interface Props {
  * Invisible local-first sync worker for laundry stores.
  * Records are already safe in localStorage before this runs. This component
  * only mirrors pending records to Supabase when connectivity is available.
+ *
+ * It asks often - on every edit, every 30 seconds, on coming back online - and
+ * laundry-offline decides whether a request actually goes. That is where the
+ * waiting after a failure lives, so asking here costs nothing while the cloud
+ * is refusing.
  */
 export default function LaundrySyncAgent({ store }: Props) {
   useEffect(() => {
@@ -26,7 +31,7 @@ export default function LaundrySyncAgent({ store }: Props) {
     };
 
     sync();
-    const onOnline = () => sync();
+    const onOnline = () => { clearLaundrySyncWait(accessCode); sync(); };
     const onLocalChange = () => sync();
     window.addEventListener('online', onOnline);
     window.addEventListener(LAUNDRY_LOCAL_CHANGED_EVENT, onLocalChange);

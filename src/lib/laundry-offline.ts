@@ -191,10 +191,15 @@ export function getLocalLaundryRecords(accessCode: string): LocalLaundryRecord[]
   }
 }
 
-function writeLocalLaundryRecords(accessCode: string, records: LocalLaundryRecord[]): void {
+/**
+ * `announce` is false only for writing down how a send to the cloud went. The
+ * sync agent sends on every announced change, so announcing its own results
+ * would have it send again straight away - see "Sending bundles to the cloud".
+ */
+function writeLocalLaundryRecords(accessCode: string, records: LocalLaundryRecord[], announce = true): void {
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem(laundryLocalStorageKey(accessCode), JSON.stringify(records.slice(0, 1000)));
-  emit(LAUNDRY_LOCAL_CHANGED_EVENT);
+  if (announce) emit(LAUNDRY_LOCAL_CHANGED_EVENT);
 }
 
 function makeClientRef(): string {
@@ -295,7 +300,7 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
   return record;
 }
 
-function updateLocalRecord(accessCode: string, clientRef: string, updates: Partial<LocalLaundryRecord>): LocalLaundryRecord | null {
+function updateLocalRecord(accessCode: string, clientRef: string, updates: Partial<LocalLaundryRecord>, announce = true): LocalLaundryRecord | null {
   const records = getLocalLaundryRecords(accessCode);
   let changed: LocalLaundryRecord | null = null;
   const next = records.map(record => {
@@ -304,7 +309,7 @@ function updateLocalRecord(accessCode: string, clientRef: string, updates: Parti
     return changed;
   });
   if (changed) {
-    writeLocalLaundryRecords(accessCode, next);
+    writeLocalLaundryRecords(accessCode, next, announce);
     emit(LAUNDRY_SYNC_CHANGED_EVENT, changed);
   }
   return changed;
@@ -551,14 +556,122 @@ async function syncLaundryStage(accessCode: string, record: LocalLaundryRecord):
   return data || null;
 }
 
+/*
+ * Sending bundles to the cloud, without hammering it.
+ *
+ * On 23 September 2026 one laptop sent the cloud 184,000 requests in 35
+ * minutes - about a hundred a second, every one refused. A failed send was
+ * written onto the bundle through the same path as a real edit, which
+ * announced "a bundle changed", and LaundrySyncAgent sends on every change. A
+ * single waiting bundle was caught by the in-flight guard; two or more set
+ * each other off forever, with nothing in between to slow them down. It had
+ * been that way since August, whenever the cloud said no.
+ *
+ * So now:
+ *  - how a send went is written down without announcing it. Only a real edit -
+ *    a new bundle, a stage moved - wakes the sync.
+ *  - a run stops at the first failure that is about the shop or the line,
+ *    because every other bundle would get the same answer.
+ *  - after one, the background waits 30 seconds, then 1, 2, 5 and at most 10
+ *    minutes. A send that works, or the phone coming back online, clears it.
+ *  - one run per shop at a time. Edits made during it fold into one more run.
+ *  - a shop the cloud has never heard of - most laundries run on the phone
+ *    alone - is asked again in an hour, or when the app is next opened, rather
+ *    than every half minute for as long as the app is open.
+ *  - a bundle the cloud refuses on its own account (no phone number, a tag it
+ *    already holds) is set aside, so it neither stops the bundles behind it nor
+ *    gets sent again until somebody changes it or the app is next opened.
+ *
+ * All of this lives in memory on purpose: opening the app again is always one
+ * fresh try, never a lockout that outlives the problem.
+ */
+
+/** Answers about the shop, not the bundle. Every other bundle would get the same one. */
+const SHOP_REFUSALS = /^(store not found|this store is not a laundry business|store is not active|store access code is required)$/i;
+const RETRY_WAITS_MS = [30_000, 60_000, 120_000, 300_000, 600_000];
+const UNKNOWN_SHOP_WAIT_MS = 60 * 60_000;
+
+interface SyncWait { until: number; failures: number; unknownShop: boolean }
+/** Per shop: how long the background leaves the cloud alone. */
+const waits = new Map<string, SyncWait>();
+/** Per bundle: the version of it the cloud refused. */
+const setAside = new Map<string, string>();
+/** Per shop: the run in progress, and whether an edit arrived during it. */
+const runs = new Map<string, Promise<void>>();
+const runAgain = new Set<string>();
+
+type SendOutcome = 'sent' | 'nothing-to-send' | 'busy' | 'offline' | 'set-aside' | 'failed';
+
+function isWaiting(code: string): boolean {
+  return (waits.get(code)?.until || 0) > Date.now();
+}
+
+/** The bundle as the counter last left it: everything except how its sends went. */
+function bundleVersion(record: LocalLaundryRecord): string {
+  const { syncStatus: _status, syncedAt: _at, cloudOrderId: _cloud, lastSyncError: _error, ...content } = record;
+  return JSON.stringify(content);
+}
+
+/** Writes down how a send went, without waking the sync - and without writing at all when nothing changed. */
+function noteSend(code: string, clientRef: string, updates: Partial<LocalLaundryRecord>): LocalLaundryRecord | null {
+  const current = getLocalLaundryRecord(code, clientRef);
+  if (!current) return null;
+  if (Object.entries(updates).every(([field, value]) => (current as any)[field] === value)) return current;
+  return updateLocalRecord(code, clientRef, updates, false);
+}
+
+function noteFailure(code: string, clientRef: string, sent: LocalLaundryRecord, error: any): SendOutcome {
+  const message = String(error?.message || '').trim() || 'Sync failed';
+  const answeredByCloud = error?.code === 'P0001';
+  if (answeredByCloud && !SHOP_REFUSALS.test(message)) {
+    setAside.set(`${code}:${clientRef}`, bundleVersion(sent));
+    noteSend(code, clientRef, { lastSyncError: message });
+    return 'set-aside';
+  }
+  const failures = (waits.get(code)?.failures || 0) + 1;
+  waits.set(code, {
+    failures,
+    unknownShop: answeredByCloud,
+    until: Date.now() + (answeredByCloud ? UNKNOWN_SHOP_WAIT_MS : RETRY_WAITS_MS[Math.min(failures, RETRY_WAITS_MS.length) - 1]),
+  });
+  noteSend(code, clientRef, { lastSyncError: message });
+  return 'failed';
+}
+
+/**
+ * Back online: whatever stood between the phone and the cloud may be gone. What
+ * the cloud itself answered about the shop has not changed, so that wait stays.
+ */
+export function clearLaundrySyncWait(accessCode: string): void {
+  const code = normalizeAccessCode(accessCode);
+  if (!waits.get(code)?.unknownShop) waits.delete(code);
+}
+
+/**
+ * One bundle, because somebody just did something to it at the counter.
+ *
+ * It gets its own try even while the background is waiting out a failure -
+ * the cloud may be back, and it costs one request per thing a person did. Not
+ * for a shop the cloud has said it does not know: recording a bundle does not
+ * change that.
+ */
 export async function syncLaundryRecord(accessCode: string, clientRef: string): Promise<boolean> {
-  const normalized = normalizeAccessCode(accessCode);
+  const code = normalizeAccessCode(accessCode);
+  const wait = waits.get(code);
+  if (wait?.unknownShop && wait.until > Date.now()) return false;
+  const outcome = await sendLaundryRecord(code, clientRef);
+  // It works again, so what was waiting behind the failure can go too.
+  if (outcome === 'sent' && wait) void syncPendingLaundryRecords(code).catch(() => {});
+  return outcome === 'sent' || outcome === 'nothing-to-send';
+}
+
+async function sendLaundryRecord(normalized: string, clientRef: string): Promise<SendOutcome> {
   const key = `${normalized}:${clientRef}`;
-  if (inflight.has(key)) return false;
+  if (inflight.has(key)) return 'busy';
 
   const record = getLocalLaundryRecord(normalized, clientRef);
-  if (!record || record.syncStatus === 'synced') return true;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+  if (!record || record.syncStatus === 'synced') return 'nothing-to-send';
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return 'offline';
 
   inflight.add(key);
   try {
@@ -590,28 +703,26 @@ export async function syncLaundryRecord(accessCode: string, clientRef: string): 
       })),
     });
 
-    if (error) {
-      updateLocalRecord(normalized, clientRef, { lastSyncError: error.message || 'Sync failed' });
-      return false;
-    }
+    if (error) return noteFailure(normalized, clientRef, record, error);
 
     const stageData = await syncLaundryStage(normalized, record);
     const cloudOrderId = String(stageData?.order_id || data?.order_id || '');
-    const updated = updateLocalRecord(normalized, clientRef, {
+    const updated = noteSend(normalized, clientRef, {
       syncStatus: 'synced',
       syncedAt: new Date().toISOString(),
       cloudOrderId,
       lastSyncError: undefined,
     });
+    waits.delete(normalized);
+    setAside.delete(key);
 
     if (typeof window !== 'undefined' && cloudOrderId) {
       window.dispatchEvent(new CustomEvent('storeflow:order-created', { detail: { orderId: cloudOrderId } }));
     }
     emit(LAUNDRY_SYNC_CHANGED_EVENT, updated || record);
-    return true;
+    return 'sent';
   } catch (error: any) {
-    updateLocalRecord(normalized, clientRef, { lastSyncError: error?.message || 'Sync failed' });
-    return false;
+    return noteFailure(normalized, clientRef, record, error);
   } finally {
     inflight.delete(key);
   }
@@ -645,9 +756,39 @@ export async function updateLaundryOrderStage(
   return true;
 }
 
-export async function syncPendingLaundryRecords(accessCode: string): Promise<void> {
-  const records = getLocalLaundryRecords(accessCode).filter(record => record.syncStatus !== 'synced');
-  for (const record of records) {
-    await syncLaundryRecord(accessCode, record.clientRef);
+/**
+ * Everything waiting to go, in the background. One run per shop at a time: a
+ * call made while one is going joins it, and asks for one more pass once it
+ * ends, so an edit made mid-run is not missed.
+ */
+export function syncPendingLaundryRecords(accessCode: string): Promise<void> {
+  const code = normalizeAccessCode(accessCode);
+  const running = runs.get(code);
+  if (running) {
+    runAgain.add(code);
+    return running;
+  }
+  const run = (async () => {
+    try {
+      do {
+        runAgain.delete(code);
+        await sendWaitingBundles(code);
+      } while (runAgain.has(code));
+    } finally {
+      runs.delete(code);
+    }
+  })();
+  runs.set(code, run);
+  return run;
+}
+
+async function sendWaitingBundles(code: string): Promise<void> {
+  if (isWaiting(code)) return;
+  for (const record of getLocalLaundryRecords(code)) {
+    if (record.syncStatus === 'synced') continue;
+    if (setAside.get(`${code}:${record.clientRef}`) === bundleVersion(record)) continue;
+    const outcome = await sendLaundryRecord(code, record.clientRef);
+    // Stop at the first answer about the shop or the line: the rest would get it too.
+    if (outcome === 'failed' || outcome === 'offline' || isWaiting(code)) return;
   }
 }
