@@ -1739,7 +1739,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                   type="email"
                   value={recoveryEmail}
                   onChange={e => setRecoveryEmail(e.target.value)}
-                  placeholder="inniegroup@gmail.com"
+                  placeholder="you@example.com"
                   className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
                 />
               </div>
@@ -1750,7 +1750,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
                     type="tel"
                     value={recoveryPhone}
                     onChange={e => setRecoveryPhone(e.target.value)}
-                    placeholder="07025517388"
+                    placeholder="0801 234 5678"
                     className="w-full p-2.5 pr-11 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
                   />
                   {/* The owner's own number, which is the one they are least

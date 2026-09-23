@@ -617,7 +617,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                     type="text"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    placeholder="e.g. 07025517388"
+                    placeholder="e.g. 0801 234 5678"
                     className="w-full p-2.5 pr-11 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
                   />
                   <ContactPickButton onPick={(picked, pickedName) => {
