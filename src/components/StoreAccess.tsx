@@ -1,4 +1,4 @@
-import { getPendingStoreSync } from '@/lib/store-cloud-sync';
+import { getPendingStoreSync, markStoreInCloud } from '@/lib/store-cloud-sync';
 import { useState, useEffect, useMemo } from 'react';
 import { createStore, loadStore, saveStore, getStoreIndex } from '@/lib/store-data';
 import { getBusinessTemplate } from '@/lib/business-runtime';
@@ -632,6 +632,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       if (remoteStores && remoteStores.length > 0) {
         const selectedRow = remoteStores[0];
         if (selectedRow && selectedRow.data) {
+          // It came from the cloud, so the cloud's copy is worth keeping as a base.
+          markStoreInCloud(selectedRow.data.accessCode);
           const remoteStore = getPendingStoreSync(selectedRow.data.accessCode)?.next || selectedRow.data as StoreData;
           // Previously this wrote raw cloud data to a mismatched localStorage
           // key (`storeflow_store_${code}` instead of the key loadStore()
@@ -1109,6 +1111,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     setAccessMood('thinking');
 
     try {
+      markStoreInCloud(storeRow.data.accessCode);
       const storeData = getPendingStoreSync(storeRow.data.accessCode)?.next || storeRow.data as StoreData;
       if (storeData.managerSettings) {
         storeData.managerSettings.multiDeviceSync = true;

@@ -4,9 +4,33 @@ import { prepareStoreForMarketplacePublish } from './marketplace-publish';
 import { generateStoreUrl } from './qr-code';
 
 export const STORE_SYNC_EVENT = 'storeflow:sync-state';
+/*
+ * One true copy.
+ *
+ * The waiting record used to hold two full copies of the shop beside the shop
+ * itself: `next`, the shop as it should read in the cloud, and `base`, the
+ * shop as the cloud last agreed. `next` was always the shop exactly as just
+ * saved - a duplicate - and for a shop with no cloud account neither copy
+ * could ever be sent anywhere, and neither was ever cleared. A shop with a
+ * long history filled the phone's storage for the app three times over, and
+ * every save then said "sync recovery storage is unavailable".
+ *
+ * Now:
+ *  - `next` is not stored. It is read from the shop's own saved record, which
+ *    is the true copy.
+ *  - `journal` is the one exception: a sale on its way to the cloud that the
+ *    shop has not taken yet. If the answer is lost, that exact proposal is
+ *    what gets sent again, so it is kept until the cloud answers.
+ *  - `base` is kept only for a shop this phone has seen in the cloud. The
+ *    cloud uses it to tell this phone's changes from another phone's; for a
+ *    shop that lives only here there is nothing to tell apart.
+ */
 export interface PendingStoreSync {
   base?: StoreData;
+  /** The shop as it should read in the cloud. Read from the shop itself, or the journal. */
   next: StoreData;
+  /** A sale sent to the cloud that the shop on this phone does not hold yet. */
+  journal?: StoreData;
   state: 'pending' | 'syncing' | 'conflict' | 'error';
   error?: string;
   uncertainCheckout?: StoreData;
@@ -23,14 +47,42 @@ const keyFor = (code: string) => `storeflow_sync_pending_${code}`;
 const signal = (code: string, store?: StoreData) => {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(STORE_SYNC_EVENT, { detail: { code, store } }));
 };
+const knownKey = (code: string) => `storeflow_cloud_known_${code}`;
+/** This phone has seen the shop in the cloud, so the cloud's last agreed copy is worth keeping. */
+export function markStoreInCloud(code: string): void {
+  try { localStorage.setItem(knownKey(code), '1'); } catch { /* a flag; the next sync sets it again */ }
+}
+function storeInCloud(code: string): boolean {
+  try { return localStorage.getItem(knownKey(code)) === '1'; } catch { return false; }
+}
+function readShop(code: string): StoreData | null {
+  const raw = localStorage.getItem(`storeflow_${code}`);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
 export function getPendingStoreSync(code: string): PendingStoreSync | null {
   const raw = localStorage.getItem(keyFor(code));
   if (!raw) return null;
-  try { return JSON.parse(raw); }
+  let held: Partial<PendingStoreSync>;
+  try { held = JSON.parse(raw); }
   catch { throw new Error('The saved sync record is unreadable. Export a backup before recovery.'); }
+  const shop = readShop(code);
+  /*
+   * Records written before this change carry a full `next`. Where it matches
+   * the shop it was only ever a duplicate; where it differs it is a sale the
+   * shop has not taken, which is what `journal` now means.
+   */
+  const journal = held.journal ?? (held.next && !(shop && same(held.next, shop)) ? held.next : undefined);
+  const next = journal ?? shop ?? held.next;
+  if (!next) return null;
+  return { ...held, journal, next } as PendingStoreSync;
 }
 function writePending(code: string, pending: PendingStoreSync) {
-  localStorage.setItem(keyFor(code), JSON.stringify(pending));
+  // `next` is read from the shop, never stored beside it.
+  const { next: _readFromShop, ...kept } = pending;
+  // A shop that has only ever lived on this phone has no cloud copy to compare against.
+  if (kept.awaitingAccount && !storeInCloud(code)) delete kept.base;
+  localStorage.setItem(keyFor(code), JSON.stringify(kept));
   signal(code);
 }
 /** Only public application data crosses the network; local credentials stay local. */
@@ -45,10 +97,13 @@ export function cloudSnapshot(store: StoreData): Record<string, any> {
 /** Shops already told, this visit, that the cloud copy could not be kept. */
 const toldNoRoom = new Set<string>();
 export function queueStoreSync(store: StoreData, base?: StoreData): void {
-  const next = JSON.parse(JSON.stringify(store)) as StoreData;
+  // Only to satisfy the record's shape: writePending never stores it.
+  const next = store;
   try {
     const held = getPendingStoreSync(store.accessCode);
-    writePending(store.accessCode, { uncertainCheckout: held?.uncertainCheckout, base: held ? held.base : base, next, state: held?.state === 'conflict' ? 'conflict' : 'pending', error: held?.error });
+    // awaitingAccount is carried so a phone-only shop never stores a base,
+    // not even for the moment before the retry below looks for an account.
+    writePending(store.accessCode, { uncertainCheckout: held?.uncertainCheckout, base: held ? held.base : base, next, state: held?.state === 'conflict' ? 'conflict' : 'pending', error: held?.error, awaitingAccount: held?.awaitingAccount });
   } catch (error) {
     /*
      * The shop itself is already saved; only the spare copy kept for the cloud
@@ -89,6 +144,7 @@ export async function retryStoreSync(code: string): Promise<void> {
       }
       const { data: existing, error: fetchError } = await supabase.from('stores').select('id').eq('access_code', code).maybeSingle();
       if (fetchError) throw fetchError;
+      if (existing) markStoreInCloud(code);
       const next = cloudSnapshot(held.next);
       let remote: Record<string, any>;
       if (existing) {
@@ -107,6 +163,7 @@ export async function retryStoreSync(code: string): Promise<void> {
         }).select('data').single();
         if (error) throw error;
         remote = data.data as Record<string, any>;
+        markStoreInCloud(code);
       }
       const latest = getPendingStoreSync(code);
       // It reached the cloud, so whatever this record said about waiting for an
