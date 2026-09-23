@@ -578,8 +578,8 @@ async function syncLaundryStage(accessCode: string, record: LocalLaundryRecord):
  *  - a shop the cloud has never heard of - most laundries run on the phone
  *    alone - is asked again in an hour, or when the app is next opened, rather
  *    than every half minute for as long as the app is open.
- *  - a bundle the cloud refuses on its own account (no phone number, a tag it
- *    already holds) is set aside, so it neither stops the bundles behind it nor
+ *  - a bundle the cloud refuses on its own account (a tag another phone has
+ *    already used, say) is set aside, so it neither stops the bundles behind it nor
  *    gets sent again until somebody changes it or the app is next opened.
  *
  * All of this lives in memory on purpose: opening the app again is always one

@@ -8,7 +8,7 @@ import {
   getLocalLaundryRecord,
   getLocalLaundryRecords,
   LAUNDRY_LOCAL_CHANGED_EVENT,
-  setLocalLaundryPhone,
+  setLocalLaundryStage,
   syncLaundryRecord,
   syncPendingLaundryRecords,
 } from '@/lib/laundry-offline';
@@ -219,43 +219,61 @@ describe('a shop the cloud has never heard of', () => {
 });
 
 describe('one bundle the cloud will not take', () => {
-  const refusesNoPhone = (name: string, args: Record<string, unknown>): Answer =>
-    name === 'create_laundry_walkin_v2' && !args.p_customer_phone
-      ? { error: { code: 'P0001', message: 'Customer phone number is required' } }
+  /*
+   * A tag another phone in the shop has already used. That answer is about
+   * this bundle, not the shop, so the bundles behind it must still go.
+   */
+  const taken = new Set<string>();
+  const refusesTakenTags = (name: string, args: Record<string, unknown>): Answer =>
+    name === 'create_laundry_walkin_v2' && taken.has(String(args.p_tag_code))
+      ? { error: { code: 'P0001', message: 'Laundry tag already exists for this store' } }
       : works;
 
   it('does not hold up the bundles behind it', async () => {
-    // The counter takes bundles with no phone on purpose; the cloud does not.
     const ada = bundle('ASIDE1', 'Ada');
     const chidi = bundle('ASIDE1', 'Chidi');
-    const walkIn = bundle('ASIDE1', 'Timi', '');
-    answer = refusesNoPhone;
+    const clash = bundle('ASIDE1', 'Timi');
+    taken.add(clash.tagCode);
+    answer = refusesTakenTags;
 
     await syncPendingLaundryRecords('ASIDE1');
 
     expect(sends()).toHaveLength(3);
-    expect(sends()[0].args.p_client_ref, 'the refused bundle was not first in line').toBe(walkIn.clientRef);
+    expect(sends()[0].args.p_client_ref, 'the refused bundle was not first in line').toBe(clash.clientRef);
     expect(getLocalLaundryRecord('ASIDE1', ada.clientRef)?.syncStatus).toBe('synced');
     expect(getLocalLaundryRecord('ASIDE1', chidi.clientRef)?.syncStatus).toBe('synced');
-    expect(getLocalLaundryRecord('ASIDE1', walkIn.clientRef)?.syncStatus).toBe('pending');
-    expect(getLocalLaundryRecord('ASIDE1', walkIn.clientRef)?.lastSyncError).toBe('Customer phone number is required');
+    expect(getLocalLaundryRecord('ASIDE1', clash.clientRef)?.syncStatus).toBe('pending');
+    expect(getLocalLaundryRecord('ASIDE1', clash.clientRef)?.lastSyncError).toBe('Laundry tag already exists for this store');
   });
 
   it('is not sent again until somebody changes it', async () => {
-    const walkIn = bundle('ASIDE2', 'Timi', '');
-    answer = refusesNoPhone;
+    const clash = bundle('ASIDE2', 'Timi');
+    taken.add(clash.tagCode);
+    answer = refusesTakenTags;
     await syncPendingLaundryRecords('ASIDE2');
     advance(60 * 60_000);
     await syncPendingLaundryRecords('ASIDE2');
     await syncPendingLaundryRecords('ASIDE2');
     expect(sends()).toHaveLength(1);
 
-    // The customer gives a number after all.
-    setLocalLaundryPhone('ASIDE2', walkIn.clientRef, '08033334444');
+    // Somebody moves it along, so it is asked about again - and taken this time.
+    taken.delete(clash.tagCode);
+    setLocalLaundryStage('ASIDE2', clash.clientRef, 'washing');
     await syncPendingLaundryRecords('ASIDE2');
 
     expect(sends()).toHaveLength(2);
-    expect(getLocalLaundryRecord('ASIDE2', walkIn.clientRef)?.syncStatus).toBe('synced');
+    expect(getLocalLaundryRecord('ASIDE2', clash.clientRef)?.syncStatus).toBe('synced');
+  });
+
+  it('sends a bundle with no phone number like any other', async () => {
+    // The cloud stores it with no number rather than refusing it. What goes up
+    // is simply blank; the database turns blank into "no number".
+    const walkIn = bundle('ASIDE3', 'Timi', '');
+    await syncPendingLaundryRecords('ASIDE3');
+
+    expect(sends()).toHaveLength(1);
+    expect(sends()[0].args.p_customer_phone).toBe('');
+    expect(getLocalLaundryRecord('ASIDE3', walkIn.clientRef)?.syncStatus).toBe('synced');
   });
 });
 
