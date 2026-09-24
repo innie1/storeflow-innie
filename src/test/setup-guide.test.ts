@@ -106,21 +106,34 @@ describe('guide progress', () => {
   });
 });
 
-describe('a shop that sells goods gets a different walk', () => {
+describe('a shop that sells goods has no walk', () => {
+  /*
+   * Its own first page - "What 5 products do you sell most?" - is its setup.
+   * The walk that ran on top of it asked for the same thing, dimmed that page
+   * while the merchant typed into it, and pointed "add your first product" at
+   * a laundry button.
+   */
   const shop = (over: Record<string, unknown> = {}) => ({
-    storeName: 'Corner Store', storeType: 'provision', category: 'retail',
+    storeName: 'Corner Store', storeType: 'provision', category: 'retail', accessCode: 'GOODS1',
     products: [], sales: [], ...over,
   }) as any;
 
-  it('uses stock and sale steps, not laundry steps', () => {
-    expect(guideSteps(shop()).map(step => step.id)).toEqual([
-      'open-inventory', 'add-product', 'open-sales', 'first-sale',
-    ]);
+  it('has no steps, from the very first minute', () => {
+    expect(guideSteps(shop())).toEqual([]);
+    expect(nextStep(shop(), 'dashboard')).toBeNull();
+    expect(shouldRunGuide(shop(), 'dashboard')).toBe(false);
   });
 
-  it('finishes on the first sale', () => {
-    const store = shop({ products: [{ id: 'p1', name: 'Rice' }], sales: [{ id: 's', total: 100 }] });
-    expect(nextStep(store, 'dashboard')).toBeNull();
+  it('holds for other goods trades too, not only provisions', () => {
+    for (const storeType of ['pharmacy', 'electronics', 'clothing']) {
+      expect(guideSteps(shop({ storeType, category: 'retail' })), storeType).toEqual([]);
+    }
+  });
+
+  it('leaves the laundry its walk', () => {
+    expect(guideSteps(laundry()).map(step => step.id)).toEqual([
+      'open-price-list', 'add-service', 'set-price', 'open-intake', 'first-job',
+    ]);
   });
 });
 

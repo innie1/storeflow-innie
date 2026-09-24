@@ -2,6 +2,7 @@ import type { StoreData } from '@/types/store';
 import { same, serializeStoreSync } from './store-sync-guard';
 import { prepareStoreForMarketplacePublish } from './marketplace-publish';
 import { generateStoreUrl } from './qr-code';
+import { cloudNotReached, cloudRecentlyUnreachable, counterDeadline, noteCloudUnreachable } from './cloud-reach';
 
 export const STORE_SYNC_EVENT = 'storeflow:sync-state';
 /*
@@ -133,6 +134,9 @@ export async function retryStoreSync(code: string): Promise<void> {
      */
     if (held.state === 'conflict') return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) { writePending(code, { ...held, state: 'pending' }); return; }
+    // A sale waits on this before it saves; a cloud that just failed is not
+    // asked again for half a minute. See cloud-reach.
+    if (cloudRecentlyUnreachable()) { writePending(code, { ...held, state: 'pending' }); return; }
     writePending(code, { ...held, state: 'syncing', error: undefined });
     try {
       const { supabase } = await import('@/integrations/supabase/client');
@@ -142,8 +146,12 @@ export async function retryStoreSync(code: string): Promise<void> {
         writePending(code, { ...held, state: 'pending', awaitingAccount: true, error: undefined });
         return;
       }
-      const { data: existing, error: fetchError } = await supabase.from('stores').select('id').eq('access_code', code).maybeSingle();
-      if (fetchError) throw fetchError;
+      const { data: existing, error: fetchError } = await supabase.from('stores').select('id').eq('access_code', code)
+        .retry(false).abortSignal(counterDeadline()).maybeSingle();
+      if (fetchError) {
+        if (cloudNotReached(fetchError)) noteCloudUnreachable();
+        throw fetchError;
+      }
       if (existing) markStoreInCloud(code);
       const next = cloudSnapshot(held.next);
       let remote: Record<string, any>;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { MilestoneDef } from '@/lib/milestones';
+import { celebrationOpened } from '@/lib/celebrations';
 
 interface MilestoneCelebrationProps {
   milestone: MilestoneDef;
@@ -47,6 +48,9 @@ export default function MilestoneCelebration({ milestone, onDismiss }: Milestone
     }
     return out;
   }, [milestone.id]);
+
+  // Hold the ready-for-business card back while this one is up.
+  useEffect(() => celebrationOpened(), []);
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setVisible(true));

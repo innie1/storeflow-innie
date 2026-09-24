@@ -3,6 +3,7 @@ import { recordCheckout } from './store-data';
 import { cloudSnapshot, markStoreInCloud, requireStoreSynced, queueStoreSync, refreshStoreFromCloud, STORE_SYNC_EVENT } from './store-cloud-sync';
 import { money, salePrice } from './inventory-sale-math';
 import { FINANCIAL_FIELDS, same, serializeStoreSync } from './store-sync-guard';
+import { cloudNotReached, cloudRecentlyUnreachable, counterDeadline, hasCloudSession, noteCloudUnreachable } from './cloud-reach';
 
 const committing = new Set<string>();
 type Items = Parameters<typeof recordCheckout>[1];
@@ -23,14 +24,27 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
     const result = recordCheckout(store, items, { ...options, deferSave: true });
     if (result.error) return result;
     const { supabase } = await import('@/integrations/supabase/client');
-    const { data: row, error: lookupError } = await supabase.from('stores').select('id').eq('access_code', store.accessCode).maybeSingle();
-    if (lookupError || !row) {
+    /*
+     * Only ask the cloud when it could say yes, and only wait a moment for it.
+     * Without a signed-in session it refuses every commit, so there is nothing
+     * to ask; after a failed attempt it is left alone for half a minute. The
+     * check itself is asked once, with a limit - the data client would
+     * otherwise retry it three times over seven seconds while the customer
+     * waits. See cloud-reach.
+     */
+    const askCloud = !cloudRecentlyUnreachable() && await hasCloudSession();
+    const lookup = askCloud
+      ? await supabase.from('stores').select('id').eq('access_code', store.accessCode).retry(false).abortSignal(counterDeadline()).maybeSingle()
+      : { data: null, error: null };
+    const { data: row, error: lookupError } = lookup;
+    if (lookupError && cloudNotReached(lookupError)) noteCloudUnreachable();
+    if (!askCloud || lookupError || !row) {
       /*
        * This device cannot commit for this shop - no cloud account signed in,
-       * no row of its own yet, or no permission to read one. None of that is a
-       * reason to refuse a customer. The sale is written down here and mirrored
-       * when there is somewhere to mirror it to, which is exactly what the
-       * laundry does with a bundle.
+       * no row of its own yet, no permission to read one, or no way through to
+       * the cloud right now. None of that is a reason to refuse a customer. The
+       * sale is written down here and mirrored when there is somewhere to
+       * mirror it to, which is exactly what the laundry does with a bundle.
        */
       localStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(result.store));
       queueStoreSync(result.store, baseStore);
@@ -56,6 +70,8 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
         if (error.code === '40001') void refreshStoreFromCloud(store.accessCode).catch(() => {});
         return failure(error.message || 'Sale rejected. Nothing was sold.');
       }
+      // The line dropped mid-sale: the next sale should not wait on it too.
+      noteCloudUnreachable();
       const live = JSON.parse(localStorage.getItem('storeflow_' + store.accessCode) || 'null');
       if (live && !same(live, current)) {
         localStorage.setItem('storeflow_sync_pending_' + store.accessCode, JSON.stringify({ base: baseStore, uncertainCheckout: result.store, state: 'conflict', error: 'The sale response was lost while another edit was made. Both copies are kept. Review cloud records before retrying this sale.' }));

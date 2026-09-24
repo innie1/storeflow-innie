@@ -191,45 +191,24 @@ function gamesSteps(): GuideStep[] {
   ];
 }
 
-/** The walk for a shop that sells goods. */
-function productSteps(): GuideStep[] {
-  return [
-    {
-      id: 'open-inventory',
-      target: 'tab-inventory',
-      title: 'Start with your stock',
-      body: 'This is where what you sell lives. Tap here to open it.',
-      done: (store, tab) => tab === 'inventory' || (store.products || []).length > 0,
-    },
-    {
-      id: 'add-product',
-      target: 'add-service',
-      tab: 'inventory',
-      title: 'Add your first product',
-      body: 'Name it, what it costs you, what you sell it for. One is enough to begin.',
-      done: store => (store.products || []).length > 0,
-    },
-    {
-      id: 'open-sales',
-      target: 'tab-sales',
-      title: 'Open the till',
-      body: 'This is where you ring up a sale. Tap here.',
-      done: (store, tab) => tab === 'sales' || (store.sales || []).length > 0,
-    },
-    {
-      id: 'first-sale',
-      target: 'record-job',
-      tab: 'sales',
-      title: 'Make your first sale',
-      body: 'Ring up one sale and the shop is open.',
-      done: store => (store.sales || []).length > 0,
-    },
-  ];
-}
+/*
+ * A shop that sells goods has no walk.
+ *
+ * Every new shop opens on its own first page - "What 5 products do you sell
+ * most?" - and for a shop that sells goods that page is the setup: products
+ * and prices in, then straight to a home screen with those products ready to
+ * tap and sell. The walk that used to run on top of it asked for the same
+ * thing again, dimmed that page while the merchant was typing into it, and
+ * pointed its "add your first product" step at a laundry button. It said
+ * nothing the first page and the home screen do not already say better.
+ *
+ * Laundries and other service shops keep theirs: they have prices to set
+ * before anything works, and no first page that sets them.
+ */
 
 export function guideSteps(store: StoreData): GuideStep[] {
   if (String(store.storeType || store.category || '').toLowerCase() === 'games') return gamesSteps();
-  return isServiceFirstBusiness(store) ? serviceSteps(store) : productSteps();
+  return isServiceFirstBusiness(store) ? serviceSteps(store) : [];
 }
 
 /** The first step not yet done, or null when the shop is ready to trade. */
@@ -308,9 +287,25 @@ export function markCelebrationShown(accessCode?: string): void {
   try { localStorage.setItem(shopKey(FINISHED_PREFIX, accessCode), '1'); } catch { /* private mode */ }
 }
 
+/**
+ * The simple home's own first page - "What 5 products do you sell most?" -
+ * is showing.
+ *
+ * It is onboarding of its own, asking for exactly what the guide's first step
+ * asks for. With both running, the guide lit the Stock button and dimmed the
+ * page the merchant was typing their products into. The page goes first; once
+ * it is finished or skipped, the guide carries on from wherever that left the
+ * shop.
+ */
+export function firstProductsPageShowing(store: StoreData, tab = ''): boolean {
+  const onboarding = (store as any).simpleOnboarding;
+  return tab === 'dashboard' && (store as any).uiMode === 'simple' && !!onboarding && !onboarding.complete;
+}
+
 /** Whether the guide should be on screen at all. */
 export function shouldRunGuide(store: StoreData | null | undefined, tab = ''): boolean {
   if (!store) return false;
   if (guideDismissed(store.accessCode)) return false;
+  if (firstProductsPageShowing(store, tab)) return false;
   return nextStep(store, tab) !== null;
 }

@@ -43,6 +43,7 @@ import NotificationDrawer from '@/components/NotificationDrawer';
  */
 import { Screens, screensForTab, preloadScreens, workspaceKeyFor } from './screens';
 import { subscribeWorkInProgress, workInProgress } from '@/lib/work-in-progress';
+import { useCelebrationShowing } from '@/lib/celebrations';
 
 const {
   Academy, Achievements, BarcodeScanner, CashDrawer, CommunicationCenter,
@@ -1115,6 +1116,8 @@ export default function Index() {
    * however the merchant got there — through the guide, or on their own.
    */
   const [showReady, setShowReady] = useState(false);
+  // A first-sale card up at the same moment goes first; this waits its turn.
+  const milestoneShowing = useCelebrationShowing();
   useEffect(() => {
     const check = () => {
       if (!store || celebrationShown(store.accessCode)) return;
@@ -2254,7 +2257,7 @@ export default function Index() {
             onNavigate={next => { if (isTabAllowed(next as TabId, currentUser)) setTab(next as TabId); }}
           />
         )}
-        {showReady && store && (
+        {showReady && !milestoneShowing && store && (
           <ReadyForBusiness
             storeName={store.storeName || 'Your store'}
             practised={hasPractised(store.accessCode) && (store.sales || []).length === 0}

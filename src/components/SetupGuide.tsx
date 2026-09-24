@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import {
@@ -130,10 +130,25 @@ export default function SetupGuide({ store, tab, onNavigate }: Props) {
     };
   }, [step?.id, step?.target, tab]);
 
-  // A step that lives on another tab takes the merchant there first.
+  /*
+   * A step that lives on another tab takes the merchant there - once.
+   *
+   * This ran on every change of tab, so while a step was open the merchant
+   * could not leave its screen: tap Home and the guide sent them straight
+   * back. A laundry that took a real customer at the last step, instead of a
+   * practice one, could not reach Home, Orders or the price list for the rest
+   * of its first day. The guide leads; it does not hold anyone. It takes them
+   * to a step when that step first appears, and after that they go where they
+   * like - the step is still there, lit, whenever they come back to it.
+   */
+  const ledTo = useRef<string | null>(null);
   useEffect(() => {
-    if (step?.tab && step.tab !== tab) onNavigate(step.tab);
-  }, [step?.id, step?.tab, tab, onNavigate]);
+    if (!step?.tab) return;
+    const key = `${store?.accessCode || ''}:${step.id}`;
+    if (ledTo.current === key) return;
+    ledTo.current = key;
+    if (step.tab !== tab) onNavigate(step.tab);
+  }, [step?.id, step?.tab, tab, onNavigate, store?.accessCode]);
 
   if (!step) return null;
 

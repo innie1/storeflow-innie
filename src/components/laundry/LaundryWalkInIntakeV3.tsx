@@ -629,6 +629,17 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
       onUpdate(nextStore);
       setCreatedPayment(payment);
       setCreated(localRecord);
+      /*
+       * The setup guide opened this form for a practice run, and the merchant
+       * switched it to a real customer and saved. That is walking through it,
+       * for real - so the guide's last step is done. Left unmarked, the guide
+       * kept asking for a practice run that was no longer needed, and pulled
+       * the merchant back to Records every time they went anywhere else.
+       *
+       * Only a form the guide opened counts. An order taken before the guide
+       * has shown anything still leaves the walk to teach what it teaches.
+       */
+      if (guidedPractice) markPractised(accessCode);
       showToast(
         payment.change > 0
           ? `Laundry saved — ₦${payment.change.toLocaleString()} change for customer`

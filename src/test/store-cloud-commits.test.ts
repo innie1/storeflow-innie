@@ -2,20 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mock = vi.hoisted(() => ({ remote: {} as any, handler: null as any, calls: 0 }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
   auth: { getSession: async () => ({ data: { session: { user: { id:'owner' } } }, error:null }) },
-  from: () => { const query: any = { select: () => query, eq: () => query, single: async () => ({data:{id:'store',data:mock.remote},error:null}), maybeSingle: async () => ({data:{id:'store'},error:null}) }; return query; },
+  from: () => { const query: any = { select: () => query, eq: () => query, retry: () => query, abortSignal: () => query, single: async () => ({data:{id:'store',data:mock.remote},error:null}), maybeSingle: async () => ({data:{id:'store'},error:null}) }; return query; },
   rpc: async (_name: string, args: any) => { mock.calls++; return mock.handler(args); },
 } }));
 import { createStore } from '@/lib/store-data';
 import { commitCashCheckout } from '@/lib/committed-checkout';
 import { cloudSnapshot, getPendingStoreSync, retryStoreSync } from '@/lib/store-cloud-sync';
 import { mergeStoreSnapshot } from '@/lib/store-sync-guard';
+import { noteCloudReached } from '@/lib/cloud-reach';
 import type { StoreData } from '@/types/store';
 function shop(): StoreData {
  const s=createStore('Cloud test','retail');
  const store={...s,storeId:'cloud-id',products:[{id:'p',name:'Soap',quantity:1,costPrice:60,sellingPrice:100,category:'Goods'}],sales:[],cashBalance:0,bankBalance:0,managerSettings:{...s.managerSettings!,multiDeviceSync:true,autoBackupsEnabled:false}};
  localStorage.setItem('storeflow_'+store.accessCode,JSON.stringify(store));mock.remote=cloudSnapshot(store);return store;
 }
-beforeEach(()=>{localStorage.clear();mock.calls=0;vi.spyOn(navigator,'onLine','get').mockReturnValue(true);mock.handler=async (args:any)=>{try {mock.remote=mergeStoreSnapshot(args.p_base,args.p_next,mock.remote);return {data:{data:mock.remote},error:null};}catch(error:any){return {data:null,error:{code:'40001',message:error.message}};}};});
+// The half-minute an unreachable cloud is left alone is per page, so each test starts with a reachable one.
+beforeEach(()=>{noteCloudReached();localStorage.clear();mock.calls=0;vi.spyOn(navigator,'onLine','get').mockReturnValue(true);mock.handler=async (args:any)=>{try {mock.remote=mergeStoreSnapshot(args.p_base,args.p_next,mock.remote);return {data:{data:mock.remote},error:null};}catch(error:any){return {data:null,error:{code:'40001',message:error.message}};}};});
 describe('server-confirmed counter checkout',()=>{
  it('waits for the server before changing local stock or returning a sale',async()=>{
   const s=shop();let release!:()=>void;const gate=new Promise<void>(r=>release=r);const original=mock.handler;
@@ -33,6 +35,8 @@ describe('server-confirmed counter checkout',()=>{
   const s=shop();const original=mock.handler;let first=true;
   mock.handler=async(args:any)=>{const result=await original(args);if(first){first=false;return {data:null,error:{message:'Connection lost'}};}return result;};
   const r=await commitCashCheckout(s,[{productId:'p',quantity:1}]);expect(r.error).toBeUndefined();
+  // The dropped line is left alone for half a minute; this is it coming back.
+  noteCloudReached();
   await retryStoreSync(s.accessCode);expect(mock.remote.sales).toHaveLength(1);expect(mock.remote.sales[0].id).toBe(r.sales[0].id);expect(mock.remote.cashBalance).toBe(100);expect(getPendingStoreSync(s.accessCode)).toBeNull();
  });
  it('keeps offline checkout pending without pretending it was uploaded',async()=>{
