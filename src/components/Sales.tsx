@@ -103,6 +103,11 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
   }, [cart, shopKey]);
   const [globalSaleMode, setGlobalSaleMode] = useState<'wholesale' | 'retail'>(() => (localStorage.getItem('storeflow_sale_mode') as 'wholesale' | 'retail') || 'retail');
   const [selectedSaleTypes, setSelectedSaleTypes] = useState<Record<string, 'carton' | 'single'>>({});
+  /** Whether anything here is sold both by the carton and by the piece - the only thing the Wholesale/Retail switch changes. */
+  const hasCartonPieceProducts = useMemo(
+    () => (store.products || []).some(product => product.isCartonSingleEnabled && !product.discontinued),
+    [store.products],
+  );
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customQtyFor, setCustomQtyFor] = useState<string | null>(null);
   const [customQty, setCustomQty] = useState('1');
@@ -626,7 +631,16 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
         </div>
       </div>
 
-      {/* Wholesale / Retail Global Toggle */}
+      {/*
+        Wholesale / Retail Global Toggle.
+
+        It only changes the price of a product sold both by the carton and by
+        the piece. For a shop with none of those it did nothing at all - yet
+        sat at the top of the till, asked for the store code to change, and
+        labelled every plain product "Carton". It is shown once there is a
+        product it can act on.
+      */}
+      {hasCartonPieceProducts && (<>
       <div className="grid grid-cols-2 gap-1 bg-surface-2 p-1 rounded-xl border border-border/80 shadow-xs">
         <button
           onClick={() => {
@@ -701,6 +715,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           </div>
         </div>
       )}
+      </>)}
 
       {/* Search and Filters */}
       <div className="relative flex gap-2">
@@ -958,11 +973,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                             >
                               {item.saleType === 'carton' ? 'Carton' : 'Single'}
                             </button>
-                          ) : (
-                            <span className="text-[8px] bg-muted/20 text-muted-foreground px-1 py-0.5 rounded font-bold select-none">
-                              <Package className="w-2.5 h-2.5 inline-block -mt-0.5 mr-0.5" />Carton
-                            </span>
-                          )}
+                          ) : null /* Sold only one way: no carton or piece to name. It said "Carton" for a 1kg bag of rice. */}
                         </p>
                         <p className="text-[9px] text-muted-foreground">₦{item.unitPrice.toLocaleString()} each</p>
                       </div>
