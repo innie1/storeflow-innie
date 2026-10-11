@@ -16,6 +16,7 @@ import ContactPickButton from '@/components/ContactPickButton';
 import ConfirmModal from '@/components/ConfirmModal';
 import ScrollLock from '@/components/ScrollLock';
 import { canSeeMoney } from '@/lib/permissions';
+import StaffExpenseSettings from '@/components/staff/StaffExpenseSettings';
 
 interface StaffManagementProps {
   store: StoreData;
@@ -361,6 +362,8 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
           </button>
         )}
       </div>
+
+      {currentUser?.role === 'owner' && <StaffExpenseSettings store={store} onUpdate={onUpdate} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Active Shift Tracker. Drawer floats are money, so only for

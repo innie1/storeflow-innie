@@ -16,6 +16,7 @@
 
 import type { Expense, StoreData, SupplyItem } from '@/types/store';
 import { tradeSupplies } from '@/lib/trade-supplies';
+import { enterExpenses } from '@/lib/expense-log';
 
 /**
  * A starting list, not a fixed one, and no longer the laundry's list for
@@ -125,7 +126,7 @@ export function buildSupplyExpense(purchase: SupplyPurchase): Expense {
 /** Buying it clears the complaint, and records what it cost and when. */
 export function markSupplyPurchased(store: StoreData, purchase: SupplyPurchase): StoreData {
   const cleared = reportSupplyLow(store, purchase.supply, false);
-  return {
+  return enterExpenses({
     ...cleared,
     supplies: getSupplies(cleared).map(item =>
       item.id === purchase.supply.id
@@ -136,8 +137,7 @@ export function markSupplyPurchased(store: StoreData, purchase: SupplyPurchase):
           }
         : item,
     ),
-    expenses: [...(store.expenses || []), buildSupplyExpense(purchase)],
-  };
+  }, [buildSupplyExpense(purchase)]);
 }
 
 export function isConsumableExpense(expense: Pick<Expense, 'category'>): boolean {

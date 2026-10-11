@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { StoreData, ExpenseCategory, Expense, Restock, RecurringBill } from '@/types/store';
-import { addExpense, deleteExpense, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
+import { StoreData, ExpenseCategory, Expense, ExpensePaidFrom, Restock, RecurringBill } from '@/types/store';
+import { approveStaffExpense, canApproveStaffExpenses, PAID_FROM_LABEL, pendingStaffExpenses, rejectStaffExpense } from '@/lib/staff-expenses';
+import { addExpense, deleteExpense, saveStore, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SupplySheet from '@/components/SupplySheet';
 import ConsumableAsk from '@/components/ConsumableAsk';
@@ -13,6 +14,16 @@ import ScrollLock from '@/components/ScrollLock';
 interface ExpensesProps {
   store: StoreData;
   onUpdate: (store: StoreData) => void;
+  currentUser?: { id?: string; name?: string; role?: string } | null;
+}
+
+const roleLabel = (role: string) => role.charAt(0).toUpperCase() + role.slice(1);
+
+/** "Faith • Attendant" for a worker's expense; nothing for the owner's own. */
+function recordedByLine(expense: Pick<Expense, 'recordedBy'>): string | null {
+  const by = expense.recordedBy;
+  if (!by || by.role === 'owner') return null;
+  return `${by.name} • ${roleLabel(by.role)}`;
 }
 
 const CATEGORY_ICON: Record<ExpenseCategory, LucideIcon> = {
@@ -33,12 +44,13 @@ function CategoryIcon({ category, className = 'w-3 h-3 inline-block -mt-0.5 mr-1
   return <Icon className={className} />;
 }
 
-export default function Expenses({ store, onUpdate }: ExpensesProps) {
+export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('Rent');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState('');
+  const [paidFrom, setPaidFrom] = useState<ExpensePaidFrom>('cash');
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
   const [confirmDel, setConfirmDel] = useState<Expense | null>(null);
   const [showRestock, setShowRestock] = useState(false);
@@ -115,10 +127,11 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
     if (!date) return showToast('Pick a date', 'error');
     if (category === 'Other' && !note.trim()) return showToast('A note is required for "Other" expenses', 'error');
     const iso = new Date(date + 'T12:00:00').toISOString();
-    const updated = addExpense(store, { amount: amt, category, date: iso, note: note.trim() || undefined });
+    const updated = addExpense(store, { amount: amt, category, date: iso, note: note.trim() || undefined, paidFrom });
     onUpdate(updated);
     setAmount('');
     setNote('');
+    setPaidFrom('cash');
     setCategory('Rent');
     setDate(new Date().toISOString().slice(0, 10));
     setShowAdd(false);
@@ -137,6 +150,19 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
   };
 
   const recurringBills = store.recurringBills || [];
+
+  // Workers' expenses waiting for the owner. Not in the book yet, so not in
+  // any total on this page.
+  const waiting = pendingStaffExpenses(store);
+  const canDecide = canApproveStaffExpenses(currentUser);
+  const approver = { id: currentUser?.id, name: currentUser?.name || 'Owner', role: currentUser?.role || 'owner' };
+  const decideStaffExpense = (id: string, approve: boolean) => {
+    const next = approve ? approveStaffExpense(store, id, approver) : rejectStaffExpense(store, id, approver);
+    if (next === store) return;
+    saveStore(next);
+    onUpdate(next);
+    showToast(approve ? 'Expense approved' : 'Expense rejected');
+  };
 
   const handleAddBill = () => {
     const amt = Number(billAmount);
@@ -191,6 +217,37 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
           })}
         </div>
       </div>
+
+      {waiting.length > 0 && (
+        <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/30 space-y-2">
+          <p className="font-display font-bold text-sm">Waiting for approval ({waiting.length})</p>
+          <p className="text-[10px] text-muted-foreground -mt-1.5">Not counted in your totals until approved.</p>
+          {waiting.map(item => (
+            <div key={item.id} className="p-2.5 rounded-lg bg-card border border-border">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-display font-semibold text-sm truncate"><CategoryIcon category={item.category} />{item.note}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {item.category} · {PAID_FROM_LABEL[item.paidFrom]} · {new Date(item.date).toLocaleDateString()}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Recorded by {item.recordedBy.name} • {roleLabel(item.recordedBy.role)}, {new Date(item.recordedAt).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                  </p>
+                </div>
+                <p className="font-display font-bold text-sm shrink-0">₦{item.amount.toLocaleString()}</p>
+              </div>
+              {canDecide ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button onClick={() => decideStaffExpense(item.id, false)} className="h-9 rounded-lg bg-surface-2 border border-border text-xs font-display font-bold">Reject</button>
+                  <button onClick={() => decideStaffExpense(item.id, true)} className="h-9 rounded-lg bg-success text-success-foreground text-xs font-display font-bold">Approve</button>
+                </div>
+              ) : (
+                <p className="mt-1.5 text-[10px] text-muted-foreground">Waiting for the owner.</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Add buttons */}
       {/* Where money is already the point. Never over a job, never twice in
@@ -415,6 +472,13 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                     {new Date(e.date).toLocaleDateString()} {new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                   {e.note && <p className="text-xs text-muted-foreground truncate mt-0.5">{e.note}</p>}
+                  {(recordedByLine(e) || (e.paidFrom && e.paidFrom !== 'cash')) && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {recordedByLine(e) && <>Recorded by {recordedByLine(e)}</>}
+                      {recordedByLine(e) && e.paidFrom && e.paidFrom !== 'cash' && ' · '}
+                      {e.paidFrom && e.paidFrom !== 'cash' && <>Paid from {PAID_FROM_LABEL[e.paidFrom].toLowerCase()}</>}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="font-display font-bold text-destructive">₦{e.amount.toLocaleString()}</p>
@@ -477,6 +541,23 @@ export default function Expenses({ store, onUpdate }: ExpensesProps) {
                   onChange={e => setDate(e.target.value)}
                   className={inputClass}
                 />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase">Paid from</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(Object.keys(PAID_FROM_LABEL) as ExpensePaidFrom[]).map(source => (
+                    <button
+                      key={source}
+                      type="button"
+                      onClick={() => setPaidFrom(source)}
+                      className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
+                        paidFrom === source ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border hover:border-primary/30'
+                      }`}
+                    >
+                      {PAID_FROM_LABEL[source]}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="text-[10px] text-muted-foreground uppercase">

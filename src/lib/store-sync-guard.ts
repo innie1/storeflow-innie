@@ -1,6 +1,6 @@
 /** Serialize background saves and refuse to overwrite concurrent remote edits. */
 const queues = new Map<string, Promise<unknown>>();
-export const FINANCIAL_FIELDS = ['products', 'sales', 'pendingPayments', 'customers', 'cashBalance', 'bankBalance', 'inventoryMovements', 'expenses', 'restocks', 'investments', 'trash'] as const;
+export const FINANCIAL_FIELDS = ['products', 'sales', 'pendingPayments', 'customers', 'cashBalance', 'bankBalance', 'walletBalance', 'inventoryMovements', 'expenses', 'restocks', 'investments', 'trash'] as const;
 export function same(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;

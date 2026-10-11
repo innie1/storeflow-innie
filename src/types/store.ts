@@ -217,6 +217,56 @@ export interface Expense {
   note?: string;
   source?: 'manual' | 'restock';
   restockBatchId?: string; // to link expense to a restock event
+  /**
+   * Which balance the money left. Absent means cash, because every expense
+   * recorded before this existed was taken from cash.
+   */
+  paidFrom?: ExpensePaidFrom;
+  /**
+   * The worker who spent it, when it was not the owner. Absent means the
+   * owner, which is who recorded every expense before staff could.
+   */
+  recordedBy?: ExpenseRecorder;
+  /** When the owner agreed a staff expense, if it had to wait. */
+  approvedAt?: string;
+}
+
+export type ExpensePaidFrom = 'cash' | 'bank' | 'wallet';
+
+export interface ExpenseRecorder {
+  staffId: string;
+  name: string;
+  role: string;
+}
+
+/**
+ * An expense a worker reported, and what became of it.
+ *
+ * Kept apart from `expenses` on purpose. Twenty-odd places add up the expense
+ * book - reports, break-even, the cash drawer, profit, Flow - and an expense
+ * still waiting for the owner must not reach any of them. Rather than teach
+ * each one to skip it, a waiting expense simply is not in the book. Approval
+ * puts it there once, through addExpense like every other expense; rejection
+ * never does. Nothing adds these up, so an approved one is never counted
+ * twice.
+ */
+export interface StaffExpenseRequest {
+  id: string;
+  amount: number;
+  category: ExpenseCategory;
+  note: string;
+  /** The day the money was spent. */
+  date: string;
+  paidFrom: ExpensePaidFrom;
+  recordedBy: ExpenseRecorder;
+  /** When the worker told the app. */
+  recordedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+  /** Approved without waiting: the shop records straight away, or it was under the limit. */
+  autoApproved?: boolean;
+  decidedAt?: string;
+  /** The entry in the expense book, once approved. */
+  expenseId?: string;
 }
 
 export interface StoreProfile {
@@ -693,6 +743,17 @@ export interface ManagerSettings {
   // Index.tsx where it is honoured: this and marketplaceSettings.alertSound
   // are two switches for one behaviour, and only one of them used to count.
   orderAlertSoundsEnabled?: boolean;
+  /**
+   * What happens when a worker records an expense. Absent means 'approval':
+   * a new shop asks the owner first, and money leaves the books only once the
+   * owner has agreed.
+   */
+  staffExpenseApproval?: 'approval' | 'immediate';
+  /**
+   * Under 'approval', a worker's expense up to this amount goes straight in.
+   * Absent or 0 means every one waits for the owner.
+   */
+  staffExpenseFreeLimit?: number;
   backorderSellingEnabled?: boolean; // when on, sales can go through even at 0 stock; the shortfall is tracked as backorderedQty on the product. Toggling this requires ownerPassword.
   emergencyRecoveryKey?: string;   // Used to encrypt/decrypt offline backup exports
   lastAutoRestockDraftDate?: string; // Last time the weekly auto restock draft notification was generated
@@ -1060,6 +1121,8 @@ export interface StoreData {
   pieceWork?: PieceWorkEntry[];
   /** What has actually been handed over to those workers. */
   workerPayments?: WorkerPayment[];
+  /** Expenses workers reported, waiting or decided. See StaffExpenseRequest. */
+  staffExpenseRequests?: StaffExpenseRequest[];
   liabilities?: number;
 }
 

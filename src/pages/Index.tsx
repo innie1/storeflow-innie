@@ -23,6 +23,8 @@ import { setNotificationPreferencesShop } from '@/lib/notification-preferences';
 import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-session';
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
+import { setCurrentActor } from '@/lib/current-actor';
+import StaffExpenseButton from '@/components/staff/StaffExpenseButton';
 import { matchCustomer, loadStore, findProductByBarcode, addProduct, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
 import StreakFlame from '@/components/streaks/StreakFlame';
@@ -409,6 +411,8 @@ export default function Index() {
   }, [store?.managerSettings?.voiceFeatures]);
   const [autoOpenRestock, setAutoOpenRestock] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  // The books ask who is acting, so every expense says who entered it.
+  useEffect(() => { setCurrentActor(currentUser); }, [currentUser]);
   const [tab, setTabState] = useState<TabId>('dashboard');
   const [orders, setOrders] = useState<any[]>([]);
   // Set when a push notification deep-links to one order; Orders consumes it.
@@ -1614,6 +1618,8 @@ export default function Index() {
             {/* A per-piece worker's Record my work and earnings, above
                 whichever home screen they use. Nobody else sees it. */}
             <MyPieceWork store={store} orders={orders} currentUser={currentUser} onUpdate={setStore} />
+            {/* Any worker can say what they spent without seeing the money. */}
+            <StaffExpenseButton store={store} currentUser={currentUser} onUpdate={setStore} />
             {store.uiMode === 'simple' ? (
               <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} orders={orders} />
             ) : (
@@ -1646,7 +1652,7 @@ export default function Index() {
       case 'sales':
         return <Sales store={store} onUpdate={setStore} managerSettings={store.managerSettings} isActive={tab === 'sales'} currentUser={currentUser} />;
       case 'expenses':
-        return <Expenses store={store} onUpdate={setStore} />;
+        return <Expenses store={store} onUpdate={setStore} currentUser={currentUser} />;
       case 'manager':
         return <Manager store={store} orders={orders} onUpdate={setStore} onNavigate={handleNavigate} />;
       case 'pending':

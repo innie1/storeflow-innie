@@ -6,7 +6,10 @@ import {
   addPaymentToPending,
   addWithdrawal,
   receiveStock,
+  saveStore,
 } from '@/lib/store-data';
+import { currentActor } from '@/lib/current-actor';
+import { recordsAsStaff, STAFF_EXPENSE_CATEGORIES, submitStaffExpense } from '@/lib/staff-expenses';
 
 /**
  * Flow's financial mutations all delegate to StoreFlow's existing data-layer
@@ -20,12 +23,30 @@ export function flowAddExpense(
   note = 'Recorded by Flow'
 ): StoreData {
   if (!Number.isFinite(amount) || amount <= 0) return store;
+  const value = Math.round(amount * 100) / 100;
+  // Whoever is talking to Flow is who spent it - not "Flow". And a worker's
+  // expense follows the same rule here as on their Record Expense form, or
+  // typing it into Flow would be the way round the owner's approval.
+  const actor = currentActor();
+  if (actor.id && recordsAsStaff(actor)) {
+    const now = new Date();
+    const result = submitStaffExpense(store, { ...actor, id: actor.id }, {
+      amount: value,
+      category: STAFF_EXPENSE_CATEGORIES.includes(category) ? category : 'Other',
+      note,
+      date: new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10),
+      paidFrom: 'cash',
+    }, now);
+    if ('error' in result) return store;
+    saveStore(result.store);
+    return result.store;
+  }
   return addExpense(store, {
-    amount: Math.round(amount * 100) / 100,
+    amount: value,
     category,
     date: new Date().toISOString(),
     note,
-  }, 'Flow', 'owner');
+  });
 }
 
 export function flowRecordPayment(

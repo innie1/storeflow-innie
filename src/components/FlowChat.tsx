@@ -2,6 +2,7 @@ import { commitCashCheckout } from '@/lib/committed-checkout';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StoreData, TabId } from '@/types/store';
 import { addProduct, receiveStock, importPurchaseOrderByCode } from '@/lib/store-data';
+import { pendingStaffExpenses } from '@/lib/staff-expenses';
 import { flowAddExpense, flowRecordPayment, flowAddInvestment, flowAddLoan, flowAddWithdrawal, flowReceiveStock } from '@/lib/flow-finance-actions';
 import { applyTheme, setThemeMode, ThemeMode, THEMES, ThemeId } from '@/lib/theme';
 import { showToast } from '@/components/Toast';
@@ -399,7 +400,7 @@ export default function FlowChat({ store, onClose, onNavigate, onUpdate }: FlowC
     if (expenseMatch) {
       const note = expenseMatch[1]?.trim() || 'Recorded by Flow';
       const category = /transport/i.test(note) ? 'Transport' : /rent/i.test(note) ? 'Rent' : /salary|wage/i.test(note) ? 'Salaries' : /utility|electric|power|water/i.test(note) ? 'Utilities' : 'Other';
-      confirm(`Record ${money(amount)} as ${category.toLowerCase()} expense${note !== 'Recorded by Flow' ? ` for ${note}` : ''}?`, () => { rememberUndo(); const next = flowAddExpense(store, amount, category, note); onUpdate(next); flow(`Done. Recorded **${money(amount)}** expense.`); showToast('Expense recorded by Flow', 'success'); });
+      confirm(`Record ${money(amount)} as ${category.toLowerCase()} expense${note !== 'Recorded by Flow' ? ` for ${note}` : ''}?`, () => { rememberUndo(); const next = flowAddExpense(store, amount, category, note); onUpdate(next); const waits = pendingStaffExpenses(next).length > pendingStaffExpenses(store).length; flow(waits ? `Done. **${money(amount)}** sent to the owner for approval.` : `Done. Recorded **${money(amount)}** expense.`); showToast(waits ? 'Expense waiting for owner approval' : 'Expense recorded by Flow', 'success'); });
       return true;
     }
 

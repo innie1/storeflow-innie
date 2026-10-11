@@ -1,8 +1,10 @@
 import { queueStoreSync } from '@/lib/store-cloud-sync';
 import { money, stockPrecision, packSize, stockBase, saleUnits, salePrice, historicalUnits, paymentAllocation, legacyAllocation } from '@/lib/inventory-sale-math';
 import type { PaymentAllocation } from '@/types/store';
+import { recordActivityLog } from './activity-log';
+import { describeExpense, enterExpenses, logExpense } from './expense-log';
 import {
-  Product, Sale, StoreData, Restock, Expense, ExpenseCategory, TrashItem, TrashKind,
+  Product, Sale, StoreData, Restock, Expense, ExpenseCategory, ExpensePaidFrom, TrashItem, TrashKind,
   Investment, StoreCategory, StoreType, GameService, GameSession,
   Customer, Supplier, BusinessGoal, MemoryEvent, DiaryEntry, StaffMember, Shift,
   CashSession, LostSale, WishlistItem, VaultDocument, BusinessChallenge, InventoryTransfer,
@@ -967,20 +969,7 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean;
   }
 }
 
-export function recordActivityLog(store: StoreData, user?: string, role?: string, action?: string): StoreData {
-  if (!user || !action) return store;
-  const newLog = {
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-    user,
-    role: role || 'owner',
-    action,
-    timestamp: new Date().toISOString(),
-  };
-  return {
-    ...store,
-    activityLogs: [newLog, ...(store.activityLogs || [])].slice(0, 1000),
-  };
-}
+export { recordActivityLog } from './activity-log';
 
 function pushTrash(store: StoreData, kind: TrashKind, payload: Product | Sale | Expense): TrashItem[] {
   const item: TrashItem = {
@@ -1089,7 +1078,6 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actor
   const now = new Date().toISOString();
   const costTotal = Math.round(product.costPrice * product.quantity * 100) / 100;
   const newInvestments = [...(store.investments || [])];
-  const newExpenses = [...(store.expenses || [])];
   if (costTotal > 0) {
     // Stock a merchant already owns is capital they put into the shop, not
     // money the shop spent. This used to record the same cost twice — once
@@ -1118,7 +1106,6 @@ export function addProduct(store: StoreData, product: Omit<Product, 'id'>, actor
       total_profit: 0
     }],
     investments: newInvestments,
-    expenses: newExpenses,
   };
   if (actorName) {
     updated = recordActivityLog(updated, actorName, actorRole, `Added product: ${product.name} (${product.quantity} units)`);
@@ -1442,7 +1429,7 @@ export function importProducts(
   importTotal = Math.round(importTotal * 100) / 100;
 
   const newInvestments = [...(store.investments || [])];
-  const newExpenses = [...(store.expenses || [])];
+  const newExpenses: Expense[] = [];
 
   // Initial mass import check: no sales yet and no existing restock expenses
   const isInitialImport = (store.sales || []).length === 0 &&
@@ -1475,8 +1462,8 @@ export function importProducts(
     ...store,
     products: [...store.products, ...newProducts],
     investments: newInvestments,
-    expenses: newExpenses,
   };
+  updated = enterExpenses(updated, newExpenses);
 
   newProducts.forEach(p => {
     if (p.quantity > 0) {
@@ -1639,12 +1626,12 @@ export function receiveStock(
     ...store,
     products: updatedProducts,
     restocks: [...newRestocks, ...(store.restocks || [])],
-    expenses: [...newExpenses, ...(store.expenses || [])],
     investments: [...newInvestments, ...(store.investments || [])],
     cashBalance: Math.round(newCashBalance * 100) / 100,
     bankBalance: Math.round(newBankBalance * 100) / 100,
     walletBalance: Math.round(newWalletBalance * 100) / 100,
   };
+  updated = enterExpenses(updated, newExpenses);
 
   for (const entry of entries) {
     if (entry.quantity > 0) {
@@ -1667,24 +1654,34 @@ export function findProductByBarcode(store: StoreData, barcode: string): Product
   return store.products.find(p => p.barcode === barcode);
 }
 
-export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'source'>, actorName?: string, actorRole?: string): StoreData {
+/**
+ * Which balance an expense is taken from. Cash unless the expense says
+ * otherwise, which is what every expense meant before it could say.
+ */
+export const EXPENSE_BALANCE_FIELD: Record<ExpensePaidFrom, 'cashBalance' | 'bankBalance' | 'walletBalance'> = {
+  cash: 'cashBalance',
+  bank: 'bankBalance',
+  wallet: 'walletBalance',
+};
+
+export function addExpense(store: StoreData, expense: Omit<Expense, 'id' | 'source'>, actorName?: string, actorRole?: string, logAction?: string): StoreData {
   const newExpense: Expense = {
     ...expense,
     id: generateId(),
     source: 'manual',
   };
 
-  let newCashBalance = store.cashBalance ?? 0;
-  newCashBalance = Math.max(0, newCashBalance - expense.amount);
+  const field = EXPENSE_BALANCE_FIELD[expense.paidFrom || 'cash'];
+  const newBalance = Math.max(0, (store[field] ?? 0) - expense.amount);
 
-  let updated: StoreData = {
-    ...store,
-    expenses: [newExpense, ...(store.expenses || [])],
-    cashBalance: Math.round(newCashBalance * 100) / 100,
-  };
-  if (actorName) {
-    updated = recordActivityLog(updated, actorName, actorRole, `Recorded expense: ${expense.category} - ₦${expense.amount.toLocaleString()}`);
-  }
+  const updated = enterExpenses(
+    { ...store, [field]: Math.round(newBalance * 100) / 100 },
+    [newExpense],
+    {
+      ...(actorName ? { actor: { name: actorName, role: actorRole || 'owner' } } : {}),
+      ...(logAction ? { action: () => logAction } : {}),
+    },
+  );
   saveStore(updated);
   return updated;
 }
@@ -1693,15 +1690,16 @@ export function deleteExpense(store: StoreData, id: string): StoreData {
   const expense = (store.expenses || []).find(e => e.id === id);
   if (!expense) return store;
 
-  let newCashBalance = store.cashBalance ?? 0;
-  newCashBalance = newCashBalance + expense.amount;
+  // Back to the balance it left, not always to cash.
+  const field = EXPENSE_BALANCE_FIELD[expense.paidFrom || 'cash'];
+  const newBalance = (store[field] ?? 0) + expense.amount;
 
-  const updated: StoreData = {
+  const updated = logExpense({
     ...store,
     expenses: (store.expenses || []).filter(e => e.id !== id),
-    cashBalance: Math.round(newCashBalance * 100) / 100,
+    [field]: Math.round(newBalance * 100) / 100,
     trash: pushTrash(store, 'expense', expense),
-  };
+  }, 'Deleted', expense);
   saveStore(updated);
   return updated;
 }
@@ -1751,7 +1749,10 @@ export function restoreTrashItem(store: StoreData, trashId: string): StoreData {
     const e = item.payload as Expense;
     const list = updated.expenses || [];
     if (!list.some(x => x.id === e.id)) {
-      updated = { ...updated, expenses: [e, ...list] };
+      // Restoring does not make the restorer its author. One from before
+      // expenses named anybody was the owner's.
+      const original = e.recordedBy ? e : { ...e, recordedBy: { staffId: 'owner', name: 'Owner', role: 'owner' } };
+      updated = enterExpenses(updated, [original], { action: restored => `Restored expense: ${describeExpense(restored)}` });
     }
   }
   saveStore(updated);

@@ -368,6 +368,16 @@ export function restoreBackupPayload(payload: BackupPayload): {
       // Merge Product Requests
       const mergedRequests = mergeArrays(localStore.customerRequests || [], backupStore.customerRequests || [], 'id');
       
+      // Workers' expenses, waiting or decided. A decision wins over a copy
+      // still waiting: the backup's expense book already holds an approved
+      // one, so letting it be approved again here would count it twice.
+      const mergedStaffExpenses = mergeArrays(localStore.staffExpenseRequests || [], backupStore.staffExpenseRequests || [], 'id')
+        .map(request => {
+          if (request.status !== 'pending') return request;
+          const decided = (backupStore.staffExpenseRequests || []).find(other => other.id === request.id && other.status !== 'pending');
+          return decided || request;
+        });
+
       // Merge Notifications
       const mergedNotifications = mergeArrays(localStore.flowNotifications || [], backupStore.flowNotifications || [], 'id');
 
@@ -381,6 +391,7 @@ export function restoreBackupPayload(payload: BackupPayload): {
         pendingPayments: mergedPending,
         customerRequests: mergedRequests,
         flowNotifications: mergedNotifications,
+        staffExpenseRequests: mergedStaffExpenses,
         coins: Math.max(localStore.coins || 0, backupStore.coins || 0),
         savingsGoal: localStore.savingsGoal || backupStore.savingsGoal,
         /*
