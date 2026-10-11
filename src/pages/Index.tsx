@@ -24,6 +24,9 @@ import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-s
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { setCurrentActor } from '@/lib/current-actor';
+import { DEVICE_WATCH_MS, noticeNewDeviceRequests, storeRefOf } from '@/lib/device-request-watch';
+import { listDevices } from '@/lib/staff-join';
+import { cloudRecentlyUnreachable, hasCloudSession } from '@/lib/cloud-reach';
 import StaffExpenseButton from '@/components/staff/StaffExpenseButton';
 import { matchCustomer, loadStore, findProductByBarcode, addProduct, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
 import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks';
@@ -413,6 +416,36 @@ export default function Index() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   // The books ask who is acting, so every expense says who entered it.
   useEffect(() => { setCurrentActor(currentUser); }, [currentUser]);
+
+  // A worker's phone asking to join lives in the cloud, so the owner's phone
+  // asks now and then - on opening, on coming back, every two minutes while
+  // in front - and turns each new request into one notification.
+  const watchAccessCode = store?.accessCode;
+  const watchStoreRef = store ? storeRefOf(store) : '';
+  const latestStore = useRef(store);
+  latestStore.current = store;
+  useEffect(() => {
+    if (currentUser?.role !== 'owner' || !watchAccessCode || !watchStoreRef) return;
+    let stopped = false;
+    const check = async () => {
+      if (stopped || document.visibilityState !== 'visible' || !navigator.onLine) return;
+      if (cloudRecentlyUnreachable() || !(await hasCloudSession())) return;
+      const result = await listDevices(watchStoreRef);
+      if (stopped || !('devices' in result)) return;
+      const current = latestStore.current;
+      if (!current || current.accessCode !== watchAccessCode) return;
+      const next = noticeNewDeviceRequests(current, result.devices);
+      if (!next) return;
+      saveStore(next);
+      setStore(next);
+      showToast('A worker’s phone is asking to join', 'info');
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), DEVICE_WATCH_MS);
+    const onVisible = () => void check();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { stopped = true; window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [currentUser?.role, watchAccessCode, watchStoreRef]);
   const [tab, setTabState] = useState<TabId>('dashboard');
   const [orders, setOrders] = useState<any[]>([]);
   // Set when a push notification deep-links to one order; Orders consumes it.

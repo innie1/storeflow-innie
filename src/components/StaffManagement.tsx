@@ -17,6 +17,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import ScrollLock from '@/components/ScrollLock';
 import { canSeeMoney } from '@/lib/permissions';
 import StaffExpenseSettings from '@/components/staff/StaffExpenseSettings';
+import DeviceRequests from '@/components/staff/DeviceRequests';
 
 interface StaffManagementProps {
   store: StoreData;
@@ -363,6 +364,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
         )}
       </div>
 
+      {currentUser?.role === 'owner' && <DeviceRequests store={store} />}
       {currentUser?.role === 'owner' && <StaffExpenseSettings store={store} onUpdate={onUpdate} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

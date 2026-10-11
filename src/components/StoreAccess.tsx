@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { generateStoreUrl, parseScannedQRText } from '@/lib/qr-code';
 import QRScannerPage from '@/components/qr/QRScannerPage';
 import { getPublicStorefront } from '@/lib/public-storefront';
+import JoinStore from '@/components/staff/JoinStore';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -60,7 +61,7 @@ function CreateFlowProgress({ step, of = 3 }: { step: number; of?: number }) {
 }
 
 export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
-  const [mode, setMode] = useState<'choose' | 'create-choice' | 'access-choice' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>('choose');
+  const [mode, setMode] = useState<'choose' | 'join' | 'create-choice' | 'access-choice' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>('choose');
 
   // Flow's contextual speech bubble through this flow — bump flowMsgKey to
   // force the same line to replay (e.g. two wrong passwords in a row).
@@ -1181,6 +1182,20 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
             </button>
           </div>
         )}
+
+        {/* For a worker on their own phone. Kept apart from, and quieter
+            than, the two buttons above, which are the owner's way in. */}
+        {mode === 'choose' && (
+          <button
+            type="button"
+            onClick={() => setMode('join')}
+            className="mt-5 w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Work here? <span className="font-semibold text-primary underline-offset-2 hover:underline">Join a Store</span>
+          </button>
+        )}
+
+        {mode === 'join' && <JoinStore onBack={() => setMode('choose')} />}
 
         {mode === 'create-choice' && (
           <div className="space-y-3 text-center">
