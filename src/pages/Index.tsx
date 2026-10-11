@@ -911,6 +911,8 @@ export default function Index() {
         p_store_id: store.id,
         p_base: cloudSnapshot(local), p_next: cloudSnapshot(proposal.store),
         p_order: { id: orderId, expected_updated_at: targetOrder.updated_at, status: newStatus, notes: JSON.stringify(proposal.notes) },
+        // Laid over our copy below, so only the differences need to come back.
+        p_reply: 'changes',
       });
       if (error) throw error;
       // Counter activity may have continued while the request was in flight.

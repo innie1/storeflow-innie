@@ -17,7 +17,33 @@ function shop(): StoreData {
  localStorage.setItem('storeflow_'+store.accessCode,JSON.stringify(store));mock.remote=cloudSnapshot(store);return store;
 }
 // The half-minute an unreachable cloud is left alone is per page, so each test starts with a reachable one.
-beforeEach(()=>{noteCloudReached();localStorage.clear();mock.calls=0;vi.spyOn(navigator,'onLine','get').mockReturnValue(true);mock.handler=async (args:any)=>{try {mock.remote=mergeStoreSnapshot(args.p_base,args.p_next,mock.remote);return {data:{data:mock.remote},error:null};}catch(error:any){return {data:null,error:{code:'40001',message:error.message}};}};});
+beforeEach(()=>{noteCloudReached();localStorage.clear();mock.calls=0;vi.spyOn(navigator,'onLine','get').mockReturnValue(true);mock.handler=async (args:any)=>{try {mock.remote=mergeStoreSnapshot(args.p_base,args.p_next,mock.remote);return {data:{data:reply(args,mock.remote)},error:null};}catch(error:any){return {data:null,error:{code:'40001',message:error.message}};}};});
+// What the cloud sends back: with p_reply 'changes', only the parts that differ
+// from what the phone sent (supabase/migrations/*_reply_with_changes_only.sql).
+function reply(args:any,remote:any){
+ if(args.p_reply!=='changes')return remote;
+ return Object.fromEntries(Object.entries(remote).filter(([key,value])=>JSON.stringify(args.p_next?.[key])!==JSON.stringify(value)));
+}
+describe('the reply to a save',()=>{
+ it('is asked to carry only what changed, and the shop comes out the same',async()=>{
+  const s=shop();const seen:any[]=[];const original=mock.handler;mock.handler=async(args:any)=>{seen.push(args);return original(args);};
+  // Another phone renamed the shop meanwhile: that, and only that, comes back.
+  mock.remote={...mock.remote,storeName:'Renamed elsewhere'};
+  const r=await commitCashCheckout(s,[{productId:'p',quantity:1}]);
+  expect(r.error).toBeUndefined();expect(seen[0].p_reply).toBe('changes');
+  expect(r.store.storeName).toBe('Renamed elsewhere');expect(r.store.products[0].quantity).toBe(0);expect(r.store.sales).toHaveLength(1);
+  // Our own copy keeps what the cloud never holds.
+  expect(r.store.managerSettings).toEqual(expect.objectContaining({multiDeviceSync:true}));
+  const saved=JSON.parse(localStorage.getItem('storeflow_'+s.accessCode)!);
+  localStorage.setItem('storeflow_'+s.accessCode,JSON.stringify({...saved,customers:[{id:'c1',name:'Ada'}]}));
+  const next={...saved,customers:[{id:'c1',name:'Ada'}]};
+  localStorage.setItem('storeflow_sync_pending_'+s.accessCode,JSON.stringify({base:saved,next,state:'pending'}));
+  await retryStoreSync(s.accessCode);
+  expect(seen[1].p_reply).toBe('changes');expect(getPendingStoreSync(s.accessCode)).toBeNull();
+  expect(JSON.parse(localStorage.getItem('storeflow_'+s.accessCode)!).customers).toEqual([{id:'c1',name:'Ada'}]);
+  expect(mock.remote.customers).toEqual([{id:'c1',name:'Ada'}]);
+ });
+});
 describe('server-confirmed counter checkout',()=>{
  it('waits for the server before changing local stock or returning a sale',async()=>{
   const s=shop();let release!:()=>void;const gate=new Promise<void>(r=>release=r);const original=mock.handler;

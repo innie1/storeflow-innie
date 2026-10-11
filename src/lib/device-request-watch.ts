@@ -10,7 +10,16 @@ import type { DeviceRow } from '@/lib/staff-join';
  * shows it only to people trusted with the shop, never to a worker.
  */
 
-export const DEVICE_WATCH_MS = 2 * 60 * 1000;
+/**
+ * How often the owner's phone asks, in the background. Opening the app and
+ * coming back to it ask as well, which is when an owner is told in person
+ * that somebody is waiting - so the background check can be slow. Each ask
+ * is a request against the free plan.
+ */
+export const DEVICE_WATCH_MS = 10 * 60 * 1000;
+
+/** While the owner is on the Staff page, looking at the requests. */
+export const STAFF_PAGE_REFRESH_MS = 2 * 60 * 1000;
 
 export const deviceNoticeId = (requestId: string) => `device-request-${requestId}`;
 

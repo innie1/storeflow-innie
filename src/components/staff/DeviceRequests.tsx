@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Copy, RefreshCw, Share2, Smartphone } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { approveDevice, listDevices, rejectDevice, spacedCode, type DeviceRow } from '@/lib/staff-join';
-import { DEVICE_WATCH_MS, storeRefOf } from '@/lib/device-request-watch';
+import { STAFF_PAGE_REFRESH_MS, storeRefOf } from '@/lib/device-request-watch';
 import { hasCloudSession } from '@/lib/cloud-reach';
 import { showToast } from '@/components/Toast';
 import ScrollLock from '@/components/ScrollLock';
@@ -52,7 +52,7 @@ export default function DeviceRequests({ store }: Props) {
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load(); }, DEVICE_WATCH_MS);
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load(); }, STAFF_PAGE_REFRESH_MS);
     const onVisible = () => { if (document.visibilityState === 'visible') void load(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };

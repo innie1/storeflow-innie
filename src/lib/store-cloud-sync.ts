@@ -158,6 +158,10 @@ export async function retryStoreSync(code: string): Promise<void> {
       if (existing) {
         const { data, error } = await (supabase as any).rpc('commit_store_snapshot', {
           p_store_id: existing.id, p_base: held.base ? cloudSnapshot(held.base) : {}, p_next: next,
+          // Only what differs from what we sent - normally nothing. The reply
+          // is laid over our copy below, so the result is the same shop, and
+          // the cloud stops sending the whole shop back on every save.
+          p_reply: 'changes',
         });
         if (error) throw error;
         remote = data.data;

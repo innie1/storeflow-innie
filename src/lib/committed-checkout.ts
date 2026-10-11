@@ -59,6 +59,8 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
     window.dispatchEvent(new CustomEvent(STORE_SYNC_EVENT, { detail: { code: store.accessCode } }));
     const { data, error } = await (supabase as any).rpc('commit_store_snapshot', {
       p_store_id: row.id, p_base: cloudSnapshot(baseStore), p_next: cloudSnapshot(result.store),
+      // Laid over our copy below, so only the differences need to come back.
+      p_reply: 'changes',
     }).catch((error: any) => ({ data: null, error: { message: error.message } }));
     if (error) {
       // A definite database rejection has no side effects. Unknown network
