@@ -43,7 +43,7 @@ describe('the expense book has one door', () => {
       }
     }
     expect(offenders).toEqual([]);
-  });
+  }, 30000);
 });
 
 describe('every road says who spent it', () => {

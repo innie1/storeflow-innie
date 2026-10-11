@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { StoreData, ExpenseCategory, Expense, ExpensePaidFrom, Restock, RecurringBill } from '@/types/store';
-import { approveStaffExpense, canApproveStaffExpenses, PAID_FROM_LABEL, pendingStaffExpenses, rejectStaffExpense } from '@/lib/staff-expenses';
+import { approveStaffExpense, canApproveStaffExpenses, expenseRecorders, filterExpenseBook, PAID_FROM_LABEL, pendingStaffExpenses, rejectStaffExpense, type ExpenseWho } from '@/lib/staff-expenses';
 import { addExpense, deleteExpense, saveStore, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
 import { showToast } from '@/components/Toast';
 import SupplySheet from '@/components/SupplySheet';
@@ -52,6 +52,10 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
   const [note, setNote] = useState('');
   const [paidFrom, setPaidFrom] = useState<ExpensePaidFrom>('cash');
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
+  // Who entered it: everything, the owner's, the workers', or what waits -
+  // and one worker in particular.
+  const [who, setWho] = useState<ExpenseWho>('all');
+  const [staffFilter, setStaffFilter] = useState('');
   const [confirmDel, setConfirmDel] = useState<Expense | null>(null);
   const [showRestock, setShowRestock] = useState(false);
   const [showSupplies, setShowSupplies] = useState(false);
@@ -113,13 +117,14 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
   };
 
 
-  const { total, byCategory, filtered } = useMemo(() => {
+  const { total, byCategory, byWho, filtered } = useMemo(() => {
     const total = expenses.reduce((s, e) => s + e.amount, 0);
     const byCategory = new Map<ExpenseCategory, number>();
     expenses.forEach(e => byCategory.set(e.category, (byCategory.get(e.category) || 0) + e.amount));
-    const filtered = filter === 'all' ? expenses : expenses.filter(e => e.category === filter);
-    return { total, byCategory, filtered };
-  }, [expenses, filter]);
+    const byWho = filterExpenseBook(expenses, who, staffFilter || undefined);
+    const filtered = filter === 'all' ? byWho : byWho.filter(e => e.category === filter);
+    return { total, byCategory, byWho, filtered };
+  }, [expenses, filter, who, staffFilter]);
 
   const handleAdd = () => {
     const amt = Number(amount);
@@ -153,7 +158,11 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
 
   // Workers' expenses waiting for the owner. Not in the book yet, so not in
   // any total on this page.
-  const waiting = pendingStaffExpenses(store);
+  const allWaiting = pendingStaffExpenses(store);
+  const waiting = staffFilter ? allWaiting.filter(item => item.recordedBy.staffId === staffFilter) : allWaiting;
+  const recorders = expenseRecorders(store);
+  const filtering = who !== 'all' || !!staffFilter || filter !== 'all';
+  const viewTotal = filtered.reduce((sum, e) => sum + e.amount, 0);
   const canDecide = canApproveStaffExpenses(currentUser);
   const approver = { id: currentUser?.id, name: currentUser?.name || 'Owner', role: currentUser?.role || 'owner' };
   const decideStaffExpense = (id: string, approve: boolean) => {
@@ -197,6 +206,37 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
     showToast('Recurring bill removed');
   };
 
+  const renderWaiting = () => (
+    <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/30 space-y-2">
+      <p className="font-display font-bold text-sm">Waiting for approval ({waiting.length})</p>
+      <p className="text-[10px] text-muted-foreground -mt-1.5">Not counted in your totals until approved.</p>
+      {waiting.map(item => (
+        <div key={item.id} className="p-2.5 rounded-lg bg-card border border-border">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-display font-semibold text-sm truncate"><CategoryIcon category={item.category} />{item.note}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {item.category} · {PAID_FROM_LABEL[item.paidFrom]} · {new Date(item.date).toLocaleDateString()}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Recorded by {item.recordedBy.name} • {roleLabel(item.recordedBy.role)}, {new Date(item.recordedAt).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+              </p>
+            </div>
+            <p className="font-display font-bold text-sm shrink-0">₦{item.amount.toLocaleString()}</p>
+          </div>
+          {canDecide ? (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button onClick={() => decideStaffExpense(item.id, false)} className="h-9 rounded-lg bg-surface-2 border border-border text-xs font-display font-bold">Reject</button>
+              <button onClick={() => decideStaffExpense(item.id, true)} className="h-9 rounded-lg bg-success text-success-foreground text-xs font-display font-bold">Approve</button>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[10px] text-muted-foreground">Waiting for the owner.</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
   const inputClass = "w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm";
 
   return (
@@ -218,36 +258,7 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
         </div>
       </div>
 
-      {waiting.length > 0 && (
-        <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/30 space-y-2">
-          <p className="font-display font-bold text-sm">Waiting for approval ({waiting.length})</p>
-          <p className="text-[10px] text-muted-foreground -mt-1.5">Not counted in your totals until approved.</p>
-          {waiting.map(item => (
-            <div key={item.id} className="p-2.5 rounded-lg bg-card border border-border">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-display font-semibold text-sm truncate"><CategoryIcon category={item.category} />{item.note}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {item.category} · {PAID_FROM_LABEL[item.paidFrom]} · {new Date(item.date).toLocaleDateString()}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Recorded by {item.recordedBy.name} • {roleLabel(item.recordedBy.role)}, {new Date(item.recordedAt).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
-                  </p>
-                </div>
-                <p className="font-display font-bold text-sm shrink-0">₦{item.amount.toLocaleString()}</p>
-              </div>
-              {canDecide ? (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button onClick={() => decideStaffExpense(item.id, false)} className="h-9 rounded-lg bg-surface-2 border border-border text-xs font-display font-bold">Reject</button>
-                  <button onClick={() => decideStaffExpense(item.id, true)} className="h-9 rounded-lg bg-success text-success-foreground text-xs font-display font-bold">Approve</button>
-                </div>
-              ) : (
-                <p className="mt-1.5 text-[10px] text-muted-foreground">Waiting for the owner.</p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {who !== 'pending' && waiting.length > 0 && renderWaiting()}
 
       {/* Add buttons */}
       {/* Where money is already the point. Never over a job, never twice in
@@ -411,18 +422,49 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
         </div>
       )}
 
-      {/* Filter chips */}
-      <div className="flex flex-wrap gap-1.5">
+      {/* Who entered it */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {([
+          ['all', 'All'],
+          ['owner', 'Owner'],
+          ['staff', 'Staff'],
+          ['pending', `Pending (${allWaiting.length})`],
+        ] as [ExpenseWho, string][]).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setWho(value)}
+            className={`px-2.5 py-1 rounded-md text-xs font-display font-semibold border transition-colors ${
+              who === value ? 'bg-foreground text-background border-foreground' : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        {recorders.length > 0 && (
+          <select
+            aria-label="Filter by employee"
+            value={staffFilter}
+            onChange={e => { setStaffFilter(e.target.value); if (e.target.value && who === 'owner') setWho('all'); }}
+            className="h-7 px-2 rounded-md bg-surface-2 border border-border text-xs font-display font-semibold text-foreground"
+          >
+            <option value="">Every employee</option>
+            {recorders.map(by => <option key={by.staffId} value={by.staffId}>{by.name}</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* Filter chips. Not for what waits: it is not in the book yet. */}
+      {who !== 'pending' && <div className="flex flex-wrap gap-1.5">
         <button
           onClick={() => setFilter('all')}
           className={`px-2.5 py-1 rounded-md text-xs font-display font-semibold border transition-colors ${
             filter === 'all' ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-muted-foreground border-border hover:text-foreground'
           }`}
         >
-          All ({expenses.length})
+          All ({byWho.length})
         </button>
         {EXPENSE_CATEGORIES.map(cat => {
-          const count = expenses.filter(e => e.category === cat).length;
+          const count = byWho.filter(e => e.category === cat).length;
           if (count === 0) return null;
           return (
             <button
@@ -436,13 +478,23 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
             </button>
           );
         })}
-      </div>
+      </div>}
+
+      {filtering && who !== 'pending' && (
+        <p className="text-xs text-muted-foreground">
+          {filtered.length} {filtered.length === 1 ? 'expense' : 'expenses'} · ₦{viewTotal.toLocaleString()} in this view
+        </p>
+      )}
 
       {/* Expense list */}
       <div className="space-y-2">
-        {filtered.length === 0 ? (
+        {who === 'pending' ? (
+          waiting.length > 0 ? renderWaiting() : (
+            <p className="text-center text-muted-foreground py-8 text-sm">Nothing waiting for approval.</p>
+          )
+        ) : filtered.length === 0 ? (
           <p className="text-center text-muted-foreground py-8 text-sm">
-            {expenses.length === 0 ? 'No expenses yet. Tap "New Expense" to add one.' : 'No expenses in this category.'}
+            {expenses.length === 0 ? 'No expenses yet. Tap "New Expense" to add one.' : 'No expenses match this filter.'}
           </p>
         ) : (
           filtered.map(e => {

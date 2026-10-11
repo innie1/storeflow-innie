@@ -120,14 +120,23 @@ export function buildSupplyExpense(purchase: SupplyPurchase): Expense {
     date: new Date().toISOString(),
     note: purchase.note ? `${label} — ${purchase.note}` : label,
     source: 'manual',
+    paidFrom: 'cash',
   };
 }
 
-/** Buying it clears the complaint, and records what it cost and when. */
+/**
+ * Buying it clears the complaint, and records what it cost and when.
+ *
+ * The money leaves the cash balance like any other expense. It used to be
+ * booked as an expense and left in the till, so a shop's cash read higher by
+ * every bag of soap it had bought.
+ */
 export function markSupplyPurchased(store: StoreData, purchase: SupplyPurchase): StoreData {
   const cleared = reportSupplyLow(store, purchase.supply, false);
+  const expense = buildSupplyExpense(purchase);
   return enterExpenses({
     ...cleared,
+    cashBalance: Math.round(Math.max(0, (cleared.cashBalance ?? 0) - expense.amount) * 100) / 100,
     supplies: getSupplies(cleared).map(item =>
       item.id === purchase.supply.id
         ? {
@@ -137,7 +146,7 @@ export function markSupplyPurchased(store: StoreData, purchase: SupplyPurchase):
           }
         : item,
     ),
-  }, [buildSupplyExpense(purchase)]);
+  }, [expense]);
 }
 
 export function isConsumableExpense(expense: Pick<Expense, 'category'>): boolean {

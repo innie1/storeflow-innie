@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Droplets, Plus, X } from 'lucide-react';
 import type { StoreData, SupplyItem } from '@/types/store';
+import { saveStore } from '@/lib/store-data';
 import {
   consumablesSpend,
   markSupplyPurchased,
@@ -42,6 +43,13 @@ export default function SupplySheet({ store, onUpdate, onClose, canSeeMoney, act
   const supplies = useMemo(() => supplyList(store), [store]);
   const [buying, setBuying] = useState<SupplyItem | null>(null);
   const [amount, setAmount] = useState('');
+  // The parent only holds the shop on screen. Without saving here, a supply
+  // bought, reported low or added was gone if the app closed before
+  // something else saved the shop.
+  const save = (next: StoreData) => {
+    saveStore(next);
+    onUpdate(next);
+  };
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newUnit, setNewUnit] = useState('');
@@ -51,7 +59,7 @@ export default function SupplySheet({ store, onUpdate, onClose, canSeeMoney, act
 
   const toggleLow = (item: SupplyItem) => {
     const nowLow = !item.lowSince;
-    onUpdate(reportSupplyLow(store, item, nowLow, actorName));
+    save(reportSupplyLow(store, item, nowLow, actorName));
     showToast(nowLow ? `${item.name} reported low` : `${item.name} cleared`, 'success');
   };
 
@@ -62,7 +70,7 @@ export default function SupplySheet({ store, onUpdate, onClose, canSeeMoney, act
       showToast('Enter what it cost', 'error');
       return;
     }
-    onUpdate(markSupplyPurchased(store, { supply: buying, amount: value }));
+    save(markSupplyPurchased(store, { supply: buying, amount: value }));
     showToast(`₦${value.toLocaleString()} recorded for ${buying.name}`, 'success');
     setBuying(null);
     setAmount('');
@@ -75,7 +83,7 @@ export default function SupplySheet({ store, onUpdate, onClose, canSeeMoney, act
     // supplyList seeds a starting list that was never saved; saving the shop's
     // own item has to keep those, or adding one silently drops the rest.
     const base = getSupplies(store).length ? getSupplies(store) : supplies;
-    onUpdate({ ...store, supplies: [...base, next] });
+    save({ ...store, supplies: [...base, next] });
     setNewName('');
     setNewUnit('');
     setAdding(false);

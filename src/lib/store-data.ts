@@ -1752,7 +1752,14 @@ export function restoreTrashItem(store: StoreData, trashId: string): StoreData {
       // Restoring does not make the restorer its author. One from before
       // expenses named anybody was the owner's.
       const original = e.recordedBy ? e : { ...e, recordedBy: { staffId: 'owner', name: 'Owner', role: 'owner' } };
-      updated = enterExpenses(updated, [original], { action: restored => `Restored expense: ${describeExpense(restored)}` });
+      // Deleting gave the money back to the balance it came from, so putting
+      // the expense back takes it out again - or the balance stays too high.
+      const field = EXPENSE_BALANCE_FIELD[e.paidFrom || 'cash'];
+      updated = enterExpenses(
+        { ...updated, [field]: Math.round(Math.max(0, (updated[field] ?? 0) - e.amount) * 100) / 100 },
+        [original],
+        { action: restored => `Restored expense: ${describeExpense(restored)}` },
+      );
     }
   }
   saveStore(updated);

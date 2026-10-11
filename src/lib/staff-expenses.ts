@@ -1,4 +1,4 @@
-import type { ExpenseCategory, ExpensePaidFrom, FlowNotification, StaffExpenseRequest, StoreData } from '@/types/store';
+import type { Expense, ExpenseCategory, ExpensePaidFrom, ExpenseRecorder, FlowNotification, StaffExpenseRequest, StoreData } from '@/types/store';
 import { addExpense } from '@/lib/store-data';
 import { recordActivityLog } from '@/lib/activity-log';
 import { describeExpense, recorderFor } from '@/lib/expense-log';
@@ -195,3 +195,65 @@ export function pendingStaffExpenses(store: Pick<StoreData, 'staffExpenseRequest
 export function myStaffExpenses(store: Pick<StoreData, 'staffExpenseRequests'>, staffId: string): StaffExpenseRequest[] {
   return (store.staffExpenseRequests || []).filter(item => item.recordedBy.staffId === staffId);
 }
+
+/* ── Looking back ───────────────────────────────────────────────────────── */
+
+/** The owner's view of the book: everything, theirs, the workers', or what waits. */
+export type ExpenseWho = 'all' | 'owner' | 'staff' | 'pending';
+
+/** Recorded by the owner - which is every expense from before anybody else could. */
+export function isOwnerExpense(expense: Pick<Expense, 'recordedBy'>): boolean {
+  return !expense.recordedBy || expense.recordedBy.role === 'owner';
+}
+
+/**
+ * Book entries for the owner's filter. 'pending' has none: a waiting expense
+ * is not in the book, and is listed from the requests instead.
+ */
+export function filterExpenseBook(expenses: Expense[], who: ExpenseWho, staffId?: string): Expense[] {
+  if (who === 'pending') return [];
+  return expenses.filter(expense => {
+    if (staffId) return expense.recordedBy?.staffId === staffId;
+    if (who === 'owner') return isOwnerExpense(expense);
+    if (who === 'staff') return !isOwnerExpense(expense);
+    return true;
+  });
+}
+
+/** Everybody other than the owner who has entered an expense, by name. */
+export function expenseRecorders(store: Pick<StoreData, 'expenses' | 'staffExpenseRequests'>): ExpenseRecorder[] {
+  const seen = new Map<string, ExpenseRecorder>();
+  for (const by of [
+    ...(store.staffExpenseRequests || []).map(item => item.recordedBy),
+    ...(store.expenses || []).map(expense => expense.recordedBy),
+  ]) {
+    if (by && by.role !== 'owner' && !seen.has(by.staffId)) seen.set(by.staffId, by);
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** A worker's own expenses by the day they were spent, newest day first. */
+export function groupByDay(requests: StaffExpenseRequest[], now: Date = new Date()): { label: string; items: StaffExpenseRequest[] }[] {
+  const dayKey = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const today = dayKey(now.toISOString());
+  const yesterday = dayKey(new Date(now.getTime() - 86400000).toISOString());
+  const groups = new Map<string, StaffExpenseRequest[]>();
+  for (const item of [...requests].sort((a, b) => b.date.localeCompare(a.date) || b.recordedAt.localeCompare(a.recordedAt))) {
+    const key = dayKey(item.date);
+    groups.set(key, [...(groups.get(key) || []), item]);
+  }
+  return [...groups.entries()].map(([key, items]) => ({
+    label: key === today ? 'Today' : key === yesterday ? 'Yesterday'
+      : new Date(items[0].date).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }),
+    items,
+  }));
+}
+
+export const STATUS_LABEL: Record<StaffExpenseRequest['status'], string> = {
+  approved: 'Approved',
+  pending: 'Waiting for approval',
+  rejected: 'Rejected',
+};

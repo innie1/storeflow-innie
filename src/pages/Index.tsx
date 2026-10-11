@@ -2235,7 +2235,10 @@ export default function Index() {
         {/* For laundry this button IS "Record Laundry", so on the intake tab it
             is a shortcut to the screen you are already on — and it sits on top
             of that screen's own record button. */}
-        {!(businessType === 'laundry' && tab === 'laundry-records') && (
+        {/* Flow opens on the Manager screen. Somebody who cannot open that
+            screen was sent there, bounced straight back by the role check,
+            and left with a button that did nothing. */}
+        {!(businessType === 'laundry' && tab === 'laundry-records') && isTabAllowed('manager', currentUser) && (
           <FlowShirtFab store={store} onUpdate={setStore} onNavigate={handleNavigate} currentUser={currentUser} />
         )}
 
