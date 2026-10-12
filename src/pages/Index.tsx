@@ -6,6 +6,7 @@ import { same } from '@/lib/store-sync-guard';
 import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { canOpenTab } from '@/lib/permissions';
 import SetupChecklist from '@/components/SetupChecklist';
+import { loadStoreOrders, mergeOrders, readOrdersCache } from '@/lib/orders-cache';
 import { endPractice } from '@/lib/guide-activity';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
 import { celebrationShown, guideProgress, hasPractised, markCelebrationShown, nextStep, PRACTISED_SIGNAL } from '@/lib/setup-guide';
@@ -624,19 +625,39 @@ export default function Index() {
     let active = true;
     const fetchOrdersAndNotifications = async () => {
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*, order_items(*)')
-          .eq('store_id', store.id)
-          .order('created_at', { ascending: false });
-        if (error) throw error;
+        /*
+         * The saved copy first, then only what changed (src/lib/orders-cache.ts).
+         * Downloading every order the shop ever had on every open would have
+         * outgrown the free plan's outgoing-data allowance within a year.
+         */
+        const normalize = (rows: any[]) => rows.map(o => ({ ...o, status: getNormalizedStatus(o.status) }));
+        const saved = await readOrdersCache(String(store.id));
+        // Replaces whatever was showing, which may be another shop's.
+        if (active) setOrders(normalize(saved?.orders || []));
+        const select = () => supabase.from('orders').select('*, order_items(*)').eq('store_id', store.id);
+        const loaded = await loadStoreOrders(String(store.id), {
+          all: async () => {
+            const { data, error } = await select().order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+          },
+          since: async watermark => {
+            const { data, error } = await select().gte('updated_at', watermark);
+            if (error) throw error;
+            return data || [];
+          },
+        });
         if (active) {
-          const normalized = (data || []).map(o => ({
-            ...o,
-            status: getNormalizedStatus(o.status)
-          }));
-          setOrders(normalized);
-          console.log('[StoreFlow Orders] Loaded orders count:', normalized.length);
+          const next = normalize(loaded.orders);
+          const ids = new Set(next.map(order => String(order.id)));
+          // Changes merge into what is shown. A full download replaces it,
+          // keeping only an order that arrived live in the last two minutes
+          // and so may simply have missed the download.
+          const fresh = (order: any) => Date.now() - Date.parse(String(order.created_at || '')) < 120_000;
+          setOrders(prev => (loaded.full
+            ? mergeOrders(next, prev.filter(order => !ids.has(String(order.id)) && fresh(order)))
+            : mergeOrders(prev, next)));
+          console.log('[StoreFlow Orders] Orders:', next.length, loaded.full ? '(full download)' : `(${loaded.downloaded} changed)`);
         }
 
         // Fetch notifications from db
