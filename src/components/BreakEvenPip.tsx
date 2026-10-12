@@ -91,7 +91,8 @@ export default function BreakEvenPip({ store, canSeeMoney, onOpen }: Props) {
     >
       <svg viewBox="0 0 24 24" className="w-5 h-5 -rotate-90 shrink-0">
         {/* The track, always grey, so it is a ring before it is a gauge. */}
-        <circle cx="12" cy="12" r={radius} className="stroke-border" strokeWidth="3" fill="none" />
+        {/* Not the border colour: on the chip's own grey that all but vanished. */}
+        <circle cx="12" cy="12" r={radius} className="stroke-muted-foreground/25" strokeWidth="3" fill="none" />
         <circle
           cx="12"
           cy="12"

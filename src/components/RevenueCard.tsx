@@ -35,7 +35,13 @@ export default function RevenueCard({ store, trailing }: Props) {
 
   return (
     <div className="rounded-2xl bg-card border border-border p-4">
-      <div className="flex items-start justify-between gap-3">
+      {/*
+        Wraps. On a phone the card is half the screen wide, and "Revenue"
+        and the month ring side by side are wider than that - neither may
+        shrink, so the ring ran out past the card's edge. Where they do not
+        fit, the ring takes the line under the word instead.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         {/*
           The word is the control.
 
