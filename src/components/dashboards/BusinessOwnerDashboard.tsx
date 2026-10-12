@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ClipboardList, DollarSign, Fuel, Gamepad2, Package, Receipt, Shirt, Sparkles, Tag, TrendingUp, Users, type LucideIcon } from 'lucide-react';
+import { ClipboardList, DollarSign, Fuel, Gamepad2, Package, Receipt, Shirt, Sparkles, Tag, TrendingUp, Users, Wallet, type LucideIcon } from 'lucide-react';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { StoreData } from '@/types/store';
@@ -13,7 +13,9 @@ import RevenueCard from '@/components/RevenueCard';
 import BreakEvenPip from '@/components/BreakEvenPip';
 import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
 import { requestSpotlight } from '@/lib/spotlight';
-import { canSeeMoney } from '@/lib/permissions';
+import { canOpenTab, canSeeMoney } from '@/lib/permissions';
+import { isBusinessTabAllowed } from '@/lib/business-runtime';
+import { requestExpenseForm } from '@/lib/expense-shortcut';
 import { bundleCount } from '@/lib/money-figures';
 
 interface BusinessOwnerDashboardProps {
@@ -79,14 +81,20 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const template = getBusinessTemplate(store.storeType);
-  const actions = quickActions[store.storeType] || [
+  const tradeActions = quickActions[store.storeType] || [
     { label: template.labels.primaryAction, tab: 'orders', icon: icon(Sparkles) },
     { label: 'Products / Services', tab: 'inventory', icon: icon(Tag) },
     { label: 'Sales', tab: 'sales', icon: icon(DollarSign) },
     { label: 'Customers', tab: 'customers', icon: icon(Users) },
   ];
+  // The expense book, for whoever may open it - it used to be reachable only
+  // from More, so Home read as if the app kept no record of spending.
+  const actions = canOpenTab('expenses', currentUser) && isBusinessTabAllowed(store, 'expenses')
+    ? [...tradeActions, { label: 'Record Expense', tab: 'expenses', icon: icon(Wallet) }]
+    : tradeActions;
 
   const handleQuickAction = (action: { label: string; tab: string }) => {
+    if (action.tab === 'expenses') requestExpenseForm();
     if (store.storeType === 'laundry') {
       const laundryView = getLaundryActionView(action.label);
       if (laundryView) requestLaundryWorkspace(laundryView);
@@ -233,7 +241,7 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
       </section>
 
       <section>
-        <div className="grid grid-cols-3 gap-2">
+        <div className={`grid ${secondaryActions.length === 4 ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
           {secondaryActions.map(action => (
             <button key={action.label} onClick={() => handleQuickAction(action)} className="min-h-20 rounded-xl border border-border bg-card p-3 text-left hover:border-primary/50 active:scale-[0.99] transition-all">
               <div className="text-muted-foreground">{action.icon}</div>

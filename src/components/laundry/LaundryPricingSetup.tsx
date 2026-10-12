@@ -16,6 +16,7 @@ import {
   renameLaundryGarmentType,
   seedLaundryGarmentPrices,
   setLaundryGarmentPrice,
+  setLaundryServicePriceForAll,
 } from '@/lib/laundry-pricing';
 import { getStoredServicePricing, type ServicePricing } from '@/lib/service-pricing';
 import { publishStorefrontToCloud } from '@/lib/marketplace-publish';
@@ -59,6 +60,8 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
   const [showGarmentPrices, setShowGarmentPrices] = useState(false);
   /** The one-at-a-time run through every price. */
   const [runThrough, setRunThrough] = useState(false);
+  /** After a price is typed: is it the price for everything, or set each one? */
+  const [pricePrompt, setPricePrompt] = useState<{ serviceId: string; name: string; price: number; applied: boolean } | null>(null);
 
   const selectedService = allServices.find(service => String(service.id) === selectedServiceId) || allServices[0] || null;
   const selectedPricing = selectedService ? getStoredServicePricing(selectedService) : 'per_piece';
@@ -213,22 +216,62 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
       serviceWorkflow: { mode: 'job', requiresStart: true, timer: false, allowPause: false, allowAddTime: false },
     };
 
+    const before = editingServiceId ? allServices.find(service => String(service.id) === editingServiceId) : undefined;
+    const knownIds = new Set((store.products || []).map(product => String(product.id)));
     let next: StoreData;
     if (editingServiceId) {
       next = updateProduct(store, editingServiceId, serviceData, currentUser?.name, currentUser?.role);
     } else {
       next = addProduct(store, serviceData, currentUser?.name, currentUser?.role);
     }
-
-    next = seedLaundryGarmentPrices(next);
-    persist(next);
     const refreshedServices = (next.products || []).filter(product => product.isService);
     const target = editingServiceId
       ? refreshedServices.find(service => String(service.id) === editingServiceId)
-      : refreshedServices[refreshedServices.length - 1];
+      : refreshedServices.find(service => !knownIds.has(String(service.id))) || refreshedServices[refreshedServices.length - 1];
+
+    /*
+     * A typed price is the shop's price for every item.
+     *
+     * It used to be ignored for anything on the usual-rates list, so a shop
+     * that said ₦500 found its shirts at one price and its duvets at another
+     * that nobody had chosen. The usual rates are now only for a price left
+     * empty. A new per-item service - or one just switched to per item - gets
+     * the typed price on everything, then the shop is asked whether that is
+     * the price for everything or whether to set each one.
+     */
+    const typed = draft.defaultPrice.trim() !== '' && defaultPrice > 0;
+    const freshPerItem = draft.pricing === 'per_piece' && (!before || getStoredServicePricing(before) !== 'per_piece');
+    const priceChanged = !!before && !freshPerItem && draft.pricing === 'per_piece'
+      && Math.round(defaultPrice) !== Math.round(Number(before.sellingPrice) || 0);
+    if (target && typed && freshPerItem) {
+      next = setLaundryServicePriceForAll(next, String(target.id), defaultPrice);
+    }
+
+    next = seedLaundryGarmentPrices(next);
+    persist(next);
     if (target) setSelectedServiceId(String(target.id));
     setShowServiceForm(false);
+    if (target && typed && (freshPerItem || priceChanged)) {
+      setPricePrompt({ serviceId: String(target.id), name: target.name, price: Math.round(defaultPrice), applied: freshPerItem });
+      return;
+    }
     showToast(editingServiceId ? 'Service updated' : 'Service added');
+  };
+
+  /** "Everything is ₦500", or go through and set each price. */
+  const answerPricePrompt = (answer: 'all' | 'each' | 'keep') => {
+    const prompt = pricePrompt;
+    setPricePrompt(null);
+    if (!prompt) return;
+    if (answer === 'all' && !prompt.applied) {
+      persist(setLaundryServicePriceForAll(store, prompt.serviceId, prompt.price));
+    }
+    if (answer === 'each') {
+      setSelectedServiceId(prompt.serviceId);
+      setRunThrough(true);
+      return;
+    }
+    showToast(answer === 'keep' ? 'Service updated. Item prices kept' : `Every item in ${prompt.name} is ₦${prompt.price.toLocaleString()}`);
   };
 
   const toggleService = (service: Product) => {
@@ -304,11 +347,37 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
         />
       )}
 
+      {pricePrompt && (
+        <div className="fixed inset-0 z-[80] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => answerPricePrompt(pricePrompt.applied ? 'all' : 'keep')}>
+          <ScrollLock />
+          <div role="dialog" aria-label="Price for everything?" className="w-full max-w-sm rounded-t-3xl sm:rounded-3xl bg-background border border-border p-5 space-y-3" onClick={event => event.stopPropagation()}>
+            <p className="text-[11px] uppercase text-primary font-black">{pricePrompt.name}</p>
+            <h3 className="font-display font-black text-lg">Is ₦{pricePrompt.price.toLocaleString()} the price for everything?</h3>
+            <p className="text-sm text-muted-foreground">
+              {pricePrompt.applied
+                ? `Every item - shirt, trousers, duvet and the rest - is ₦${pricePrompt.price.toLocaleString()} for now. If some cost more or less, set each one.`
+                : `Your items have their own prices. Put ₦${pricePrompt.price.toLocaleString()} on every item, or go through them one at a time.`}
+            </p>
+            <button type="button" onClick={() => answerPricePrompt('all')} className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm">
+              Yes, ₦{pricePrompt.price.toLocaleString()} for everything
+            </button>
+            <button type="button" onClick={() => answerPricePrompt('each')} className="w-full h-12 rounded-xl bg-surface-2 border border-border font-display font-bold text-sm">
+              No, let me set each price
+            </button>
+            {!pricePrompt.applied && (
+              <button type="button" onClick={() => answerPricePrompt('keep')} className="w-full h-10 rounded-xl text-muted-foreground font-display font-bold text-sm">
+                Keep my item prices
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {allServices.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-8 text-center">
           <Shirt className="w-7 h-7 text-primary mx-auto" />
           <p className="font-display font-black mt-3">Add your first laundry service</p>
-          <p className="text-xs text-muted-foreground mt-1">e.g. Wash & Iron, Wash Only, Dry Cleaning.</p>
+          <p className="text-xs text-muted-foreground mt-1">e.g. Full Service, Wash Only, Dry Cleaning.</p>
           <button onClick={openNewService} className="mt-4 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black">Add Service</button>
         </div>
       ) : (
@@ -351,9 +420,9 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => toggleService(selectedService)} title={selectedService.discontinued ? 'Enable' : 'Disable'} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground"><Power className="w-4 h-4" /></button>
-                  <button onClick={() => openEditService(selectedService)} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => removeService(selectedService)} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-destructive"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => toggleService(selectedService)} aria-label={`${selectedService.discontinued ? 'Enable' : 'Disable'} ${selectedService.name}`} title={selectedService.discontinued ? 'Enable' : 'Disable'} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground"><Power className="w-4 h-4" /></button>
+                  <button onClick={() => openEditService(selectedService)} aria-label={`Edit ${selectedService.name}`} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => removeService(selectedService)} aria-label={`Remove ${selectedService.name}`} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-destructive"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
 
@@ -512,7 +581,13 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
                 {/* Said as a question with the answer under it, because "starting price"
             on its own reads like the price, and a shop that charges different
             amounts per garment needs to know this is only where they begin. */}
-        {draft.pricing === 'per_piece' && <p className="text-[10px] text-muted-foreground mt-1">You can edit this in your items individually later.</p>}
+        {draft.pricing === 'per_piece' && (
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {draft.defaultPrice.trim() && Number(draft.defaultPrice) > 0
+              ? 'Every item starts at this price. Next you choose: the same for everything, or set each one.'
+              : 'Leave it empty to start from the usual price for each item. You can change any of them.'}
+          </p>
+        )}
               </div>
               <div>
                 <label className="text-[10px] uppercase font-black text-muted-foreground">Turnaround</label>

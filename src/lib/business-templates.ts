@@ -110,7 +110,7 @@ export const BUSINESS_TEMPLATES: Record<string, BusinessTemplate> = {
     type: 'laundry', name: 'Laundry', icon: '🧺', description: 'Take laundry orders by number of clothes, item type or weight.',
     modes: ['services'], modules: ['orders', ...commerce, 'pickup', 'delivery', 'attachments', 'queue'],
     offerings: [
-      { id: 'wash-iron', name: 'Wash & Iron', icon: '🧺', mode: 'services', pricing: 'item' },
+      { id: 'wash-iron', name: 'Full Service', icon: '🧺', mode: 'services', pricing: 'item' },
       { id: 'wash-only', name: 'Wash Only', icon: '🫧', mode: 'services', pricing: 'item' },
       { id: 'iron-only', name: 'Ironing', icon: '👔', mode: 'services', pricing: 'item' },
       { id: 'dry-cleaning', name: 'Dry Cleaning', icon: '✨', mode: 'services', pricing: 'item' },

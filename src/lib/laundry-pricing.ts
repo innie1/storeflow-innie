@@ -99,6 +99,30 @@ export function setLaundryGarmentPrice(store: StoreData, serviceId: string, garm
   } as StoreData;
 }
 
+/**
+ * One price on every item a service lists.
+ *
+ * What a shop means when it types a starting price for a new service: "this
+ * is what we charge" - not "this, except where the app knows better". The
+ * usual going rates are only for a shop that leaves the price empty. Right
+ * after, the shop is asked whether it is the price for everything or whether
+ * to go through and set each one.
+ */
+export function setLaundryServicePriceForAll(store: StoreData, serviceId: string, price: number): StoreData {
+  const config = getLaundryPricingConfig(store);
+  const cleanPrice = Math.max(0, Math.round(Number(price) || 0));
+  const row: Record<string, number> = {};
+  for (const garment of config.garmentTypes) row[garment] = cleanPrice;
+  return {
+    ...(store as any),
+    laundryPricing: {
+      version: 1,
+      garmentTypes: config.garmentTypes,
+      matrix: { ...config.matrix, [String(serviceId)]: row },
+    },
+  } as StoreData;
+}
+
 export function addLaundryGarmentType(store: StoreData, garmentType: string): StoreData {
   const config = getLaundryPricingConfig(store);
   const cleanName = garmentType.trim();

@@ -14,7 +14,9 @@ import CostPricePrompt from './CostPricePrompt';
 import QuickSellGrid from './QuickSellGrid';
 import SimpleSearch from './SimpleSearch';
 import GamesDashboard from '@/components/games/GamesDashboard';
-import { History, Search } from 'lucide-react';
+import { History, Search, Wallet } from 'lucide-react';
+import { canOpenTab } from '@/lib/permissions';
+import { requestExpenseForm } from '@/lib/expense-shortcut';
 import './SimpleModeHomeLayout.css';
 
 interface SimpleModeHomeProps {
@@ -99,7 +101,13 @@ function ProductSimpleHome({ store, setStore, currentUser, onNavigate }: SimpleM
         <div className="mt-3 max-w-[220px] mx-auto"><div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1"><span className="uppercase font-bold tracking-wide">{target.period === 'daily' ? "Today's Target" : "This Week's Target"}{target.mode === 'auto' ? ' (Auto)' : ''}</span><span className="font-bold text-foreground">₦{target.progressAmount.toLocaleString()} / ₦{target.targetAmount.toLocaleString()}</span></div><div className="w-full h-1.5 rounded-full bg-surface-2 overflow-hidden"><div className={`h-full rounded-full transition-all ${target.progressPercent >= 100 ? 'bg-success' : 'bg-primary'}`} style={{ width: `${target.progressPercent}%` }} /></div></div>
       </div>
       <div className="simple-mode-voice-shell"><SimpleVoiceSell products={store.products} onConfirmSale={handleConfirmSale} onConfirmMultiSale={handleConfirmMultiSale} onCreateProduct={handleCreateProduct} onSaveAlias={handleSaveAlias} /><button onClick={() => setShowSearch(true)} className="simple-mode-search-near-toggle bg-surface-2 border border-border flex items-center justify-center hover:bg-surface-3 active:scale-95 transition-all cursor-pointer shadow-sm" title="Search products, customers, receipts" aria-label="Search products, customers, receipts"><Search className="w-4 h-4 text-foreground/80" /></button></div>
-      <button onClick={() => onNavigate('history')} className="mt-6 flex items-center gap-1.5 text-xs text-muted-foreground font-display font-semibold"><History className="w-3.5 h-3.5" /> View Sales History</button>
+      <div className="mt-6 flex items-center gap-5">
+        <button onClick={() => onNavigate('history')} className="flex items-center gap-1.5 text-xs text-muted-foreground font-display font-semibold"><History className="w-3.5 h-3.5" /> View Sales History</button>
+        {/* The expense book had no door on this screen at all. */}
+        {canOpenTab('expenses', currentUser) && (
+          <button onClick={() => { requestExpenseForm(); onNavigate('expenses'); }} className="flex items-center gap-1.5 text-xs text-muted-foreground font-display font-semibold"><Wallet className="w-3.5 h-3.5" /> Record Expense</button>
+        )}
+      </div>
       <QuickSellGrid store={store} onSell={handleConfirmSale} onNavigate={onNavigate} />
       {promptProduct && <CostPricePrompt store={store} setStore={setStore} product={promptProduct} onDone={() => setCostPricePromptProductId(null)} />}
       {activeMilestone && <MilestoneCelebration milestone={activeMilestone} onDismiss={() => { const updated = markMilestoneReached(store, activeMilestone.id); setStore(updated); setActiveMilestone(null); }} />}

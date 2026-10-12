@@ -64,7 +64,7 @@ export function defaultGarmentPrice(garmentType: string): number | null {
  * something of its own still types it.
  */
 export const COMMON_LAUNDRY_SERVICES = [
-  'Wash & Iron',
+  'Full Service',
   'Wash Only',
   'Ironing Only',
   'Dry Cleaning',

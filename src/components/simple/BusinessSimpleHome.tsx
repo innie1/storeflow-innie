@@ -11,7 +11,8 @@ import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { getBusinessTemplate, isBusinessTabAllowed } from '@/lib/business-runtime';
 import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
-import { CalendarClock, DollarSign, Gamepad2, Receipt, Shirt, Sparkles, Tag, Users, Briefcase } from 'lucide-react';
+import { requestExpenseForm } from '@/lib/expense-shortcut';
+import { CalendarClock, DollarSign, Gamepad2, Receipt, Shirt, Sparkles, Tag, Users, Briefcase, Wallet } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 interface Props {
@@ -49,6 +50,11 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
         ? [{ label: 'Sessions', icon: <Gamepad2 className="w-6 h-6" />, tab: 'games-dashboard' as TabId }]
         : []),
     ...(isLaundry ? [{ label: 'Laundry Records', icon: <Receipt className="w-6 h-6" />, tab: 'laundry-records' as TabId }] : [{ label: 'Sales', icon: <DollarSign className="w-6 h-6" />, tab: 'sales' as TabId }]),
+    // The expense book had no door on Home: it was under More, so an owner
+    // looking at this screen reasonably concluded the app could not record
+    // spending at all. Workers have their own Record Expense button above;
+    // this is for whoever may open the book, which the filter below decides.
+    { label: 'Record Expense', icon: <Wallet className="w-6 h-6" />, tab: 'expenses' as TabId },
     // Adding a worker is a first-week job in every one of these trades, and
     // the only route to it was Staff Accounts, sixth in a flat list of
     // sixteen under More. Owners only: nobody else can add staff anyway.
@@ -69,6 +75,7 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
   ));
 
   const navigate = (action: { label: string; tab: TabId }) => {
+    if (action.tab === 'expenses') requestExpenseForm();
     if (isLaundry) {
       const view = getLaundryActionView(action.label);
       if (view) requestLaundryWorkspace(view);
@@ -143,8 +150,8 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
           <h2 className="font-display font-bold">Quick actions</h2>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          {actions.map(action => (
-            <button key={`${action.tab}-${action.label}`} onClick={() => navigate(action)} className="min-h-24 rounded-2xl bg-surface-2/50 border border-border p-3 text-left hover:border-primary/30 active:scale-[.99] transition-all">
+          {actions.map((action, index) => (
+            <button key={`${action.tab}-${action.label}`} onClick={() => navigate(action)} className={`${actions.length % 2 === 1 && index === actions.length - 1 ? 'col-span-2 ' : ''}min-h-24 rounded-2xl bg-surface-2/50 border border-border p-3 text-left hover:border-primary/30 active:scale-[.99] transition-all`}>
               <span className="text-primary">{action.icon}</span>
               <p className="font-display font-bold text-sm mt-2">{action.label}</p>
             </button>

@@ -129,7 +129,7 @@ function serviceSteps(store: StoreData): GuideStep[] {
       tab: 'inventory',
       title: isLaundry ? 'Add your first service' : `Add your first ${noun}`,
       body: isLaundry
-        ? 'Wash & Iron, Wash Only, Dry Cleaning — whatever you actually offer. You can add the rest later.'
+        ? 'Full Service, Wash Only, Dry Cleaning — whatever you actually offer. You can add the rest later.'
         : `Give it a name and what you charge. One is enough to begin.`,
       done: store => services(store).length > 0,
     },

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { StoreData, ExpenseCategory, Expense, ExpensePaidFrom, Restock, RecurringBill } from '@/types/store';
 import { approveStaffExpense, canApproveStaffExpenses, expenseRecorders, filterExpenseBook, PAID_FROM_LABEL, pendingStaffExpenses, rejectStaffExpense, type ExpenseWho } from '@/lib/staff-expenses';
 import { addExpense, deleteExpense, saveStore, EXPENSE_CATEGORIES, receiveStock, RestockFunding, addRecurringBill, deleteRecurringBill, toggleRecurringBill, markRecurringBillPaid } from '@/lib/store-data';
@@ -10,6 +10,7 @@ import { lowSupplies } from '@/lib/consumables';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import { Banknote, Droplets, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon, Shirt} from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
+import { takeExpenseFormRequest } from '@/lib/expense-shortcut';
 
 interface ExpensesProps {
   store: StoreData;
@@ -46,6 +47,8 @@ function CategoryIcon({ category, className = 'w-3 h-3 inline-block -mt-0.5 mr-1
 
 export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps) {
   const [showAdd, setShowAdd] = useState(false);
+  // Opened from Record Expense on Home: straight to the form.
+  useEffect(() => { if (takeExpenseFormRequest()) setShowAdd(true); }, []);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('Rent');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
