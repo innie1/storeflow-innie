@@ -12,7 +12,6 @@ import WorkerSignIn from '@/components/staff/WorkerSignIn';
 import { getStoreIndex, loadStore, saveStore } from '@/lib/store-data';
 import { getPendingStoreSync } from '@/lib/store-cloud-sync';
 import { shouldRunGuide } from '@/lib/setup-guide';
-import { createLocalLaundryRecord, getLocalLaundryRecords, syncPendingLaundryRecords } from '@/lib/laundry-offline';
 import {
   OFFLINE_WINDOW_MS, readWorkerSession, refreshWorkerCopy, signInWorker, workerAccessCode, workerStoreFromView,
 } from '@/lib/staff-session';
@@ -129,19 +128,6 @@ describe('refreshing while signed in', () => {
     expect(localStorage.getItem('storeflow_STAFF-SF-WSH001')).toBeNull();
     expect(readJoin()).toBeNull();
     expect(readWorkerSession()).toBeNull();
-  });
-});
-
-describe('until laundry has its own way in (5b)', () => {
-  it('bundles on a worker copy wait on the phone rather than being sent with no access code', async () => {
-    createLocalLaundryRecord({
-      accessCode: 'STAFF-SF-WSH001', customerName: 'Ada', customerPhone: '', serviceId: 'p1', serviceName: 'Wash and Iron',
-      total: 1500, garments: [{ garmentType: 'Shirt', quantity: 1 }],
-    } as never);
-    expect(getLocalLaundryRecords('STAFF-SF-WSH001')[0].syncStatus).toBe('pending');
-    await syncPendingLaundryRecords('STAFF-SF-WSH001');
-    expect(rpc).not.toHaveBeenCalled();
-    expect(getLocalLaundryRecords('STAFF-SF-WSH001')[0].syncStatus).toBe('pending');
   });
 });
 

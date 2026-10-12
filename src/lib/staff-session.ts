@@ -256,3 +256,42 @@ export function signInErrorText(error: string): string {
     default: return 'Something went wrong. Try again.';
   }
 }
+
+/** How often a worker's phone asks what changed in the shop's bundles, while in front. */
+export const WORKER_BUNDLES_MS = 3 * 60 * 1000;
+
+export type BundlesResult =
+  | { state: 'ok'; orders: Record<string, any>[]; asOf: string }
+  | { state: 'unchanged' }
+  | { state: 'shut_out' };
+
+/**
+ * The shop's laundry bundles, for a worker's phone.
+ *
+ * The first time, open bundles and anything finished in the last week; after
+ * that, only what changed since `since` - normally nothing, a reply of a few
+ * dozen bytes. The cloud leaves out each customer's private order key and
+ * account id. A pass that has run out is not a reason to sign out - the PIN
+ * gets a new one - but a revoked phone or a removed worker is.
+ */
+export async function fetchWorkerBundles(since: string | null): Promise<BundlesResult> {
+  const session = readWorkerSession();
+  if (!session || !navigator.onLine) return { state: 'unchanged' };
+  const reply = await callCloud('staff_laundry_list', { p_token: session.token, p_device_key: deviceKey(), p_since: since });
+  if (!reply) return { state: 'unchanged' };
+  if (!reply.ok) {
+    if (SHUT_OUT.has(reply.error)) {
+      forgetWorkerPhone();
+      return { state: 'shut_out' };
+    }
+    return { state: 'unchanged' };
+  }
+  return { state: 'ok', orders: Array.isArray(reply.orders) ? reply.orders : [], asOf: String(reply.as_of) };
+}
+
+/** Lay newer bundles over the ones already shown, newest first. */
+export function mergeBundles(current: Record<string, any>[], incoming: Record<string, any>[]): Record<string, any>[] {
+  const byId = new Map(current.map(order => [order.id, order]));
+  for (const order of incoming) byId.set(order.id, order);
+  return [...byId.values()].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+}

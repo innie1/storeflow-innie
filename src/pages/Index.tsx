@@ -24,7 +24,8 @@ import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-s
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { setCurrentActor } from '@/lib/current-actor';
-import { refreshWorkerCopy } from '@/lib/staff-session';
+import { fetchWorkerBundles, mergeBundles, refreshWorkerCopy, WORKER_BUNDLES_MS } from '@/lib/staff-session';
+import { resumeWorkerLaundry } from '@/lib/laundry-offline';
 import { DEVICE_WATCH_MS, noticeNewDeviceRequests, storeRefOf } from '@/lib/device-request-watch';
 import { listDevices } from '@/lib/staff-join';
 import { cloudRecentlyUnreachable, hasCloudSession } from '@/lib/cloud-reach';
@@ -1405,12 +1406,53 @@ export default function Index() {
       } else if (result.state === 'fresh') {
         setStore(prev => (prev && prev.accessCode === result.store.accessCode ? result.store : prev));
         setCurrentUser((prev: any) => prev ? { ...prev, ...result.worker } : prev);
+        // The pass is good: bundles waiting on this phone can go now.
+        void resumeWorkerLaundry(workerCopyCode).catch(() => {});
       }
     };
     void refresh();
     window.addEventListener('online', refresh);
     return () => { stopped = true; window.removeEventListener('online', refresh); };
   }, [workerCopyCode]);
+
+  // A worker's phone sees the shop's bundles through its own door, since it
+  // has no owner account to read them with: everything open once, then only
+  // what changed, every few minutes while the app is in front.
+  useEffect(() => {
+    if (!workerCopyCode) return;
+    let stopped = false;
+    let since: string | null = null;
+    const pull = async () => {
+      if (stopped || document.visibilityState !== 'visible') return;
+      const result = await fetchWorkerBundles(since);
+      if (stopped) return;
+      if (result.state === 'shut_out') {
+        clearSession();
+        localStorage.removeItem('storeflow_active_user');
+        setStore(null);
+        setCurrentUser(null);
+        setOrders([]);
+        showToast('This phone has been signed out of the shop.', 'info');
+        return;
+      }
+      if (result.state !== 'ok') return;
+      since = result.asOf;
+      const incoming = result.orders.map(order => ({ ...order, status: getNormalizedStatus(order.status) }));
+      setOrders(prev => mergeBundles(prev, incoming));
+    };
+    setOrders([]);
+    void pull();
+    const timer = window.setInterval(() => void pull(), WORKER_BUNDLES_MS);
+    const onVisible = () => void pull();
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', onVisible);
+    };
+  }, [workerCopyCode, getNormalizedStatus]);
 
   useEffect(() => {
     const hash = window.location.hash;

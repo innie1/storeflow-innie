@@ -1,7 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import { appendRunEvent, type LaundryFulfillment, type LaundryRunStatus, type RunEvent } from '@/lib/laundry-runs';
 import { generateLaundryReceiptNumber, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
-import { isWorkerCode } from '@/lib/staff-session';
+import { isWorkerCode, readWorkerSession } from '@/lib/staff-session';
+import { deviceKey } from '@/lib/staff-join';
 
 export type LaundrySyncStatus = 'pending' | 'synced';
 export type LaundryWorkflowStage = 'received' | 'washing' | 'drying' | 'ironing' | 'folding' | 'ready' | 'collected';
@@ -548,8 +549,7 @@ export function mergeLaundryRecords(cloudOrders: any[], localRecords: LocalLaund
 
 async function syncLaundryStage(accessCode: string, record: LocalLaundryRecord): Promise<{ order_id?: string } | null> {
   const stage = record.workflowStage || 'received';
-  const { data, error } = await (supabase as any).rpc('update_laundry_walkin_stage', {
-    p_access_code: normalizeAccessCode(accessCode),
+  const { data, error } = await laundryDoor(accessCode, 'stage', {
     p_client_ref: record.clientRef,
     p_stage: stage,
   });
@@ -588,7 +588,38 @@ async function syncLaundryStage(accessCode: string, record: LocalLaundryRecord):
  */
 
 /** Answers about the shop, not the bundle. Every other bundle would get the same one. */
-const SHOP_REFUSALS = /^(store not found|this store is not a laundry business|store is not active|store access code is required)$/i;
+const SHOP_REFUSALS = /^(store not found|this store is not a laundry business|store is not active|store access code is required|worker pass: .+)$/i;
+
+/*
+ * Which door a bundle goes through.
+ *
+ * The counter opens the cloud's laundry doors with the shop's access code. A
+ * worker's own phone never holds that code - it is also the password for
+ * deleting the shop's records - so it opens its own doors with the 24-hour
+ * pass from signing in (supabase/migrations/20261012115143_staff_laundry_doors).
+ * Those doors check the pass, the phone and the worker's role every time and
+ * then do exactly what the counter's door does.
+ *
+ * Their "no" comes back as an answer, not an error, so it is turned into the
+ * shop-level refusal it is: a pass that has run out, a phone the owner has
+ * revoked, a role that does not take laundry in. Bundles then wait on the
+ * phone - for an hour, or until the worker signs in again - rather than each
+ * one being set aside as if it were wrong.
+ */
+async function laundryDoor(code: string, kind: 'walkin' | 'stage', args: Record<string, unknown>): Promise<{ data: any; error: any }> {
+  const normalized = normalizeAccessCode(code);
+  if (!isWorkerCode(normalized)) {
+    return (supabase as any).rpc(kind === 'walkin' ? 'create_laundry_walkin_v2' : 'update_laundry_walkin_stage', { p_access_code: normalized, ...args });
+  }
+  const session = readWorkerSession();
+  if (!session) return { data: null, error: { code: 'P0001', message: 'Worker pass: expired' } };
+  const { data, error } = await (supabase as any).rpc(kind === 'walkin' ? 'staff_laundry_walkin' : 'staff_laundry_stage', {
+    p_token: session.token, p_device_key: deviceKey(), ...args,
+  });
+  if (error) return { data, error };
+  if (data && data.ok === false) return { data: null, error: { code: 'P0001', message: `Worker pass: ${data.error}` } };
+  return { data, error: null };
+}
 const RETRY_WAITS_MS = [30_000, 60_000, 120_000, 300_000, 600_000];
 const UNKNOWN_SHOP_WAIT_MS = 60 * 60_000;
 
@@ -650,6 +681,16 @@ export function clearLaundrySyncWait(accessCode: string): void {
 }
 
 /**
+ * A worker has just signed in: the pass their bundles were waiting for is
+ * here, so the wait is over and the bundles can go.
+ */
+export function resumeWorkerLaundry(accessCode: string): Promise<void> {
+  const code = normalizeAccessCode(accessCode);
+  waits.delete(code);
+  return syncPendingLaundryRecords(code);
+}
+
+/**
  * One bundle, because somebody just did something to it at the counter.
  *
  * It gets its own try even while the background is waiting out a failure -
@@ -659,9 +700,6 @@ export function clearLaundrySyncWait(accessCode: string): void {
  */
 export async function syncLaundryRecord(accessCode: string, clientRef: string): Promise<boolean> {
   const code = normalizeAccessCode(accessCode);
-  // A worker's phone has no access code to send bundles with. They wait on
-  // the phone until it has its own way in (step 5b of the staff plan).
-  if (isWorkerCode(code)) return false;
   const wait = waits.get(code);
   if (wait?.unknownShop && wait.until > Date.now()) return false;
   const outcome = await sendLaundryRecord(code, clientRef);
@@ -681,8 +719,7 @@ async function sendLaundryRecord(normalized: string, clientRef: string): Promise
 
   inflight.add(key);
   try {
-    const { data, error } = await (supabase as any).rpc('create_laundry_walkin_v2', {
-      p_access_code: normalized,
+    const { data, error } = await laundryDoor(normalized, 'walkin', {
       p_client_ref: record.clientRef,
       p_tag_code: record.tagCode,
       p_customer_name: record.customerName,
@@ -757,9 +794,7 @@ export async function updateLaundryOrderStage(
   }
 
   if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
-  if (isWorkerCode(accessCode)) return false;
-  const { data, error } = await (supabase as any).rpc('update_laundry_walkin_stage', {
-    p_access_code: normalizeAccessCode(accessCode),
+  const { data, error } = await laundryDoor(accessCode, 'stage', {
     p_client_ref: clientRef,
     p_stage: stage,
   });
@@ -777,7 +812,6 @@ export async function updateLaundryOrderStage(
  */
 export function syncPendingLaundryRecords(accessCode: string): Promise<void> {
   const code = normalizeAccessCode(accessCode);
-  if (isWorkerCode(code)) return Promise.resolve();
   const running = runs.get(code);
   if (running) {
     runAgain.add(code);

@@ -5,6 +5,7 @@ import { loadStore, saveStore } from '@/lib/store-data';
 import { readJoin } from '@/lib/staff-join';
 import { signInErrorText, signInWorker, type Worker } from '@/lib/staff-session';
 import { writeActiveUser } from '@/lib/store-session';
+import { resumeWorkerLaundry } from '@/lib/laundry-offline';
 
 /**
  * "Washlie · Faith - enter your PIN", on a worker's own approved phone.
@@ -46,6 +47,8 @@ export default function WorkerSignIn({ onSignedIn }: Props) {
       id: worker.id, name: worker.name, role: worker.role,
       permissions: { sales: !!ticked.sales, inventory: !!ticked.inventory, reports: !!ticked.reports, settings: !!ticked.settings, money: !!ticked.money },
     });
+    // A fresh pass: bundles taken in while it was away can go now.
+    if (!result.offline) void resumeWorkerLaundry(result.store.accessCode).catch(() => {});
     onSignedIn(result.store);
   };
 
