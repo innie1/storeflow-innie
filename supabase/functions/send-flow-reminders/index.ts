@@ -89,6 +89,41 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+    /*
+     * Who may send.
+     *
+     * This checked nobody. The gateway's JWT check lets the public anon key
+     * through, and that key ships inside every copy of the app - so anybody
+     * could post { title, body } with no store_id and put words of their
+     * choosing on every merchant's phone ("your account is locked, call this
+     * number"), or start the every-shop modes, which read every shop's data.
+     *
+     * Now: the every-shop modes, and any wording of the caller's own, belong
+     * to the cloud's scheduler alone (it calls with the service-role key).
+     * Anyone else must be signed in as the owner of the one shop named, and
+     * gets the fixed wording of the reminder asked for - which is all the
+     * Test buttons in Settings ever did.
+     */
+    const deny = (status: number, error: string) =>
+      new Response(JSON.stringify({ error }), { status, headers: { "Content-Type": "application/json" } });
+    const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    const fromScheduler = !!token && token === serviceRoleKey;
+    if (!fromScheduler) {
+      if (!["streak", "sales", "debt"].includes(reminderType)) return deny(403, "Only the scheduler sends to every shop");
+      if (!storeId) return deny(400, "Name the shop");
+      const { data: userData } = await supabase.auth.getUser(token);
+      const userId = userData?.user?.id;
+      if (!userId) return deny(401, "Sign in first");
+      const { data: profiles } = await supabase.from("profiles").select("id").eq("auth_user_id", userId);
+      const profileIds = (profiles || []).map((p: { id: string }) => p.id);
+      const { data: owned } = profileIds.length
+        ? await supabase.from("stores").select("id").eq("id", storeId).in("owner_id", profileIds).maybeSingle()
+        : { data: null };
+      if (!owned) return deny(403, "Not your shop");
+      customTitle = null;
+      customBody = null;
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // STREAK TARGETED: per-store pre-loss push with local-time gating
     // ─────────────────────────────────────────────────────────────────────
@@ -525,7 +560,10 @@ Deno.serve(async (req: Request) => {
       body: bodyText,
       tag,
       url,
-      actions
+      actions,
+      // The shop it is about, when there is one, so the phone judges it by
+      // that shop's notification switches.
+      ...(storeId ? { store_id: storeId } : {}),
     });
 
     const results = await Promise.allSettled(
