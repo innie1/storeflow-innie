@@ -256,9 +256,7 @@ export default function JoinStore({ onBack }: Props) {
           <p className="text-sm text-muted-foreground">
             {record.staffName} can use <span className="font-semibold text-foreground">{record.storeName}</span> on this phone.
           </p>
-          <p className="text-xs text-muted-foreground">
-            Signing in here with your PIN is coming in the next update. Until then, keep using the shop's phone.
-          </p>
+          <button type="button" onClick={onBack} className={primary}>Sign in now</button>
         </div>
       )}
 

@@ -98,6 +98,8 @@ export function cloudSnapshot(store: StoreData): Record<string, any> {
 /** Shops already told, this visit, that the cloud copy could not be kept. */
 const toldNoRoom = new Set<string>();
 export function queueStoreSync(store: StoreData, base?: StoreData): void {
+  // A worker's slim copy never goes up as the shop. See staff-session.
+  if (store.staffDevice) return;
   // Only to satisfy the record's shape: writePending never stores it.
   const next = store;
   try {

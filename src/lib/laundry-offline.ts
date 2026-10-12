@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { appendRunEvent, type LaundryFulfillment, type LaundryRunStatus, type RunEvent } from '@/lib/laundry-runs';
 import { generateLaundryReceiptNumber, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
+import { isWorkerCode } from '@/lib/staff-session';
 
 export type LaundrySyncStatus = 'pending' | 'synced';
 export type LaundryWorkflowStage = 'received' | 'washing' | 'drying' | 'ironing' | 'folding' | 'ready' | 'collected';
@@ -658,6 +659,9 @@ export function clearLaundrySyncWait(accessCode: string): void {
  */
 export async function syncLaundryRecord(accessCode: string, clientRef: string): Promise<boolean> {
   const code = normalizeAccessCode(accessCode);
+  // A worker's phone has no access code to send bundles with. They wait on
+  // the phone until it has its own way in (step 5b of the staff plan).
+  if (isWorkerCode(code)) return false;
   const wait = waits.get(code);
   if (wait?.unknownShop && wait.until > Date.now()) return false;
   const outcome = await sendLaundryRecord(code, clientRef);
@@ -753,6 +757,7 @@ export async function updateLaundryOrderStage(
   }
 
   if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+  if (isWorkerCode(accessCode)) return false;
   const { data, error } = await (supabase as any).rpc('update_laundry_walkin_stage', {
     p_access_code: normalizeAccessCode(accessCode),
     p_client_ref: clientRef,
@@ -772,6 +777,7 @@ export async function updateLaundryOrderStage(
  */
 export function syncPendingLaundryRecords(accessCode: string): Promise<void> {
   const code = normalizeAccessCode(accessCode);
+  if (isWorkerCode(code)) return Promise.resolve();
   const running = runs.get(code);
   if (running) {
     runAgain.add(code);

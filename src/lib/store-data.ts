@@ -495,6 +495,9 @@ export function getStoreIndex(): StoreIndexEntry[] {
 }
 
 function upsertStoreIndex(store: StoreData) {
+  // A worker's slim copy is not a shop on this phone's list: it opens only
+  // through the worker's own sign-in.
+  if (store.staffDevice) return;
   const idx = getStoreIndex().filter(s => s.code !== store.accessCode);
   idx.unshift({
     code: store.accessCode,
@@ -964,7 +967,9 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean;
     createAutoBackupSnapshot().catch(() => {});
   }
 
-  if (!options?.skipCloudSync && (store.storeId || store.managerSettings?.multiDeviceSync)) {
+  // Never for a worker's slim copy: it is not the shop, and sending it as the
+  // shop would overwrite the owner's records with a copy missing most of them.
+  if (!options?.skipCloudSync && !store.staffDevice && (store.storeId || store.managerSettings?.multiDeviceSync)) {
     queueStoreSync(store, before ? JSON.parse(before) : undefined);
   }
 }

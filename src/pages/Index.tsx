@@ -24,6 +24,7 @@ import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-s
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { setCurrentActor } from '@/lib/current-actor';
+import { refreshWorkerCopy } from '@/lib/staff-session';
 import { DEVICE_WATCH_MS, noticeNewDeviceRequests, storeRefOf } from '@/lib/device-request-watch';
 import { listDevices } from '@/lib/staff-join';
 import { cloudRecentlyUnreachable, hasCloudSession } from '@/lib/cloud-reach';
@@ -460,17 +461,22 @@ export default function Index() {
   // orders/notifications query and realtime subscription in this file filters
   // by store.id. Without this, those queries silently never run.
   useEffect(() => {
-    if (!store?.accessCode || (store as any).id) return;
+    // A worker's copy is not a cloud shop of its own; and with nobody signed
+    // in to the cloud this lookup can only be refused, on every opening.
+    if (!store?.accessCode || (store as any).id || store.staffDevice) return;
     let active = true;
-    supabase
-      .from('stores')
-      .select('id')
-      .eq('access_code', store.accessCode)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!active || error || !data?.id) return;
-        setStore(prev => (prev ? { ...prev, id: data.id } as any : prev));
-      });
+    void hasCloudSession().then(signedIn => {
+      if (!active || !signedIn) return;
+      supabase
+        .from('stores')
+        .select('id')
+        .eq('access_code', store.accessCode)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (!active || error || !data?.id) return;
+          setStore(prev => (prev ? { ...prev, id: data.id } as any : prev));
+        });
+    });
     return () => { active = false; };
   }, [store?.accessCode]);
 
@@ -1377,6 +1383,35 @@ export default function Index() {
     }
   }, []);
 
+  // A worker's phone: bring the slim copy up to date when it opens and when
+  // the internet comes back, and sign the worker out at once if the owner
+  // has revoked the phone or removed them from the staff list.
+  const workerCopyCode = store?.staffDevice ? store.accessCode : '';
+  useEffect(() => {
+    if (!workerCopyCode) return;
+    let stopped = false;
+    const refresh = async () => {
+      const result = await refreshWorkerCopy({
+        loadCopy: code => loadStore(code),
+        saveCopy: copy => saveStore(copy, { skipCloudSync: true }),
+      });
+      if (stopped) return;
+      if (result.state === 'shut_out') {
+        clearSession();
+        localStorage.removeItem('storeflow_active_user');
+        setStore(null);
+        setCurrentUser(null);
+        showToast('This phone has been signed out of the shop.', 'info');
+      } else if (result.state === 'fresh') {
+        setStore(prev => (prev && prev.accessCode === result.store.accessCode ? result.store : prev));
+        setCurrentUser((prev: any) => prev ? { ...prev, ...result.worker } : prev);
+      }
+    };
+    void refresh();
+    window.addEventListener('online', refresh);
+    return () => { stopped = true; window.removeEventListener('online', refresh); };
+  }, [workerCopyCode]);
+
   useEffect(() => {
     const hash = window.location.hash;
     const searchParams = new URLSearchParams(window.location.search);
@@ -1909,12 +1944,13 @@ export default function Index() {
           <div className="flex flex-col text-left">
             <h1 className="wordmark font-black text-xl tracking-tight select-none"><span className="text-foreground">Store</span><span className="text-primary">Flow</span></h1>
             <button
-              onClick={() => setShowSwitcher(true)}
+              onClick={() => { if (!store.staffDevice) setShowSwitcher(true); }}
+              disabled={!!store.staffDevice}
               className="w-fit self-start inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors font-semibold mt-0.5 px-1 py-0.5 rounded hover:bg-surface-2/60 cursor-pointer active:scale-95"
               title="Switch Store"
             >
               <span className="truncate max-w-[130px]">{store.storeName}</span>
-              <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+              {!store.staffDevice && <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />}
             </button>
           </div>
 
@@ -1983,7 +2019,9 @@ export default function Index() {
                       </div>
                     </div>
 
-                    {/* Switch Role Action */}
+                    {/* Switch Role Action. Not on a worker's own phone: it is one
+                        person's, in one shop. */}
+                    {!store.staffDevice && (
                     <button
                       onClick={() => {
                         setShowProfileMenu(false);
@@ -1994,6 +2032,7 @@ export default function Index() {
                       <UserCheck className="w-4 h-4 text-primary" />
                       <span>Switch Role</span>
                     </button>
+                    )}
 
                     {/* Lock Store Action */}
                     <button

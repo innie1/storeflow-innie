@@ -305,6 +305,8 @@ export function firstProductsPageShowing(store: StoreData, tab = ''): boolean {
 /** Whether the guide should be on screen at all. */
 export function shouldRunGuide(store: StoreData | null | undefined, tab = ''): boolean {
   if (!store) return false;
+  // Setting a shop up is the owner's job; a worker's phone has nothing to set.
+  if (store.staffDevice) return false;
   if (guideDismissed(store.accessCode)) return false;
   if (firstProductsPageShowing(store, tab)) return false;
   return nextStep(store, tab) !== null;

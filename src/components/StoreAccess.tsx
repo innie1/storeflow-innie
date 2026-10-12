@@ -14,6 +14,8 @@ import { generateStoreUrl, parseScannedQRText } from '@/lib/qr-code';
 import QRScannerPage from '@/components/qr/QRScannerPage';
 import { getPublicStorefront } from '@/lib/public-storefront';
 import JoinStore from '@/components/staff/JoinStore';
+import WorkerSignIn from '@/components/staff/WorkerSignIn';
+import { readJoin } from '@/lib/staff-join';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -1163,6 +1165,10 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           <p className="text-muted-foreground text-sm">Offline-first store management</p>
         </div>
 
+        {/* On a worker's own approved phone, their shop comes first. The two
+            owner buttons below are left exactly as they are. */}
+        {mode === 'choose' && <WorkerSignIn onSignedIn={onStoreLoaded} />}
+
         {mode === 'choose' && (
           <div className="space-y-3">
             <button
@@ -1185,7 +1191,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
 
         {/* For a worker on their own phone. Kept apart from, and quieter
             than, the two buttons above, which are the owner's way in. */}
-        {mode === 'choose' && (
+        {mode === 'choose' && readJoin()?.status !== 'authorized' && (
           <button
             type="button"
             onClick={() => setMode('join')}

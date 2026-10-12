@@ -1123,6 +1123,11 @@ export interface StoreData {
   workerPayments?: WorkerPayment[];
   /** Expenses workers reported, waiting or decided. See StaffExpenseRequest. */
   staffExpenseRequests?: StaffExpenseRequest[];
+  /**
+   * Set only on a worker's own phone: this is the slim copy of a shop the
+   * cloud gave them, not a shop of their own. See staff-session.
+   */
+  staffDevice?: { requestId: string; storeRef: string; staffId: string };
   liabilities?: number;
 }
 

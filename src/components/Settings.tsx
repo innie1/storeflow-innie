@@ -3676,6 +3676,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   if (view === 'data') return (
     <SubPage title="Data & Storage" onBack={() => setView('home')}>
       <div className="grid grid-cols-2 gap-3">
+        {/* Not on a worker's own phone: it holds one shop, theirs to work in. */}
+        {!store.staffDevice && (
         <DataTile
           icon={<RefreshCw className="w-4.5 h-4.5" />}
           label="Switch Store"
@@ -3684,6 +3686,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           iconColor="#818CF8"
           onClick={() => setShowSwitcher(true)}
         />
+        )}
         <DataTile
           icon={<Trash2 className="w-4.5 h-4.5" />}
           label={trashCount ? `Recently Deleted (${trashCount})` : 'Recently Deleted'}
