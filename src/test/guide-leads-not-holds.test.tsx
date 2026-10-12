@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { readSource } from './helpers/source';
-import SetupGuide from '@/components/SetupGuide';
+import SetupChecklist from '@/components/SetupChecklist';
+import { endPractice, guideStepOnScreen } from '@/lib/guide-activity';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 import { celebrationShowing } from '@/lib/celebrations';
-import { firstProductsPageShowing, nextStep, shouldRunGuide } from '@/lib/setup-guide';
+import { firstProductsPageShowing, guideDismissed, nextStep, shouldRunGuide } from '@/lib/setup-guide';
 import { laundryLocalStorageKey } from '@/lib/laundry-offline';
 
 /**
@@ -25,39 +26,68 @@ function oneRealBundle(accessCode: string) {
 }
 
 beforeEach(() => { localStorage.clear(); });
-afterEach(() => { cleanup(); localStorage.clear(); });
+afterEach(() => { cleanup(); localStorage.clear(); endPractice(); });
 
-describe('the setup guide leads; it does not hold anyone', () => {
+describe('the setup checklist leads; it does not hold anyone', () => {
   /*
-   * With a step open, it sent the merchant back to that step's screen every
-   * time they changed tab. A laundry that took a real customer at the last
-   * step could not reach Home, Orders or the price list all day.
+   * The old walk sent the merchant to a step's screen by itself, and for a
+   * while back to it every time they changed tab. The checklist moves nobody:
+   * only a tap on a row's button goes anywhere.
    */
-  it('takes the merchant to a step once, when the step first appears', () => {
-    const store = laundry();
-    oneRealBundle('GUIDE1');
-    expect(nextStep(store, 'dashboard')?.id).toBe('first-job');
+  it('shows what is left, and goes nowhere by itself', () => {
     const navigate = vi.fn();
-
-    const view = render(<SetupGuide store={store} tab="dashboard" onNavigate={navigate} />);
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith('laundry-records');
-
-    // They go there, then leave for Home, then Orders.
-    view.rerender(<SetupGuide store={store} tab="laundry-records" onNavigate={navigate} />);
-    view.rerender(<SetupGuide store={store} tab="dashboard" onNavigate={navigate} />);
-    view.rerender(<SetupGuide store={store} tab="orders" onNavigate={navigate} />);
-
-    expect(navigate, 'the guide pulled the merchant back').toHaveBeenCalledTimes(1);
+    render(<SetupChecklist store={laundry({ products: [] })} onNavigate={navigate} />);
+    const card = screen.getByRole('region', { name: 'Get your shop ready' });
+    expect(within(card).getByText('0 of 3 done')).toBeTruthy();
+    expect(within(card).getByText('Add your services')).toBeTruthy();
+    expect(within(card).getByText('Set your prices')).toBeTruthy();
+    expect(within(card).getByText('Try a practice bundle')).toBeTruthy();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('still leads each shop, not just the first one opened', () => {
-    oneRealBundle('GUIDE1');
-    oneRealBundle('GUIDE2');
+  it('ticks what is done and offers buttons only for what is not', () => {
+    render(<SetupChecklist store={laundry()} onNavigate={() => {}} />);
+    const card = screen.getByRole('region', { name: 'Get your shop ready' });
+    expect(within(card).getByText('2 of 3 done')).toBeTruthy();
+    expect(within(card).queryByRole('button', { name: 'Add service' })).toBeNull();
+    expect(within(card).getByRole('button', { name: 'Try it' })).toBeTruthy();
+  });
+
+  it('"Try it" opens the intake as a practice run, on the tap and not before', () => {
     const navigate = vi.fn();
-    const view = render(<SetupGuide store={laundry()} tab="dashboard" onNavigate={navigate} />);
-    view.rerender(<SetupGuide store={laundry({ accessCode: 'GUIDE2' })} tab="dashboard" onNavigate={navigate} />);
-    expect(navigate).toHaveBeenCalledTimes(2);
+    render(<SetupChecklist store={laundry()} onNavigate={navigate} />);
+    expect(guideStepOnScreen()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try it' }));
+    expect(navigate).toHaveBeenCalledWith('laundry-records');
+    expect(guideStepOnScreen()).toBe('first-job');
+    endPractice();
+    expect(guideStepOnScreen()).toBeNull();
+  });
+
+  it('asks before hiding, then stays hidden for this shop', () => {
+    render(<SetupChecklist store={laundry()} onNavigate={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the setup checklist' }));
+    expect(screen.getByText('Hide the setup checklist?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    expect(guideDismissed('GUIDE1')).toBe(true);
+    expect(screen.queryByRole('region', { name: 'Get your shop ready' })).toBeNull();
+  });
+
+  it('is not there for a shop that is ready', () => {
+    const ready = laundry({ sales: [
+      { id: 'a', total: 1, date: '2026-09-07T10:00:00.000Z' },
+      { id: 'b', total: 1, date: '2026-09-08T10:00:00.000Z' },
+    ] });
+    render(<SetupChecklist store={ready} onNavigate={() => {}} />);
+    expect(screen.queryByRole('region', { name: 'Get your shop ready' })).toBeNull();
+  });
+});
+
+describe('the practice run ends on its own', () => {
+  const index = readSource('src/pages/Index.tsx');
+  it('when the merchant leaves the intake, or the run is done', () => {
+    expect(index).toContain("if (tab !== 'laundry-records') endPractice();");
+    expect(index).toContain('window.addEventListener(PRACTISED_SIGNAL, endPractice)');
   });
 });
 
@@ -72,7 +102,7 @@ describe('a real bundle taken from the guide counts as walking through it', () =
     // The 8 September rule: one job alone, outside the guide, is not the lesson.
     const store = laundry();
     oneRealBundle('GUIDE1');
-    expect(nextStep(store, 'dashboard')?.id).toBe('first-job');
+    expect(nextStep(store)?.id).toBe('first-job');
   });
 });
 

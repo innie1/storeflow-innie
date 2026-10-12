@@ -10,6 +10,7 @@ import {
   celebrationShown,
   markCelebrationShown,
   shouldRunGuide,
+  showGuideAgain,
 } from '@/lib/setup-guide';
 import { laundryLocalStorageKey } from '@/lib/laundry-offline';
 
@@ -42,47 +43,49 @@ beforeEach(() => { localStorage.clear(); });
 afterEach(() => { localStorage.clear(); });
 
 describe('a brand-new laundry', () => {
-  it('is walked through five steps', () => {
-    expect(guideSteps(laundry()).map(step => step.id)).toEqual([
-      'open-price-list', 'add-service', 'set-price', 'open-intake', 'first-job',
-    ]);
+  it('gets a three-item checklist', () => {
+    expect(guideSteps(laundry()).map(step => step.id)).toEqual(['add-service', 'set-price', 'first-job']);
   });
 
-  it('starts by pointing at the price list', () => {
-    const step = nextStep(laundry(), 'dashboard');
-    expect(step?.id).toBe('open-price-list');
-    expect(step?.target).toBe('tab-inventory');
+  it('starts with adding a service, with a button that opens the price list', () => {
+    const step = nextStep(laundry());
+    expect(step?.id).toBe('add-service');
+    expect(step?.action).toBe('Add service');
+    expect(step?.tab).toBe('inventory');
+    expect(step?.target).toBe('add-service');
   });
 
-  it('counts arriving on the price-list screen as doing the navigation step', () => {
-    expect(nextStep(laundry(), 'inventory')?.id).toBe('add-service');
+  it('never ticks an item for being on a screen - only for doing it', () => {
+    // The old walk's "open the price list" step ticked itself while that
+    // screen was open and un-ticked the moment the merchant left, so the walk
+    // kept coming back for it. Items take the shop and nothing else.
+    for (const step of guideSteps(laundry())) expect(step.done.length).toBe(1);
+    expect(nextStep(laundry())?.id).toBe('add-service');
   });
 
   it('asks for a price once a service exists', () => {
-    expect(nextStep(laundry({ products: [service(0)] }), 'inventory')?.id).toBe('set-price');
+    expect(nextStep(laundry({ products: [service(0)] }))?.id).toBe('set-price');
   });
 
-  it('sends the merchant to Intake once prices are set', () => {
-    expect(nextStep(laundry({ products: [service(500)] }), 'inventory')?.id).toBe('open-intake');
-  });
-
-  it('then points at the button that starts a job', () => {
-    const step = nextStep(laundry({ products: [service(500)] }), 'laundry-records');
+  it('then offers a practice bundle, which opens the intake as practice', () => {
+    const step = nextStep(laundry({ products: [service(500)] }));
     expect(step?.id).toBe('first-job');
+    expect(step?.practice).toBe(true);
+    expect(step?.tab).toBe('laundry-records');
     expect(step?.target).toBe('record-job');
   });
 
   it('is not finished by one job on one day', () => {
     const store = laundry({ products: [service(500)] });
     seedRecords('TEST01', 1);
-    expect(nextStep(store, 'dashboard')?.id).toBe('first-job');
+    expect(nextStep(store)?.id).toBe('first-job');
     expect(shouldRunGuide(store)).toBe(true);
   });
 
   it('is finished once the shop has traded on more than one day', () => {
     const store = laundry({ products: [service(500)] });
     seedRecordsAcrossDays('TEST01', ['2026-09-07T10:00:00.000Z', '2026-09-08T10:00:00.000Z']);
-    expect(nextStep(store, 'dashboard')).toBeNull();
+    expect(nextStep(store)).toBeNull();
     expect(shouldRunGuide(store)).toBe(false);
   });
 
@@ -91,18 +94,16 @@ describe('a brand-new laundry', () => {
       products: [service(0)],
       businessTemplate: { laundryPricing: { matrix: { s1: { Shirt: 500 } } } },
     });
-    expect(nextStep(store, 'inventory')?.id).toBe('open-intake');
+    expect(nextStep(store)?.id).toBe('first-job');
   });
 });
 
-describe('guide progress', () => {
-  it('skips steps already satisfied and reports progress honestly', () => {
+describe('checklist progress', () => {
+  it('ticks what is already done and reports progress honestly', () => {
     const configured = laundry({ products: [service(800)] });
-    expect(nextStep(configured, 'dashboard')?.id).toBe('open-intake');
-    expect(guideProgress(laundry(), 'dashboard').done).toBe(0);
-    expect(guideProgress(configured, 'dashboard').done).toBe(3);
-    expect(guideProgress(configured, 'dashboard').index).toBe(3);
-    expect(guideProgress(configured, 'dashboard').total).toBe(5);
+    expect(nextStep(configured)?.id).toBe('first-job');
+    expect(guideProgress(laundry()).done).toBe(0);
+    expect(guideProgress(configured)).toEqual({ done: 2, total: 3, index: 2 });
   });
 });
 
@@ -120,7 +121,7 @@ describe('a shop that sells goods has no walk', () => {
 
   it('has no steps, from the very first minute', () => {
     expect(guideSteps(shop())).toEqual([]);
-    expect(nextStep(shop(), 'dashboard')).toBeNull();
+    expect(nextStep(shop())).toBeNull();
     expect(shouldRunGuide(shop(), 'dashboard')).toBe(false);
   });
 
@@ -130,15 +131,13 @@ describe('a shop that sells goods has no walk', () => {
     }
   });
 
-  it('leaves the laundry its walk', () => {
-    expect(guideSteps(laundry()).map(step => step.id)).toEqual([
-      'open-price-list', 'add-service', 'set-price', 'open-intake', 'first-job',
-    ]);
+  it('leaves the laundry its checklist', () => {
+    expect(guideSteps(laundry()).map(step => step.id)).toEqual(['add-service', 'set-price', 'first-job']);
   });
 });
 
 describe('onboarding state is strictly per store', () => {
-  it('closing the walk on one shop leaves it running on another', () => {
+  it('hiding the checklist on one shop leaves it showing on another', () => {
     const shine = laundry({ accessCode: 'SHINE1' });
     const second = laundry({ accessCode: 'SECOND' });
 
@@ -209,11 +208,11 @@ describe('onboarding state is strictly per store', () => {
   });
 });
 
-describe('switching to another shop starts its own walk', () => {
+describe('switching to another shop shows its own checklist', () => {
   const index = readSource('src/pages/Index.tsx');
 
-  it('remounts the guide when the shop changes', () => {
-    const mount = index.slice(index.indexOf('<SetupGuide'), index.indexOf('onNavigate={next =>'));
+  it('remounts the checklist when the shop changes', () => {
+    const mount = index.slice(index.indexOf('<SetupChecklist'), index.indexOf('onNavigate={next =>', index.indexOf('<SetupChecklist')));
     expect(mount).toContain('key={store.accessCode}');
   });
 
@@ -221,5 +220,16 @@ describe('switching to another shop starts its own walk', () => {
     const guide = readSource('src/lib/setup-guide.ts');
     expect(guide).toContain('shopKey(DISMISSED_PREFIX, accessCode)');
     expect(guide).not.toContain("localStorage.getItem('storeflow_setup_guide_dismissed')");
+  });
+});
+
+describe('brought back from Settings', () => {
+  it('shows again with its progress kept', () => {
+    const store = laundry({ products: [service(500)] });
+    dismissGuide('TEST01');
+    expect(shouldRunGuide(store)).toBe(false);
+    showGuideAgain('TEST01');
+    expect(shouldRunGuide(store)).toBe(true);
+    expect(guideProgress(store).done).toBe(2);
   });
 });

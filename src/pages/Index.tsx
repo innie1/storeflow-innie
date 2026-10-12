@@ -5,7 +5,8 @@ import { prepareInventoryOrder } from '@/lib/inventory-orders';
 import { same } from '@/lib/store-sync-guard';
 import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { canOpenTab } from '@/lib/permissions';
-import SetupGuide from '@/components/SetupGuide';
+import SetupChecklist from '@/components/SetupChecklist';
+import { endPractice } from '@/lib/guide-activity';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
 import { celebrationShown, guideProgress, hasPractised, markCelebrationShown, nextStep, PRACTISED_SIGNAL } from '@/lib/setup-guide';
 import { StoreData, TabId, Product, FlowNotification } from '@/types/store';
@@ -1172,6 +1173,14 @@ export default function Index() {
    * however the merchant got there — through the guide, or on their own.
    */
   const [showReady, setShowReady] = useState(false);
+  // A practice run lasts only while its screen is open and until it is done,
+  // so the next bundle taken in is always real.
+  useEffect(() => { if (tab !== 'laundry-records') endPractice(); }, [tab]);
+  useEffect(() => {
+    window.addEventListener(PRACTISED_SIGNAL, endPractice);
+    return () => window.removeEventListener(PRACTISED_SIGNAL, endPractice);
+  }, []);
+
   // A first-sale card up at the same moment goes first; this waits its turn.
   const milestoneShowing = useCelebrationShowing();
   useEffect(() => {
@@ -1752,6 +1761,15 @@ export default function Index() {
             {/* A per-piece worker's Record my work and earnings, above
                 whichever home screen they use. Nobody else sees it. */}
             <MyPieceWork store={store} orders={orders} currentUser={currentUser} onUpdate={setStore} />
+            {/* What is left to open the shop, in one place: the owner's job,
+                so owners only. Keyed on the shop so each has its own. */}
+            {currentUser?.role === 'owner' && (
+              <SetupChecklist
+                key={store.accessCode}
+                store={store}
+                onNavigate={next => { if (isTabAllowed(next as TabId, currentUser)) setTab(next as TabId); }}
+              />
+            )}
             {/* Any worker can say what they spent without seeing the money. */}
             <StaffExpenseButton store={store} currentUser={currentUser} onUpdate={setStore} />
             {store.uiMode === 'simple' ? (
@@ -2380,30 +2398,6 @@ export default function Index() {
           <FlowShirtFab store={store} onUpdate={setStore} onNavigate={handleNavigate} currentUser={currentUser} />
         )}
 
-        {/* A brand-new shop is walked through opening: the app dims, one
-            control stays lit, and it follows what the merchant actually does
-            rather than counting clicks. It stops for good once the shop can
-            trade, and never asks twice if it is closed. */}
-        {/* Owners only. The walk ends at the price list, which is the one
-            place a worker is not allowed - it dragged an attendant onto a
-            screen their role forbids and then held them there. */}
-        {store && currentUser?.role === 'owner' && (
-          <SetupGuide
-            /*
-             * Keyed on the shop, so switching stores starts the walk over.
-             *
-             * The guide keeps "I closed this" in local state, and this
-             * component is never unmounted - so closing it on one shop closed
-             * it on every shop opened afterwards on that device. The stored
-             * flag was always per shop; only the live component's memory of it
-             * was not.
-             */
-            key={store.accessCode}
-            store={store}
-            tab={tab}
-            onNavigate={next => { if (isTabAllowed(next as TabId, currentUser)) setTab(next as TabId); }}
-          />
-        )}
         {showReady && !milestoneShowing && store && (
           <ReadyForBusiness
             storeName={store.storeName || 'Your store'}

@@ -37,6 +37,22 @@ export function setGuideStepOnScreen(stepId: string | null): void {
   announce();
 }
 
+/**
+ * "Try it" on the setup checklist: the intake opens as a practice run.
+ *
+ * Still only on a knowing tap. The practice form says so across its top and
+ * offers "This is a real customer - record it", and the run ends as soon as
+ * it is finished or the merchant leaves the screen (endPractice), so the next
+ * bundle taken in is always real.
+ */
+export function startPractice(): void {
+  setGuideStepOnScreen('first-job');
+}
+
+export function endPractice(): void {
+  if (showing === 'first-job') setGuideStepOnScreen(null);
+}
+
 export function guideStepOnScreen(): string | null {
   return showing;
 }

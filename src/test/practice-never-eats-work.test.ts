@@ -31,7 +31,8 @@ import { readSource } from './helpers/source';
  */
 
 const workspace = readSource('src/components/laundry/LaundryWorkspace.tsx');
-const guide = readSource('src/components/SetupGuide.tsx');
+const checklist = readSource('src/components/SetupChecklist.tsx');
+const index = readSource('src/pages/Index.tsx');
 const intake = readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx');
 
 describe('nothing rehearses unless the guide says so', () => {
@@ -72,11 +73,15 @@ describe('the workspace asks the guide rather than the data', () => {
     expect(workspace).toContain('GUIDE_STEP_SIGNAL');
   });
 
-  it('and the guide is the only thing that sets it', () => {
-    expect(guide).toContain('setGuideStepOnScreen(step?.id ?? null)');
-    // Cleared on unmount, so a guide that disappears cannot leave the app
-    // rehearsing behind it.
-    expect(guide).toContain('return () => setGuideStepOnScreen(null)');
+  it('and only a tap on "Try it" sets it, ended by leaving or finishing', () => {
+    // Set in one place: the checklist row's button handler.
+    expect(checklist).toContain('startPractice();');
+    const go = checklist.slice(checklist.indexOf('const go = '), checklist.indexOf('return (', checklist.indexOf('const go = ')));
+    expect(go).toContain('startPractice();');
+    // Ended when the merchant leaves the intake or finishes the run, so the
+    // next bundle taken in is real.
+    expect(index).toContain("if (tab !== 'laundry-records') endPractice();");
+    expect(index).toContain('window.addEventListener(PRACTISED_SIGNAL, endPractice)');
   });
 });
 

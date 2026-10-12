@@ -3,35 +3,36 @@ import { getLocalLaundryRecords } from '@/lib/laundry-offline';
 import { getBusinessTemplate, isServiceFirstBusiness } from '@/lib/business-runtime';
 
 /**
- * The walk a brand-new shop is taken on.
+ * The setup checklist a brand-new shop sees on Home.
  *
  * Setup ends with a store that exists and does nothing: no prices, no
- * services, no first job. Everything needed to actually open is behind a tab
- * the owner has never seen, and nothing says which one. The guide dims the app
- * and points at one thing at a time until the shop is ready to trade.
+ * services, no first job. The checklist lists what is left, ticks each item
+ * as the shop actually does it, and gives each a button that goes to the
+ * right screen and lights the control to press.
  *
- * Steps are data. Each knows what it is asking for, where to point, and — the
- * important part — how to tell on its own whether it is done, so the guide
- * follows the merchant rather than counting clicks.
+ * It used to be a walk that dimmed the whole app, chased the merchant from
+ * tab to tab and pointed at one control at a time. Two of its steps were
+ * "be on this screen", which un-did themselves the moment the merchant left -
+ * so the walk kept coming back for a step already done, and pulled people
+ * onto pages while they were busy with something else. An item here is done
+ * only by the shop's own data, so it can never go backwards, and nothing
+ * moves anybody anywhere unless they tap.
  */
 
 export interface GuideStep {
   id: string;
-  /** The element to spotlight, matched on data-guide="…". */
-  target: string;
   title: string;
   body: string;
-  /** Which tab must be open for the target to exist. */
+  /** The button on the checklist row: "Add service", "Try it". */
+  action: string;
+  /** The screen the button opens. */
   tab?: string;
-  /**
-   * True once the merchant has done this.
-   *
-   * Takes the open tab as well as the store, because the first step of each
-   * walk is "get to this screen" — which no amount of looking at the data can
-   * tell you. Without it the guide kept pointing at a tab the merchant was
-   * already standing on.
-   */
-  done: (store: StoreData, tab: string) => boolean;
+  /** The control lit on arrival, matched on data-guide="…". */
+  target?: string;
+  /** Opens the intake as a practice run, where nothing is saved. */
+  practice?: boolean;
+  /** True once the shop has really done this - from its data, never the screen. */
+  done: (store: StoreData) => boolean;
 }
 
 const services = (store: StoreData) =>
@@ -106,7 +107,7 @@ export function tradingBeyondFirstDay(store: StoreData): boolean {
   return false;
 }
 
-/** The walk for a shop that sells work rather than goods. */
+/** The checklist for a shop that sells work rather than goods. */
 function serviceSteps(store: StoreData): GuideStep[] {
   const template = getBusinessTemplate(store);
   const noun = template.labels.offeringNoun.toLowerCase();
@@ -114,60 +115,54 @@ function serviceSteps(store: StoreData): GuideStep[] {
 
   return [
     {
-      id: 'open-price-list',
-      target: 'tab-inventory',
-      tab: undefined,
-      title: isLaundry ? 'Start with your price list' : `Start with your ${noun}s`,
-      body: isLaundry
-        ? 'This is where you tell the app what you charge. Nothing else works until it knows your prices.'
-        : `This is where your ${noun}s live. Tap here to open it.`,
-      done: (store, tab) => tab === 'inventory' || services(store).length > 0 || hasPrices(store),
-    },
-    {
       id: 'add-service',
-      target: 'add-service',
-      tab: 'inventory',
-      title: isLaundry ? 'Add your first service' : `Add your first ${noun}`,
+      title: isLaundry ? 'Add your services' : `Add your ${noun}s`,
       body: isLaundry
-        ? 'Full Service, Wash Only, Dry Cleaning — whatever you actually offer. You can add the rest later.'
-        : `Give it a name and what you charge. One is enough to begin.`,
+        ? 'Full Service, Wash Only, Dry Cleaning - whatever you offer. You can add more later.'
+        : 'What you offer, by name. One is enough to begin.',
+      action: isLaundry ? 'Add service' : `Add ${noun}`,
+      tab: 'inventory',
+      target: 'add-service',
       done: store => services(store).length > 0,
     },
     {
       id: 'set-price',
-      target: 'add-service',
-      tab: 'inventory',
-      title: 'Put a price on it',
+      title: 'Set your prices',
       body: isLaundry
-        ? 'Most Nigerian laundries charge per piece. Set what one shirt costs and the app works the rest out.'
-        : 'Set what you charge, and the app totals every job for you.',
+        ? 'What you charge for each item, so every bundle adds itself up.'
+        : 'What you charge, so every job adds itself up.',
+      action: 'Set prices',
+      tab: 'inventory',
+      target: isLaundry ? 'set-prices' : 'add-service',
       done: hasPrices,
     },
-    {
-      id: 'open-intake',
-      target: isLaundry ? 'tab-laundry-records' : 'tab-orders',
-      title: isLaundry ? 'Open Intake' : 'Open Orders',
-      body: isLaundry
-        ? 'This is where clothes go when someone brings them in. Tap here.'
-        : 'This is where work you take in is logged. Tap here.',
-      done: (store, tab) => tab === (isLaundry ? 'laundry-records' : 'orders')
-        || hasJob(store)
-        || hasPractised(store.accessCode),
-    },
-    {
-      id: 'first-job',
-      target: 'record-job',
-      tab: isLaundry ? 'laundry-records' : 'orders',
-      title: isLaundry ? 'Try taking a bundle in' : 'Record your first job',
-      body: isLaundry
-        ? 'Walk through it once. Nothing is saved — this is only to show you how.'
-        : 'Log the first piece of work you take in. That is the shop open.',
-      done: store => hasPractised(store.accessCode) || tradingBeyondFirstDay(store),
-    },
+    isLaundry
+      ? {
+        id: 'first-job',
+        title: 'Try a practice bundle',
+        body: 'Take clothes in once to see how it works. Nothing is saved.',
+        action: 'Try it',
+        tab: 'laundry-records',
+        target: 'record-job',
+        practice: true,
+        // One real bundle alone does not end it (the 8 September rule): a
+        // shop that took a bundle in before seeing any of this still has the
+        // lesson to learn. A practice run, a real bundle saved from the
+        // practice form, or trading on a second day does.
+        done: (store: StoreData) => hasPractised(store.accessCode) || tradingBeyondFirstDay(store),
+      }
+      : {
+        id: 'first-job',
+        title: 'Record your first job',
+        body: 'Log the first piece of work you take in. That is the shop open.',
+        action: 'Open Orders',
+        tab: 'orders',
+        done: (store: StoreData) => hasJob(store) || tradingBeyondFirstDay(store),
+      },
   ];
 }
 
-/** The walk for a gaming centre. */
+/** The checklist for a gaming centre. */
 function gamesSteps(): GuideStep[] {
   const priced = (store: StoreData) => (store.games || []).some(game => Number((game as any).price || 0) > 0);
   const played = (store: StoreData) => ((store as any).gameSessions || []).length > 0;
@@ -175,17 +170,19 @@ function gamesSteps(): GuideStep[] {
   return [
     {
       id: 'games-priced',
-      target: 'tab-games-settings',
-      title: 'Check what each game costs',
-      body: 'Your machines are listed already. Set what a player pays and the app totals every session.',
-      done: (store, tab) => tab === 'games-settings' || priced(store),
+      title: 'Set what each game costs',
+      body: 'Your machines are listed already. Set what a player pays and every session adds itself up.',
+      action: 'Set prices',
+      tab: 'games-settings',
+      done: priced,
     },
     {
       id: 'first-session',
-      target: 'start-session',
-      tab: 'games-dashboard',
       title: 'Start your first session',
       body: 'Tap Play on any machine when someone sits down. That is the floor open.',
+      action: 'Start',
+      tab: 'games-dashboard',
+      target: 'start-session',
       done: played,
     },
   ];
@@ -211,17 +208,17 @@ export function guideSteps(store: StoreData): GuideStep[] {
   return isServiceFirstBusiness(store) ? serviceSteps(store) : [];
 }
 
-/** The first step not yet done, or null when the shop is ready to trade. */
-export function nextStep(store: StoreData, tab = ''): GuideStep | null {
-  return guideSteps(store).find(step => !step.done(store, tab)) || null;
+/** The first item not yet done, or null when the shop is ready to trade. */
+export function nextStep(store: StoreData): GuideStep | null {
+  return guideSteps(store).find(step => !step.done(store)) || null;
 }
 
-/** Where the merchant is in the walk. */
-export function guideProgress(store: StoreData, tab = ''): { done: number; total: number; index: number } {
+/** How far through the checklist the shop is. */
+export function guideProgress(store: StoreData): { done: number; total: number; index: number } {
   const steps = guideSteps(store);
-  const current = steps.findIndex(step => !step.done(store, tab));
+  const current = steps.findIndex(step => !step.done(store));
   return {
-    done: steps.filter(step => step.done(store, tab)).length,
+    done: steps.filter(step => step.done(store)).length,
     total: steps.length,
     index: current === -1 ? steps.length : current,
   };
@@ -266,8 +263,22 @@ export function guideDismissed(accessCode?: string): boolean {
   return readShopFlag(DISMISSED_PREFIX, accessCode);
 }
 
+/** Fired when the checklist is hidden or brought back, from wherever. */
+export const CHECKLIST_SIGNAL = 'storeflow:setup-checklist';
+
+function announceChecklist(): void {
+  try { window.dispatchEvent(new CustomEvent(CHECKLIST_SIGNAL)); } catch { /* not a browser */ }
+}
+
 export function dismissGuide(accessCode?: string): void {
   try { localStorage.setItem(shopKey(DISMISSED_PREFIX, accessCode), '1'); } catch { /* private mode */ }
+  announceChecklist();
+}
+
+/** "Show setup checklist" in Settings: hidden no longer, progress kept. */
+export function showGuideAgain(accessCode?: string): void {
+  try { localStorage.removeItem(shopKey(DISMISSED_PREFIX, accessCode)); } catch { /* private mode */ }
+  announceChecklist();
 }
 
 export function restartGuide(accessCode?: string): void {
@@ -302,12 +313,12 @@ export function firstProductsPageShowing(store: StoreData, tab = ''): boolean {
   return tab === 'dashboard' && (store as any).uiMode === 'simple' && !!onboarding && !onboarding.complete;
 }
 
-/** Whether the guide should be on screen at all. */
-export function shouldRunGuide(store: StoreData | null | undefined, tab = ''): boolean {
+/** Whether the checklist belongs on Home at all. */
+export function shouldRunGuide(store: StoreData | null | undefined, tab = 'dashboard'): boolean {
   if (!store) return false;
   // Setting a shop up is the owner's job; a worker's phone has nothing to set.
   if (store.staffDevice) return false;
   if (guideDismissed(store.accessCode)) return false;
   if (firstProductsPageShowing(store, tab)) return false;
-  return nextStep(store, tab) !== null;
+  return nextStep(store) !== null;
 }

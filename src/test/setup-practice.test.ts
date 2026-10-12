@@ -74,10 +74,10 @@ describe('finishing the walk without a real job', () => {
   it('cannot be judged by what it left behind, so it is recorded', () => {
     const store = laundry();
     const lastStep = guideSteps(store).at(-1)!;
-    expect(lastStep.done(store, 'laundry-records')).toBe(false);
+    expect(lastStep.done(store)).toBe(false);
 
     markPractised(store.accessCode);
-    expect(lastStep.done(store, 'laundry-records')).toBe(true);
+    expect(lastStep.done(store)).toBe(true);
   });
 
   it('keeps each shop’s rehearsal to itself', () => {
@@ -89,7 +89,7 @@ describe('finishing the walk without a real job', () => {
   /** A shop already trading does not need to be taught. */
   it('is not finished by a single job, which is when the walk is most needed', () => {
     const oneJob = laundry({ accessCode: 'TRADED', sales: [{ id: 's1', total: 3000, date: '2026-09-08T10:00:00.000Z' }] as any });
-    expect(guideSteps(oneJob).at(-1)!.done(oneJob, 'laundry-records')).toBe(false);
+    expect(guideSteps(oneJob).at(-1)!.done(oneJob)).toBe(false);
   });
 
   it('is already finished for a shop trading across more than one day', () => {
@@ -100,7 +100,7 @@ describe('finishing the walk without a real job', () => {
         { id: 's2', total: 2000, date: '2026-09-08T10:00:00.000Z' },
       ] as any,
     });
-    expect(guideSteps(trading).at(-1)!.done(trading, 'laundry-records')).toBe(true);
+    expect(guideSteps(trading).at(-1)!.done(trading)).toBe(true);
   });
 });
 
@@ -121,17 +121,15 @@ describe('finishing on a rehearsal still celebrates', () => {
   });
 
   /**
-   * And the step before it. "Open Intake" completed on standing on the tab or
-   * having traded; the celebration checks the walk with no tab in hand, so a
-   * shop that had only rehearsed never finished that step either.
+   * The old walk had an "Open Intake" step that ticked only while standing on
+   * that tab, and the celebration checks with no tab in hand - so a shop that
+   * had only rehearsed never finished. No item depends on a screen now.
    */
-  it('counts the rehearsal as having opened the intake', () => {
-    const store = laundry({ accessCode: 'OPENED' });
-    const openIntake = guideSteps(store).find(step => step.id === 'open-intake')!;
-    expect(openIntake.done(store, '')).toBe(false);
-
+  it('finishes the checklist on the rehearsal alone', () => {
+    const store = laundry({ accessCode: 'OPENED', products: [{ id: 's1', name: 'Full Service', isService: true, sellingPrice: 500, costPrice: 0, quantity: 0 }] as any });
+    expect(guideSteps(store).every(step => step.done(store))).toBe(false);
     markPractised(store.accessCode);
-    expect(openIntake.done(store, '')).toBe(true);
+    expect(guideSteps(store).every(step => step.done(store))).toBe(true);
   });
 
   it('does not claim a job was recorded when none was', () => {

@@ -181,7 +181,6 @@ function activePreset(promisedFor: string, chips: { hours: number }[]): number |
 
 export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, onRecorded, practice: guidedPractice = false }: Props) {
   const [rehearsing, setRehearsing] = useState(guidedPractice);
-  useEffect(() => { setRehearsing(guidedPractice); }, [guidedPractice]);
   const practice = rehearsing;
   const services = useMemo(
     () => (store.products || []).filter(service => service.isService && !service.discontinued),
@@ -288,6 +287,10 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   const [washMethodId, setWashMethodId] = useState('manual:hand-wash');
   const [dryMethodId, setDryMethodId] = useState('manual:sun-dry');
   const [created, setCreated] = useState<LocalLaundryRecord | null>(null);
+  // Follow the checklist's practice switch - but not under an open receipt,
+  // or a practice receipt would relabel itself "Order created" the moment the
+  // practice ends. It takes the new answer when the receipt is closed.
+  useEffect(() => { if (!created) setRehearsing(guidedPractice); }, [guidedPractice, created]);
   const [createdPayment, setCreatedPayment] = useState<ReturnType<typeof settleLaundryPayment> | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [showTicket, setShowTicket] = useState(false);

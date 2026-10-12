@@ -481,6 +481,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
                       most shops price three and leave the rest. */}
                   <button
                     type="button"
+                    data-guide="set-prices"
                     onClick={() => setRunThrough(true)}
                     className="w-full p-4 text-xs font-display font-black text-primary hover:bg-primary/5 border-t border-border"
                   >

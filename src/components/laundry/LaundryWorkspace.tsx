@@ -38,7 +38,6 @@ import LaundryRuns from '@/components/laundry/LaundryRuns';
 import { can } from '@/lib/permissions';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
 import { bundleModifiers } from '@/lib/laundry-modifiers';
-import { nextStep } from '@/lib/setup-guide';
 import { Bike } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { decorateRecord, type DecoratedRecord } from '@/lib/laundry-records';

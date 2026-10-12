@@ -9,6 +9,7 @@ import { drawQRCode, encodeQRData, drawSimpleQR, drawBarcode, generateStoreUrl, 
 import { saveStore, getTrash, getDashboardStats, getTopSellers, removeStoreFromIndex, getStoreIndex, STORE_PREFIX, getSavingsGoals, addSavingsGoal, updateSavingsGoalById, deleteSavingsGoalById } from '@/lib/store-data';
 import { generatePerformanceSummary, generateFullTextReport, generateFullCSV } from '@/lib/reports';
 import { showToast } from '@/components/Toast';
+import { guideDismissed, nextStep, showGuideAgain } from '@/lib/setup-guide';
 import { THEMES, ThemeId, getTheme, applyTheme } from '@/lib/theme';
 import DayNightToggle from '@/components/DayNightToggle';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
@@ -4699,6 +4700,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     <SubPage title="Support & Legal" subtitle="Help, policies & contact information" onBack={() => setView('home')}>
       <div className={`${card} divide-y divide-border`}>
         <SupportRow icon="📖" label="Help Center" onClick={() => { setHelpOpen(null); setView('help'); }} />
+        {/* Only while there is something left on it, and it was hidden. */}
+        {guideDismissed(store.accessCode) && nextStep(store) && (
+          <SupportRow icon="✅" label="Show setup checklist" onClick={() => { showGuideAgain(store.accessCode); showToast('The setup checklist is back on Home'); }} />
+        )}
         <SupportRow icon="❓" label="FAQ" onClick={() => { setHelpOpen(null); setView('faq'); }} />
         <SupportRow icon="💬" label="Contact Support" onClick={() => setView('contact')} />
         <SupportRow icon="🛡️" label="Privacy Policy" onClick={() => setView('privacy')} />

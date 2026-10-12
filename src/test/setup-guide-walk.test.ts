@@ -54,57 +54,51 @@ describe('the last step has something to point at', () => {
   });
 });
 
-describe('the walk itself', () => {
-  it('asks a laundry for prices, then a service, then a first bundle', () => {
+describe('the checklist itself', () => {
+  it('asks a laundry for a service, its prices, then a practice bundle', () => {
     const ids = guideSteps(laundry).map(step => step.id);
-    expect(ids).toEqual(['open-price-list', 'add-service', 'set-price', 'open-intake', 'first-job']);
+    expect(ids).toEqual(['add-service', 'set-price', 'first-job']);
   });
 
   it('finishes only once a bundle has actually been taken in', () => {
     const last = guideSteps(laundry).at(-1)!;
-    expect(last.done(laundry, 'laundry-records')).toBe(false);
-    // A walk-in with no deposit books no sale, so this cannot read store.sales
-    // alone — records live in their own bucket, keyed by access code.
+    expect(last.done(laundry)).toBe(false);
     expect(last.target).toBe('record-job');
   });
-});
 
-describe('pointing at something the merchant can actually reach', () => {
-  const guide = code('src/components/SetupGuide.tsx');
-
-  /**
-   * The intake opens as a full-screen sheet over the workspace, and the button
-   * this step points at stays in the document underneath it. A rectangle is
-   * still measurable there, so the spotlight lit whatever the sheet happened
-   * to be showing at those coordinates — on a phone, the Service field.
-   */
-  it('asks the document what is at the point, not just for a rectangle', () => {
-    expect(guide).toContain('document.elementFromPoint');
-  });
-
-  /**
-   * A gaming centre's first session button sits below a panel of customer
-   * requests, so the hole was drawn 837px down a 554px screen: the app dimmed
-   * and showed nothing, with the card off the bottom too. Off-screen is not
-   * covered, but it is not usable either.
-   */
-  it('scrolls an off-screen target into view instead of lighting it unseen', () => {
-    const block = guide.slice(guide.indexOf('const element = candidates.find'), guide.indexOf('if (!element)'));
-    expect(block).toContain('x > window.innerWidth || y > window.innerHeight');
-    expect(block).toContain("node.scrollIntoView({ block: 'center'");
-  });
-
-  /**
-   * With no target the fallback dimmed the whole screen and floated the card
-   * in the middle, which is how a step ended up lying across the form being
-   * filled in.
-   */
-  it('stands down entirely when it has nothing to point at', () => {
-    expect(guide).toContain('if (!hole) return null;');
+  it('lights the one-at-a-time price button for the prices item', () => {
+    expect(guideSteps(laundry)[1].target).toBe('set-prices');
+    expect(code('src/components/laundry/LaundryPricingSetup.tsx')).toContain('data-guide="set-prices"');
   });
 });
 
-describe('a gaming centre gets its own walk', () => {
+describe('lighting what the button sent the merchant to', () => {
+  const glow = code('src/lib/guide-glow.ts');
+  const checklist = code('src/components/SetupChecklist.tsx');
+
+  it('lights the copy that is on screen, not the hidden one', () => {
+    expect(glow).toContain('box.width > 0 && box.height > 0');
+  });
+
+  it('brings it into view and lights it briefly, then lets go', () => {
+    expect(glow).toContain("scrollIntoView({ block: 'center'");
+    expect(glow).toContain('classList.remove(SPOTLIGHT_CLASS)');
+  });
+
+  it('gives up quietly when there is nothing to light - nothing dims, nothing blocks', () => {
+    expect(glow).toContain('giveUpAfterMs');
+    expect(glow + checklist).not.toMatch(/boxShadow: '0 0 0 9999px/);
+  });
+
+  it('moves nobody anywhere unless they tap', () => {
+    // The only navigation is inside the row button's handler.
+    const handler = checklist.slice(checklist.indexOf('const go = '), checklist.indexOf('return (', checklist.indexOf('const go = ')));
+    expect(handler).toContain('onNavigate(step.tab)');
+    expect(checklist.split('onNavigate(').length - 1).toBe(1);
+  });
+});
+
+describe('a gaming centre gets its own checklist', () => {
   const games = {
     id: 's2', storeId: 'SF-P', storeName: 'Play', accessCode: 'PLAY01',
     storeType: 'games', category: 'games',
@@ -123,15 +117,16 @@ describe('a gaming centre gets its own walk', () => {
     expect(targets).not.toContain('tab-sales');
   });
 
-  it('points only at tabs a gaming centre actually has', () => {
+  it('sends it only to screens a gaming centre actually has', () => {
     for (const step of guideSteps(games)) {
-      expect(['tab-games-settings', 'start-session']).toContain(step.target);
+      expect(['games-settings', 'games-dashboard']).toContain(step.tab);
+      expect([undefined, 'start-session']).toContain(step.target);
     }
   });
 
   it('finishes when a session has been played, not when stock is added', () => {
     const last = guideSteps(games).at(-1)!;
-    expect(last.done(games, 'games-dashboard')).toBe(false);
-    expect(last.done({ ...games, gameSessions: [{ id: 'x' }] } as any, 'games-dashboard')).toBe(true);
+    expect(last.done(games)).toBe(false);
+    expect(last.done({ ...games, gameSessions: [{ id: 'x' }] } as any)).toBe(true);
   });
 });
