@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { CheckCircle2, Clock, Droplets, Lightbulb, Receipt, Truck, type LucideIcon } from 'lucide-react';
 import type { ExpenseCategory, ExpensePaidFrom, StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
-import { PAID_FROM_LABEL, STAFF_EXPENSE_CATEGORIES, submitStaffExpense, type SubmitResult } from '@/lib/staff-expenses';
+import { mustWait, PAID_FROM_LABEL, STAFF_EXPENSE_CATEGORIES, submitStaffExpense, type SubmitResult } from '@/lib/staff-expenses';
 import ScrollLock from '@/components/ScrollLock';
 
 /**
@@ -59,6 +59,11 @@ export default function RecordExpenseSheet({ store, worker, onUpdate, onClose }:
     setDone(result.request);
   };
 
+  // On a worker's own phone it is sent to the owner's, where the shop's rule
+  // is applied; say what that rule will do, rather than "waiting" for a shop
+  // that records straight away.
+  const counts = !!done && (done.status === 'approved' || (!!store.staffDevice && !mustWait(store, done.amount)));
+
   const input = 'w-full h-11 px-3 rounded-xl bg-surface-2 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm';
   const chip = (active: boolean) => `h-10 rounded-xl text-xs font-display font-bold border transition-colors flex items-center justify-center gap-1.5 ${
     active ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border'
@@ -75,15 +80,15 @@ export default function RecordExpenseSheet({ store, worker, onUpdate, onClose }:
       >
         {done ? (
           <div className="text-center py-4">
-            {done.status === 'approved'
+            {counts
               ? <CheckCircle2 className="w-12 h-12 mx-auto text-success" />
               : <Clock className="w-12 h-12 mx-auto text-amber-500" />}
             <p className="mt-3 font-display font-black text-lg">Expense recorded</p>
             <p className="mt-1 text-sm text-foreground">
               ₦{done.amount.toLocaleString()} • {done.category} • {done.note}
             </p>
-            <p className={`mt-2 text-xs font-semibold ${done.status === 'approved' ? 'text-success' : 'text-amber-600'}`}>
-              {done.status === 'approved' ? 'Approved' : 'Waiting for owner approval'}
+            <p className={`mt-2 text-xs font-semibold ${counts ? 'text-success' : 'text-amber-600'}`}>
+              {done.status === 'approved' ? 'Approved' : counts ? 'Recorded' : 'Waiting for owner approval'}
             </p>
             <button
               type="button"

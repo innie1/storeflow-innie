@@ -24,7 +24,8 @@ import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-s
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { setCurrentActor } from '@/lib/current-actor';
-import { fetchWorkerBundles, mergeBundles, refreshWorkerCopy, WORKER_BUNDLES_MS } from '@/lib/staff-session';
+import { fetchWorkerBundles, mergeBundles, refreshWorkerCopy, sendWorkerRecords, WORKER_BUNDLES_MS } from '@/lib/staff-session';
+import { collectStaffRecords } from '@/lib/staff-records';
 import { resumeWorkerLaundry } from '@/lib/laundry-offline';
 import { DEVICE_WATCH_MS, noticeNewDeviceRequests, storeRefOf } from '@/lib/device-request-watch';
 import { listDevices } from '@/lib/staff-join';
@@ -437,10 +438,19 @@ export default function Index() {
       const current = latestStore.current;
       if (!current || current.accessCode !== watchAccessCode) return;
       const next = noticeNewDeviceRequests(current, result.devices);
-      if (!next) return;
-      saveStore(next);
-      setStore(next);
-      showToast('A worker’s phone is asking to join', 'info');
+      if (next) {
+        saveStore(next);
+        setStore(next);
+        showToast('A worker’s phone is asking to join', 'info');
+      }
+      // With a worker's phone let in, bring over what they recorded on it:
+      // new customers, expenses, piece work. Only what is new, so normally
+      // a reply of a few bytes.
+      if (!result.devices.some(device => device.status === 'authorized')) return;
+      const withRecords = await collectStaffRecords(latestStore.current || current);
+      if (stopped || !withRecords || latestStore.current?.accessCode !== watchAccessCode) return;
+      saveStore(withRecords);
+      setStore(withRecords);
     };
     void check();
     const timer = window.setInterval(() => void check(), DEVICE_WATCH_MS);
@@ -1415,6 +1425,16 @@ export default function Index() {
     return () => { stopped = true; window.removeEventListener('online', refresh); };
   }, [workerCopyCode]);
 
+  // A worker's phone sends what it recorded a moment after it is recorded -
+  // an expense, a new customer, a piece-work claim - not on every keystroke.
+  useEffect(() => {
+    if (!store?.staffDevice) return;
+    const timer = window.setTimeout(() => {
+      if (latestStore.current?.staffDevice) void sendWorkerRecords(latestStore.current).catch(() => {});
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [store]);
+
   // A worker's phone sees the shop's bundles through its own door, since it
   // has no owner account to read them with: everything open once, then only
   // what changed, every few minutes while the app is in front.
@@ -1437,6 +1457,8 @@ export default function Index() {
       }
       if (result.state !== 'ok') return;
       since = result.asOf;
+      // What this phone recorded and the cloud has not got yet goes with it.
+      if (latestStore.current?.staffDevice) void sendWorkerRecords(latestStore.current).catch(() => {});
       const incoming = result.orders.map(order => ({ ...order, status: getNormalizedStatus(order.status) }));
       setOrders(prev => mergeBundles(prev, incoming));
     };

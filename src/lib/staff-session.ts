@@ -138,7 +138,85 @@ export function workerStoreFromView(
   for (const key of UNION_BY_ID) {
     (next as any)[key] = unionById((base as any)[key], view[key]);
   }
+  // The cloud leaves spending and debt out of a worker's copy; the screens
+  // still expect the numbers to be there, so they read as nothing.
+  next.customers = (next.customers || []).map(customer => ({
+    totalPurchases: 0, outstandingDebt: 0, purchaseHistory: [], loyaltyPoints: 0, visitsCount: 0, ...customer,
+  }));
   return next;
+}
+
+/* ── what a worker's phone sends ────────────────────────────────────────── */
+
+const sentKey = (code: string) => `storeflow_staff_sent_${code}`;
+
+function readSent(code: string): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(sentKey(code)) || '[]')); } catch { return new Set(); }
+}
+
+function writeSent(code: string, ids: Set<string>): void {
+  try { localStorage.setItem(sentKey(code), JSON.stringify([...ids])); } catch { /* private mode */ }
+}
+
+/** Everything the cloud's copy already holds counts as sent. */
+export function markViewAsSent(code: string, view: Record<string, any>): void {
+  const sent = readSent(code);
+  for (const key of UNION_BY_ID) for (const item of (view[key] || []) as { id?: string }[]) if (item?.id) sent.add(item.id);
+  writeSent(code, sent);
+}
+
+export interface Unsent {
+  customers: Record<string, unknown>[];
+  expenseRequests: Record<string, unknown>[];
+  pieceWork: Record<string, unknown>[];
+}
+
+/**
+ * What this phone recorded that the cloud has not got: new customers, this
+ * worker's expenses, this worker's piece work. Only those - the cloud's door
+ * takes nothing else, and decides for itself what to keep of these.
+ */
+export function unsentRecords(store: StoreData): Unsent {
+  const sent = readSent(store.accessCode);
+  const me = store.staffDevice?.staffId;
+  const fresh = <T extends { id?: string }>(items: T[] | undefined) => (items || []).filter(item => item.id && !sent.has(item.id));
+  return {
+    customers: fresh(store.customers).map(c => ({ id: c.id, name: c.name, phone: c.phone, address: c.address })),
+    expenseRequests: fresh(store.staffExpenseRequests).filter(r => r.recordedBy?.staffId === me).map(r => ({
+      id: r.id, amount: r.amount, category: r.category, note: r.note, date: r.date, paidFrom: r.paidFrom,
+    })),
+    pieceWork: fresh(store.pieceWork).filter(w => w.workerId === me).map(w => ({
+      id: w.id, clientRef: w.clientRef, tagCode: w.tagCode, customerName: w.customerName,
+      task: w.task, garmentType: w.garmentType, quantity: w.quantity,
+    })),
+  };
+}
+
+export type SendResult = { state: 'sent' | 'nothing' | 'unchanged' | 'shut_out' };
+
+/** Send what this phone has that the cloud has not, through the worker's door. */
+export async function sendWorkerRecords(store: StoreData): Promise<SendResult> {
+  if (!store.staffDevice) return { state: 'nothing' };
+  const unsent = unsentRecords(store);
+  if (!unsent.customers.length && !unsent.expenseRequests.length && !unsent.pieceWork.length) return { state: 'nothing' };
+  const session = readWorkerSession();
+  if (!session || !navigator.onLine) return { state: 'unchanged' };
+  const reply = await callCloud('staff_send_records', {
+    p_token: session.token, p_device_key: deviceKey(),
+    p_customers: unsent.customers, p_expense_requests: unsent.expenseRequests, p_piece_work: unsent.pieceWork,
+  });
+  if (!reply) return { state: 'unchanged' };
+  if (!reply.ok) {
+    if (SHUT_OUT.has(reply.error)) { forgetWorkerPhone(); return { state: 'shut_out' }; }
+    return { state: 'unchanged' };
+  }
+  // The cloud has answered for every one of them: kept, or refused for a
+  // reason sending again would not change (a role that may not add
+  // customers, an amount that is not money). Either way, not sent again.
+  const sent = readSent(store.accessCode);
+  for (const item of [...unsent.customers, ...unsent.expenseRequests, ...unsent.pieceWork]) sent.add(String(item.id));
+  writeSent(store.accessCode, sent);
+  return { state: 'sent' };
 }
 
 async function callCloud(fn: string, args: Record<string, unknown>): Promise<Record<string, any> | null> {
@@ -157,7 +235,10 @@ export function forgetWorkerPhone(): void {
   const join = readJoin();
   const ref = session?.storeRef || join?.storeRef;
   try {
-    if (ref) localStorage.removeItem(`storeflow_${workerAccessCode(ref)}`);
+    if (ref) {
+      localStorage.removeItem(`storeflow_${workerAccessCode(ref)}`);
+      localStorage.removeItem(sentKey(workerAccessCode(ref)));
+    }
   } catch { /* private mode */ }
   writeWorkerSession(null);
   writeJoin(null);
@@ -185,6 +266,7 @@ export async function signInWorker(
     const storeRef = String(reply.store_ref || join.storeRef);
     const existing = deps.loadCopy(workerAccessCode(storeRef));
     const store = workerStoreFromView(reply.view || {}, join, storeRef, existing);
+    markViewAsSent(store.accessCode, reply.view || {});
     deps.saveCopy(store);
     const worker = reply.worker as Worker;
     writeWorkerSession({
@@ -237,6 +319,7 @@ export async function refreshWorkerCopy(
   }
   const storeRef = String(reply.store_ref || session.storeRef);
   const store = workerStoreFromView(reply.view || {}, join, storeRef, deps.loadCopy(workerAccessCode(storeRef)));
+  markViewAsSent(store.accessCode, reply.view || {});
   deps.saveCopy(store);
   const now = deps.now ? deps.now() : Date.now();
   writeWorkerSession({ ...session, worker: reply.worker, lastOnlineAt: new Date(now).toISOString(), storeRef });

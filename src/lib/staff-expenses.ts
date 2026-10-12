@@ -128,6 +128,13 @@ export function submitStaffExpense(
 
   let next: StoreData = { ...store, staffExpenseRequests: [request, ...(store.staffExpenseRequests || [])] };
 
+  // On a worker's own phone it only waits there to be sent: the books are on
+  // the owner's phone, which applies the shop's rule when it arrives.
+  if (store.staffDevice) {
+    next = recordActivityLog(next, worker.name, worker.role, `Recorded expense: ${describeExpense(request)}`);
+    return { ok: true, store: next, request };
+  }
+
   if (!mustWait(store, amount)) {
     next = enterInBook(next, request, worker, now, true);
     const decided = next.staffExpenseRequests!.find(item => item.id === request.id)!;
@@ -135,24 +142,53 @@ export function submitStaffExpense(
   }
 
   next = recordActivityLog(next, worker.name, worker.role, `Recorded expense for approval: ${describeExpense(request)}`);
-  // No category: it always arrives, and the notification gate shows an
-  // uncategorised notification only to people who see the money.
-  const notice: FlowNotification = {
+  next = { ...next, flowNotifications: [waitingNotice(request, now), ...(next.flowNotifications || [])] };
+  return { ok: true, store: next, request };
+}
+
+/** "Faith recorded an expense" for the owner. No category: only people who see the money see it. */
+function waitingNotice(request: StaffExpenseRequest, now: Date): FlowNotification {
+  const line = `${request.note} · ₦${request.amount.toLocaleString()} · ${request.category}`;
+  return {
     id: notificationId(request.id),
     icon: '🧾',
     tone: 'info',
     date: now.toISOString(),
     read: false,
-    title: `${worker.name} recorded an expense`,
-    text: `${note} · ₦${amount.toLocaleString()} · ${request.category}`,
+    title: `${request.recordedBy.name} recorded an expense`,
+    text: line,
     // The panel shows the description when there is one, so the expense
     // itself has to be in it, not only in `text`.
-    description: `${note} · ₦${amount.toLocaleString()} · ${request.category}. Paid from ${PAID_FROM_LABEL[request.paidFrom].toLowerCase()}; it counts once you approve it.`,
+    description: `${line}. Paid from ${PAID_FROM_LABEL[request.paidFrom].toLowerCase()}; it counts once you approve it.`,
     actionLabel: 'Review',
     actionTab: 'expenses',
   };
-  next = { ...next, flowNotifications: [notice, ...(next.flowNotifications || [])] };
-  return { ok: true, store: next, request };
+}
+
+/**
+ * Expenses that arrived from workers' own phones, settled on the owner's.
+ *
+ * They always arrive waiting - a worker's phone has no books to put them in.
+ * Here the shop's own rule decides: straight into the book if the shop
+ * records immediately or the amount is under the limit, exactly as if it had
+ * been entered on the counter phone; otherwise the owner is told, and it
+ * waits for Approve.
+ */
+export function settleArrivedStaffExpenses(store: StoreData, ids: string[], now: Date = new Date()): StoreData {
+  let next = store;
+  for (const id of ids) {
+    const request = (next.staffExpenseRequests || []).find(item => item.id === id);
+    if (!request || request.status !== 'pending') continue;
+    const worker: Actor = { id: request.recordedBy.staffId, name: request.recordedBy.name, role: request.recordedBy.role };
+    if (!mustWait(next, request.amount)) {
+      next = enterInBook(next, request, worker, now, true);
+      continue;
+    }
+    if ((next.flowNotifications || []).some(n => n.id === notificationId(id))) continue;
+    next = recordActivityLog(next, worker.name, worker.role, `Recorded expense for approval: ${describeExpense(request)}`);
+    next = { ...next, flowNotifications: [waitingNotice(request, now), ...(next.flowNotifications || [])] };
+  }
+  return next;
 }
 
 function decide(store: StoreData, requestId: string, approver: Actor, at: Date, approve: boolean): StoreData {
