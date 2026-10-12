@@ -16,6 +16,8 @@ import {
 
 interface Props {
   onBack: () => void;
+  /** The Store ID an invite QR brought, filled in for the worker. */
+  initialStoreRef?: string;
 }
 
 type Step = 'details' | 'confirm' | 'waiting' | 'done' | 'rejected';
@@ -31,10 +33,10 @@ function stepFor(record: JoinRecord | null): Step {
   return 'waiting';
 }
 
-export default function JoinStore({ onBack }: Props) {
+export default function JoinStore({ onBack, initialStoreRef = '' }: Props) {
   const [record, setRecord] = useState<JoinRecord | null>(readJoin);
   const [step, setStep] = useState<Step>(() => stepFor(readJoin()));
-  const [storeRef, setStoreRef] = useState('');
+  const [storeRef, setStoreRef] = useState(initialStoreRef);
   const [pin, setPin] = useState('');
   const [storeName, setStoreName] = useState('');
   const [matches, setMatches] = useState<StaffMatch[]>([]);
@@ -158,6 +160,9 @@ export default function JoinStore({ onBack }: Props) {
               autoComplete="off"
               className={`${input} font-mono tracking-wider`}
             />
+            {initialStoreRef && storeRef === initialStoreRef && (
+              <span className="block mt-1 text-[11px] text-muted-foreground">Filled in from the shop's invite.</span>
+            )}
           </label>
           <label className="block">
             <span className="text-xs font-semibold text-muted-foreground">Your staff PIN</span>
@@ -167,6 +172,7 @@ export default function JoinStore({ onBack }: Props) {
               type="password"
               inputMode="numeric"
               autoComplete="off"
+              autoFocus={!!initialStoreRef}
               placeholder="4 digits"
               className={`${input} ${pin ? 'tracking-[0.5em]' : ''}`}
             />

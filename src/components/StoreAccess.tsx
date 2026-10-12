@@ -15,7 +15,7 @@ import QRScannerPage from '@/components/qr/QRScannerPage';
 import { getPublicStorefront } from '@/lib/public-storefront';
 import JoinStore from '@/components/staff/JoinStore';
 import WorkerSignIn from '@/components/staff/WorkerSignIn';
-import { readJoin } from '@/lib/staff-join';
+import { inviteStoreRef, readJoin } from '@/lib/staff-join';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -63,7 +63,17 @@ function CreateFlowProgress({ step, of = 3 }: { step: number; of?: number }) {
 }
 
 export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
-  const [mode, setMode] = useState<'choose' | 'join' | 'create-choice' | 'access-choice' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>('choose');
+  // A worker who scanned the shop's invite QR lands straight on Join a Store
+  // with the Store ID filled in - unless this phone has already joined.
+  const [invitedRef] = useState(() => (readJoin()?.status === 'authorized' ? '' : inviteStoreRef()));
+  const [mode, setMode] = useState<'choose' | 'join' | 'create-choice' | 'access-choice' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>(invitedRef ? 'join' : 'choose');
+  // Read once; a refresh or Back should not keep reopening it.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('join')) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('join');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  }, []);
 
   // Flow's contextual speech bubble through this flow — bump flowMsgKey to
   // force the same line to replay (e.g. two wrong passwords in a row).
@@ -1201,7 +1211,7 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           </button>
         )}
 
-        {mode === 'join' && <JoinStore onBack={() => setMode('choose')} />}
+        {mode === 'join' && <JoinStore onBack={() => setMode('choose')} initialStoreRef={invitedRef} />}
 
         {mode === 'create-choice' && (
           <div className="space-y-3 text-center">

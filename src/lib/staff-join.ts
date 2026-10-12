@@ -174,5 +174,43 @@ export function rejectDevice(requestId: string) {
   return call<Record<string, never>>('staff_device_reject', { p_request_id: requestId });
 }
 
+/**
+ * Take a phone back. Its next check with the cloud is answered "revoked" and
+ * the app signs it out; to come back it has to ask to join again.
+ */
+export function revokeDevice(requestId: string) {
+  return call<{ revoked: number }>('staff_device_revoke', { p_request_id: requestId });
+}
+
+/** Every phone one worker has in this shop: a lost phone, or they have left. */
+export function revokeAllDevices(storeRef: string, staffId: string) {
+  return call<{ revoked: number }>('staff_device_revoke_all', { p_store_ref: storeRef, p_staff_id: staffId });
+}
+
+/**
+ * The link an invite QR opens: the app's own front door with the Store ID
+ * filled in. It holds no secret - the owner still approves the phone and
+ * gives it a code - so a photo of it shared around lets nobody in.
+ */
+export function inviteLink(storeRef: string, origin: string = window.location.origin): string {
+  return `${origin}/?join=${encodeURIComponent(normaliseStoreRef(storeRef))}`;
+}
+
+/** The Store ID an invite link brought, if this page was opened from one. */
+export function inviteStoreRef(search: string = window.location.search): string {
+  const ref = normaliseStoreRef(new URLSearchParams(search).get('join') || '');
+  return /^[A-Z0-9-]{4,24}$/.test(ref) ? ref : '';
+}
+
+/** "Seen 5 min ago": how recently the phone last reached the cloud. */
+export function lastSeen(iso: string | undefined, now: number = Date.now()): string {
+  if (!iso) return 'Not seen yet';
+  const minutes = Math.floor((now - new Date(iso).getTime()) / 60000);
+  if (minutes < 2) return 'Seen just now';
+  if (minutes < 60) return `Seen ${minutes} min ago`;
+  if (minutes < 24 * 60) return `Seen ${Math.floor(minutes / 60)} h ago`;
+  return `Seen ${new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' })}`;
+}
+
 /** "482 731": easier to read out loud. */
 export const spacedCode = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`;
