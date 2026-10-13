@@ -24,6 +24,12 @@ import ScrollLock from '@/components/ScrollLock';
  * phone is signed out the next time it reaches the cloud. The invite QR only
  * fills in the Store ID on the worker's phone - approval and the code still
  * apply - so it is safe to show or send.
+ *
+ * The invite is offered only once the cloud has answered for this shop. A
+ * worker's phone finds the shop by asking the cloud, so a shop kept only on
+ * this phone - Cloud Sync never turned on - sent every invited worker to "No
+ * shop has that Store ID". Until the cloud knows the shop, the owner is told
+ * to put it online first instead.
  */
 
 interface Props {
@@ -48,7 +54,7 @@ type Revoking = { kind: 'one'; device: DeviceRow } | { kind: 'all'; staffId: str
 
 export default function DeviceRequests({ store }: Props) {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
-  const [state, setState] = useState<'loading' | 'ready' | 'signin' | 'offline'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'signin' | 'notOnline' | 'offline'>('loading');
   const [busy, setBusy] = useState('');
   const [shown, setShown] = useState<ShownCode | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -61,7 +67,8 @@ export default function DeviceRequests({ store }: Props) {
   const load = useCallback(async () => {
     if (!(await hasCloudSession())) return setState('signin');
     const result = await listDevices(ref);
-    if ('error' in result) return setState(result.error === 'not_owner' ? 'signin' : 'offline');
+    // Signed in, yet the cloud has no shop of this account's under this Store ID.
+    if ('error' in result) return setState(result.error === 'not_owner' ? 'notOnline' : 'offline');
     setDevices(result.devices);
     setState('ready');
   }, [ref]);
@@ -168,14 +175,20 @@ export default function DeviceRequests({ store }: Props) {
         enter your Store ID <span className="font-mono font-semibold text-foreground">{store.storeId || '—'}</span> and their own PIN.
         Never give them your email, password or access code.
       </p>
-      {invite && (
+      {invite && state === 'ready' && (
         <button type="button" onClick={() => setShowInvite(true)} className="w-full h-10 rounded-xl bg-surface-2 border border-border text-sm font-display font-bold flex items-center justify-center gap-1.5">
           <QrCode className="w-4 h-4" /> Show invite QR
         </button>
       )}
 
       {state === 'loading' && <p className="text-xs text-muted-foreground">Checking…</p>}
-      {state === 'signin' && <p className="text-xs text-muted-foreground">Sign in to your StoreFlow account on this phone to see and approve requests.</p>}
+      {state === 'signin' && <p className="text-xs text-muted-foreground">Sign in to your StoreFlow account on this phone to invite workers and approve their phones.</p>}
+      {state === 'notOnline' && (
+        <p className="text-xs text-amber-600">
+          Workers can't join yet: this shop is only on this phone, so their phones can't find it. Turn on
+          <span className="font-semibold"> Settings → Security → Multi-device Cloud Sync</span>, then come back here to invite them.
+        </p>
+      )}
       {state === 'offline' && <p className="text-xs text-muted-foreground">Could not reach StoreFlow. Requests show here when you are online.</p>}
 
       {state === 'ready' && devices.length === 0 && <p className="text-xs text-muted-foreground">No requests yet.</p>}

@@ -147,7 +147,7 @@ export function redeemCode(requestId: string, code: string) {
 /** What to tell a worker when the cloud says no. */
 export function joinErrorText(error: string, triesLeft?: number): string {
   switch (error) {
-    case 'not_found': return 'No shop has that Store ID. Check it with the owner.';
+    case 'not_found': return 'StoreFlow cannot find this shop online. Check the Store ID with the owner - if it is right, the owner needs to turn on Cloud Sync first.';
     case 'wrong_pin': return 'That PIN is not right for this shop.';
     case 'paused': return 'Too many wrong tries. Wait an hour, or ask the owner.';
     case 'too_many': return 'This shop has too many requests waiting. Ask the owner to clear them.';

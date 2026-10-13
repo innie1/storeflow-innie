@@ -158,6 +158,27 @@ describe("the owner's Workers' phones", () => {
     await waitFor(() => expect(rpc).toHaveBeenCalledWith('staff_device_reject', { p_request_id: 'r1' }));
   });
 
+  it('offers no invite until the cloud knows the shop, and says how to put it online', async () => {
+    answer({ staff_device_list: no('not_owner') });
+    render(<DeviceRequests store={shop()} />);
+    await screen.findByText(/Workers can't join yet/);
+    expect(document.body.textContent).toContain('Multi-device Cloud Sync');
+    expect(screen.queryByRole('button', { name: /Show invite QR/ })).toBeNull();
+    expect(screen.queryByText(/Sign in to your StoreFlow account/)).toBeNull();
+  });
+
+  it('offers no invite while signed out either', async () => {
+    session.mockResolvedValue(false);
+    render(<DeviceRequests store={shop()} />);
+    await screen.findByText(/Sign in to your StoreFlow account/);
+    expect(screen.queryByRole('button', { name: /Show invite QR/ })).toBeNull();
+  });
+
+  it('tells a worker an unknown shop may simply not be online yet', () => {
+    expect(joinErrorText('not_found')).toMatch(/cannot find this shop online/);
+    expect(joinErrorText('not_found')).toMatch(/Cloud Sync/);
+  });
+
   it('tells the owner to share the Store ID, never the access code', async () => {
     answer({ staff_device_list: ok({ devices: [] }) });
     render(<DeviceRequests store={shop()} />);
