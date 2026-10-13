@@ -18,6 +18,7 @@ import WorkerSignIn from '@/components/staff/WorkerSignIn';
 import { clearInvite, normaliseStoreRef, pendingInvite, readJoin } from '@/lib/staff-join';
 import { forgetWorkerPhone } from '@/lib/staff-session';
 import InviteSwitchPrompt from '@/components/staff/InviteSwitchPrompt';
+import { connectOwnerAccount, ownerAccountMessage, OWNER_ACCOUNT_MIN_PASSWORD } from '@/lib/owner-cloud-account';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -330,10 +331,12 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
     say("Boom! Your store is live. Save that code somewhere safe!");
   };
 
-  const handleSaveSecurity = (e: React.FormEvent) => {
+  const handleSaveSecurity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ownerPassword.trim() || ownerPassword.length < 4) {
-      return showToast('Password must be at least 4 characters', 'error');
+    if (loadingAuth) return;
+    // The owner password is also the online account's, which needs six.
+    if (!ownerPassword.trim() || ownerPassword.length < OWNER_ACCOUNT_MIN_PASSWORD) {
+      return showToast(`Password must be at least ${OWNER_ACCOUNT_MIN_PASSWORD} characters`, 'error');
     }
     if (ownerPassword !== confirmPassword) {
       return showToast('Passwords do not match', 'error');
@@ -342,6 +345,15 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       return showToast('Please fill all recovery details', 'error');
     }
     if (!loadedStore) return;
+
+    // The same email and password open the shop's online account, so it is
+    // backed up and findable by workers' phones from the first save - nobody
+    // has to come back to Settings and type them in again.
+    setLoadingAuth(true);
+    setAccessMood('thinking');
+    const account = await connectOwnerAccount(recoveryEmail, ownerPassword.trim(), ownerName.trim() || loadedStore.storeName);
+    setLoadingAuth(false);
+    const online = account === 'created' || account === 'signed_in';
 
     // Update settings
     const updatedStore: StoreData = {
@@ -401,6 +413,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         recoveryQuestion,
         recoveryAnswer: recoveryAnswer.trim().toLowerCase(),
         emergencyRecoveryKey: generatedRecoveryKey,
+        // Saving below uploads the shop now that an account is signed in.
+        multiDeviceSync: online || loadedStore.managerSettings?.multiDeviceSync || false,
       }
     };
 
@@ -423,7 +437,8 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
       },
     }).catch(err => console.warn('Failed to send account recovery email via Resend:', err));
 
-    showToast('Store secured successfully!');
+    const told = ownerAccountMessage(account);
+    showToast(told.text, told.tone, told.tone === 'success' ? undefined : 7000);
 
     // Log in session as Owner
     const ownerUser = {
@@ -1864,8 +1879,11 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
               </p>
             </div>
 
-            <button type="submit" className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer">
-              Save Security & Enter Store
+            <p className="text-[11px] text-muted-foreground leading-normal">
+              Your recovery email and owner password also open your StoreFlow account, which backs the store up online so your workers can join from their own phones.
+            </p>
+            <button type="submit" disabled={loadingAuth} className="w-full p-3 rounded-lg bg-primary text-primary-foreground font-display font-bold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60">
+              {loadingAuth ? 'Securing & backing up…' : 'Save Security & Enter Store'}
             </button>
             <button
               type="button"
