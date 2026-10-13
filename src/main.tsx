@@ -5,8 +5,12 @@ import "./storeflow-ui-overhaul.css";
 import { initTheme } from "./lib/theme";
 import { workInProgress } from "@/lib/work-in-progress";
 import { showToast } from "@/components/Toast";
+import { captureInviteFromUrl } from "@/lib/staff-join";
 
 initTheme();
+// A staff invite link is kept before anything draws, so an open shop cannot
+// swallow it (src/lib/staff-join.ts, captureInviteFromUrl).
+captureInviteFromUrl();
 
 document.body.classList.add("storeflow-ui-overhaul");
 

@@ -11,7 +11,8 @@ vi.mock('@/lib/qr-code', () => ({ drawSimpleQR: (...args: unknown[]) => { drawn(
 
 import DeviceRequests from '@/components/staff/DeviceRequests';
 import JoinStore from '@/components/staff/JoinStore';
-import { inviteLink, inviteStoreRef, lastSeen } from '@/lib/staff-join';
+import { captureInviteFromUrl, clearInvite, inviteLink, inviteStoreRef, lastSeen, pendingInvite } from '@/lib/staff-join';
+import InviteSwitchPrompt from '@/components/staff/InviteSwitchPrompt';
 import { readSource } from './helpers/source';
 
 /**
@@ -139,13 +140,56 @@ describe('the invite QR', () => {
     expect(screen.getByText("Filled in from the shop's invite.")).toBeTruthy();
   });
 
-  it('is read on the opening screen, once, without touching the two owner buttons', () => {
+  it('is kept at start-up, before an open shop can swallow it', () => {
+    window.history.replaceState(null, '', '/?join=sf-wsh001&tab=x');
+    captureInviteFromUrl();
+    expect(window.location.search).toBe('?tab=x');
+    expect(pendingInvite()).toBe('SF-WSH001');
+    clearInvite();
+    expect(pendingInvite()).toBe('');
+    expect(readSource('src/main.tsx')).toMatch(/captureInviteFromUrl\(\);[\s\S]*createRoot|captureInviteFromUrl\(\);/);
+  });
+
+  it('is offered on the opening screen without touching the two owner buttons', () => {
     const source = readSource('src/components/StoreAccess.tsx');
-    expect(source).toMatch(/inviteStoreRef\(\)/);
-    expect(source).toContain("url.searchParams.delete('join')");
+    expect(source).toContain('useState(pendingInvite)');
     expect(source).toContain('initialStoreRef={invitedRef}');
     expect(source).toMatch(/onClick=\{\(\) => setMode\('create-choice'\)\}[\s\S]{0,400}Create New Store/);
     expect(source).toMatch(/onClick=\{\(\) => setMode\('access-choice'\)\}[\s\S]{0,400}Access Existing Store/);
+  });
+});
+
+describe('an invite opened on a phone that is already in a shop', () => {
+  afterEach(() => { sessionStorage.clear(); });
+
+  it('asks first, naming the shop it would sign out of', () => {
+    const onJoin = vi.fn();
+    const onStay = vi.fn();
+    render(<InviteSwitchPrompt invitedRef="SF-NEW001" currentName="Corner Store" kind="owner" onJoin={onJoin} onStay={onStay} />);
+    const dialog = screen.getByRole('dialog', { name: 'Join another shop?' });
+    expect(dialog.textContent).toContain('SF-NEW001');
+    expect(dialog.textContent).toContain('Nothing in Corner Store is deleted');
+    fireEvent.click(screen.getByRole('button', { name: 'Stay in Corner Store' }));
+    expect(onStay).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out of Corner Store and join' }));
+    expect(onJoin).toHaveBeenCalled();
+  });
+
+  it('tells a worker’s phone it would leave its shop', () => {
+    render(<InviteSwitchPrompt invitedRef="SF-NEW001" currentName="Washlie" kind="worker" onJoin={() => {}} onStay={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Leave Washlie and join' })).toBeTruthy();
+  });
+
+  it('is asked by an open shop, and not for its own invite or the shop it works at', () => {
+    const index = readSource('src/pages/Index.tsx');
+    const check = index.slice(index.indexOf('const [inviteAsk, setInviteAsk]'), index.indexOf('setInviteAsk(ref);'));
+    expect(check).toContain('pendingInvite()');
+    expect(check).toContain("normaliseStoreRef(store.staffDevice.storeRef) === ref");
+    expect(check).toContain("normaliseStoreRef(String(store.storeId || '')) === ref");
+    // Joining signs out; the invite stays waiting for the opening screen.
+    const join = index.slice(index.indexOf('<InviteSwitchPrompt'), index.indexOf('onStay', index.indexOf('<InviteSwitchPrompt')));
+    expect(join).toContain('handleLock()');
+    expect(join).not.toContain('clearInvite()');
   });
 });
 

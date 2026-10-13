@@ -15,7 +15,9 @@ import QRScannerPage from '@/components/qr/QRScannerPage';
 import { getPublicStorefront } from '@/lib/public-storefront';
 import JoinStore from '@/components/staff/JoinStore';
 import WorkerSignIn from '@/components/staff/WorkerSignIn';
-import { inviteStoreRef, readJoin } from '@/lib/staff-join';
+import { clearInvite, normaliseStoreRef, pendingInvite, readJoin } from '@/lib/staff-join';
+import { forgetWorkerPhone } from '@/lib/staff-session';
+import InviteSwitchPrompt from '@/components/staff/InviteSwitchPrompt';
 
 interface StoreAccessProps {
   onStoreLoaded: (store: StoreData) => void;
@@ -63,17 +65,26 @@ function CreateFlowProgress({ step, of = 3 }: { step: number; of?: number }) {
 }
 
 export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
-  // A worker who scanned the shop's invite QR lands straight on Join a Store
-  // with the Store ID filled in - unless this phone has already joined.
-  const [invitedRef] = useState(() => (readJoin()?.status === 'authorized' ? '' : inviteStoreRef()));
-  const [mode, setMode] = useState<'choose' | 'join' | 'create-choice' | 'access-choice' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>(invitedRef ? 'join' : 'choose');
-  // Read once; a refresh or Back should not keep reopening it.
-  useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has('join')) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete('join');
-    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
-  }, []);
+  /*
+   * A worker who scanned a shop's invite QR lands on Join a Store with the
+   * Store ID filled in. The link was kept at start-up (captureInviteFromUrl),
+   * so it survives a shop that was open for a moment first.
+   *
+   * A phone that already works at that very shop just signs in as usual. One
+   * that works at - or is waiting to join - a different shop is asked first,
+   * because joining means leaving the other.
+   */
+  const [invitedRef, setInvitedRef] = useState(pendingInvite);
+  const [askSwitch, setAskSwitch] = useState(() => {
+    const joined = readJoin();
+    return !!invitedRef && !!joined && normaliseStoreRef(joined.storeRef) !== invitedRef;
+  });
+  const [mode, setMode] = useState<'choose' | 'join' | 'create-choice' | 'access-choice' | 'create' | 'access' | 'setup-security' | 'login-select' | 'login-password' | 'login-pin' | 'recovery' | 'auth-login' | 'auth-signup' | 'auth-store-select' | 'auth-store-create'>(() => {
+    if (!invitedRef || askSwitch) return 'choose';
+    if (readJoin()?.status === 'authorized') { clearInvite(); return 'choose'; }
+    return 'join';
+  });
+  const dropInvite = () => { clearInvite(); setInvitedRef(''); };
 
   // Flow's contextual speech bubble through this flow — bump flowMsgKey to
   // force the same line to replay (e.g. two wrong passwords in a row).
@@ -1211,7 +1222,17 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
           </button>
         )}
 
-        {mode === 'join' && <JoinStore onBack={() => setMode('choose')} initialStoreRef={invitedRef} />}
+        {mode === 'join' && <JoinStore onBack={() => { dropInvite(); setMode('choose'); }} initialStoreRef={invitedRef} />}
+
+        {askSwitch && invitedRef && (
+          <InviteSwitchPrompt
+            invitedRef={invitedRef}
+            currentName={readJoin()?.storeName || ''}
+            kind="worker"
+            onJoin={() => { forgetWorkerPhone(); setAskSwitch(false); setMode('join'); }}
+            onStay={() => { setAskSwitch(false); dropInvite(); }}
+          />
+        )}
 
         {mode === 'create-choice' && (
           <div className="space-y-3 text-center">

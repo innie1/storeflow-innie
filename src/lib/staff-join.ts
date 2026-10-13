@@ -212,5 +212,43 @@ export function lastSeen(iso: string | undefined, now: number = Date.now()): str
   return `Seen ${new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' })}`;
 }
 
+/*
+ * An invite waiting to be answered.
+ *
+ * The link was read by the opening screen, which only shows on a phone with
+ * no shop open - and even then only for the moment before an open shop
+ * finished loading, after which the shop replaced it and the invite was gone.
+ * So a phone with any shop open landed in that shop as if nothing had been
+ * scanned. The link is now taken out of the address bar once, at start-up,
+ * and kept for this visit until somebody answers it: the opening screen
+ * offers Join a Store, and an open shop asks first whether to leave it.
+ */
+const INVITE_KEY = 'storeflow_pending_invite';
+
+/** Called once at start-up, before anything is drawn. */
+export function captureInviteFromUrl(): void {
+  try {
+    if (!new URLSearchParams(window.location.search).has('join')) return;
+    const ref = inviteStoreRef();
+    if (ref) window.sessionStorage.setItem(INVITE_KEY, ref);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('join');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  } catch { /* private mode: the link simply does nothing */ }
+}
+
+/** The Store ID an unanswered invite names, or ''. */
+export function pendingInvite(): string {
+  try {
+    return inviteStoreRef(`?join=${encodeURIComponent(window.sessionStorage.getItem(INVITE_KEY) || '')}`);
+  } catch {
+    return '';
+  }
+}
+
+export function clearInvite(): void {
+  try { window.sessionStorage.removeItem(INVITE_KEY); } catch { /* private mode */ }
+}
+
 /** "482 731": easier to read out loud. */
 export const spacedCode = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`;

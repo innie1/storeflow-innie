@@ -120,7 +120,8 @@ describe('one celebration at a time', () => {
   it('keeps the ready-for-business card back while one is up', () => {
     const index = readSource('src/pages/Index.tsx');
     expect(index).toContain('const milestoneShowing = useCelebrationShowing();');
-    expect(index).toContain('{showReady && !milestoneShowing && store && (');
+    // And behind an invite question, which the person scanning is waiting on.
+    expect(index).toContain('{showReady && !milestoneShowing && !inviteAsk && store && (');
   });
 });
 

@@ -26,11 +26,12 @@ import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-s
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { setCurrentActor } from '@/lib/current-actor';
-import { fetchWorkerBundles, mergeBundles, refreshWorkerCopy, sendWorkerRecords, WORKER_BUNDLES_MS } from '@/lib/staff-session';
+import { fetchWorkerBundles, forgetWorkerPhone, mergeBundles, refreshWorkerCopy, sendWorkerRecords, WORKER_BUNDLES_MS } from '@/lib/staff-session';
+import InviteSwitchPrompt from '@/components/staff/InviteSwitchPrompt';
 import { collectStaffRecords } from '@/lib/staff-records';
 import { resumeWorkerLaundry } from '@/lib/laundry-offline';
 import { DEVICE_WATCH_MS, noticeNewDeviceRequests, storeRefOf } from '@/lib/device-request-watch';
-import { listDevices } from '@/lib/staff-join';
+import { clearInvite, listDevices, normaliseStoreRef, pendingInvite } from '@/lib/staff-join';
 import { cloudRecentlyUnreachable, hasCloudSession } from '@/lib/cloud-reach';
 import StaffExpenseButton from '@/components/staff/StaffExpenseButton';
 import { matchCustomer, loadStore, findProductByBarcode, addProduct, saveStore, runScheduledSavingsDeduction, logScanEvent } from '@/lib/store-data';
@@ -1668,6 +1669,31 @@ export default function Index() {
     setCurrentUser(null);
   };
 
+  /*
+   * A staff invite opened while a shop is open on this phone.
+   *
+   * It used to be swallowed: the open shop replaced the opening screen that
+   * had read the link. Now the phone asks. Its own shop's invite, or the
+   * shop this phone already works at, needs no answer and says so.
+   */
+  const [inviteAsk, setInviteAsk] = useState<string | null>(null);
+  useEffect(() => {
+    if (!store) return;
+    const ref = pendingInvite();
+    if (!ref) return;
+    if (store.staffDevice && normaliseStoreRef(store.staffDevice.storeRef) === ref) {
+      clearInvite();
+      showToast('This phone already works at this shop.', 'info');
+      return;
+    }
+    if (!store.staffDevice && normaliseStoreRef(String(store.storeId || '')) === ref) {
+      clearInvite();
+      showToast("That is this shop's own invite. A worker scans it on their phone.", 'info');
+      return;
+    }
+    setInviteAsk(ref);
+  }, [store?.accessCode]);
+
   const handleBarcodeDetected = useCallback((code: string) => {
     if (!store) return;
     let targetId = code;
@@ -2419,7 +2445,21 @@ export default function Index() {
           <FlowShirtFab store={store} onUpdate={setStore} onNavigate={handleNavigate} currentUser={currentUser} />
         )}
 
-        {showReady && !milestoneShowing && store && (
+        {inviteAsk && store && (
+          <InviteSwitchPrompt
+            invitedRef={inviteAsk}
+            currentName={store.storeName || ''}
+            kind={store.staffDevice ? 'worker' : 'owner'}
+            onJoin={() => {
+              // The invite stays waiting; the opening screen picks it up.
+              if (store.staffDevice) forgetWorkerPhone();
+              setInviteAsk(null);
+              handleLock();
+            }}
+            onStay={() => { clearInvite(); setInviteAsk(null); }}
+          />
+        )}
+        {showReady && !milestoneShowing && !inviteAsk && store && (
           <ReadyForBusiness
             storeName={store.storeName || 'Your store'}
             practised={hasPractised(store.accessCode) && (store.sales || []).length === 0}
