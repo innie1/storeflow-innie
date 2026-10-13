@@ -128,14 +128,29 @@ describe('recording by date, with nothing to tap', () => {
     expect(yesterday).toMatchObject({ received: 500, owedOnDay: 500, final: true });
   });
 
-  it('never rewrites a settled day', () => {
+  /*
+   * The owner's rule (13 October): a change reaches the old records too. A
+   * payment for a past day that reaches this phone late - from another phone,
+   * or after a fix - now counts on that day. What was owed at the end of the
+   * day is a moment that has passed, so that stays as it was seen.
+   */
+  it('brings a settled day up to date when a record for it arrives late', () => {
     keep(bundle('a', at(2), 2));
     recordDays(laundry({ sales: [sale(400, at(2), 'a')] as any }), NOW);
-    const before = getDayHistory('DAY001').find(day => day.final);
-    // As if the phone had lost how far it had got, so the day is walked again.
-    localStorage.removeItem('storeflow_day_history_checked_DAY001');
+    const before = getDayHistory('DAY001').find(day => day.final)!;
     recordDays(laundry({ sales: [sale(400, at(2), 'a'), sale(9999, at(2), 'late')] as any }), NOW);
-    expect(getDayHistory('DAY001').find(day => day.key === before?.key)).toEqual(before);
+    const after = getDayHistory('DAY001').find(day => day.key === before.key)!;
+    expect(after.received).toBe(before.received + 9999);
+    expect(after.owedOnDay).toBe(before.owedOnDay);
+  });
+
+  it('keeps a filed day whose records are no longer on the phone', () => {
+    keep(bundle('a', at(2), 2));
+    recordDays(laundry({ sales: [sale(400, at(2), 'a')] as any }), NOW);
+    const before = getDayHistory('DAY001').find(day => day.final)!;
+    localStorage.removeItem(laundryLocalStorageKey('DAY001'));
+    recordDays(laundry(), NOW);
+    expect(getDayHistory('DAY001').find(day => day.key === before.key)).toEqual(before);
   });
 
   it('keeps nothing for a day nothing happened', () => {

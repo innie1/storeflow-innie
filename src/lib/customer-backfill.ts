@@ -1,6 +1,7 @@
 import type { Customer, StoreData } from '@/types/store';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { isInCustomerBook, knownCustomers } from '@/lib/customer-directory';
-import { getLocalLaundryRecords, setLocalLaundryCustomerIds } from '@/lib/laundry-offline';
+import { setLocalLaundryCustomerIds } from '@/lib/laundry-offline';
 
 /**
  * Putting everyone the shop has served into the customer book, once.
@@ -36,7 +37,7 @@ function needsBackfill(store: StoreData): boolean {
   const accessCode = String(store.accessCode || '');
   if (accessCode) {
     try {
-      if (getLocalLaundryRecords(accessCode).some(record => record.customerName && !linkIsLive(record.customerId, known))) return true;
+      if (shopLaundryRecords(accessCode).some(record => record.customerName && !linkIsLive(record.customerId, known))) return true;
     } catch { /* no records on this device */ }
   }
   return (store.pendingPayments || []).some(payment => payment?.customerName && !linkIsLive(payment.customerId, known));
@@ -110,7 +111,7 @@ export function backfillCustomerBook(store: StoreData, makeId: () => string): St
   if (accessCode) {
     const links: Record<string, string> = {};
     try {
-      for (const record of getLocalLaundryRecords(accessCode)) {
+      for (const record of shopLaundryRecords(accessCode)) {
         // A live link is the counter's own choice and is never overruled here.
         if (!record.customerName || linkIsLive(record.customerId, live)) continue;
         const id = resolve(record.customerName, record.customerPhone);

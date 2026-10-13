@@ -1,5 +1,6 @@
 import type { StoreData } from '@/types/store';
-import { getLocalLaundryRecords, type LocalLaundryRecord } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+import { type LocalLaundryRecord } from '@/lib/laundry-offline';
 import { receivedBetween } from '@/lib/money-figures';
 import { laundryBalance } from '@/lib/laundry-money';
 
@@ -37,7 +38,6 @@ import { laundryBalance } from '@/lib/laundry-money';
  */
 
 const HISTORY_KEY = 'storeflow_day_history_';
-const CHECKED_KEY = 'storeflow_day_history_checked_';
 
 /** How far back a first run looks for days worked but never recorded. */
 export const BACKFILL_DAYS = 60;
@@ -97,7 +97,7 @@ function time(value: unknown): number {
 
 function localRecords(accessCode: string): LocalLaundryRecord[] {
   try {
-    return getLocalLaundryRecords(accessCode);
+    return shopLaundryRecords(accessCode);
   } catch {
     return [];
   }
@@ -156,23 +156,44 @@ export function recordDays(store: StoreData, now: number = Date.now()): DayRecor
   const records = localRecords(accessCode);
   const today = startOfDay(now);
 
-  // Where the last run got to, so the days already settled are not walked again.
-  let checked: string | null = null;
-  try { checked = localStorage.getItem(CHECKED_KEY + accessCode); } catch { /* private mode */ }
-
-  let start = startOfDay(today - BACKFILL_DAYS * 86400000);
-  if (checked) start = Math.max(start, nextDay(startOfKey(checked)));
+  /*
+   * Every past day, worked out again from the shop's records.
+   *
+   * A finished day used to be filed once and skipped ever after, and a
+   * bookmark stopped days already walked from being looked at again. So a
+   * figure fixed later never reached the days before it, and a bundle that
+   * reached this phone late - from a worker's phone, or the cloud on a new
+   * phone - never counted on the day it was taken in. Each day is now
+   * measured again from all the shop's bundles and payments.
+   *
+   * Two things are kept as they were: what was still owed at the end of the
+   * day, which is a moment that has passed, and any filed day whose records
+   * are no longer anywhere this phone can read.
+   */
+  const byDay = new Map<number, typeof records>();
+  let earliest = today;
+  for (const record of records) {
+    const at = time(record.createdAt);
+    if (!Number.isFinite(at)) continue;
+    const day = startOfDay(at);
+    if (day < earliest) earliest = day;
+    const list = byDay.get(day);
+    if (list) list.push(record); else byDay.set(day, [record]);
+  }
+  for (const sale of store.sales || []) {
+    const at = time((sale as { date?: string }).date);
+    if (Number.isFinite(at) && startOfDay(at) < earliest) earliest = startOfDay(at);
+  }
+  let start = Math.max(earliest, startOfDay(today - Math.max(BACKFILL_DAYS, KEEP_DAYS) * 86400000));
 
   for (; start < today; start = nextDay(start)) {
     const key = dayKey(start);
     const existing = byKey.get(key);
-    if (existing?.final) continue;
-
-    const measured = measureDay(store, records, start, now);
+    const measured = measureDay(store, byDay.get(start) || [], start, now);
     // Counted while it was going: keep what was owed as last seen that day.
     const settled: DayRecord = { ...measured, owedOnDay: existing ? existing.owedOnDay : measured.owedOnDay, final: true };
-    if (worked(settled)) byKey.set(key, settled);
-    else byKey.delete(key);
+    if (worked(settled)) byKey.set(key, existing && sameFigures(existing, settled) ? existing : settled);
+    // Nothing found for it now: a filed day stands, rather than vanishing.
   }
 
   const live = measureDay(store, records, today, now);
@@ -181,13 +202,11 @@ export function recordDays(store: StoreData, now: number = Date.now()): DayRecor
   else if (!previous || !sameFigures(previous, live)) byKey.set(live.key, live);
 
   const next = [...byKey.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, KEEP_DAYS);
-  const yesterday = dayKey(today - 1);
 
   try {
     if (next.length !== history.length || next.some((day, index) => day !== history[index])) {
       localStorage.setItem(HISTORY_KEY + accessCode, JSON.stringify(next));
     }
-    if (checked !== yesterday) localStorage.setItem(CHECKED_KEY + accessCode, yesterday);
   } catch { /* private mode: the days are still returned for this screen */ }
 
   return next;

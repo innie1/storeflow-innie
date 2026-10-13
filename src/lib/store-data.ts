@@ -12,6 +12,7 @@ import {
   BalanceAdjustment, SavingsGoal } from '@/types/store';
 import { attribution } from '@/lib/recorded-by';
 import { currentActor } from '@/lib/current-actor';
+import { backfillAttribution } from '@/lib/attribution-backfill';
 import { backfillCustomerBook } from '@/lib/customer-backfill';
 import { countDebtors } from '@/lib/customer-key';
 import { getLowStockThreshold } from '@/lib/settings';
@@ -942,6 +943,11 @@ export function loadStore(code: string): StoreData | null {
    */
   const migratedCustomers = backfilled !== store;
   store = backfilled;
+  // Names for sales and expenses made before the records kept one, read back
+  // from the activity history (attribution-backfill.ts). Worked out on every
+  // open rather than forced into a save, so it can never be the reason a sync
+  // clashes; it is kept whenever the shop is next saved anyway.
+  store = backfillAttribution(store);
   store = runScheduledSavingsDeduction(store);
   store = syncStoreData(store);
   store = syncProductPerformance(store);

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { ChevronDown } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import {
-  getMonthHistory,
+  monthHistory,
   monthReport,
-  recordMonthSnapshot,
   type MonthReport,
 } from '@/lib/service-month-report';
 
@@ -37,19 +37,16 @@ export default function MonthReportCard({ store, canSeeMoney }: Props) {
   const [open, setOpen] = useState(false);
   const [showing, setShowing] = useState<string | null>(null);
 
-  const thisMonth = useMemo(() => monthReport(store), [store]);
+  const laundryVersion = useShopLaundryVersion();
+  const thisMonth = useMemo(() => monthReport(store), [store, laundryVersion]);
 
   /*
-   * File the month that has just ended, once.
-   *
-   * Done on view rather than on a timer: nothing runs while the app is closed,
-   * and the first time the shop is opened in a new month is exactly when the
-   * last one becomes history.
+   * Past months, worked out again from the shop's records with today's rules
+   * (monthHistory), so a fix reaches last month too and a new phone sees the
+   * shop's whole history. Only a month whose records are gone falls back to
+   * the copy filed earlier.
    */
-  const [history, setHistory] = useState<MonthReport[]>(() => getMonthHistory(String(store.accessCode || '')));
-  useEffect(() => {
-    setHistory(recordMonthSnapshot(store));
-  }, [store]);
+  const history = useMemo<MonthReport[]>(() => monthHistory(store), [store, laundryVersion]);
 
   if (!canSeeMoney) return null;
 

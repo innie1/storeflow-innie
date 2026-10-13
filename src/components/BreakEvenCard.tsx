@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { Target } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { breakEven, breakEvenSentence } from '@/lib/service-breakeven';
@@ -32,7 +33,8 @@ const PACE_TONE: Record<string, string> = {
 };
 
 export default function BreakEvenCard({ store, canSeeMoney }: Props) {
-  const state = useMemo(() => breakEven(store), [store]);
+  const laundryVersion = useShopLaundryVersion();
+  const state = useMemo(() => breakEven(store), [store, laundryVersion]);
 
   /*
    * Lit, briefly, when the ring on the home screen sent somebody here.

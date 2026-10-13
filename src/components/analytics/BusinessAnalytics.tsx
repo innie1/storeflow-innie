@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { ArrowLeft, BarChart3, CheckCircle2, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, XCircle, type LucideIcon } from 'lucide-react';
 import { receivedBetween, receivedByChannel, waitingToCollect } from '@/lib/money-figures';
@@ -57,7 +59,7 @@ function walkInOrders(store: StoreData): AnyRecord[] {
   const accessCode = String((store as AnyRecord).accessCode || '');
   if (!accessCode) return [];
   let records: AnyRecord[] = [];
-  try { records = getLocalLaundryRecords(accessCode) as unknown as AnyRecord[]; } catch { return []; }
+  try { records = shopLaundryRecords(accessCode) as unknown as AnyRecord[]; } catch { return []; }
   return records.map(record => ({
     id: record.clientRef,
     order_number: record.tagCode,
@@ -89,6 +91,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
     if (isLaundry) setDays(recordDays(store));
   }, [store, isLaundry]);
 
+  const laundryVersion = useShopLaundryVersion();
   const analytics = useMemo(() => {
     const scans = listFromStore(store, ['scanEvents', 'scan_events', 'qrScans', 'qr_scans']);
     const online = listFromStore(store, ['orders', 'customerOrders', 'customer_orders']);
@@ -206,7 +209,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       },
       recentScans: [...filteredScans].sort((a, b) => dateOf(b) - dateOf(a)).slice(0, 20),
     };
-  }, [store, range]);
+  }, [store, range, laundryVersion]);
 
   const isService = isServiceFirstBusiness(store);
   // Said on every figure measured over time, so no number is read as a different stretch.

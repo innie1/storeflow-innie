@@ -42,7 +42,7 @@ afterEach(() => localStorage.clear());
 describe('it reads the counter, not only the storefront', () => {
   it('turns walk-in bundles into orders the page can count', () => {
     expect(analytics).toContain('function walkInOrders');
-    expect(analytics).toContain('getLocalLaundryRecords(accessCode)');
+    expect(analytics).toContain('shopLaundryRecords(accessCode)');
   });
 
   it('counts a handed-back bundle as a completed order', () => {

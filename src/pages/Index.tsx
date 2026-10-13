@@ -7,6 +7,7 @@ import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } fro
 import { canOpenTab } from '@/lib/permissions';
 import SetupChecklist from '@/components/SetupChecklist';
 import { loadStoreOrders, mergeOrders, readOrdersCache } from '@/lib/orders-cache';
+import { setShopCloudOrders } from '@/lib/shop-laundry';
 import { endPractice } from '@/lib/guide-activity';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
 import { celebrationShown, guideProgress, hasPractised, markCelebrationShown, nextStep, PRACTISED_SIGNAL } from '@/lib/setup-guide';
@@ -463,6 +464,12 @@ export default function Index() {
   }, [currentUser?.role, watchAccessCode, watchStoreRef]);
   const [tab, setTabState] = useState<TabId>('dashboard');
   const [orders, setOrders] = useState<any[]>([]);
+  // Every figure that counts laundry reads the shop's bundles, not only the
+  // ones taken in on this phone (src/lib/shop-laundry.ts). Handed over here,
+  // before anything below is drawn, each time the orders change.
+  useMemo(() => {
+    if (store?.accessCode) setShopCloudOrders(store.accessCode, orders);
+  }, [store?.accessCode, orders]);
   // Set when a push notification deep-links to one order; Orders consumes it.
   const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
   // What the merchant pressed on a push notification, carried into the screen

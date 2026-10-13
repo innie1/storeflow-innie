@@ -14,6 +14,8 @@ export interface LaundryStageStep {
   at: string;
   by?: string;
   role?: string;
+  /** Shown instead of the stage's own name, for an old step known only roughly. */
+  label?: string;
 }
 
 export type LaundrySyncStatus = 'pending' | 'synced';

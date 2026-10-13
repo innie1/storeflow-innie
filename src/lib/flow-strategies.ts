@@ -1,5 +1,6 @@
 import type { Customer, StoreData } from '@/types/store';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 import { getCustomerActivitySignals } from '@/lib/business-insights';
 import { whatsappUrl } from '@/lib/flow-message-orders';
 
@@ -163,7 +164,7 @@ function detectUncollected(store: StoreData): Strategy | null {
   // no `store.laundryRecords`, so reading it meant this strategy could never
   // fire however much finished work was sitting on the shelf.
   const accessCode = String(store.accessCode || '');
-  const records = (accessCode ? getLocalLaundryRecords(accessCode) : [])
+  const records = (accessCode ? shopLaundryRecords(accessCode) : [])
     .filter(record => record && record.workflowStage !== 'collected');
   const overdue = records.filter(record => {
     const due = daysSince(record.promisedFor);

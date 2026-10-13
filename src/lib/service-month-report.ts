@@ -12,7 +12,8 @@
  */
 
 import type { StoreData } from '@/types/store';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 import { breakEven, monthWindow, monthlyFixedCosts, type MonthWindow } from '@/lib/service-breakeven';
 import { estimateUnitCost } from '@/lib/cost-estimator';
 import { receivedBetween } from '@/lib/money-figures';
@@ -89,7 +90,7 @@ export function monthReport(store: StoreData, at: Date = new Date()): MonthRepor
   const key = monthKey(at);
   const accessCode = String(store.accessCode || '');
 
-  const records = (accessCode ? getLocalLaundryRecords(accessCode) : []).filter(record => {
+  const records = (accessCode ? shopLaundryRecords(accessCode) : []).filter(record => {
     const time = new Date(record.createdAt || '').getTime();
     return Number.isFinite(time) && time >= window.start && time < window.end;
   });
@@ -173,11 +174,43 @@ export function getMonthHistory(accessCode: string): MonthReport[] {
 }
 
 /**
- * File a finished month, once.
+ * The past months, worked out again from the shop's records each time.
  *
- * Only a month that has ended, and never rewritten: the records it was
- * computed from are synced and eventually pruned, so a figure recomputed later
- * would quietly shrink. A closed month is history.
+ * A month used to be filed once when it ended and never touched again. That
+ * froze every mistake: a calculation fixed later never reached the months
+ * already filed, and a month the phone did not see close (a new phone, a shop
+ * opened late in the month) was simply missing. The records are the shop's
+ * own now - every bundle in the cloud plus every payment in the books - so a
+ * month is recomputed from them, with the latest rules, whenever it is shown.
+ *
+ * The filed copy is still kept, and used only for a month whose records are no
+ * longer anywhere this phone can read, so history never quietly shrinks.
+ */
+export function monthHistory(store: StoreData, at: Date = new Date(), months = 24): MonthReport[] {
+  const accessCode = String(store.accessCode || '').toUpperCase();
+  if (!accessCode) return [];
+  const filed = new Map(getMonthHistory(accessCode).map(entry => [entry.key, entry]));
+  const history: MonthReport[] = [];
+  for (let back = 1; back <= months; back++) {
+    const month = new Date(at.getFullYear(), at.getMonth() - back, 1);
+    const live = monthReport(store, month);
+    const hasRecords = live.jobs > 0 || live.revenue > 0;
+    const report = hasRecords ? live : filed.get(live.key);
+    if (report) history.push(report);
+  }
+  // Keep the newest figures as the fallback for the day the records are gone,
+  // and any older filed month this view does not reach.
+  const shown = new Set(history.map(entry => entry.key));
+  const kept = [...history, ...[...filed.values()].filter(entry => !shown.has(entry.key))]
+    .sort((a, b) => b.key.localeCompare(a.key))
+    .slice(0, 36);
+  try { localStorage.setItem(HISTORY_KEY + accessCode, JSON.stringify(kept)); } catch { /* private mode */ }
+  return history;
+}
+
+/**
+ * File a finished month, once - kept as the fallback copy only. What is shown
+ * is monthHistory, which works each month out again from the records.
  */
 export function recordMonthSnapshot(store: StoreData, at: Date = new Date()): MonthReport[] {
   const accessCode = String(store.accessCode || '').toUpperCase();

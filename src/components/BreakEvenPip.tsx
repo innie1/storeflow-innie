@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import type { StoreData } from '@/types/store';
 import { breakEven } from '@/lib/service-breakeven';
 
@@ -50,7 +51,8 @@ export function tones(state: ReturnType<typeof breakEven>): { ring: string; text
 }
 
 export default function BreakEvenPip({ store, canSeeMoney, onOpen }: Props) {
-  const state = useMemo(() => breakEven(store), [store]);
+  const laundryVersion = useShopLaundryVersion();
+  const state = useMemo(() => breakEven(store), [store, laundryVersion]);
 
   // Money is the owner's business. That is the only reason to hide this.
   if (!canSeeMoney) return null;

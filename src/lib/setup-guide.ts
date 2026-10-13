@@ -1,5 +1,6 @@
 import type { StoreData } from '@/types/store';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 import { getBusinessTemplate, isServiceFirstBusiness } from '@/lib/business-runtime';
 
 /**
@@ -67,7 +68,7 @@ const hasPrices = (store: StoreData) => {
 const hasJob = (store: StoreData) => {
   if ((store.sales || []).length > 0) return true;
   const accessCode = String(store.accessCode || '');
-  return accessCode ? getLocalLaundryRecords(accessCode).length > 0 : false;
+  return accessCode ? shopLaundryRecords(accessCode).length > 0 : false;
 };
 
 /** The day a timestamp falls on, for counting distinct trading days. */
@@ -98,7 +99,7 @@ export function tradingBeyondFirstDay(store: StoreData): boolean {
   }
 
   const accessCode = String(store.accessCode || '');
-  for (const record of accessCode ? getLocalLaundryRecords(accessCode) : []) {
+  for (const record of accessCode ? shopLaundryRecords(accessCode) : []) {
     const day = tradingDay(record.createdAt);
     if (day) days.add(day);
     if (days.size > 1) return true;

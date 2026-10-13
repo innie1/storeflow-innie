@@ -25,8 +25,18 @@ export function withStatusStep(notes: Record<string, any>, status: string, actor
 }
 
 export function orderStatusSteps(order: any): OrderStatusStep[] {
-  const steps = orderNotes(order).status_by;
-  return Array.isArray(steps) ? steps.filter((step: any) => step && step.status && step.at) : [];
+  const raw = orderNotes(order).status_by;
+  const named: OrderStatusStep[] = Array.isArray(raw) ? raw.filter((step: any) => step && step.status && step.at) : [];
+  /*
+   * Older steps, from before names were kept: the cloud has recorded the time
+   * of every status change all along (orders.status_history), just not who
+   * made it. Those come first, so an old order still shows its whole run.
+   */
+  const firstNamed = named.length ? Date.parse(named[0].at) : Infinity;
+  const earlier: OrderStatusStep[] = (Array.isArray(order?.status_history) ? order.status_history : [])
+    .filter((step: any) => step && step.status && Number.isFinite(Date.parse(String(step.at))) && Date.parse(String(step.at)) < firstNamed - 1000)
+    .map((step: any) => ({ status: String(step.status), at: String(step.at) }));
+  return [...earlier, ...named];
 }
 
 /** The person to name as having served the customer: who completed it, else readied or accepted it. */

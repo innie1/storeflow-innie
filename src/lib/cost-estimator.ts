@@ -29,7 +29,8 @@
  */
 
 import type { Expense, ExpenseCategory, StoreData } from '@/types/store';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { approvedLabourBetween, PIECE_WORK_CATEGORY } from '@/lib/piece-work';
 
@@ -130,7 +131,7 @@ export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
 
   const accessCode = String(store.accessCode || '');
   let pieces = 0;
-  for (const record of accessCode ? getLocalLaundryRecords(accessCode) : []) {
+  for (const record of accessCode ? shopLaundryRecords(accessCode) : []) {
     if (!within(record.createdAt)) continue;
     pieces += Number(record.pieceCount) || 0;
   }

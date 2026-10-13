@@ -1,5 +1,6 @@
 import type { StoreData } from '@/types/store';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 
 /**
  * What Flow has worked out about this particular shop.
@@ -60,9 +61,9 @@ function commonest<T>(values: T[]): { value: T; count: number } | null {
 
 export function shopProfile(store: StoreData): ShopProfile {
   const accessCode = String((store as { accessCode?: string }).accessCode || '');
-  let records: ReturnType<typeof getLocalLaundryRecords> = [];
+  let records: ReturnType<typeof shopLaundryRecords> = [];
   try {
-    if (accessCode) records = getLocalLaundryRecords(accessCode);
+    if (accessCode) records = shopLaundryRecords(accessCode);
   } catch {
     records = [];
   }

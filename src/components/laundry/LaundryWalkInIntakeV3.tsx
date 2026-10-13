@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { attribution } from '@/lib/recorded-by';
 import { localNumber, peopleOnThisNumber, sameName } from '@/lib/customer-key';
 import { checkNewMilestone, markMilestoneReached, type MilestoneDef } from '@/lib/milestones';
@@ -16,15 +17,7 @@ import {
 } from '@/lib/laundry-pricing';
 import { recordLaundryPayment, requiredDeposit, settleLaundryPayment } from '@/lib/laundry-money';
 import CustomerSuggestions from '@/components/CustomerSuggestions';
-import {
-  createLocalLaundryRecord,
-  getLocalLaundryRecords,
-  setLocalLaundryPhone,
-  LAUNDRY_SYNC_CHANGED_EVENT,
-  localLaundryRecordToOrder,
-  syncLaundryRecord,
-  type LocalLaundryRecord,
-} from '@/lib/laundry-offline';
+import { createLocalLaundryRecord, setLocalLaundryPhone, LAUNDRY_SYNC_CHANGED_EVENT, localLaundryRecordToOrder, syncLaundryRecord, type LocalLaundryRecord } from '@/lib/laundry-offline';
 import { openLaundryWhatsApp, openWhatsAppChooser } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
 import ContactPickButton from '@/components/ContactPickButton';
@@ -71,7 +64,7 @@ function emptyCounts(garments: string[]): Record<string, number> {
 export function rankGarmentsByUsage(accessCode: string, garmentTypes: string[]): string[] {
   const used = new Map<string, number>();
   const lastUsed = new Map<string, number>();
-  for (const record of getLocalLaundryRecords(accessCode)) {
+  for (const record of shopLaundryRecords(accessCode)) {
     const at = new Date(record.createdAt || '').getTime();
     for (const garment of record.garments || []) {
       const name = String(garment.garmentType || '');

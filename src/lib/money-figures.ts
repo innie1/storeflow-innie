@@ -21,7 +21,8 @@
  */
 
 import type { StoreData } from '@/types/store';
-import { getLocalLaundryRecords, type LocalLaundryRecord } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+import { type LocalLaundryRecord } from '@/lib/laundry-offline';
 import { getOperatingExpenses } from '@/lib/store-data';
 import { approvedLabourBetween, PIECE_WORK_CATEGORY } from '@/lib/piece-work';
 import { laundryBalance } from '@/lib/laundry-money';
@@ -71,7 +72,7 @@ export function bundlesBetween(store: Pick<StoreData, 'accessCode'>, from: numbe
   const accessCode = String(store.accessCode || '');
   if (!accessCode) return [];
   try {
-    return getLocalLaundryRecords(accessCode).filter(record => inside(timeOf(record.createdAt), from, to));
+    return shopLaundryRecords(accessCode).filter(record => inside(timeOf(record.createdAt), from, to));
   } catch {
     return [];
   }
@@ -99,7 +100,7 @@ export function bundleCount(store: Pick<StoreData, 'accessCode'>): number {
   const accessCode = String(store.accessCode || '');
   if (!accessCode) return 0;
   try {
-    return getLocalLaundryRecords(accessCode).length;
+    return shopLaundryRecords(accessCode).length;
   } catch {
     return 0;
   }
@@ -145,7 +146,7 @@ export function waitingToCollect(store: Pick<StoreData, 'accessCode' | 'pendingP
   if (!accessCode) return none;
   let records: LocalLaundryRecord[];
   try {
-    records = getLocalLaundryRecords(accessCode);
+    records = shopLaundryRecords(accessCode);
   } catch {
     return none;
   }

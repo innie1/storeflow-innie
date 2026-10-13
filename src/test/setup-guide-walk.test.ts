@@ -50,7 +50,7 @@ describe('the last step has something to point at', () => {
    * a new laundry an empty table and left the step with no target at all.
    */
   it('opens a shop with no records on the intake, not an empty list', () => {
-    expect(workspace).toContain("if (requested === 'records' && getLocalLaundryRecords(store.accessCode).length === 0) return 'record';");
+    expect(workspace).toContain("if (requested === 'records' && shopLaundryRecords(store.accessCode).length === 0) return 'record';");
   });
 });
 

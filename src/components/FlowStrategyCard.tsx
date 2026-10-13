@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { Sparkles, X } from 'lucide-react';
 import type { StoreData, TabId } from '@/types/store';
 import { snoozeStrategy, topStrategy, type Strategy } from '@/lib/flow-strategies';
@@ -21,7 +22,8 @@ interface Props {
 
 export default function FlowStrategyCard({ store, onNavigate }: Props) {
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const strategy = useMemo<Strategy | null>(() => topStrategy(store), [store]);
+  const laundryVersion = useShopLaundryVersion();
+  const strategy = useMemo<Strategy | null>(() => topStrategy(store), [store, laundryVersion]);
 
   if (!strategy || dismissed === strategy.id) return null;
 

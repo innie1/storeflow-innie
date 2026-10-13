@@ -1,5 +1,6 @@
 import type { Customer, StoreData } from '@/types/store';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 import { owedByCustomer } from '@/lib/flow-service-brain';
 
 /**
@@ -67,7 +68,7 @@ function sightings(store: StoreData): Sighting[] {
   if (accessCode) {
     // Wrapped: a device with no storage still has a book worth showing.
     try {
-      for (const record of getLocalLaundryRecords(accessCode)) {
+      for (const record of shopLaundryRecords(accessCode)) {
         const name = String(record.customerName || '').trim();
         if (!name) continue;
         found.push({

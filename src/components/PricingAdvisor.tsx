@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { Check, Sparkles, X } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { updateProduct } from '@/lib/store-data';
@@ -40,7 +41,8 @@ const LABEL: Record<string, string> = {
 };
 
 export default function PricingAdvisor({ store, onUpdate }: Props) {
-  const state = useMemo(() => pricingAdvice(store), [store]);
+  const laundryVersion = useShopLaundryVersion();
+  const state = useMemo(() => pricingAdvice(store), [store, laundryVersion]);
   const code = String(store.accessCode || '');
 
   const [ignored, setIgnored] = useState<string[]>(() => {

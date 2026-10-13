@@ -41,6 +41,7 @@ import { bundleModifiers } from '@/lib/laundry-modifiers';
 import { Bike } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { bundleTimeline, decorateRecord, type DecoratedRecord } from '@/lib/laundry-records';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
 
 interface Props {
   store: StoreData;
@@ -85,7 +86,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
      * That is the "nothing happens, there is no place to click" this was
      * reported as, and it is also just the wrong screen to land on.
      */
-    if (requested === 'records' && getLocalLaundryRecords(store.accessCode).length === 0) return 'record';
+    if (requested === 'records' && shopLaundryRecords(store.accessCode).length === 0) return 'record';
     return requested;
   });
   const [search, setSearch] = useState('');

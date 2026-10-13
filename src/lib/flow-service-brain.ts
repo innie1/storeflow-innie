@@ -1,8 +1,9 @@
 import type { Customer, StoreData } from '@/types/store';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { debtorKey } from '@/lib/customer-key';
 import { hasGoneQuiet, quietAfterDays, usualGapDays } from '@/lib/customer-rhythm';
 import { getBusinessTemplate, isServiceFirstBusiness } from '@/lib/business-runtime';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+
 
 /**
  * What Flow needs to know to sound like it works here.
@@ -46,7 +47,7 @@ export function workNoun(store: StoreData): string {
 
 export function serviceSnapshot(store: StoreData): ServiceSnapshot {
   const accessCode = String(store.accessCode || '');
-  const records = accessCode ? getLocalLaundryRecords(accessCode) : [];
+  const records = accessCode ? shopLaundryRecords(accessCode) : [];
   const now = Date.now();
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
@@ -218,7 +219,7 @@ export function customerBrief(store: StoreData, customer: Customer): string {
 
   const accessCode = String(store.accessCode || '');
   const theirs = accessCode
-    ? getLocalLaundryRecords(accessCode).filter(record => norm(record.customerName) === norm(customer.name))
+    ? shopLaundryRecords(accessCode).filter(record => norm(record.customerName) === norm(customer.name))
     : [];
   const openOnes = theirs.filter(record => record.workflowStage !== 'collected');
 

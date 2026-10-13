@@ -1,9 +1,10 @@
 import { StoreData, Product, FlowNotification, TabId } from '@/types/store';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { receivedBetween, runningCostsBetween } from '@/lib/money-figures';
 import { countDebtors } from '@/lib/customer-key';
 import { allowedNotifications, wantsNotification } from '@/lib/notification-gate';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+
 import { getLowStockThreshold } from '@/lib/settings';
 import { getPendingSummary, isStockPurchase } from '@/lib/store-data';
 import type { AutoFixSpec } from '@/lib/auto-fix';
@@ -291,7 +292,7 @@ function serviceRecords(store: StoreData) {
   const accessCode = String((store as { accessCode?: string }).accessCode || '');
   if (!accessCode) return [];
   try {
-    return getLocalLaundryRecords(accessCode);
+    return shopLaundryRecords(accessCode);
   } catch {
     return [];
   }

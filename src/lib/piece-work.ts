@@ -25,6 +25,7 @@
 
 import type { PieceRate, PieceWorkEntry, StaffMember, StoreData, WorkerPayment } from '@/types/store';
 import { getLocalLaundryRecords, mergeLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { parseLaundryRecordMetadata } from '@/lib/laundry-workspace';
 /*
  * These return a new store rather than saving one. Persisting is the caller's
@@ -188,7 +189,7 @@ export function openJobsForTask(
   records?: WorkRecord[],
 ): { record: WorkRecord; items: RemainingItem[] }[] {
   const accessCode = String(store.accessCode || '');
-  const source: WorkRecord[] = records ?? (accessCode ? getLocalLaundryRecords(accessCode) : []);
+  const source: WorkRecord[] = records ?? (accessCode ? shopLaundryRecords(accessCode) : []);
 
   return source
     .filter(record => record.workflowStage !== 'collected')

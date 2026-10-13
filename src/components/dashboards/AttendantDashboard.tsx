@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { ClipboardList, Clock, PackageCheck, Users } from 'lucide-react';
 import type { StoreData, TabId } from '@/types/store';
 import { getBusinessTemplate } from '@/lib/business-runtime';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+
 import { requestLaundryWorkspace } from '@/lib/laundry-workspace';
 
 /**
@@ -27,9 +29,10 @@ export default function AttendantDashboard({ store, onNavigate, userName }: Prop
   const template = getBusinessTemplate(store);
   const isLaundry = String(store.storeType || '').toLowerCase() === 'laundry';
 
+  const laundryVersion = useShopLaundryVersion();
   const counts = useMemo(() => {
     const accessCode = String(store.accessCode || '');
-    const records = accessCode ? getLocalLaundryRecords(accessCode) : [];
+    const records = accessCode ? shopLaundryRecords(accessCode) : [];
     const now = Date.now();
     const open = records.filter(record => record.workflowStage !== 'collected');
     const late = open.filter(record => {
@@ -38,7 +41,7 @@ export default function AttendantDashboard({ store, onNavigate, userName }: Prop
     });
     const ready = open.filter(record => record.workflowStage === 'ready');
     return { open: open.length, late: late.length, ready: ready.length, today: records.length };
-  }, [store]);
+  }, [store, laundryVersion]);
 
   const openIntake = () => {
     if (isLaundry) requestLaundryWorkspace('record');

@@ -68,9 +68,8 @@ export interface DecoratedRecord {
  * The bundle's moves, as the cloud or this phone kept them, oldest first.
  * Anything malformed is dropped rather than shown half-read.
  */
-export function readStageSteps(raw: unknown): LaundryStageStep[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
+export function readStageSteps(raw: unknown, statusHistory?: unknown): LaundryStageStep[] {
+  const named = (Array.isArray(raw) ? raw : [])
     .filter((step: any) => step && LAUNDRY_WORKFLOW_STAGES.some(item => item.id === step.stage) && Number.isFinite(Date.parse(String(step.at))))
     .map((step: any) => ({
       stage: step.stage,
@@ -79,6 +78,23 @@ export function readStageSteps(raw: unknown): LaundryStageStep[] {
       role: step.role ? String(step.role) : undefined,
     }))
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  /*
+   * Moves from before names were kept. The cloud has recorded the time of each
+   * status change on every order all along (orders.status_history), so an old
+   * bundle still shows when it moved - not who moved it, which was never kept.
+   * "Preparing" covered washing, drying and ironing alike, so it says only
+   * that the work was under way.
+   */
+  const firstNamed = named.length ? Date.parse(named[0].at) : Infinity;
+  const stageFor: Record<string, { stage: LaundryWorkflowStage; label?: string }> = {
+    Preparing: { stage: 'washing', label: 'In progress' },
+    Ready: { stage: 'ready' },
+    Completed: { stage: 'collected' },
+  };
+  const earlier: LaundryStageStep[] = (Array.isArray(statusHistory) ? statusHistory : [])
+    .filter((step: any) => step && stageFor[String(step.status)] && Number.isFinite(Date.parse(String(step.at))) && Date.parse(String(step.at)) < firstNamed - 1000)
+    .map((step: any) => ({ ...stageFor[String(step.status)], at: String(step.at) }));
+  return [...earlier.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)), ...named];
 }
 
 /**
@@ -92,7 +108,7 @@ export function bundleTimeline(record: Pick<DecoratedRecord, 'createdAt' | 'reco
   const taken = record.createdAt ? [{ label: 'Taken in', at: record.createdAt, by: record.recordedByName }] : [];
   return [
     ...taken,
-    ...record.steps.filter(step => step.stage !== 'received').map(step => ({ label: label(step.stage), at: Date.parse(step.at), by: step.by })),
+    ...record.steps.filter(step => step.stage !== 'received').map(step => ({ label: step.label || label(step.stage), at: Date.parse(step.at), by: step.by })),
   ];
 }
 
@@ -128,7 +144,7 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     collectedBy: meta.collected_by || undefined,
     recordedByName: meta.recorded_by_name || undefined,
     recordedByRole: meta.recorded_by_role || undefined,
-    steps: readStageSteps(meta.stage_history),
+    steps: readStageSteps(meta.stage_history, order.status_history),
     customerPhone: order.customer_phone || '',
     serviceName,
     garmentSummary: meta.garment_summary

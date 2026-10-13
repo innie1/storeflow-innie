@@ -23,7 +23,8 @@
  */
 
 import type { Product, StoreData } from '@/types/store';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { monthWindow, breakEven } from '@/lib/service-breakeven';
 import { estimateUnitCost } from '@/lib/cost-estimator';
@@ -110,7 +111,7 @@ function monthlyVolume(store: StoreData): Map<string, number> {
   }
 
   const accessCode = String(store.accessCode || '');
-  for (const record of accessCode ? getLocalLaundryRecords(accessCode) : []) {
+  for (const record of accessCode ? shopLaundryRecords(accessCode) : []) {
     if (!within(record.createdAt)) continue;
     const id = String(record.serviceId || '');
     if (id) volume.set(id, (volume.get(id) || 0) + (Number(record.pieceCount) || 0));

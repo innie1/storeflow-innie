@@ -1,6 +1,7 @@
 import { StoreData } from '@/types/store';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+
 import { 
   Trophy, Award, Lock, Sparkles, CheckCircle2, CircleDollarSign, TrendingUp, Package, ShieldAlert
 } from 'lucide-react';
@@ -112,7 +113,7 @@ const BADGES: Badge[] = [
       const code = String((s as { accessCode?: string }).accessCode || '');
       if (!code) return false;
       let records: { workflowStage?: string; promisedFor?: string }[] = [];
-      try { records = getLocalLaundryRecords(code); } catch { return false; }
+      try { records = shopLaundryRecords(code); } catch { return false; }
       const collected = records.filter(r => r.workflowStage === 'collected').length;
       const late = records.filter(r => {
         if (r.workflowStage === 'collected') return false;

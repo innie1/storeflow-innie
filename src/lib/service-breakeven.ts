@@ -16,7 +16,8 @@
  */
 
 import type { StoreData } from '@/types/store';
-import { getLocalLaundryRecords } from '@/lib/laundry-offline';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+
 import { receivedBetween } from '@/lib/money-figures';
 import { estimateUnitCost, isVariableCost } from '@/lib/cost-estimator';
 import { isStockPurchase } from '@/lib/store-data';
@@ -149,7 +150,7 @@ export interface PiecesAndRevenue {
 /** The money that came in this month, the work taken in, and its pieces. */
 export function monthToDate(store: StoreData, window: MonthWindow = monthWindow()): PiecesAndRevenue {
   const accessCode = String(store.accessCode || '');
-  const records = accessCode ? getLocalLaundryRecords(accessCode) : [];
+  const records = accessCode ? shopLaundryRecords(accessCode) : [];
 
   let pieces = 0;
   let workTakenIn = 0;
