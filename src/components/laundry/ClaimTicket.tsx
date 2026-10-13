@@ -31,6 +31,8 @@ export interface ClaimTicketRecord {
   total: number;
   amountPaid?: number;
   promisedFor?: string;
+  /** Who took the bundle in, so the customer and the shop both know. */
+  recordedByName?: string;
 }
 
 /**
@@ -110,6 +112,12 @@ export default function ClaimTicket({ store, record, onClose }: Props) {
             <span className="text-neutral-500">Ready</span>
             <span className="font-semibold text-right">{whenReady(record.promisedFor)}</span>
           </div>
+          {record.recordedByName && (
+            <div className="flex justify-between gap-3">
+              <span className="text-neutral-500">Taken in by</span>
+              <span className="font-semibold text-right truncate">{record.recordedByName}</span>
+            </div>
+          )}
         </div>
 
         <div className="mt-3 border-t border-neutral-200 pt-3 text-left text-[12px] space-y-1.5">

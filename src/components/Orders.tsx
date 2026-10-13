@@ -6,6 +6,7 @@ import OrderReceipt from '@/components/OrderReceipt';
 import { subscribeToOrderPush } from '@/lib/push-notifications';
 import ServiceOrderControls from '@/components/ServiceOrderControls';
 import { getOrderProgressText } from '@/lib/business-runtime';
+import { orderStatusSteps } from '@/lib/inventory-orders';
 
 interface OrdersProps {
   store: StoreData;
@@ -748,6 +749,22 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
                       {meta?.instructions || meta?.notes || order.notes}
                     </p>
                   </div>
+                )}
+
+                {/* Who moved it along, so the shop can see who did what. */}
+                {orderStatusSteps(order).length > 0 && (
+                  <ol aria-label="Who did what" className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground text-left">
+                    {orderStatusSteps(order).map((step, index) => (
+                      <li key={`${step.status}-${step.at}`} className="inline-flex items-center gap-1.5">
+                        {index > 0 && <span aria-hidden="true">›</span>}
+                        <span>
+                          <b className="text-foreground font-semibold">{step.status}</b>
+                          {step.by ? ` · ${step.by}` : ''}
+                          {' '}{new Date(step.at).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
                 )}
 
                 {/* Details Accordion & Actions Row */}

@@ -40,7 +40,7 @@ import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
 import { bundleModifiers } from '@/lib/laundry-modifiers';
 import { Bike } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
-import { decorateRecord, type DecoratedRecord } from '@/lib/laundry-records';
+import { bundleTimeline, decorateRecord, type DecoratedRecord } from '@/lib/laundry-records';
 
 interface Props {
   store: StoreData;
@@ -399,6 +399,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
             // counter's screen cannot disagree about what is left to pay.
             amountPaid: ticket.total - ticket.balance,
             promisedFor: ticket.promisedAt ? new Date(ticket.promisedAt).toISOString() : undefined,
+            recordedByName: ticket.recordedByName,
           }}
           onClose={() => setTicket(null)}
         />
@@ -853,6 +854,24 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                         {record.address && <p><b className="text-foreground">Address:</b> {record.address}</p>}
                         {(record.washMethod || record.dryMethod) && <p className="mt-1"><b className="text-foreground">Processing:</b> {record.washMethod || 'Not assigned'} · {record.dryMethod || 'Not assigned'}</p>}
                       </div>
+                    )}
+
+                    {/* Who did what, start to finish. Shown once the bundle
+                        has moved past being taken in, which the line above
+                        already names. */}
+                    {record.steps.length > 0 && (
+                      <ol aria-label="Who did what" className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+                        {bundleTimeline(record).map((step, index) => (
+                          <li key={`${step.label}-${step.at}`} className="inline-flex items-center gap-1.5">
+                            {index > 0 && <span aria-hidden="true">›</span>}
+                            <span>
+                              <b className="text-foreground font-semibold">{step.label}</b>
+                              {step.by ? ` · ${step.by}` : ''}
+                              {' '}{new Date(step.at).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
                     )}
 
                     {/* Who else may collect, kept small, and who actually did. */}

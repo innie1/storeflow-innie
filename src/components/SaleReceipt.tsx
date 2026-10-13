@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import ContactPickButton from '@/components/ContactPickButton';
 import { StoreData, Sale, ManagerSettings } from '@/types/store';
 import { printReceipt } from '@/lib/print-engine';
+import { recordedByLabel } from '@/lib/recorded-by';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
 import { drawQRCode, encodeQRData } from '@/lib/qr-code';
@@ -36,6 +37,8 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   // Written once per checkout, on the row that opens it.
   const tendered = salesList[0]?.amountTendered || 0;
   const changeGiven = salesList[0]?.changeGiven || 0;
+  // Who served, so a shop with several people can tell who sold what.
+  const servedBy = recordedByLabel(salesList[0]);
 
 
   const generateReceiptText = () => {
@@ -51,6 +54,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
     receipt += `Date: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
     const receiptNum = salesList[0]?.transactionId || salesList[0]?.id || '';
     receipt += `Receipt #: ${receiptNum.toUpperCase()}\n`;
+    if (servedBy) receipt += `Served by: ${servedBy}\n`;
     receipt += `------------------------------\n`;
     salesList.forEach(s => {
       receipt += `${s.productName}\n`;
@@ -102,6 +106,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
       storePhoto: settings.receiptLogoEnabled && profile?.photo ? profile.photo : undefined,
       receiptNumber: salesList[0]?.transactionId || salesList[0]?.id || '',
       date: salesList[0]?.date || new Date().toISOString(),
+      cashierName: servedBy || undefined,
       items: salesList.map(s => ({
         productName: s.productName,
         name: s.productName,
@@ -243,6 +248,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
               <span>{date.toLocaleTimeString()}</span>
             </div>
             <p className="text-muted-foreground">Receipt #: {(salesList[0]?.transactionId || salesList[0]?.id || '').slice(0, 8).toUpperCase()}</p>
+            {servedBy && <p className="text-muted-foreground">Served by: {servedBy}</p>}
 
             <div className="border-t border-dashed border-border my-2" />
 

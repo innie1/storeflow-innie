@@ -15,7 +15,7 @@ import type { StoreData } from '@/types/store';
 import { getLaundryRecordSearchText, parseLaundryRecordMetadata } from '@/lib/laundry-workspace';
 import { describeDue, type DueLabel } from '@/lib/laundry-due';
 import { laundryBalance, laundryTenderSummary } from '@/lib/laundry-money';
-import { LAUNDRY_SETTLED_STAGES, LAUNDRY_WORKFLOW_STAGES, type LaundryWorkflowStage } from '@/lib/laundry-offline';
+import { LAUNDRY_SETTLED_STAGES, LAUNDRY_WORKFLOW_STAGES, type LaundryStageStep, type LaundryWorkflowStage } from '@/lib/laundry-offline';
 import { buildLaundryWhatsAppPayload } from '@/lib/laundry-whatsapp';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
 import { bundleModifiers } from '@/lib/laundry-modifiers';
@@ -40,6 +40,8 @@ export interface DecoratedRecord {
   shelfLocation?: string;
   recordedByName?: string;
   recordedByRole?: string;
+  /** Every move along the wash after it was taken in, with who made it. */
+  steps: LaundryStageStep[];
   /** Walk-in, collected from the customer, or delivered back. */
   fulfillment?: LaundryFulfillment;
   /** The journey, which is not the wash stage. */
@@ -60,6 +62,38 @@ export interface DecoratedRecord {
   washMethod: string;
   dryMethod: string;
   searchText: string;
+}
+
+/**
+ * The bundle's moves, as the cloud or this phone kept them, oldest first.
+ * Anything malformed is dropped rather than shown half-read.
+ */
+export function readStageSteps(raw: unknown): LaundryStageStep[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((step: any) => step && LAUNDRY_WORKFLOW_STAGES.some(item => item.id === step.stage) && Number.isFinite(Date.parse(String(step.at))))
+    .map((step: any) => ({
+      stage: step.stage,
+      at: String(step.at),
+      by: step.by ? String(step.by) : undefined,
+      role: step.role ? String(step.role) : undefined,
+    }))
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+/**
+ * Who did what to this bundle, start to finish: taken in, then every move.
+ * A step from before names were kept simply has no name.
+ */
+export function bundleTimeline(record: Pick<DecoratedRecord, 'createdAt' | 'recordedByName' | 'steps'>): { label: string; at: number; by?: string }[] {
+  const label = (stage: string) => stage === 'collected'
+    ? 'Handed over'
+    : (LAUNDRY_WORKFLOW_STAGES.find(item => item.id === stage)?.label || stage);
+  const taken = record.createdAt ? [{ label: 'Taken in', at: record.createdAt, by: record.recordedByName }] : [];
+  return [
+    ...taken,
+    ...record.steps.filter(step => step.stage !== 'received').map(step => ({ label: label(step.stage), at: Date.parse(step.at), by: step.by })),
+  ];
 }
 
 export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
@@ -94,6 +128,7 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     collectedBy: meta.collected_by || undefined,
     recordedByName: meta.recorded_by_name || undefined,
     recordedByRole: meta.recorded_by_role || undefined,
+    steps: readStageSteps(meta.stage_history),
     customerPhone: order.customer_phone || '',
     serviceName,
     garmentSummary: meta.garment_summary

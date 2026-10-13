@@ -222,6 +222,8 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
           amountColor: 'text-warning',
           icon: <Package className="w-4 h-4" />,
           raw: batch[0],
+          recordedByName: batch[0].recordedByName,
+          recordedByRole: batch[0].recordedByRole,
         });
       });
       singles.forEach(r => {
@@ -235,6 +237,8 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
           amountColor: 'text-warning',
           icon: <Package className="w-4 h-4" />,
           raw: r,
+          recordedByName: r.recordedByName,
+          recordedByRole: r.recordedByRole,
         });
       });
     }
@@ -251,6 +255,9 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
           amountColor: 'text-destructive',
           icon: <Receipt className="w-4 h-4" />,
           raw: e,
+          // Expenses keep who entered them as an object; the list reads names.
+          recordedByName: e.recordedBy?.name,
+          recordedByRole: e.recordedBy?.role,
         });
       });
     }

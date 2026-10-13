@@ -515,6 +515,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
           paid: result.paid,
           balance: result.balance,
           paymentMethod: method,
+          cashierName: result.sales[0]?.recordedByName || undefined,
           footerMessage: managerSettings.receiptFooterMessage || 'Thank you for your patronage! 🙏',
           receiptCurrency: managerSettings.receiptCurrency || '₦',
         };

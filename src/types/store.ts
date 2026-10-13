@@ -66,6 +66,9 @@ export interface Restock {
   date: string;
   batchId?: string;
   funding?: 'balance' | 'new_money';
+  /** Who received the stock, as on a sale (see src/lib/recorded-by.ts). */
+  recordedByName?: string;
+  recordedByRole?: string;
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'pos' | 'mixed';

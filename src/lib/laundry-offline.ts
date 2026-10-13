@@ -3,6 +3,18 @@ import { appendRunEvent, type LaundryFulfillment, type LaundryRunStatus, type Ru
 import { generateLaundryReceiptNumber, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
 import { isWorkerCode, readWorkerSession } from '@/lib/staff-session';
 import { deviceKey } from '@/lib/staff-join';
+import { currentActor } from '@/lib/current-actor';
+
+/**
+ * One move of a bundle along the wash: to which stage, when, and who did it.
+ * The cloud keeps the same list in service_metadata.stage_history.
+ */
+export interface LaundryStageStep {
+  stage: LaundryWorkflowStage;
+  at: string;
+  by?: string;
+  role?: string;
+}
 
 export type LaundrySyncStatus = 'pending' | 'synced';
 export type LaundryWorkflowStage = 'received' | 'washing' | 'drying' | 'ironing' | 'folding' | 'ready' | 'collected';
@@ -100,6 +112,8 @@ export interface LocalLaundryRecord {
   createdAt: string;
   workflowStage?: LaundryWorkflowStage;
   stageUpdatedAt?: string;
+  /** Each move along the wash, with who made it (see LaundryStageStep). */
+  stageHistory?: LaundryStageStep[];
   syncStatus: LaundrySyncStatus;
   syncedAt?: string;
   cloudOrderId?: string;
@@ -385,9 +399,19 @@ export function getLocalLaundryRecord(accessCode: string, clientRef: string): Lo
 
 export function setLocalLaundryStage(accessCode: string, clientRef: string, stage: LaundryWorkflowStage): LocalLaundryRecord | null {
   if (!isLaundryWorkflowStage(stage)) return null;
+  const existing = getLocalLaundryRecord(accessCode, clientRef);
+  const at = new Date().toISOString();
+  // Who moved it, kept on the bundle so the timeline can name them even
+  // before the cloud has it. Setting the stage it already has adds nothing.
+  const actor = currentActor();
+  const history = existing?.stageHistory || [];
+  const stageHistory = existing && existing.workflowStage === stage
+    ? history
+    : [...history, { stage, at, by: actor.name, role: actor.role }].slice(-30);
   return updateLocalRecord(accessCode, clientRef, {
     workflowStage: stage,
-    stageUpdatedAt: new Date().toISOString(),
+    stageUpdatedAt: at,
+    stageHistory,
     syncStatus: 'pending',
     lastSyncError: undefined,
   });
@@ -457,6 +481,7 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     delivery_fee: record.deliveryFee,
     recorded_by_name: record.recordedByName,
     recorded_by_role: record.recordedByRole,
+    stage_history: record.stageHistory,
     receipt_number: record.tagCode,
     tag_code: record.tagCode,
     instructions: record.notes,
@@ -549,10 +574,12 @@ export function mergeLaundryRecords(cloudOrders: any[], localRecords: LocalLaund
 
 async function syncLaundryStage(accessCode: string, record: LocalLaundryRecord): Promise<{ order_id?: string } | null> {
   const stage = record.workflowStage || 'received';
+  // The person who moved it to this stage, as this phone recorded at the time.
+  const step = [...(record.stageHistory || [])].reverse().find(entry => entry.stage === stage);
   const { data, error } = await laundryDoor(accessCode, 'stage', {
     p_client_ref: record.clientRef,
     p_stage: stage,
-  });
+  }, step ? { name: step.by, role: step.role } : undefined);
   if (error) throw error;
   return data || null;
 }
@@ -606,10 +633,18 @@ const SHOP_REFUSALS = /^(store not found|this store is not a laundry business|st
  * phone - for an hour, or until the worker signs in again - rather than each
  * one being set aside as if it were wrong.
  */
-async function laundryDoor(code: string, kind: 'walkin' | 'stage', args: Record<string, unknown>): Promise<{ data: any; error: any }> {
+async function laundryDoor(
+  code: string,
+  kind: 'walkin' | 'stage',
+  args: Record<string, unknown>,
+  by?: { name?: string; role?: string },
+): Promise<{ data: any; error: any }> {
   const normalized = normalizeAccessCode(code);
   if (!isWorkerCode(normalized)) {
-    return (supabase as any).rpc(kind === 'walkin' ? 'create_laundry_walkin_v2' : 'update_laundry_walkin_stage', { p_access_code: normalized, ...args });
+    // Who moved it, from the shop's own phone. A worker's door takes the name
+    // from the worker's pass instead, so nothing is sent from here for it.
+    const who = kind === 'stage' && by?.name ? { p_by_name: by.name, p_by_role: by.role || null } : {};
+    return (supabase as any).rpc(kind === 'walkin' ? 'create_laundry_walkin_v2' : 'update_laundry_walkin_stage', { p_access_code: normalized, ...args, ...who });
   }
   const session = readWorkerSession();
   if (!session) return { data: null, error: { code: 'P0001', message: 'Worker pass: expired' } };
@@ -794,10 +829,11 @@ export async function updateLaundryOrderStage(
   }
 
   if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+  const actor = currentActor();
   const { data, error } = await laundryDoor(accessCode, 'stage', {
     p_client_ref: clientRef,
     p_stage: stage,
-  });
+  }, { name: actor.name, role: actor.role });
   if (error) return false;
   if (typeof window !== 'undefined' && data?.order_id) {
     window.dispatchEvent(new CustomEvent('storeflow:order-created', { detail: { orderId: data.order_id } }));

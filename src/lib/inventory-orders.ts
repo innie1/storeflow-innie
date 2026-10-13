@@ -7,6 +7,38 @@ export function orderNotes(order: any): Record<string, any> {
   try { const value = JSON.parse(order.notes || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; }
   catch { return { instructions: order.notes || '' }; }
 }
+
+/**
+ * Who moved an order along: accepted it, started it, marked it ready,
+ * completed, rejected or cancelled it. Kept in the order's notes next to the
+ * stock reservation, so it travels in the same atomic commit as the change it
+ * describes, and the order card and receipt can name the person.
+ */
+export interface OrderStatusStep { status: string; at: string; by?: string; role?: string }
+
+export function withStatusStep(notes: Record<string, any>, status: string, actor: { name?: string; role?: string } | null | undefined, at: Date = new Date()): Record<string, any> {
+  const earlier: OrderStatusStep[] = Array.isArray(notes.status_by) ? notes.status_by : [];
+  const step: OrderStatusStep = { status, at: at.toISOString() };
+  const by = String(actor?.name || '').trim();
+  if (by) { step.by = by; if (actor?.role) step.role = String(actor.role); }
+  return { ...notes, status_by: [...earlier, step].slice(-20) };
+}
+
+export function orderStatusSteps(order: any): OrderStatusStep[] {
+  const steps = orderNotes(order).status_by;
+  return Array.isArray(steps) ? steps.filter((step: any) => step && step.status && step.at) : [];
+}
+
+/** The person to name as having served the customer: who completed it, else readied or accepted it. */
+export function orderServedBy(order: any): string | null {
+  const steps = orderStatusSteps(order);
+  for (const status of ['Completed', 'Ready', 'Accepted']) {
+    const step = [...steps].reverse().find(entry => entry.status === status && entry.by);
+    if (step?.by) return step.by;
+  }
+  return null;
+}
+
 /** Pure proposal. It is persisted only by the atomic server commit. */
 export function prepareInventoryOrder(store: StoreData, order: any, status: string, metadata: Record<string, any> = {}) {
   const notes = { ...orderNotes(order), ...metadata };

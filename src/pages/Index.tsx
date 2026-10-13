@@ -1,7 +1,7 @@
 import { commitCashCheckout } from '@/lib/committed-checkout';
 import StoreIntegrityPanel from '@/components/StoreIntegrityPanel';
 import { cloudSnapshot, getPendingStoreSync, requireStoreSynced, STORE_SYNC_EVENT } from '@/lib/store-cloud-sync';
-import { prepareInventoryOrder } from '@/lib/inventory-orders';
+import { prepareInventoryOrder, withStatusStep } from '@/lib/inventory-orders';
 import { same } from '@/lib/store-sync-guard';
 import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { canOpenTab } from '@/lib/permissions';
@@ -946,7 +946,9 @@ export default function Index() {
       const local = loadStore(store.accessCode) || store;
       const targetOrder = orders.find(o => o.id === orderId);
       if (!targetOrder) throw new Error('Order not found.');
-      const proposal = prepareInventoryOrder(local, targetOrder, newStatus, metadata);
+      const prepared = prepareInventoryOrder(local, targetOrder, newStatus, metadata);
+      // Who did it, carried in the same commit as the change itself.
+      const proposal = { ...prepared, notes: withStatusStep(prepared.notes, newStatus, currentUser) };
       const { data, error } = await (supabase as any).rpc('commit_store_snapshot', {
         p_store_id: store.id,
         p_base: cloudSnapshot(local), p_next: cloudSnapshot(proposal.store),
@@ -971,7 +973,7 @@ export default function Index() {
     } catch (err: any) {
       showToast('Order was not confirmed: ' + err.message, 'error');
     } finally { orderCommitBusy.current = false; }
-  }, [store, orders, getNormalizedStatus]);
+  }, [store, orders, getNormalizedStatus, currentUser]);
 
   const setTab = useCallback((targetTab: TabId) => {
     setTabState(targetTab);

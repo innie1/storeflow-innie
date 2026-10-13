@@ -11,6 +11,7 @@ import {
   DEFAULT_MANAGER_SETTINGS, InventoryMovement, Loan, RecurringBill, Withdrawal, ScanEvent, PurchaseOrderRecord,
   BalanceAdjustment, SavingsGoal } from '@/types/store';
 import { attribution } from '@/lib/recorded-by';
+import { currentActor } from '@/lib/current-actor';
 import { backfillCustomerBook } from '@/lib/customer-backfill';
 import { countDebtors } from '@/lib/customer-key';
 import { getLowStockThreshold } from '@/lib/settings';
@@ -1533,6 +1534,8 @@ export function receiveStock(
       date: now,
       batchId,
       funding,
+      // Who received it, so History can say so as it does for a sale.
+      ...attribution(actorName ? { name: actorName, role: actorRole } : currentActor()),
     });
     const currentPriceHistory = p.priceHistory || (p.costPrice > 0 ? [{ costPrice: p.costPrice, date: p.addedAt || now }] : []);
     const newPriceHistory = entry.costPrice > 0

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import ContactPickButton from '@/components/ContactPickButton';
 import { StoreData, ManagerSettings } from '@/types/store';
 import { printReceipt } from '@/lib/print-engine';
+import { orderServedBy } from '@/lib/inventory-orders';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
@@ -27,6 +28,8 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
   const status = (order?.status || '').trim();
   const normStatus = status.toLowerCase();
   const isCancelled = normStatus === 'cancelled';
+  // Who completed (or readied, or accepted) it, for "Served by".
+  const servedBy = orderServedBy(order);
   const isRejected = normStatus === 'rejected';
 
   const parseNotes = (notesStr?: string) => {
@@ -58,6 +61,7 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
     receipt += `Date: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
     receipt += `Order #: ${order?.order_number || ''}\n`;
     if (order?.customer_name) receipt += `Customer: ${order.customer_name}\n`;
+    if (servedBy) receipt += `Served by: ${servedBy}\n`;
     receipt += `------------------------------\n`;
     items.forEach((i: any) => {
       receipt += `${i.productName}\n`;
@@ -118,6 +122,7 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
       storePhoto: settings.receiptLogoEnabled && profile?.photo ? profile.photo : undefined,
       receiptNumber: order?.order_number || order?.id || '',
       date: order?.created_at || new Date().toISOString(),
+      cashierName: servedBy || undefined,
       items,
       subtotal,
       discount: 0,
@@ -180,6 +185,7 @@ export default function OrderReceipt({ store, order, onClose }: OrderReceiptProp
           </div>
           <p className="text-muted-foreground">Order #: {order?.order_number}</p>
           {order?.customer_name && <p className="text-muted-foreground">Customer: {order.customer_name}</p>}
+          {servedBy && <p className="text-muted-foreground">Served by: {servedBy}</p>}
 
           <div className="border-t border-dashed border-border my-2" />
 

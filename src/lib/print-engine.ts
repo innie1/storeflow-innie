@@ -10,6 +10,7 @@ export interface PrintReceiptData {
   storePhoto?: string;
   receiptNumber: string;
   date: string;
+  /** Who served the customer, printed as "Served by". */
   cashierName?: string;
   customerName?: string;
   items: { productName: string; quantity: number; unitPrice: number; total: number }[];
@@ -128,7 +129,7 @@ export function generateEscPosBytes(data: PrintReceiptData, paperWidth: '58mm' |
   encoder.align('left');
   encoder.line(`Date: ${new Date(data.date).toLocaleString()}`);
   encoder.line(`Receipt #: ${data.receiptNumber.toUpperCase()}`);
-  if (data.cashierName) encoder.line(`Cashier: ${data.cashierName}`);
+  if (data.cashierName) encoder.line(`Served by: ${data.cashierName}`);
   if (data.customerName) encoder.line(`Customer: ${data.customerName}`);
 
   encoder.divider('-');
@@ -222,7 +223,7 @@ export function generatePlainTextReceipt(data: PrintReceiptData, paperWidth: '58
 
   out += `Date: ${new Date(data.date).toLocaleString()}\n`;
   out += `Receipt #: ${data.receiptNumber.toUpperCase()}\n`;
-  if (data.cashierName) out += `Cashier: ${data.cashierName}\n`;
+  if (data.cashierName) out += `Served by: ${data.cashierName}\n`;
   if (data.customerName) out += `Customer: ${data.customerName}\n`;
   out += '-'.repeat(maxChars) + '\n';
 
@@ -519,7 +520,7 @@ export function printSystem(data: PrintReceiptData, paperWidth: '58mm' | '80mm' 
             <div style="font-size: ${isThermal ? '10px' : '12px'}; color: #444;">
               <div>Date: ${new Date(data.date).toLocaleString()}</div>
               <div>Receipt #: ${data.receiptNumber.toUpperCase()}</div>
-              ${data.cashierName ? `<div>Cashier: ${data.cashierName}</div>` : ''}
+              ${data.cashierName ? `<div>Served by: ${data.cashierName}</div>` : ''}
               ${data.customerName ? `<div>Customer: ${data.customerName}</div>` : ''}
             </div>
 
