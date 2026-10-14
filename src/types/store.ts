@@ -1129,6 +1129,12 @@ export interface StoreData {
   pieceWork?: PieceWorkEntry[];
   /** What has actually been handed over to those workers. */
   workerPayments?: WorkerPayment[];
+  /**
+   * Customer payments workers took on their own phones that this shop has
+   * already booked, by id, so one arriving twice is booked once. The newest
+   * few hundred only: each arrives once, and only near the last collection.
+   */
+  appliedStaffPayments?: string[];
   /** Expenses workers reported, waiting or decided. See StaffExpenseRequest. */
   staffExpenseRequests?: StaffExpenseRequest[];
   /**

@@ -944,6 +944,18 @@ export default function Index() {
     try {
       // Service controls have already committed their own server workflow RPC.
       if (metadata?.serviceSession) {
+        /*
+         * Who moved it, for a service as for an order of goods: the step is
+         * noted beside the others in the order's notes, and the order card
+         * names the person. Only when the status changes - pausing and
+         * resuming a running service is not a new step - so one small call.
+         */
+        const before = orders.find(o => o.id === orderId);
+        if (before && getNormalizedStatus(before.status) !== getNormalizedStatus(newStatus)) {
+          await (supabase as any).rpc('service_order_note_step', {
+            p_order_id: orderId, p_status: newStatus, p_by_name: currentUser?.name || null, p_by_role: currentUser?.role || null,
+          }).then(() => undefined, () => undefined);
+        }
         const { data, error } = await supabase.from('orders').select('*, order_items(*)').eq('id', orderId).single();
         if (error) throw error;
         setOrders(prev => prev.map(o => o.id === orderId ? { ...data, status: getNormalizedStatus(data.status) } : o));
@@ -1456,8 +1468,12 @@ export default function Index() {
       } else if (result.state === 'fresh') {
         setStore(prev => (prev && prev.accessCode === result.store.accessCode ? result.store : prev));
         setCurrentUser((prev: any) => prev ? { ...prev, ...result.worker } : prev);
-        // The pass is good: bundles waiting on this phone can go now.
-        void resumeWorkerLaundry(workerCopyCode).catch(() => {});
+        // The pass is good: bundles waiting on this phone can go now - and
+        // then the money taken on them, which the cloud takes only once the
+        // bundle is there.
+        void resumeWorkerLaundry(workerCopyCode)
+          .then(() => { if (latestStore.current?.staffDevice) return sendWorkerRecords(latestStore.current); })
+          .catch(() => {});
       }
     };
     void refresh();

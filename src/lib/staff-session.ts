@@ -192,31 +192,87 @@ export function unsentRecords(store: StoreData): Unsent {
   };
 }
 
+/** Money a worker took on a bundle, as the cloud's door takes it. */
+export interface WorkerLaundryPayment {
+  id: string;
+  /** 'intake' is the bundle being taken in - with a deposit, or with nothing paid. */
+  kind: 'intake' | 'payment';
+  clientRef: string;
+  amount: number;
+  at: string;
+}
+
+/**
+ * The money this phone took that the owner has not got.
+ *
+ * A worker taking a bundle in, or handing one back and being paid, records
+ * it on this phone exactly as the counter phone does: an amount owed on the
+ * bundle, and each payment against it. That stayed on this phone - a worker's
+ * copy is never sent up as the shop - so the owner's sales and Money Owed
+ * never heard of it. Each bundle's taking-in and each later payment now go
+ * up once, through staff_send_payments, which checks the bundle exists and
+ * that its total is never exceeded. Read from what is already saved: nothing
+ * new is stored.
+ */
+export function unsentLaundryPayments(store: StoreData): WorkerLaundryPayment[] {
+  const sent = readSent(store.accessCode);
+  const out: WorkerLaundryPayment[] = [];
+  for (const owed of store.pendingPayments || []) {
+    if (!String(owed.id || '').startsWith('laundry-')) continue;
+    const clientRef = owed.id.slice('laundry-'.length);
+    const events = owed.events || [];
+    const deposit = events.filter(event => event.date === owed.createdAt).reduce((sum, event) => sum + (Number(event.amount) || 0), 0);
+    out.push({ id: `${owed.id}-in`, kind: 'intake', clientRef, amount: Math.round(deposit * 100) / 100, at: owed.createdAt });
+    for (const event of events) {
+      if (event.date === owed.createdAt || !(Number(event.amount) > 0)) continue;
+      out.push({ id: `${owed.id}-${Date.parse(event.date)}`, kind: 'payment', clientRef, amount: Number(event.amount), at: event.date });
+    }
+  }
+  return out.filter(payment => !sent.has(payment.id)).slice(0, 50);
+}
+
 export type SendResult = { state: 'sent' | 'nothing' | 'unchanged' | 'shut_out' };
 
 /** Send what this phone has that the cloud has not, through the worker's door. */
 export async function sendWorkerRecords(store: StoreData): Promise<SendResult> {
   if (!store.staffDevice) return { state: 'nothing' };
   const unsent = unsentRecords(store);
-  if (!unsent.customers.length && !unsent.expenseRequests.length && !unsent.pieceWork.length) return { state: 'nothing' };
+  const payments = unsentLaundryPayments(store);
+  const records = unsent.customers.length + unsent.expenseRequests.length + unsent.pieceWork.length;
+  if (!records && !payments.length) return { state: 'nothing' };
   const session = readWorkerSession();
   if (!session || !navigator.onLine) return { state: 'unchanged' };
-  const reply = await callCloud('staff_send_records', {
-    p_token: session.token, p_device_key: deviceKey(),
-    p_customers: unsent.customers, p_expense_requests: unsent.expenseRequests, p_piece_work: unsent.pieceWork,
-  });
-  if (!reply) return { state: 'unchanged' };
-  if (!reply.ok) {
-    if (SHUT_OUT.has(reply.error)) { forgetWorkerPhone(); return { state: 'shut_out' }; }
-    return { state: 'unchanged' };
-  }
-  // The cloud has answered for every one of them: kept, or refused for a
-  // reason sending again would not change (a role that may not add
-  // customers, an amount that is not money). Either way, not sent again.
   const sent = readSent(store.accessCode);
-  for (const item of [...unsent.customers, ...unsent.expenseRequests, ...unsent.pieceWork]) sent.add(String(item.id));
+  let any = false;
+
+  if (records) {
+    const reply = await callCloud('staff_send_records', {
+      p_token: session.token, p_device_key: deviceKey(),
+      p_customers: unsent.customers, p_expense_requests: unsent.expenseRequests, p_piece_work: unsent.pieceWork,
+    });
+    if (reply && !reply.ok && SHUT_OUT.has(reply.error)) { forgetWorkerPhone(); return { state: 'shut_out' }; }
+    if (reply?.ok) {
+      // The cloud has answered for every one of them: kept, or refused for a
+      // reason sending again would not change (a role that may not add
+      // customers, an amount that is not money). Either way, not sent again.
+      for (const item of [...unsent.customers, ...unsent.expenseRequests, ...unsent.pieceWork]) sent.add(String(item.id));
+      any = true;
+    }
+  }
+
+  if (payments.length) {
+    const reply = await callCloud('staff_send_payments', { p_token: session.token, p_device_key: deviceKey(), p_payments: payments });
+    if (reply && !reply.ok && SHUT_OUT.has(reply.error)) { forgetWorkerPhone(); return { state: 'shut_out' }; }
+    if (reply?.ok) {
+      // Only what the cloud took: a payment on a bundle the cloud has not got
+      // yet waits, and goes with the next send once the bundle is there.
+      for (const id of (Array.isArray(reply.payments) ? reply.payments : [])) sent.add(String(id));
+      any = true;
+    }
+  }
+
   writeSent(store.accessCode, sent);
-  return { state: 'sent' };
+  return { state: any ? 'sent' : 'unchanged' };
 }
 
 async function callCloud(fn: string, args: Record<string, unknown>): Promise<Record<string, any> | null> {

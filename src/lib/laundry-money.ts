@@ -70,6 +70,8 @@ export interface LaundryPaymentInput {
   /** When the bundle is promised, so an unpaid balance has a due date. */
   promisedFor?: string;
   at?: string;
+  /** Who took the money, when it was not this phone's own user: a worker. */
+  takenBy?: string;
 }
 
 const money = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
@@ -187,9 +189,9 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
     ? [{
         date: at,
         amount: actuallyTaken,
-        note: settlement.change > 0
+        note: (settlement.change > 0
           ? `${input.tagCode} payment — ₦${settlement.tendered.toLocaleString()} tendered, ₦${settlement.change.toLocaleString()} change`
-          : `${input.tagCode} payment`,
+          : `${input.tagCode} payment`) + (input.takenBy ? ` (taken by ${input.takenBy})` : ''),
       }]
     : [];
 
