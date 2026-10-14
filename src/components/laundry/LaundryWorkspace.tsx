@@ -33,6 +33,7 @@ import { saveStore } from '@/lib/store-data';
 import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, Ticket, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
 import ClaimTicket from '@/components/laundry/ClaimTicket';
+import ChangeServiceSheet from '@/components/laundry/ChangeServiceSheet';
 import { GUIDE_STEP_SIGNAL, guideStepOnScreen } from '@/lib/guide-activity';
 import LaundryRuns from '@/components/laundry/LaundryRuns';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
@@ -113,6 +114,8 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
   /** The bundle whose list of people who may collect is being changed. */
   const [collectorEdit, setCollectorEdit] = useState<{ record: DecoratedRecord; list: { name: string; phone: string }[] } | null>(null);
   const [ticket, setTicket] = useState<DecoratedRecord | null>(null);
+  /** The bundle being moved to another service. */
+  const [serviceChange, setServiceChange] = useState<DecoratedRecord | null>(null);
   // What the guide is displaying, straight from the guide rather than guessed.
   const [guideStep, setGuideStep] = useState<string | null>(() => guideStepOnScreen());
 
@@ -385,6 +388,9 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
 
   return (
     <div className="space-y-4 pt-1">
+      {serviceChange && (
+        <ChangeServiceSheet store={store} record={serviceChange} onUpdate={onUpdate} onClose={() => setServiceChange(null)} />
+      )}
       {ticket && (
         <ClaimTicket
           store={store}
@@ -962,6 +968,17 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                       >
                         <Ticket className="w-4 h-4" /> Ticket
                       </button>
+
+                      {/* Tagged as the wrong service - full service for
+                          clothes that only came to be ironed. Until handed over. */}
+                      {record.stage !== 'collected' && (
+                        <button
+                          onClick={() => setServiceChange(record)}
+                          className="h-10 px-4 rounded-xl bg-surface-2 border border-border text-xs font-display font-black"
+                        >
+                          Change service
+                        </button>
+                      )}
 
                       {/* Was a bare dropdown showing the current stage, which
                           reads as a label rather than something to change. */}

@@ -9,6 +9,7 @@ import SetupChecklist from '@/components/SetupChecklist';
 import { loadStoreOrders, mergeOrders, readOrdersCache } from '@/lib/orders-cache';
 import { setShopCloudOrders, shopLaundryRecords } from '@/lib/shop-laundry';
 import { noticePriceCuts } from '@/lib/price-cuts';
+import { BUNDLE_REPLACED_EVENT, noticeServiceChanges } from '@/lib/laundry-service-change';
 import { endPractice } from '@/lib/guide-activity';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
 import { celebrationShown, guideProgress, hasPractised, markCelebrationShown, nextStep, PRACTISED_SIGNAL } from '@/lib/setup-guide';
@@ -471,12 +472,15 @@ export default function Index() {
   useMemo(() => {
     if (store?.accessCode) setShopCloudOrders(store.accessCode, orders);
   }, [store?.accessCode, orders]);
-  // A bundle charged under the price list, told to the owner once - read
-  // from the bundles just handed over, so the cloud is asked nothing more.
+  // A bundle charged under the price list, or moved to another service, told
+  // to the owner once - and what the customer owes kept in step - read from
+  // the bundles just handed over, so the cloud is asked nothing more.
   useEffect(() => {
     const current = latestStore.current;
     if (currentUser?.role !== 'owner' || !current?.accessCode) return;
-    const next = noticePriceCuts(current, shopLaundryRecords(current.accessCode));
+    const records = shopLaundryRecords(current.accessCode);
+    const cut = noticePriceCuts(current, records);
+    const next = noticeServiceChanges(cut || current, records) || cut;
     if (!next) return;
     saveStore(next);
     setStore(next);
@@ -751,6 +755,20 @@ export default function Index() {
     };
     window.addEventListener('storeflow:order-created', handleCreatedOrder);
     return () => window.removeEventListener('storeflow:order-created', handleCreatedOrder);
+  }, [getNormalizedStatus]);
+
+  // A bundle changed on this phone, as the cloud now has it - shown at once,
+  // on a worker's phone too, which cannot read the orders table itself.
+  useEffect(() => {
+    const replace = (event: Event) => {
+      const order = (event as CustomEvent).detail?.order;
+      if (!order?.id) return;
+      setOrders(prev => prev.map(existing => existing.id === order.id
+        ? { ...existing, ...order, status: getNormalizedStatus(order.status) }
+        : existing));
+    };
+    window.addEventListener(BUNDLE_REPLACED_EVENT, replace);
+    return () => window.removeEventListener(BUNDLE_REPLACED_EVENT, replace);
   }, [getNormalizedStatus]);
 
   // Auto-heal / maintain background push notification subscription when store is loaded

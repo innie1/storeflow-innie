@@ -264,6 +264,30 @@ export function cloudBundleBalance(store: StoreData, clientRef: string, order: {
   return money(Math.max(0, (Number(order.total) || 0) - order.paid_so_far - notYetCounted));
 }
 
+/**
+ * A bundle's price changed after intake: what the customer owes follows it.
+ * What was paid stays paid; paid over the new price leaves nothing owed, and
+ * the difference is the shop's to hand back. Unchanged when there is no debt
+ * on this phone or the price is the same.
+ */
+export function repriceLaundryDebt(store: StoreData, clientRef: string, newTotal: number, serviceName?: string): StoreData {
+  const id = `laundry-${clientRef}`;
+  const entry = (store.pendingPayments || []).find(item => item.id === id);
+  const total = money(Math.max(0, newTotal));
+  if (!entry || money(entry.total) === total) return store;
+  const balance = money(Math.max(0, total - money(entry.paid)));
+  const repriced: PendingPayment = {
+    ...entry,
+    total,
+    balance,
+    status: balance <= 0 ? 'paid' : 'pending',
+    items: (entry.items || []).map((item, index) => index === 0
+      ? { ...item, unitPrice: total, ...(serviceName ? { productName: String(item.productName || '').replace(/^.*?(?= · )/, serviceName) } : {}) }
+      : item),
+  } as PendingPayment;
+  return { ...store, pendingPayments: (store.pendingPayments || []).map(item => item.id === id ? repriced : item) };
+}
+
 /** What is still owed on a bundle, or 0 when it is settled or unknown. */
 export function laundryBalance(store: StoreData, clientRef: string): number {
   const entry = (store.pendingPayments || []).find(item => item.id === `laundry-${clientRef}`);

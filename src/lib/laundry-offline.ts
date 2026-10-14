@@ -131,6 +131,44 @@ export interface LocalLaundryRecord {
   recordedByRole?: string;
   /** What the price list said, kept only when the price charged was lower - so the owner can see it. */
   listPrice?: number;
+  /** Each time the service was changed after intake, with why and by whom. The last ten. */
+  serviceChanges?: ServiceChange[];
+}
+
+/** A bundle moved to another service after it was taken in - "Full service" that was only ironing. */
+export interface ServiceChange {
+  at: string;
+  from?: string;
+  to: string;
+  fromTotal: number;
+  toTotal: number;
+  reason: string;
+  by?: string;
+  role?: string;
+}
+
+/** The cloud keeps these as `service_changes`, in its own spelling. */
+export function readServiceChanges(value: unknown): ServiceChange[] | undefined {
+  if (!Array.isArray(value) || !value.length) return undefined;
+  return value
+    .filter(step => step && typeof step === 'object' && step.at && step.to)
+    .map((step: any) => ({
+      at: String(step.at),
+      from: step.from ? String(step.from) : undefined,
+      to: String(step.to),
+      fromTotal: Number(step.from_total ?? step.fromTotal) || 0,
+      toTotal: Number(step.to_total ?? step.toTotal) || 0,
+      reason: String(step.reason || ''),
+      by: step.by ? String(step.by) : undefined,
+      role: step.role ? String(step.role) : undefined,
+    }));
+}
+
+function writeServiceChanges(changes: ServiceChange[] | undefined): Record<string, unknown>[] | undefined {
+  return changes?.map(step => ({
+    at: step.at, from: step.from, to: step.to, from_total: step.fromTotal, to_total: step.toTotal,
+    reason: step.reason, by: step.by, role: step.role,
+  }));
 }
 
 export interface NewLocalLaundryRecord {
@@ -488,6 +526,7 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     recorded_by_name: record.recordedByName,
     recorded_by_role: record.recordedByRole,
     list_price: record.listPrice,
+    service_changes: writeServiceChanges(record.serviceChanges),
     stage_history: record.stageHistory,
     receipt_number: record.tagCode,
     tag_code: record.tagCode,
@@ -820,6 +859,96 @@ async function sendLaundryRecord(normalized: string, clientRef: string): Promise
   } finally {
     inflight.delete(key);
   }
+}
+
+export interface ServiceChangeInput {
+  serviceId: string;
+  serviceName: string;
+  pricing: string;
+  billingQuantity: number;
+  total: number;
+  garments: LaundryGarmentSelection[];
+  reason: string;
+}
+
+/**
+ * Moves a bundle to another service, with the reason.
+ *
+ * A bundle still waiting on this phone just changes here and goes up as it
+ * now is. One the cloud already has is changed there - one call, and only
+ * online, so two phones never hold different prices for the same clothes.
+ * Returns the bundle as the cloud now has it, for the screen to show.
+ */
+export async function changeLaundryService(
+  accessCode: string,
+  clientRef: string,
+  input: ServiceChangeInput,
+): Promise<{ order?: any; error?: string }> {
+  const code = normalizeAccessCode(accessCode);
+  const reason = input.reason.trim().slice(0, 200);
+  if (!reason) return { error: 'Say why the service is changing.' };
+  const actor = currentActor();
+  const local = getLocalLaundryRecord(code, clientRef);
+  const garments = input.garments.map(item => ({ ...item }));
+  const change: ServiceChange = {
+    at: new Date().toISOString(),
+    from: local?.serviceName,
+    to: input.serviceName,
+    fromTotal: local?.total ?? 0,
+    toTotal: Math.max(0, input.total),
+    reason,
+    by: actor.name || undefined,
+    role: actor.role || undefined,
+  };
+  const keepHere = () => local && updateLocalRecord(code, clientRef, {
+    serviceId: input.serviceId,
+    serviceName: input.serviceName,
+    pricing: input.pricing,
+    billingQuantity: input.billingQuantity,
+    total: Math.max(0, input.total),
+    garments,
+    listPrice: undefined,
+    serviceChanges: [...(local.serviceChanges || []), change].slice(-10),
+  });
+
+  if (local && local.syncStatus !== 'synced' && !local.cloudOrderId) {
+    keepHere();
+    return {};
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return { error: 'Connect to the internet to change this bundle.' };
+
+  const args = {
+    p_client_ref: clientRef,
+    p_service_id: input.serviceId,
+    p_service_name: input.serviceName,
+    p_pricing: input.pricing,
+    p_billing_quantity: input.billingQuantity,
+    p_total: Math.max(0, input.total),
+    p_garments: garments.map(item => ({
+      garment_type: item.garmentType,
+      quantity: item.quantity,
+      unit_price: Math.max(0, Number(item.unitPrice) || 0),
+      subtotal: Math.max(0, Number(item.subtotal) || 0),
+    })),
+    p_reason: reason,
+  };
+  let order: any = null;
+  if (isWorkerCode(code)) {
+    const session = readWorkerSession();
+    if (!session) return { error: 'Sign in again with your PIN.' };
+    const { data, error } = await (supabase as any).rpc('staff_change_laundry_service', { p_token: session.token, p_device_key: deviceKey(), ...args });
+    if (error) return { error: String(error.message || 'Could not change it. Try again.') };
+    if (!data?.ok) return { error: data?.error === 'not_allowed' ? 'Your role cannot change bundles.' : 'Sign in again with your PIN.' };
+    order = data.order;
+  } else {
+    const { data, error } = await (supabase as any).rpc('change_laundry_service', {
+      p_access_code: code, ...args, p_by_name: actor.name || null, p_by_role: actor.role || null,
+    });
+    if (error) return { error: String(error.message || 'Could not change it. Try again.') };
+    order = data;
+  }
+  keepHere();
+  return { order };
 }
 
 export async function updateLaundryOrderStage(

@@ -1139,6 +1139,8 @@ export interface StoreData {
   appliedStaffPayments?: string[];
   /** Bundles the owner was already told were charged under the price list. The newest two hundred. */
   priceCutsNoticed?: string[];
+  /** Service changes on bundles the owner was already told about, as `clientRef@at`. The newest two hundred. */
+  serviceChangesNoticed?: string[];
   /** Expenses workers reported, waiting or decided. See StaffExpenseRequest. */
   staffExpenseRequests?: StaffExpenseRequest[];
   /**

@@ -1,6 +1,7 @@
 import {
   getLocalLaundryRecords,
   isWalkInLaundryOrder,
+  readServiceChanges,
   LAUNDRY_WORKFLOW_STAGES,
   type LaundryStageStep,
   type LaundryWorkflowStage,
@@ -79,6 +80,7 @@ export function orderToLaundryRecord(order: any, accessCode: string): LocalLaund
     recordedByName: m.recorded_by_name || undefined,
     recordedByRole: m.recorded_by_role || undefined,
     listPrice: Number(m.list_price) || undefined,
+    serviceChanges: readServiceChanges(m.service_changes),
     syncStatus: 'synced',
     cloudOrderId: order?.id ? String(order.id) : undefined,
   } as LocalLaundryRecord;
