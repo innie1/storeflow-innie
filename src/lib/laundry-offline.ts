@@ -129,6 +129,8 @@ export interface LocalLaundryRecord {
    */
   recordedByName?: string;
   recordedByRole?: string;
+  /** What the price list said, kept only when the price charged was lower - so the owner can see it. */
+  listPrice?: number;
 }
 
 export interface NewLocalLaundryRecord {
@@ -177,6 +179,7 @@ export interface NewLocalLaundryRecord {
   garments: LaundryGarmentSelection[];
   recordedByName?: string;
   recordedByRole?: string;
+  listPrice?: number;
 }
 
 export const LAUNDRY_LOCAL_CHANGED_EVENT = 'storeflow:laundry-local-changed';
@@ -312,6 +315,7 @@ export function createLocalLaundryRecord(input: NewLocalLaundryRecord): LocalLau
     syncStatus: 'pending',
     recordedByName: input.recordedByName,
     recordedByRole: input.recordedByRole,
+    ...(Number(input.listPrice) > Math.max(0, Number(input.total) || 0) ? { listPrice: Number(input.listPrice) } : {}),
   };
 
   writeLocalLaundryRecords(accessCode, [record, ...existing]);
@@ -483,6 +487,7 @@ export function localLaundryRecordToOrder(record: LocalLaundryRecord): any {
     delivery_fee: record.deliveryFee,
     recorded_by_name: record.recordedByName,
     recorded_by_role: record.recordedByRole,
+    list_price: record.listPrice,
     stage_history: record.stageHistory,
     receipt_number: record.tagCode,
     tag_code: record.tagCode,
@@ -774,6 +779,8 @@ async function sendLaundryRecord(normalized: string, clientRef: string): Promise
         wash_method_name: record.washMethodName || '',
         dry_method_id: record.dryMethodId || '',
         dry_method_name: record.dryMethodName || '',
+        ...(record.listPrice ? { list_price: record.listPrice } : {}),
+        ...(record.recordedByName ? { recorded_by_name: record.recordedByName, recorded_by_role: record.recordedByRole || '' } : {}),
       }),
       p_garments: record.garments.map(item => ({
         garment_type: item.garmentType,

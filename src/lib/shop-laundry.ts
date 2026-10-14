@@ -78,6 +78,7 @@ export function orderToLaundryRecord(order: any, accessCode: string): LocalLaund
     stageHistory: Array.isArray(m.stage_history) ? (m.stage_history as LaundryStageStep[]) : undefined,
     recordedByName: m.recorded_by_name || undefined,
     recordedByRole: m.recorded_by_role || undefined,
+    listPrice: Number(m.list_price) || undefined,
     syncStatus: 'synced',
     cloudOrderId: order?.id ? String(order.id) : undefined,
   } as LocalLaundryRecord;

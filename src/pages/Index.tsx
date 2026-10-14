@@ -7,7 +7,8 @@ import { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } fro
 import { canOpenTab } from '@/lib/permissions';
 import SetupChecklist from '@/components/SetupChecklist';
 import { loadStoreOrders, mergeOrders, readOrdersCache } from '@/lib/orders-cache';
-import { setShopCloudOrders } from '@/lib/shop-laundry';
+import { setShopCloudOrders, shopLaundryRecords } from '@/lib/shop-laundry';
+import { noticePriceCuts } from '@/lib/price-cuts';
 import { endPractice } from '@/lib/guide-activity';
 import ReadyForBusiness from '@/components/ReadyForBusiness';
 import { celebrationShown, guideProgress, hasPractised, markCelebrationShown, nextStep, PRACTISED_SIGNAL } from '@/lib/setup-guide';
@@ -470,6 +471,16 @@ export default function Index() {
   useMemo(() => {
     if (store?.accessCode) setShopCloudOrders(store.accessCode, orders);
   }, [store?.accessCode, orders]);
+  // A bundle charged under the price list, told to the owner once - read
+  // from the bundles just handed over, so the cloud is asked nothing more.
+  useEffect(() => {
+    const current = latestStore.current;
+    if (currentUser?.role !== 'owner' || !current?.accessCode) return;
+    const next = noticePriceCuts(current, shopLaundryRecords(current.accessCode));
+    if (!next) return;
+    saveStore(next);
+    setStore(next);
+  }, [orders, currentUser?.role]);
   // Set when a push notification deep-links to one order; Orders consumes it.
   const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
   // What the merchant pressed on a push notification, carried into the screen

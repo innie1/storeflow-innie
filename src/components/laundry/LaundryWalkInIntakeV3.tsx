@@ -591,6 +591,8 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
         runLandmark: runLandmark.trim(),
         deliveryFee: fee,
         garments: pricedGarments,
+        // Kept when the price typed is under the price list, so the owner sees it.
+        listPrice: totalWithDelivery(calculated.total, fee),
         ...attribution(currentUser),
       });
 
