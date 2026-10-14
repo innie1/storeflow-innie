@@ -123,7 +123,31 @@ export function queueStoreSync(store: StoreData, base?: StoreData): void {
   }
   void retryStoreSync(store.accessCode);
 }
-export async function retryStoreSync(code: string): Promise<void> {
+/** The lists the cloud tells apart record by record (see merge_inventory_snapshot). */
+const RECORD_LISTS = ['products', 'sales', 'pendingPayments', 'inventoryMovements', 'expenses', 'restocks', 'investments', 'trash', 'customers', 'staffExpenseRequests', 'pieceWork', 'staffMembers'];
+const recordKey = (record: any): string => record && typeof record === 'object' && record.id != null ? String(record.id) : JSON.stringify(record);
+
+/**
+ * Whether the cloud's copy is only an older version of this phone's: every
+ * record in it - every sale, expense, product, customer, worker - is one this
+ * phone holds too (or has since put in the bin). Then nothing in the cloud
+ * came from another phone, and this phone's copy can go up over it without
+ * anybody being asked. One record the phone has never seen and it cannot.
+ */
+export function cloudIsOlderCopy(remote: Record<string, any> | null | undefined, next: Record<string, any>): boolean {
+  if (!remote || typeof remote !== 'object') return false;
+  const held = new Set<string>();
+  for (const key of RECORD_LISTS) {
+    for (const record of Array.isArray(next[key]) ? next[key] : []) {
+      held.add(recordKey(record));
+      // A binned record keeps its own id inside the bin entry.
+      for (const inner of [record?.item, record?.data, record?.record]) if (inner && typeof inner === 'object' && inner.id != null) held.add(String(inner.id));
+    }
+  }
+  return RECORD_LISTS.every(key => (Array.isArray(remote[key]) ? remote[key] : []).every((record: any) => held.has(recordKey(record))));
+}
+
+export async function retryStoreSync(code: string, options: { settleOlderCloud?: boolean } = {}): Promise<void> {
   return serializeStoreSync(code, async () => {
     const held = getPendingStoreSync(code);
     if (!held) return;
@@ -133,8 +157,13 @@ export async function retryStoreSync(code: string): Promise<void> {
      * sending the same proposal again. Retrying one would also rewrite its
      * state and lose the reason it is being held - which is exactly what made
      * a refused change quietly look like an ordinary unsent record.
+     *
+     * Except the one that is not really a conflict: a phone with no last
+     * agreed copy - it kept the shop with nobody signed in - whose cloud copy
+     * turns out to be only older. That is asked again (when the shop opens,
+     * not on every tick), and settles itself below if so.
      */
-    if (held.state === 'conflict') return;
+    if (held.state === 'conflict' && (held.base || !options.settleOlderCloud)) return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) { writePending(code, { ...held, state: 'pending' }); return; }
     // A sale waits on this before it saves; a cloud that just failed is not
     // asked again for half a minute. See cloud-reach.
@@ -148,8 +177,10 @@ export async function retryStoreSync(code: string): Promise<void> {
         writePending(code, { ...held, state: 'pending', awaitingAccount: true, error: undefined });
         return;
       }
-      const { data: existing, error: fetchError } = await supabase.from('stores').select('id').eq('access_code', code)
-        .retry(false).abortSignal(counterDeadline()).maybeSingle();
+      // With no agreed copy, the cloud's own copy is fetched too, to see
+      // whether it is only an older version of this phone's.
+      const { data: existing, error: fetchError } = await (supabase.from('stores').select(held.base ? 'id' : 'id, data') as any).eq('access_code', code)
+        .retry(false).abortSignal(counterDeadline()).maybeSingle() as { data: { id: string; data?: Record<string, any> } | null; error: any };
       if (fetchError) {
         if (cloudNotReached(fetchError)) noteCloudUnreachable();
         throw fetchError;
@@ -158,8 +189,21 @@ export async function retryStoreSync(code: string): Promise<void> {
       const next = cloudSnapshot(held.next);
       let remote: Record<string, any>;
       if (existing) {
+        let base: Record<string, any> = held.base ? cloudSnapshot(held.base) : {};
+        if (!held.base && existing.data) {
+          if (!cloudIsOlderCopy(existing.data, next)) {
+            // Something in the cloud this phone has never seen: that is for
+            // the owner to look at, not for this phone to write over.
+            writePending(code, { ...held, awaitingAccount: false, state: 'conflict', error: 'The cloud has records this phone does not. Review sync to choose which to keep.' });
+            return;
+          }
+          // Only older: this phone's copy goes up over it, as changes to it.
+          // The cloud's copy is kept here first - a quota error stops this.
+          localStorage.setItem(`storeflow_sync_archive_${code}_${Date.now()}`, JSON.stringify({ next: existing.data, cloudCopy: true }));
+          base = existing.data;
+        }
         const { data, error } = await (supabase as any).rpc('commit_store_snapshot', {
-          p_store_id: existing.id, p_base: held.base ? cloudSnapshot(held.base) : {}, p_next: next,
+          p_store_id: existing.id, p_base: base, p_next: next,
           // Only what differs from what we sent - normally nothing. The reply
           // is laid over our copy below, so the result is the same shop, and
           // the cloud stops sending the whole shop back on every save.
