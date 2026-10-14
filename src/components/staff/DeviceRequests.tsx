@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Copy, QrCode, RefreshCw, Share2, Smartphone } from 'lucide-react';
+import { Cloud, Copy, QrCode, RefreshCw, Share2, Smartphone, UserPlus } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import {
-  approveDevice, inviteLink, lastSeen, listDevices, rejectDevice, revokeAllDevices, revokeDevice, spacedCode, type DeviceRow,
+  approveDevice, inviteLink, inviteMessage, lastSeen, listDevices, rejectDevice, revokeAllDevices, revokeDevice, spacedCode, type DeviceRow,
 } from '@/lib/staff-join';
 import { drawSimpleQR } from '@/lib/qr-code';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -25,15 +25,24 @@ import ScrollLock from '@/components/ScrollLock';
  * fills in the Store ID on the worker's phone - approval and the code still
  * apply - so it is safe to show or send.
  *
- * The invite is offered only once the cloud has answered for this shop. A
- * worker's phone finds the shop by asking the cloud, so a shop kept only on
- * this phone - Cloud Sync never turned on - sent every invited worker to "No
- * shop has that Store ID". Until the cloud knows the shop, the owner is told
- * to put it online first instead.
+ * The invite is always here, at the top: one link for every worker, each of
+ * whom proves who they are with their own PIN. It only works once the cloud
+ * knows the shop - a worker's phone finds the shop by asking the cloud, so a
+ * shop kept only on this phone sent every invited worker to "No shop has that
+ * Store ID". So until the cloud has answered for this shop, sending the
+ * invite first puts the shop online (onGoOnline) instead of sending a link
+ * that cannot work.
  */
+
+export type CloudState = 'loading' | 'ready' | 'signin' | 'notOnline' | 'offline';
 
 interface Props {
   store: StoreData;
+  /** Sign the owner in and upload the shop, so its invite works. */
+  onGoOnline?: () => void;
+  /** Changed after the shop goes online, to ask the cloud again. */
+  refreshKey?: number;
+  onState?: (state: CloudState) => void;
 }
 
 interface ShownCode {
@@ -52,9 +61,9 @@ const when = (iso?: string) => iso
 
 type Revoking = { kind: 'one'; device: DeviceRow } | { kind: 'all'; staffId: string; name: string; count: number };
 
-export default function DeviceRequests({ store }: Props) {
+export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onState }: Props) {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
-  const [state, setState] = useState<'loading' | 'ready' | 'signin' | 'notOnline' | 'offline'>('loading');
+  const [state, setState] = useState<CloudState>('loading');
   const [busy, setBusy] = useState('');
   const [shown, setShown] = useState<ShownCode | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -79,7 +88,9 @@ export default function DeviceRequests({ store }: Props) {
     const onVisible = () => { if (document.visibilityState === 'visible') void load(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-  }, [load]);
+  }, [load, refreshKey]);
+
+  useEffect(() => { onState?.(state); }, [state, onState]);
 
   useEffect(() => {
     if (!shown) return;
@@ -125,12 +136,28 @@ export default function DeviceRequests({ store }: Props) {
     void drawSimpleQR(invite, qrCanvas.current).catch(() => showToast('Could not draw the QR. Send the link instead.', 'error'));
   }, [showInvite, invite]);
 
+  /** The cloud has not got this shop for this owner yet. */
+  const needsSync = state === 'signin' || state === 'notOnline';
+
+  /** Only an invite that can work goes out; otherwise the shop goes online first. */
+  const whenOnline = (send: () => void) => {
+    if (state === 'ready') return send();
+    if (state === 'loading') return showToast('Checking your shop is online. Try again in a moment.', 'info');
+    if (state === 'offline') return showToast('No internet right now. Invites can be sent once you are online.', 'error');
+    if (onGoOnline) return onGoOnline();
+    showToast('Turn on Settings > Security > Multi-device Cloud Sync first, so workers can find your shop.', 'info', 7000);
+  };
+
   const shareInvite = async () => {
-    const text = `Join ${store.storeName} on StoreFlow: ${invite}`;
+    const text = inviteMessage(store.storeName, invite);
     try {
       if (navigator.share) await navigator.share({ text });
-      else { await navigator.clipboard.writeText(invite); showToast('Invite link copied'); }
+      else { await navigator.clipboard.writeText(text); showToast('Invite copied. Paste it to your workers.'); }
     } catch { /* closed the share sheet */ }
+  };
+
+  const copyInvite = async () => {
+    try { await navigator.clipboard.writeText(invite); showToast('Invite link copied'); } catch { showToast('Could not copy the link.', 'error'); }
   };
 
   const message = (code: ShownCode) => `Your StoreFlow code for ${store.storeName}: ${spacedCode(code.code)}. It works for 5 minutes.`;
@@ -159,6 +186,51 @@ export default function DeviceRequests({ store }: Props) {
   const secondsLeft = shown ? Math.max(0, Math.round((shown.expiresAt - now) / 1000)) : 0;
 
   return (
+    <>
+    {invite && (
+      <section aria-label="Invite workers" className="p-4 rounded-2xl bg-card border border-primary/30 space-y-3">
+        <div className="flex items-center gap-2">
+          <UserPlus className="w-4 h-4 text-primary" />
+          <h3 className="font-display font-bold text-base text-foreground">Invite workers</h3>
+        </div>
+        <p className="text-xs text-muted-foreground -mt-1">
+          One link for all your workers. Each opens it on their own phone and enters their own staff PIN, then you approve them below.
+        </p>
+        {/*
+          Synced: the link, in the shop's own colour, ready to send. Not yet:
+          one Sync button in its place, so a link that cannot work is never
+          sent and the owner is one tap from one that does.
+        */}
+        {needsSync ? (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Your shop is only on this phone, so workers' phones can't find it yet. Sync it once and this link works for everyone.
+            </p>
+            {onGoOnline && (
+              <button type="button" onClick={onGoOnline} className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-display font-black flex items-center justify-center gap-1.5">
+                <Cloud className="w-4 h-4" /> Sync to add workers
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className={`px-3 py-2 rounded-xl border font-mono text-xs break-all select-all ${state === 'ready' ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}>{invite}</div>
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" disabled={state === 'loading'} onClick={() => whenOnline(() => void shareInvite())} className="h-10 rounded-xl bg-primary text-primary-foreground text-sm font-display font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                <Share2 className="w-4 h-4" /> Send
+              </button>
+              <button type="button" disabled={state === 'loading'} onClick={() => whenOnline(() => void copyInvite())} className="h-10 rounded-xl bg-primary/10 border border-primary/40 text-primary text-sm font-display font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                <Copy className="w-4 h-4" /> Copy
+              </button>
+              <button type="button" disabled={state === 'loading'} onClick={() => whenOnline(() => setShowInvite(true))} aria-label="Show invite QR" className="h-10 rounded-xl bg-primary/10 border border-primary/40 text-primary text-sm font-display font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                <QrCode className="w-4 h-4" /> QR
+              </button>
+            </div>
+            {state === 'loading' && <p className="text-xs text-muted-foreground">Checking your shop is synced…</p>}
+          </>
+        )}
+      </section>
+    )}
     <section className="p-4 rounded-2xl bg-card border border-border space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -171,22 +243,17 @@ export default function DeviceRequests({ store }: Props) {
         </button>
       </div>
       <p className="text-xs text-muted-foreground -mt-1">
-        A worker can use the shop on their own phone: on the opening screen they tap <span className="font-semibold">Join a Store</span> and
-        enter your Store ID <span className="font-mono font-semibold text-foreground">{store.storeId || '—'}</span> and their own PIN.
+        Without the link, a worker taps <span className="font-semibold">Join a Store</span> on the opening screen and
+        enters your Store ID <span className="font-mono font-semibold text-foreground">{store.storeId || '—'}</span> and their own PIN.
         Never give them your email, password or access code.
       </p>
-      {invite && state === 'ready' && (
-        <button type="button" onClick={() => setShowInvite(true)} className="w-full h-10 rounded-xl bg-surface-2 border border-border text-sm font-display font-bold flex items-center justify-center gap-1.5">
-          <QrCode className="w-4 h-4" /> Show invite QR
-        </button>
-      )}
 
       {state === 'loading' && <p className="text-xs text-muted-foreground">Checking…</p>}
-      {state === 'signin' && <p className="text-xs text-muted-foreground">Sign in to your StoreFlow account on this phone to invite workers and approve their phones.</p>}
+      {state === 'signin' && <p className="text-xs text-muted-foreground">Sign in to your StoreFlow account on this phone to approve workers' phones.</p>}
       {state === 'notOnline' && (
         <p className="text-xs text-amber-600">
-          Workers can't join yet: this shop is only on this phone, so their phones can't find it. Turn on
-          <span className="font-semibold"> Settings → Security → Multi-device Cloud Sync</span>, then come back here to invite them.
+          Workers can't join yet: this shop is only on this phone, so their phones can't find it.
+          {onGoOnline ? ' Tap Sync to add workers above.' : <> Turn on <span className="font-semibold">Settings → Security → Multi-device Cloud Sync</span>, then come back here to invite them.</>}
         </p>
       )}
       {state === 'offline' && <p className="text-xs text-muted-foreground">Could not reach StoreFlow. Requests show here when you are online.</p>}
@@ -312,5 +379,6 @@ export default function DeviceRequests({ store }: Props) {
         </div>
       )}
     </section>
+    </>
   );
 }

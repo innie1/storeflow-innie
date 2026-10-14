@@ -196,6 +196,15 @@ export function inviteLink(storeRef: string, origin: string = window.location.or
   return `${origin}/?join=${encodeURIComponent(normaliseStoreRef(storeRef))}`;
 }
 
+/**
+ * What the owner sends: one link serves every worker, since each one proves
+ * who they are with their own PIN. Named when it goes to one person.
+ */
+export function inviteMessage(storeName: string, link: string, workerName?: string): string {
+  const hello = workerName ? `Hi ${workerName}, join` : 'Join';
+  return `${hello} ${storeName} on StoreFlow: ${link}\nOpen it on your phone and enter your staff PIN.`;
+}
+
 /** The Store ID an invite link brought, if this page was opened from one. */
 export function inviteStoreRef(search: string = window.location.search): string {
   const ref = normaliseStoreRef(new URLSearchParams(search).get('join') || '');

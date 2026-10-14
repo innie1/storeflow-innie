@@ -10,7 +10,7 @@ vi.mock('@/components/Toast', () => ({ showToast: vi.fn() }));
 
 import JoinStore from '@/components/staff/JoinStore';
 import DeviceRequests from '@/components/staff/DeviceRequests';
-import { deviceKey, joinErrorText, normaliseStoreRef, readJoin, spacedCode } from '@/lib/staff-join';
+import { deviceKey, inviteMessage, joinErrorText, normaliseStoreRef, readJoin, spacedCode } from '@/lib/staff-join';
 import { noticeNewDeviceRequests, storeRefOf } from '@/lib/device-request-watch';
 import { visibleNotifications } from '@/lib/notification-gate';
 import { readSource } from './helpers/source';
@@ -158,20 +158,51 @@ describe("the owner's Workers' phones", () => {
     await waitFor(() => expect(rpc).toHaveBeenCalledWith('staff_device_reject', { p_request_id: 'r1' }));
   });
 
-  it('offers no invite until the cloud knows the shop, and says how to put it online', async () => {
+  it('keeps the invite in one place for every worker, always there', async () => {
+    answer({ staff_device_list: ok({ devices: [] }) });
+    render(<DeviceRequests store={shop()} />);
+    await screen.findByText('No requests yet.');
+    const panel = screen.getByRole('region', { name: 'Invite workers' });
+    expect(panel.textContent).toContain('One link for all your workers');
+    expect(panel.textContent).toContain(`${window.location.origin}/?join=SF-WSH001`);
+    expect(panel.textContent).not.toContain('ABC123');
+  });
+
+  it('shows Sync in place of a link that could not work yet', async () => {
+    answer({ staff_device_list: no('not_owner') });
+    const goOnline = vi.fn();
+    render(<DeviceRequests store={shop()} onGoOnline={goOnline} />);
+    await screen.findByText(/Workers can't join yet/);
+    const panel = screen.getByRole('region', { name: 'Invite workers' });
+    expect(panel.textContent).not.toContain('?join=');
+    expect(screen.queryByRole('button', { name: /Show invite QR/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Sync to add workers/ }));
+    expect(goOnline).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Sign in to your StoreFlow account/)).toBeNull();
+  });
+
+  it('says where Cloud Sync is when there is no way to sync from here', async () => {
     answer({ staff_device_list: no('not_owner') });
     render(<DeviceRequests store={shop()} />);
     await screen.findByText(/Workers can't join yet/);
     expect(document.body.textContent).toContain('Multi-device Cloud Sync');
-    expect(screen.queryByRole('button', { name: /Show invite QR/ })).toBeNull();
-    expect(screen.queryByText(/Sign in to your StoreFlow account/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sync to add workers/ })).toBeNull();
   });
 
-  it('offers no invite while signed out either', async () => {
+  it('offers Sync while signed out too', async () => {
     session.mockResolvedValue(false);
-    render(<DeviceRequests store={shop()} />);
+    const goOnline = vi.fn();
+    render(<DeviceRequests store={shop()} onGoOnline={goOnline} />);
     await screen.findByText(/Sign in to your StoreFlow account/);
-    expect(screen.queryByRole('button', { name: /Show invite QR/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Sync to add workers/ }));
+    expect(goOnline).toHaveBeenCalled();
+  });
+
+  it('names the worker when the invite goes to one person', () => {
+    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001', 'Faith')).toBe(
+      'Hi Faith, join Washlie on StoreFlow: https://app.test/?join=SF-WSH001\nOpen it on your phone and enter your staff PIN.',
+    );
+    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001')).toMatch(/^Join Washlie on StoreFlow/);
   });
 
   it('tells a worker an unknown shop may simply not be online yet', () => {

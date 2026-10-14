@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { runsATill } from '@/lib/business-runtime';
 import { StoreData, StaffMember, Shift, PieceRate } from '@/types/store';
-import { 
-  addStaffMember, deleteStaffMember, updateStaffMember, startShift, endShift 
+import {
+  addStaffMember, deleteStaffMember, updateStaffMember, startShift, endShift, saveStore
 } from '@/lib/store-data';
-import { 
-  Briefcase, UserPlus, Lock, Key, Shield, Calendar, Play, Square, FileText, CheckSquare, Trash2, Edit, Check, X
+import {
+  Briefcase, UserPlus, Lock, Key, Shield, Calendar, Play, Square, FileText, CheckSquare, Trash2, Edit, Check, X, Share2, Cloud
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 import { ANY_GARMENT, pendingClaims, setPieceRate, taskLabel, WORK_TASKS } from '@/lib/piece-work';
@@ -17,7 +17,10 @@ import ConfirmModal from '@/components/ConfirmModal';
 import ScrollLock from '@/components/ScrollLock';
 import { canSeeMoney } from '@/lib/permissions';
 import StaffExpenseSettings from '@/components/staff/StaffExpenseSettings';
-import DeviceRequests from '@/components/staff/DeviceRequests';
+import DeviceRequests, { type CloudState } from '@/components/staff/DeviceRequests';
+import CloudAuthModal from '@/components/CloudAuthModal';
+import { getPendingStoreSync, retryStoreSync } from '@/lib/store-cloud-sync';
+import { inviteLink, inviteMessage } from '@/lib/staff-join';
 
 interface StaffManagementProps {
   store: StoreData;
@@ -75,6 +78,51 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  /*
+   * Inviting workers needs the shop online: a worker's phone finds it by
+   * asking the cloud. When it is not, inviting puts it online right here -
+   * sign in or make the account, then upload - instead of sending the owner
+   * off to Settings and back.
+   */
+  const [cloudState, setCloudState] = useState<CloudState>('loading');
+  const [goingOnline, setGoingOnline] = useState(false);
+  const [cloudCheck, setCloudCheck] = useState(0);
+  const latestStore = useRef(store);
+  latestStore.current = store;
+  const onlineStarted = useRef(false);
+
+  const goOnline = useCallback(() => { onlineStarted.current = false; setGoingOnline(true); }, []);
+
+  // Stable, because the sign-in sheet calls it at once when already signed in.
+  const putShopOnline = useCallback(async () => {
+    if (onlineStarted.current) return;
+    onlineStarted.current = true;
+    setGoingOnline(false);
+    const current = latestStore.current;
+    const next = { ...current, managerSettings: { ...current.managerSettings, multiDeviceSync: true } } as StoreData;
+    saveStore(next);
+    onUpdate(next);
+    await retryStoreSync(next.accessCode);
+    setCloudCheck(n => n + 1);
+    const held = getPendingStoreSync(next.accessCode);
+    if (held && (held.state === 'error' || held.state === 'conflict')) {
+      showToast(`Signed in, but the shop could not be uploaded yet. ${held.error || 'Try again in a moment.'}`, 'error', 7000);
+    } else {
+      showToast('Your shop is online. Workers can now use your invite link.', 'success');
+    }
+  }, [onUpdate]);
+
+  const inviteWorker = async (worker: StaffMember) => {
+    if (cloudState === 'signin' || cloudState === 'notOnline') return goOnline();
+    if (cloudState === 'offline') return showToast('No internet right now. Invites can be sent once you are online.', 'error');
+    if (cloudState !== 'ready' || !store.storeId) return showToast('Checking your shop is online. Try again in a moment.', 'info');
+    const text = inviteMessage(store.storeName, inviteLink(store.storeId), worker.name);
+    try {
+      if (navigator.share) await navigator.share({ text });
+      else { await navigator.clipboard.writeText(text); showToast(`Invite for ${worker.name} copied. Paste it to them.`); }
+    } catch { /* closed the share sheet */ }
+  };
 
   // Form states for adding staff
   const [name, setName] = useState('');
@@ -364,7 +412,17 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
         )}
       </div>
 
-      {currentUser?.role === 'owner' && <DeviceRequests store={store} />}
+      {currentUser?.role === 'owner' && (
+        <DeviceRequests store={store} onGoOnline={goOnline} refreshKey={cloudCheck} onState={setCloudState} />
+      )}
+      {goingOnline && (
+        <CloudAuthModal
+          onClose={() => setGoingOnline(false)}
+          onAuthSuccess={putShopOnline}
+          initialEmail={store.profile?.email || store.managerSettings?.recoveryEmail || ''}
+          initialFullName={store.profile?.ownerName || ''}
+        />
+      )}
       {currentUser?.role === 'owner' && <StaffExpenseSettings store={store} onUpdate={onUpdate} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -484,6 +542,17 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                       </div>
                       {currentUser?.role === 'owner' && (
                         <div className="flex items-center gap-1">
+                          {/* So a worker already on the team can be sent the
+                              link to use the shop on their own phone. */}
+                          {cloudState === 'signin' || cloudState === 'notOnline' ? (
+                            <button onClick={goOnline} aria-label={`Sync to invite ${s.name}`} className="h-7 px-2 rounded bg-surface-2 border border-border text-muted-foreground text-[11px] font-display font-bold flex items-center gap-1 transition-all">
+                              <Cloud className="w-3 h-3" /> Sync
+                            </button>
+                          ) : (
+                            <button onClick={() => void inviteWorker(s)} aria-label={`Invite ${s.name}`} className="h-7 px-2 rounded bg-primary text-primary-foreground text-[11px] font-display font-bold flex items-center gap-1 transition-all">
+                              <Share2 className="w-3 h-3" /> Invite
+                            </button>
+                          )}
                           <button onClick={() => startEdit(s)} className="p-1.5 rounded bg-surface-2 border border-border text-muted-foreground hover:text-yellow-500 transition-all">
                             <Edit className="w-3 h-3" />
                           </button>
