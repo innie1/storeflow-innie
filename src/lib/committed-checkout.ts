@@ -69,7 +69,9 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
         const held = JSON.parse(localStorage.getItem('storeflow_sync_pending_' + store.accessCode) || 'null');
         if (same(held?.journal ?? held?.next, result.store)) localStorage.removeItem('storeflow_sync_pending_' + store.accessCode);
         window.dispatchEvent(new CustomEvent(STORE_SYNC_EVENT, { detail: { code: store.accessCode } }));
-        if (error.code === '40001') void refreshStoreFromCloud(store.accessCode).catch(() => {});
+        // Refusals are P0001 now (40001 made the server retry them forever), so
+        // they are told by their words; 40001 still counts for a real one.
+        if (error.code === '40001' || /another device/i.test(error.message || '')) void refreshStoreFromCloud(store.accessCode).catch(() => {});
         return failure(error.message || 'Sale rejected. Nothing was sold.');
       }
       // The line dropped mid-sale: the next sale should not wait on it too.

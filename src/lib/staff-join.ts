@@ -155,7 +155,7 @@ export function joinErrorText(error: string, triesLeft?: number): string {
     case 'expired': return 'That code has run out. Ask the owner for a new one.';
     case 'no_code': return 'There is no code to use. Ask the owner to approve again for a new one.';
     case 'bad_device': return 'This phone could not make its key. Try another browser.';
-    case 'offline': return 'Could not reach StoreFlow. Check the internet and try again.';
+    case 'offline': return 'StoreFlow did not answer. Try again in a moment.';
     default: return 'Something went wrong. Try again.';
   }
 }
