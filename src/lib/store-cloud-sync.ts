@@ -258,6 +258,48 @@ export async function adoptReviewedCloudCopy(code: string, reviewed: Awaited<Ret
   });
 }
 
+/**
+ * The other way out of a held sync: this device's records win.
+ *
+ * The only way out used to be the cloud's copy. That is right when another
+ * phone moved on, and exactly wrong for the commonest held sync: a phone that
+ * kept the shop for weeks with nobody signed in, whose cloud copy is simply
+ * older. The cloud refuses such a phone because it holds no last agreed copy
+ * to tell its changes from another phone's - and taking the cloud's copy then
+ * threw away every record since. Here the phone's records are sent as changes
+ * to the cloud copy exactly as reviewed, so the cloud's own checks (stock
+ * never below zero, customers merged by record) still apply; and the cloud's
+ * copy is kept on this device first, so nothing is lost either way.
+ */
+export async function adoptThisDeviceCopy(code: string, reviewed: Awaited<ReturnType<typeof inspectStoreConflict>>): Promise<StoreData> {
+  if (!reviewed) throw new Error('Load the comparison first.');
+  return new Promise((resolve, reject) => {
+    void serializeStoreSync(code, async () => {
+      const current = getPendingStoreSync(code);
+      if (!current || !same(current.next, reviewed.next)) throw new Error('Local records changed. Review the comparison again.');
+      // A sale whose answer was lost may already be counted in the cloud.
+      if (current.uncertainCheckout) throw new Error('A sale is still waiting for the cloud to answer. Retry sync first.');
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: row, error } = await supabase.from('stores').select('id, data').eq('access_code', code).single();
+      if (error) throw error;
+      if (!same(row.data, reviewed.remote)) throw new Error('Cloud records changed. Review the comparison again.');
+      // A quota error aborts this: never overwrite a copy that could not be kept.
+      localStorage.setItem(`storeflow_sync_archive_${code}_${Date.now()}`, JSON.stringify({ next: row.data, cloudCopy: true }));
+      const { data, error: commitError } = await (supabase as any).rpc('commit_store_snapshot', {
+        p_store_id: row.id, p_base: row.data, p_next: cloudSnapshot(current.next), p_reply: 'changes',
+      });
+      if (commitError) throw commitError;
+      const remote = (data?.data || {}) as Record<string, any>;
+      const accepted = { ...current.next, ...remote, managerSettings: { ...current.next.managerSettings, ...remote.managerSettings } } as StoreData;
+      localStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
+      localStorage.removeItem(keyFor(code));
+      markStoreInCloud(code);
+      signal(code, accepted);
+      resolve(accepted);
+    }).catch(reject);
+  });
+}
+
 export async function refreshStoreFromCloud(code: string): Promise<void> {
   return serializeStoreSync(code, async () => {
     if (getPendingStoreSync(code)) throw new Error('Resolve pending sync before refreshing cloud records.');

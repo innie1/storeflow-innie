@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { StoreData } from '@/types/store';
-import { cloudSnapshot, getPendingStoreSync, inspectStoreConflict, retryStoreSync, STORE_SYNC_EVENT, adoptReviewedCloudCopy } from '@/lib/store-cloud-sync';
+import { cloudSnapshot, getPendingStoreSync, inspectStoreConflict, retryStoreSync, STORE_SYNC_EVENT, adoptReviewedCloudCopy, adoptThisDeviceCopy } from '@/lib/store-cloud-sync';
 import { inspectStoreRecords } from '@/lib/store-reconciliation';
 import { showToast } from './Toast';
 
@@ -49,12 +49,29 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
    * affairs and the quieter screen.
    */
   if (!unsent) return null;
+  const compare = () => void act(async () => { setReview(await inspectStoreConflict(store.accessCode)); setAcknowledged(false); });
+  /*
+   * A held sync's way out, where the owner can see it. It sat behind Check
+   * records, then Compare - and while it waits, nothing this phone does
+   * reaches the cloud: not its records, not its staff list, so no worker's
+   * PIN can be found.
+   */
+  const choose = review && <div className="space-y-3 border rounded p-3">
+    <table className="w-full text-left"><caption>Records saved on each copy</caption><thead><tr><th>Record</th><th>This device</th><th>Cloud</th></tr></thead><tbody>{['sales','products','pendingPayments','staffMembers'].map(field => <tr key={field}><td>{field === 'pendingPayments' ? 'Debt invoices' : field === 'sales' ? 'Sales' : field === 'staffMembers' ? 'Workers' : 'Products'}</td><td>{((review.next as any)[field] || []).length}</td><td>{((review.remote as any)?.[field] || []).length}</td></tr>)}</tbody></table>
+    <button className="underline" onClick={() => download(`storeflow-sync-review-${store.accessCode}.json`, { base: review.base ? cloudSnapshot(review.base) : null, device: cloudSnapshot(review.next), cloud: review.remote, uncertainCheckout: review.uncertainCheckout ? cloudSnapshot(review.uncertainCheckout) : undefined })}>Download both copies for review</button>
+    <label className="flex gap-2"><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} />I have reviewed the differences.</label>
+    <p className="text-muted-foreground">Keep this device's records if this is the phone you have been working on. The cloud's copy is saved on this device first.</p>
+    <button disabled={!acknowledged || busy} className="w-full rounded p-2 bg-primary text-primary-foreground font-bold disabled:opacity-50" onClick={() => void act(async () => { await adoptThisDeviceCopy(store.accessCode, review); setReview(null); setAcknowledged(false); showToast('This device\'s records are now in the cloud.', 'success'); })}>Keep this device's records</button>
+    <p className="text-muted-foreground">Using the cloud copy removes unuploaded changes from the active device records. A recovery copy is retained on this device.</p>
+    <button disabled={!acknowledged || busy} className="w-full border rounded p-2 disabled:opacity-50" onClick={() => void act(async () => { await adoptReviewedCloudCopy(store.accessCode, review); setReview(null); setAcknowledged(false); })}>Keep recovery copy and use cloud records</button>
+  </div>;
   return <section className="rounded-xl border border-border bg-card p-3 text-sm space-y-2" aria-label="Store sync and record checks">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <span role="status">{unsent.state === 'syncing' ? 'Syncing saved records…' : unsent.state === 'conflict' ? 'Sync needs review — saved on this device' : 'Records waiting to sync — saved on this device'}</span>
-      <div className="flex gap-3"><button disabled={busy || unsent.state === 'syncing'} onClick={() => void act(() => retryStoreSync(store.accessCode))}>Retry sync</button>{owner && <button onClick={() => setOpen(v => !v)}>{open ? 'Close checks' : 'Check records'}</button>}</div>
+      <div className="flex gap-3">{owner && unsent.state === 'conflict' && !review && <button disabled={busy} className="font-bold text-primary" onClick={compare}>Review sync</button>}<button disabled={busy || unsent.state === 'syncing'} onClick={() => void act(() => retryStoreSync(store.accessCode))}>Retry sync</button>{owner && <button onClick={() => setOpen(v => !v)}>{open ? 'Close checks' : 'Check records'}</button>}</div>
     </div>
     {unsent?.error && <p className="text-muted-foreground">{unsent.error}</p>}
+    {owner && !open && choose}
     {open && owner && <div className="space-y-3">
       <p>These checks flag inconsistent records. Verify receipts and physical stock before making historical corrections.</p>
       <button className="underline" onClick={() => download(`storeflow-record-checks-${store.accessCode}.json`, { date: new Date().toISOString(), issues })}>Download findings</button>
@@ -68,14 +85,8 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
         download(`storeflow-recovery-copies-${store.accessCode}.json`, copies);
       }}>Download archived recovery copies</button>
       {pending && <>
-        <button disabled={busy} className="underline" onClick={() => void act(async () => { setReview(await inspectStoreConflict(store.accessCode)); setAcknowledged(false); })}>Compare device and cloud records</button>
-        {review && <div className="space-y-3 border rounded p-3">
-          <table className="w-full text-left"><caption>Records saved on each copy</caption><thead><tr><th>Record</th><th>This device</th><th>Cloud</th></tr></thead><tbody>{['products','sales','pendingPayments'].map(field => <tr key={field}><td>{field === 'pendingPayments' ? 'Debt invoices' : field === 'sales' ? 'Sales' : 'Products'}</td><td>{((review.next as any)[field] || []).length}</td><td>{((review.remote as any)?.[field] || []).length}</td></tr>)}</tbody></table>
-          <button className="underline" onClick={() => download(`storeflow-sync-review-${store.accessCode}.json`, { base: review.base ? cloudSnapshot(review.base) : null, device: cloudSnapshot(review.next), cloud: review.remote, uncertainCheckout: review.uncertainCheckout ? cloudSnapshot(review.uncertainCheckout) : undefined })}>Download both copies for review</button>
-          <p>Using the cloud copy removes unuploaded changes from the active device records. A recovery copy is retained on this device.</p>
-          <label className="flex gap-2"><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} />I have reviewed the differences and want to use the cloud copy.</label>
-          <button disabled={!acknowledged || busy} className="border rounded p-2 disabled:opacity-50" onClick={() => void act(async () => { await adoptReviewedCloudCopy(store.accessCode, review); setReview(null); setAcknowledged(false); })}>Keep recovery copy and use cloud records</button>
-        </div>}
+        <button disabled={busy} className="underline" onClick={compare}>Compare device and cloud records</button>
+        {choose}
       </>}
     </div>}
   </section>;
