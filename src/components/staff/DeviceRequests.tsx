@@ -188,81 +188,70 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
   return (
     <>
     {invite && (
-      <section aria-label="Invite workers" className="p-4 rounded-2xl bg-card border border-primary/30 space-y-3">
-        <div className="flex items-center gap-2">
-          <UserPlus className="w-4 h-4 text-primary" />
-          <h3 className="font-display font-bold text-base text-foreground">Invite workers</h3>
+      <section aria-label="Invite workers" className="p-3 rounded-2xl bg-card border border-primary/30 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-1.5">
+            <UserPlus className="w-4 h-4 text-primary" /> Invite workers
+          </h3>
+          {/* For a worker joining by hand: Join a Store, then this and their PIN. */}
+          <span className="text-[10px] text-muted-foreground">ID <span className="font-mono font-semibold text-foreground">{store.storeId}</span></span>
         </div>
-        <p className="text-xs text-muted-foreground -mt-1">
-          One link for all your workers. Each opens it on their own phone and enters their own staff PIN, then you approve them below.
-        </p>
         {/*
           Synced: the link, in the shop's own colour, ready to send. Not yet:
           one Sync button in its place, so a link that cannot work is never
           sent and the owner is one tap from one that does.
         */}
         {needsSync ? (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">
-              Your shop is only on this phone, so workers' phones can't find it yet. Sync it once and this link works for everyone.
-            </p>
-            {onGoOnline && (
-              <button type="button" onClick={onGoOnline} className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-display font-black flex items-center justify-center gap-1.5">
-                <Cloud className="w-4 h-4" /> Sync to add workers
-              </button>
-            )}
-          </div>
+          onGoOnline ? (
+            <button type="button" onClick={onGoOnline} className="w-full h-10 rounded-xl bg-primary text-primary-foreground text-sm font-display font-black flex items-center justify-center gap-1.5">
+              <Cloud className="w-4 h-4" /> Sync to add workers
+            </button>
+          ) : (
+            <p className="text-xs text-amber-600">Workers can't join yet. Turn on Settings → Security → Multi-device Cloud Sync.</p>
+          )
         ) : (
-          <>
-            <div className={`px-3 py-2 rounded-xl border font-mono text-xs break-all select-all ${state === 'ready' ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}>{invite}</div>
-            <div className="grid grid-cols-3 gap-2">
-              <button type="button" disabled={state === 'loading'} onClick={() => whenOnline(() => void shareInvite())} className="h-10 rounded-xl bg-primary text-primary-foreground text-sm font-display font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-                <Share2 className="w-4 h-4" /> Send
-              </button>
-              <button type="button" disabled={state === 'loading'} onClick={() => whenOnline(() => void copyInvite())} className="h-10 rounded-xl bg-primary/10 border border-primary/40 text-primary text-sm font-display font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-                <Copy className="w-4 h-4" /> Copy
-              </button>
-              <button type="button" disabled={state === 'loading'} onClick={() => whenOnline(() => setShowInvite(true))} aria-label="Show invite QR" className="h-10 rounded-xl bg-primary/10 border border-primary/40 text-primary text-sm font-display font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-                <QrCode className="w-4 h-4" /> QR
-              </button>
-            </div>
-            {state === 'loading' && <p className="text-xs text-muted-foreground">Checking your shop is synced…</p>}
-          </>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              disabled={state === 'loading'}
+              onClick={() => whenOnline(() => void copyInvite())}
+              aria-label="Copy invite link"
+              className={`min-w-0 flex-1 h-9 px-2.5 rounded-xl border text-left font-mono text-[11px] truncate flex items-center gap-1.5 disabled:opacity-50 ${state === 'ready' ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
+            >
+              <Copy className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{invite.replace(/^https?:\/\//, '')}</span>
+            </button>
+            <button type="button" disabled={state === 'loading'} onClick={() => whenOnline(() => setShowInvite(true))} aria-label="Show invite QR" className="w-9 h-9 shrink-0 rounded-xl bg-primary/10 border border-primary/40 text-primary flex items-center justify-center disabled:opacity-50">
+              <QrCode className="w-4 h-4" />
+            </button>
+            <button type="button" disabled={state === 'loading'} onClick={() => whenOnline(() => void shareInvite())} className="h-9 shrink-0 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-bold flex items-center gap-1 disabled:opacity-50">
+              <Share2 className="w-3.5 h-3.5" /> Send
+            </button>
+          </div>
         )}
       </section>
     )}
-    <section className="p-4 rounded-2xl bg-card border border-border space-y-3">
+    {/*
+      Only when there is something to act on or a reason it cannot be seen:
+      an empty "Workers' phones" box with a paragraph in it was most of the
+      page's text and none of its use.
+    */}
+    {(devices.length > 0 || state === 'offline') && (
+    <section className="p-3 rounded-2xl bg-card border border-border space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Smartphone className="w-4 h-4 text-muted-foreground" />
-          <h3 className="font-display font-bold text-base text-foreground">Workers' phones</h3>
+        <h3 className="font-display font-bold text-sm text-foreground flex items-center gap-1.5">
+          <Smartphone className="w-4 h-4 text-muted-foreground" /> Workers' phones
           {pending.length > 0 && <span className="px-1.5 py-0.5 rounded-md bg-amber-500 text-background text-[10px] font-black">{pending.length} new</span>}
-        </div>
-        <button type="button" onClick={() => void load()} aria-label="Refresh" className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground">
-          <RefreshCw className="w-4 h-4" />
+        </h3>
+        <button type="button" onClick={() => void load()} aria-label="Refresh" className="p-1 rounded-lg text-muted-foreground hover:text-foreground">
+          <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
-      <p className="text-xs text-muted-foreground -mt-1">
-        Without the link, a worker taps <span className="font-semibold">Join a Store</span> on the opening screen and
-        enters your Store ID <span className="font-mono font-semibold text-foreground">{store.storeId || '—'}</span> and their own PIN.
-        Never give them your email, password or access code.
-      </p>
 
-      {state === 'loading' && <p className="text-xs text-muted-foreground">Checking…</p>}
-      {state === 'signin' && <p className="text-xs text-muted-foreground">Sign in to your StoreFlow account on this phone to approve workers' phones.</p>}
-      {state === 'notOnline' && (
-        <p className="text-xs text-amber-600">
-          Workers can't join yet: this shop is only on this phone, so their phones can't find it.
-          {onGoOnline ? ' Tap Sync to add workers above.' : <> Turn on <span className="font-semibold">Settings → Security → Multi-device Cloud Sync</span>, then come back here to invite them.</>}
-        </p>
-      )}
-      {state === 'offline' && <p className="text-xs text-muted-foreground">Could not reach StoreFlow. Requests show here when you are online.</p>}
-
-      {state === 'ready' && devices.length === 0 && <p className="text-xs text-muted-foreground">No requests yet.</p>}
+      {state === 'offline' && <p className="text-xs text-muted-foreground">No internet. Requests show here when you're online.</p>}
 
       {pending.map(device => (
         <div key={device.id} className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/5">
-          <p className="text-[11px] font-black uppercase tracking-wider text-amber-600">New device requesting access</p>
+          <p className="text-[11px] font-black uppercase tracking-wider text-amber-600">Wants to join</p>
           <p className="mt-1 font-display font-bold">{device.staff_name}</p>
           <p className="text-xs text-muted-foreground">
             {[roleLabel(device.staff_role), device.device_label, `Requested ${when(device.requested_at)}`].filter(Boolean).join(' · ')}
@@ -278,7 +267,7 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
         <div key={device.id} className="p-3 rounded-xl border border-border bg-surface-2">
           <p className="font-display font-bold text-sm">{device.staff_name} · {device.device_label || 'Phone'}</p>
           <p className="text-xs text-muted-foreground">
-            {device.code_live ? 'Approved. Waiting for them to type the code.' : 'The code ran out before it was used.'}
+            {device.code_live ? 'Approved. Waiting for them to type the code.' : 'The code ran out.'}
           </p>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button type="button" disabled={busy === device.id} onClick={() => reject(device)} className="h-9 rounded-xl bg-card border border-border text-xs font-display font-bold">Cancel</button>
@@ -328,6 +317,8 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
           ))}
         </div>
       )}
+    </section>
+    )}
 
       {revoking && (
         <ConfirmModal
@@ -349,12 +340,14 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
           <ScrollLock />
           <div role="dialog" aria-label="Staff invite" className="w-full max-w-sm rounded-2xl bg-card border border-border p-5 text-center space-y-3" onClick={e => e.stopPropagation()}>
             <h3 className="font-display font-black text-lg">Invite a worker</h3>
-            <p className="text-sm text-muted-foreground">They scan this with their phone camera. It opens StoreFlow on Join a Store with your Store ID filled in.</p>
+            <p className="text-sm text-muted-foreground">Scan with the worker's phone camera.</p>
             <canvas ref={qrCanvas} width={220} height={220} className="mx-auto rounded-xl bg-white p-2" aria-label="Invite QR code" />
-            <p className="font-mono text-sm font-semibold">{store.storeId}</p>
-            <p className="text-[11px] text-muted-foreground">It holds no password. You still approve each phone and give it a code.</p>
-            <button type="button" onClick={() => void shareInvite()} className="w-full h-10 rounded-xl bg-surface-2 border border-border text-sm font-display font-bold flex items-center justify-center gap-1.5"><Share2 className="w-4 h-4" /> Send link</button>
-            <button type="button" onClick={() => setShowInvite(false)} className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-display font-black">Done</button>
+            {/* No password in it: you still approve each phone and give it a code. */}
+            <p className="text-[11px] text-muted-foreground">You still approve each phone.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => void shareInvite()} className="h-10 rounded-xl bg-surface-2 border border-border text-sm font-display font-bold flex items-center justify-center gap-1.5"><Share2 className="w-4 h-4" /> Send</button>
+              <button type="button" onClick={() => setShowInvite(false)} className="h-10 rounded-xl bg-primary text-primary-foreground font-display font-black">Done</button>
+            </div>
           </div>
         </div>
       )}
@@ -378,7 +371,6 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
           </div>
         </div>
       )}
-    </section>
     </>
   );
 }

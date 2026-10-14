@@ -130,11 +130,18 @@ describe('Join a Store, on the worker’s phone', () => {
 describe("the owner's Workers' phones", () => {
   const pending = { id: 'r1', staff_id: 's1', staff_name: 'Faith', staff_role: 'attendant', device_label: 'Samsung SM-A366B', status: 'pending', requested_at: new Date().toISOString() };
 
-  it('asks the owner to sign in when this phone has no account', async () => {
+  it('offers Sync, without asking the cloud, when this phone has no account', async () => {
     session.mockResolvedValue(false);
-    render(<DeviceRequests store={shop()} />);
-    await screen.findByText(/Sign in to your StoreFlow account/);
+    render(<DeviceRequests store={shop()} onGoOnline={() => {}} />);
+    await screen.findByRole('button', { name: /Sync to add workers/ });
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('shows no empty Workers\' phones box when nobody has asked', async () => {
+    answer({ staff_device_list: ok({ devices: [] }) });
+    render(<DeviceRequests store={shop()} />);
+    await screen.findByRole('button', { name: 'Copy invite link' });
+    expect(screen.queryByText("Workers' phones")).toBeNull();
   });
 
   it('approves with a code to read out, or rejects', async () => {
@@ -161,10 +168,9 @@ describe("the owner's Workers' phones", () => {
   it('keeps the invite in one place for every worker, always there', async () => {
     answer({ staff_device_list: ok({ devices: [] }) });
     render(<DeviceRequests store={shop()} />);
-    await screen.findByText('No requests yet.');
+    await screen.findByRole('button', { name: 'Copy invite link' });
     const panel = screen.getByRole('region', { name: 'Invite workers' });
-    expect(panel.textContent).toContain('One link for all your workers');
-    expect(panel.textContent).toContain(`${window.location.origin}/?join=SF-WSH001`);
+    expect(panel.textContent).toContain(`${window.location.host}/?join=SF-WSH001`);
     expect(panel.textContent).not.toContain('ABC123');
   });
 
@@ -172,7 +178,7 @@ describe("the owner's Workers' phones", () => {
     answer({ staff_device_list: no('not_owner') });
     const goOnline = vi.fn();
     render(<DeviceRequests store={shop()} onGoOnline={goOnline} />);
-    await screen.findByText(/Workers can't join yet/);
+    await screen.findByRole('button', { name: /Sync to add workers/ });
     const panel = screen.getByRole('region', { name: 'Invite workers' });
     expect(panel.textContent).not.toContain('?join=');
     expect(screen.queryByRole('button', { name: /Show invite QR/ })).toBeNull();
@@ -193,8 +199,7 @@ describe("the owner's Workers' phones", () => {
     session.mockResolvedValue(false);
     const goOnline = vi.fn();
     render(<DeviceRequests store={shop()} onGoOnline={goOnline} />);
-    await screen.findByText(/Sign in to your StoreFlow account/);
-    fireEvent.click(screen.getByRole('button', { name: /Sync to add workers/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Sync to add workers/ }));
     expect(goOnline).toHaveBeenCalled();
   });
 
@@ -213,7 +218,7 @@ describe("the owner's Workers' phones", () => {
   it('tells the owner to share the Store ID, never the access code', async () => {
     answer({ staff_device_list: ok({ devices: [] }) });
     render(<DeviceRequests store={shop()} />);
-    await screen.findByText('No requests yet.');
+    await screen.findByRole('button', { name: 'Copy invite link' });
     expect(screen.getByText('SF-WSH001')).toBeTruthy();
     expect(document.body.textContent).not.toContain('ABC123');
   });

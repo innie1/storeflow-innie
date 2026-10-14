@@ -390,24 +390,19 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
           onClose={() => setEarningsFor(null)}
         />
       )}
-    <div className="space-y-6 text-left">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="font-display font-bold text-2xl text-foreground flex items-center gap-2">
-            <Briefcase className="w-6 h-6 text-yellow-500" /> {hasTill ? 'Staff Accounts & Shifts' : 'Staff Accounts'}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {hasTill
-              ? 'Add your workers, set what each can reach, and track cashier shifts.'
-              : 'Add your workers and set what each of them can reach.'}
-          </p>
-        </div>
+    <div className="space-y-4 text-left">
+      {/* The title says what the page is; the buttons say what it does. */}
+      <div className="flex justify-between items-center gap-3">
+        <h2 className="font-display font-bold text-xl text-foreground flex items-center gap-2 min-w-0">
+          <Briefcase className="w-5 h-5 text-yellow-500 shrink-0" /> <span className="truncate">{hasTill ? 'Staff Accounts & Shifts' : 'Staff Accounts'}</span>
+        </h2>
         {currentUser?.role === 'owner' && (
-          <button 
+          <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
+            aria-label="Add Staff Member"
+            className="shrink-0 flex items-center gap-1.5 h-9 px-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-primary-foreground font-display font-bold transition-all text-sm shadow-md active:scale-95 cursor-pointer"
           >
-            <UserPlus className="w-4 h-4" /> Add Staff Member
+            <UserPlus className="w-4 h-4" /> Add
           </button>
         )}
       </div>
@@ -423,9 +418,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
           initialFullName={store.profile?.ownerName || ''}
         />
       )}
-      {currentUser?.role === 'owner' && <StaffExpenseSettings store={store} onUpdate={onUpdate} />}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left: Active Shift Tracker. Drawer floats are money, so only for
             somebody trusted with it. */}
         {hasTill && seesMoney && (
@@ -502,22 +495,18 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
         )}
 
         {/* Right: Accounts list and Shift history */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4">
           {/* Active Accounts list */}
-          <div className="space-y-3.5">
-            <h3 className="font-display font-bold text-base text-foreground">Your team</h3>
+          <div className="space-y-2">
+            <h3 className="font-display font-bold text-sm text-foreground">Your team</h3>
             {staffMembers.length === 0 ? (
-              <div className="text-center py-8 bg-card/30 rounded-2xl border border-dashed border-border/80">
-                <p className="text-muted-foreground text-xs">
-              {hasTill
-                ? 'Nobody added yet. Add a worker to give them their own login and shift log.'
-                : 'Nobody added yet. Add a worker to give them their own login.'}
-            </p>
+              <div className="text-center py-5 bg-card/30 rounded-2xl border border-dashed border-border/80">
+                <p className="text-muted-foreground text-xs">No workers yet. Tap Add.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {staffMembers.map(s => (
-                  <div key={s.id} className="p-4 rounded-xl bg-background border border-border flex flex-col justify-between gap-3 text-left">
+                  <div key={s.id} className="p-3 rounded-xl bg-background border border-border flex flex-col justify-between gap-2 text-left">
                     <div className="flex justify-between items-start gap-2">
                       <div>
                         <h4 className="font-display font-bold text-sm text-foreground">{s.name}</h4>
@@ -563,12 +552,8 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 flex-wrap text-[9px] font-mono text-muted-foreground">
-                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.sales ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>{hasTill ? 'Sales' : 'Orders'}</span>
-                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.inventory ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>{hasTill ? 'Inventory' : 'Price list'}</span>
-                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.reports ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Reports</span>
-                      <span className={`px-1.5 py-0.5 rounded ${s.permissions.settings ? 'bg-success/10 text-success' : 'bg-surface-2'}`}>Settings</span>
-                    </div>
+                    {/* What each worker can open is in their edit form; four
+                        grey chips on every card repeated it as noise. */}
 
                     {/*
                       Recording work and being paid are the two things a
@@ -649,6 +634,9 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
           )}
         </div>
       </div>
+
+      {/* A setting, set once - below the team rather than above it. */}
+      {currentUser?.role === 'owner' && <StaffExpenseSettings store={store} onUpdate={onUpdate} />}
 
       {/*
         The worker form, as a sheet whose middle scrolls.
