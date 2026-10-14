@@ -148,7 +148,7 @@ export function redeemCode(requestId: string, code: string) {
 export function joinErrorText(error: string, triesLeft?: number): string {
   switch (error) {
     case 'not_found': return 'StoreFlow cannot find this shop online. Check the Store ID with the owner - if it is right, the owner needs to turn on Cloud Sync first.';
-    case 'wrong_pin': return 'That PIN is not right for this shop.';
+    case 'wrong_pin': return 'That PIN is not right for this shop. If it is, ask the owner to open StoreFlow and sign in, then try again.';
     case 'paused': return 'Too many wrong tries. Wait an hour, or ask the owner.';
     case 'too_many': return 'This shop has too many requests waiting. Ask the owner to clear them.';
     case 'wrong_code': return `That code is not right.${triesLeft !== undefined ? ` ${triesLeft} ${triesLeft === 1 ? 'try' : 'tries'} left.` : ''}`;
@@ -161,6 +161,22 @@ export function joinErrorText(error: string, triesLeft?: number): string {
 }
 
 /* ── the owner ──────────────────────────────────────────────────────────── */
+
+/**
+ * Whether customers can already find this shop online - the same public
+ * lookup their phones use, so it needs nobody signed in. A shop customers
+ * order from is a shop workers' phones can find, whether or not the owner is
+ * signed in on this particular phone.
+ */
+export async function shopIsOnline(storeId: string): Promise<boolean> {
+  if (!storeId) return false;
+  try {
+    const { data, error } = await rpcAheadOfTypes('get_public_storefront', { p_key: normaliseStoreRef(storeId) });
+    return !error && !!data;
+  } catch {
+    return false;
+  }
+}
 
 export function listDevices(storeRef: string) {
   return call<{ devices: DeviceRow[] }>('staff_device_list', { p_store_ref: storeRef });

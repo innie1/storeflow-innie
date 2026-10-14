@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Cloud, Copy, QrCode, RefreshCw, Share2, Smartphone, UserPlus } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import {
-  approveDevice, inviteLink, inviteMessage, lastSeen, listDevices, rejectDevice, revokeAllDevices, revokeDevice, spacedCode, type DeviceRow,
+  approveDevice, inviteLink, inviteMessage, lastSeen, shopIsOnline, listDevices, rejectDevice, revokeAllDevices, revokeDevice, spacedCode, type DeviceRow,
 } from '@/lib/staff-join';
 import { drawSimpleQR } from '@/lib/qr-code';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -34,7 +34,13 @@ import ScrollLock from '@/components/ScrollLock';
  * that cannot work.
  */
 
-export type CloudState = 'loading' | 'ready' | 'signin' | 'notOnline' | 'offline';
+/**
+ * ready - signed in as the owner, and the cloud has the shop.
+ * public - customers can find the shop online, but nobody is signed in on
+ *   this phone: the link works, approving needs a sign-in.
+ * signin / notOnline - the cloud has no shop to send anyone to yet.
+ */
+export type CloudState = 'loading' | 'ready' | 'public' | 'signin' | 'notOnline' | 'offline';
 
 interface Props {
   store: StoreData;
@@ -74,13 +80,15 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
   const invite = store.storeId ? inviteLink(store.storeId) : '';
 
   const load = useCallback(async () => {
-    if (!(await hasCloudSession())) return setState('signin');
+    // Signed out on this phone is not the same as offline: a shop customers
+    // already order from needs no Sync, only the link.
+    if (!(await hasCloudSession())) return setState(await shopIsOnline(store.storeId || '') ? 'public' : 'signin');
     const result = await listDevices(ref);
     // Signed in, yet the cloud has no shop of this account's under this Store ID.
     if ('error' in result) return setState(result.error === 'not_owner' ? 'notOnline' : 'offline');
     setDevices(result.devices);
     setState('ready');
-  }, [ref]);
+  }, [ref, store.storeId]);
 
   useEffect(() => {
     void load();
@@ -141,7 +149,7 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
 
   /** Only an invite that can work goes out; otherwise the shop goes online first. */
   const whenOnline = (send: () => void) => {
-    if (state === 'ready') return send();
+    if (state === 'ready' || state === 'public') return send();
     if (state === 'loading') return showToast('Checking your shop is online. Try again in a moment.', 'info');
     if (state === 'offline') return showToast('No internet right now. Invites can be sent once you are online.', 'error');
     if (onGoOnline) return onGoOnline();
@@ -216,7 +224,7 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
               disabled={state === 'loading'}
               onClick={() => whenOnline(() => void copyInvite())}
               aria-label="Copy invite link"
-              className={`min-w-0 flex-1 h-9 px-2.5 rounded-xl border text-left font-mono text-[11px] truncate flex items-center gap-1.5 disabled:opacity-50 ${state === 'ready' ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
+              className={`min-w-0 flex-1 h-9 px-2.5 rounded-xl border text-left font-mono text-[11px] truncate flex items-center gap-1.5 disabled:opacity-50 ${state === 'ready' || state === 'public' ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-2 border-border text-muted-foreground'}`}
             >
               <Copy className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{invite.replace(/^https?:\/\//, '')}</span>
             </button>
@@ -227,6 +235,13 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
               <Share2 className="w-3.5 h-3.5" /> Send
             </button>
           </div>
+        )}
+        {/* The link already works; seeing and approving who asks is the
+            owner's, so that alone waits for a sign-in on this phone. */}
+        {state === 'public' && onGoOnline && (
+          <button type="button" onClick={onGoOnline} className="text-[11px] text-muted-foreground underline underline-offset-2">
+            Sign in on this phone to approve workers
+          </button>
         )}
       </section>
     )}

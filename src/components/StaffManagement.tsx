@@ -116,7 +116,8 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
   const inviteWorker = async (worker: StaffMember) => {
     if (cloudState === 'signin' || cloudState === 'notOnline') return goOnline();
     if (cloudState === 'offline') return showToast('No internet right now. Invites can be sent once you are online.', 'error');
-    if (cloudState !== 'ready' || !store.storeId) return showToast('Checking your shop is online. Try again in a moment.', 'info');
+    // 'public': customers already find the shop online, so the link works.
+    if ((cloudState !== 'ready' && cloudState !== 'public') || !store.storeId) return showToast('Checking your shop is online. Try again in a moment.', 'info');
     const text = inviteMessage(store.storeName, inviteLink(store.storeId), worker.name);
     try {
       if (navigator.share) await navigator.share({ text });

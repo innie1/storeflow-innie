@@ -79,7 +79,7 @@ describe('Join a Store, on the worker’s phone', () => {
     answer({ staff_join_identify: no('wrong_pin') });
     render(<JoinStore onBack={() => {}} />);
     fill('sf-wsh001', '0000');
-    await screen.findByText('That PIN is not right for this shop.');
+    await screen.findByText(/^That PIN is not right for this shop\./);
     expect(rpc).toHaveBeenCalledWith('staff_join_identify', expect.objectContaining({ p_store_ref: 'SF-WSH001', p_pin: '0000' }));
     expect(screen.queryByText(/You are/)).toBeNull();
   });
@@ -130,11 +130,30 @@ describe('Join a Store, on the worker’s phone', () => {
 describe("the owner's Workers' phones", () => {
   const pending = { id: 'r1', staff_id: 's1', staff_name: 'Faith', staff_role: 'attendant', device_label: 'Samsung SM-A366B', status: 'pending', requested_at: new Date().toISOString() };
 
-  it('offers Sync, without asking the cloud, when this phone has no account', async () => {
+  it('offers Sync when this phone has no account and customers cannot find the shop either', async () => {
     session.mockResolvedValue(false);
+    answer({ get_public_storefront: { data: null, error: null } });
     render(<DeviceRequests store={shop()} onGoOnline={() => {}} />);
     await screen.findByRole('button', { name: /Sync to add workers/ });
-    expect(rpc).not.toHaveBeenCalled();
+    // Only the public lookup - nothing an owner's account would be needed for.
+    expect(rpc).toHaveBeenCalledWith('get_public_storefront', { p_key: 'SF-WSH001' });
+    expect(rpc).not.toHaveBeenCalledWith('staff_device_list', expect.anything());
+  });
+
+  it('shares the link straight away for a shop customers already order from, signed in or not', async () => {
+    session.mockResolvedValue(false);
+    answer({ get_public_storefront: { data: { store_id: 'SF-WSH001' }, error: null } });
+    const goOnline = vi.fn();
+    render(<DeviceRequests store={shop()} onGoOnline={goOnline} />);
+    const link = await screen.findByRole('button', { name: 'Copy invite link' });
+    expect(link.className).toContain('text-primary');
+    expect(screen.queryByRole('button', { name: /Sync to add workers/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Show invite QR/ }));
+    expect(screen.getByRole('dialog', { name: 'Staff invite' })).toBeTruthy();
+    expect(goOnline).not.toHaveBeenCalled();
+    // Approving is still the owner's, so that alone asks for a sign-in.
+    fireEvent.click(screen.getByRole('button', { name: /Sign in on this phone to approve workers/ }));
+    expect(goOnline).toHaveBeenCalledTimes(1);
   });
 
   it('shows no empty Workers\' phones box when nobody has asked', async () => {
