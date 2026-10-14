@@ -212,13 +212,27 @@ export function inviteLink(storeRef: string, origin: string = window.location.or
   return `${origin}/?join=${encodeURIComponent(normaliseStoreRef(storeRef))}`;
 }
 
+/** A role the way it is said out loud: "an Attendant", "a Cashier". */
+export function roleWithArticle(role?: string): string {
+  const names: Record<string, string> = {
+    cashier: 'Cashier', attendant: 'Attendant', inventory: 'Inventory Staff', supervisor: 'Supervisor',
+    accountant: 'Accountant', manager: 'Manager',
+  };
+  const name = role ? names[role] : '';
+  if (!name) return '';
+  return `${/^[AEIOU]/.test(name) ? 'an' : 'a'} ${name}`;
+}
+
 /**
  * What the owner sends: one link serves every worker, since each one proves
- * who they are with their own PIN. Named when it goes to one person.
+ * who they are with their own PIN - which is also what tells the app their
+ * role. Named, with that role, when it goes to one person, so they know what
+ * they are joining as. The PIN itself is never in it: the owner tells them.
  */
-export function inviteMessage(storeName: string, link: string, workerName?: string): string {
+export function inviteMessage(storeName: string, link: string, workerName?: string, role?: string): string {
+  const as = roleWithArticle(role);
   const hello = workerName ? `Hi ${workerName}, join` : 'Join';
-  return `${hello} ${storeName} on StoreFlow: ${link}\nOpen it on your phone and enter your staff PIN.`;
+  return `${hello} ${storeName} on StoreFlow${as ? ` as ${as}` : ''}: ${link}\nOpen it on your phone and enter your staff PIN.`;
 }
 
 /** The Store ID an invite link brought, if this page was opened from one. */

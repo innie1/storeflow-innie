@@ -49,6 +49,8 @@ interface Props {
   /** Changed after the shop goes online, to ask the cloud again. */
   refreshKey?: number;
   onState?: (state: CloudState) => void;
+  /** Open the add-worker form: a worker has to exist before the link means anything. */
+  onAddWorker?: () => void;
 }
 
 interface ShownCode {
@@ -67,7 +69,7 @@ const when = (iso?: string) => iso
 
 type Revoking = { kind: 'one'; device: DeviceRow } | { kind: 'all'; staffId: string; name: string; count: number };
 
-export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onState }: Props) {
+export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onState, onAddWorker }: Props) {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [state, setState] = useState<CloudState>('loading');
   const [busy, setBusy] = useState('');
@@ -144,6 +146,9 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
     void drawSimpleQR(invite, qrCanvas.current).catch(() => showToast('Could not draw the QR. Send the link instead.', 'error'));
   }, [showInvite, invite]);
 
+  /** Somebody a worker could join as: a name, a PIN and a role, set by the owner. */
+  const hasWorkers = (store.staffMembers || []).some(member => member.role !== 'owner');
+
   /** The cloud has not got this shop for this owner yet. */
   const needsSync = state === 'signin' || state === 'notOnline';
 
@@ -209,7 +214,22 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
           one Sync button in its place, so a link that cannot work is never
           sent and the owner is one tap from one that does.
         */}
-        {needsSync ? (
+        {/*
+          The link only lets someone in with a PIN the owner set, and that PIN
+          is what gives them their role. With nobody added there is no PIN to
+          match, so the box asks for a worker first instead of offering a link
+          that cannot let anyone in.
+        */}
+        {!hasWorkers ? (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">Add a worker first: name, PIN and role.</p>
+            {onAddWorker && (
+              <button type="button" onClick={onAddWorker} className="shrink-0 h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-display font-bold flex items-center gap-1">
+                <UserPlus className="w-3.5 h-3.5" /> Add worker
+              </button>
+            )}
+          </div>
+        ) : needsSync ? (
           onGoOnline ? (
             <button type="button" onClick={onGoOnline} className="w-full h-10 rounded-xl bg-primary text-primary-foreground text-sm font-display font-black flex items-center justify-center gap-1.5">
               <Cloud className="w-4 h-4" /> Sync to add workers
@@ -238,7 +258,7 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
         )}
         {/* The link already works; seeing and approving who asks is the
             owner's, so that alone waits for a sign-in on this phone. */}
-        {state === 'public' && onGoOnline && (
+        {hasWorkers && state === 'public' && onGoOnline && (
           <button type="button" onClick={onGoOnline} className="text-[11px] text-muted-foreground underline underline-offset-2">
             Sign in on this phone to approve workers
           </button>

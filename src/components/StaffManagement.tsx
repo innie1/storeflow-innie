@@ -20,7 +20,7 @@ import StaffExpenseSettings from '@/components/staff/StaffExpenseSettings';
 import DeviceRequests, { type CloudState } from '@/components/staff/DeviceRequests';
 import CloudAuthModal from '@/components/CloudAuthModal';
 import { getPendingStoreSync, retryStoreSync } from '@/lib/store-cloud-sync';
-import { inviteLink, inviteMessage } from '@/lib/staff-join';
+import { inviteLink, inviteMessage, roleWithArticle } from '@/lib/staff-join';
 
 interface StaffManagementProps {
   store: StoreData;
@@ -86,6 +86,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
    * off to Settings and back.
    */
   const [cloudState, setCloudState] = useState<CloudState>('loading');
+  const [justAdded, setJustAdded] = useState<StaffMember | null>(null);
   const [goingOnline, setGoingOnline] = useState(false);
   const [cloudCheck, setCloudCheck] = useState(0);
   const latestStore = useRef(store);
@@ -118,7 +119,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
     if (cloudState === 'offline') return showToast('No internet right now. Invites can be sent once you are online.', 'error');
     // 'public': customers already find the shop online, so the link works.
     if ((cloudState !== 'ready' && cloudState !== 'public') || !store.storeId) return showToast('Checking your shop is online. Try again in a moment.', 'info');
-    const text = inviteMessage(store.storeName, inviteLink(store.storeId), worker.name);
+    const text = inviteMessage(store.storeName, inviteLink(store.storeId), worker.name, worker.role);
     try {
       if (navigator.share) await navigator.share({ text });
       else { await navigator.clipboard.writeText(text); showToast(`Invite for ${worker.name} copied. Paste it to them.`); }
@@ -248,8 +249,13 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
       }
     });
     onUpdate(nextStore);
-    showToast('Employee account created!');
     resetForm();
+    // The moment the worker exists - name, PIN, role - is the moment to send
+    // their invite, so it is offered here rather than left to be found.
+    const known = new Set((store.staffMembers || []).map(member => member.id));
+    const added = (nextStore.staffMembers || []).find(member => !known.has(member.id));
+    if (added && currentUser?.role === 'owner') setJustAdded(added);
+    else showToast('Employee account created!');
   };
 
   const handleEditStaff = (e: React.FormEvent) => {
@@ -409,7 +415,22 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
       </div>
 
       {currentUser?.role === 'owner' && (
-        <DeviceRequests store={store} onGoOnline={goOnline} refreshKey={cloudCheck} onState={setCloudState} />
+        <DeviceRequests store={store} onGoOnline={goOnline} refreshKey={cloudCheck} onState={setCloudState} onAddWorker={() => setShowAddModal(true)} />
+      )}
+      {justAdded && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-background/85 backdrop-blur-sm" onClick={() => setJustAdded(null)}>
+          <ScrollLock />
+          <div role="dialog" aria-label="Invite the new worker" className="w-full max-w-sm rounded-2xl bg-card border border-border p-5 text-center space-y-3" onClick={e => e.stopPropagation()}>
+            <h3 className="font-display font-black text-lg">{justAdded.name} added{roleWithArticle(justAdded.role) ? ` as ${roleWithArticle(justAdded.role)}` : ''}</h3>
+            <p className="text-sm text-muted-foreground">Send {justAdded.name} the invite now? They open it on their phone and enter the PIN you just set.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setJustAdded(null)} className="h-11 rounded-xl bg-surface-2 border border-border font-display font-bold">Later</button>
+              <button type="button" onClick={() => { const worker = justAdded; setJustAdded(null); void inviteWorker(worker); }} className="h-11 rounded-xl bg-primary text-primary-foreground font-display font-black flex items-center justify-center gap-1.5">
+                <Share2 className="w-4 h-4" /> Send invite
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {goingOnline && (
         <CloudAuthModal

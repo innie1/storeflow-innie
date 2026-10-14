@@ -10,7 +10,7 @@ vi.mock('@/components/Toast', () => ({ showToast: vi.fn() }));
 
 import JoinStore from '@/components/staff/JoinStore';
 import DeviceRequests from '@/components/staff/DeviceRequests';
-import { deviceKey, inviteMessage, joinErrorText, normaliseStoreRef, readJoin, spacedCode } from '@/lib/staff-join';
+import { deviceKey, inviteMessage, joinErrorText, normaliseStoreRef, readJoin, roleWithArticle, spacedCode } from '@/lib/staff-join';
 import { noticeNewDeviceRequests, storeRefOf } from '@/lib/device-request-watch';
 import { visibleNotifications } from '@/lib/notification-gate';
 import { readSource } from './helpers/source';
@@ -34,7 +34,7 @@ function answer(map: Record<string, unknown | ((args: Record<string, unknown>) =
 
 const shop = (): StoreData => ({
   storeName: 'Washlie', accessCode: 'ABC123', storeId: 'SF-WSH001', products: [], sales: [], expenses: [], customers: [],
-  staffMembers: [], managerSettings: {}, createdAt: new Date(0).toISOString(),
+  staffMembers: [{ id: 's1', name: 'Faith', role: 'attendant', pin: '1234' }], managerSettings: {}, createdAt: new Date(0).toISOString(),
 } as unknown as StoreData);
 
 beforeEach(() => { rpc.mockReset(); session.mockReset(); session.mockResolvedValue(true); });
@@ -222,11 +222,30 @@ describe("the owner's Workers' phones", () => {
     expect(goOnline).toHaveBeenCalled();
   });
 
-  it('names the worker when the invite goes to one person', () => {
-    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001', 'Faith')).toBe(
-      'Hi Faith, join Washlie on StoreFlow: https://app.test/?join=SF-WSH001\nOpen it on your phone and enter your staff PIN.',
+  it('names the worker, and their role, when the invite goes to one person', () => {
+    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001', 'Faith', 'attendant')).toBe(
+      'Hi Faith, join Washlie on StoreFlow as an Attendant: https://app.test/?join=SF-WSH001\nOpen it on your phone and enter your staff PIN.',
     );
-    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001')).toMatch(/^Join Washlie on StoreFlow/);
+    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001', 'Ada', 'cashier')).toMatch(/as a Cashier:/);
+    // A custom role has no name to say; the PIN still decides what they can open.
+    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001', 'Ada', 'custom')).toMatch(/^Hi Ada, join Washlie on StoreFlow: /);
+    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001')).toMatch(/^Join Washlie on StoreFlow: /);
+    expect(inviteMessage('Washlie', 'https://app.test/?join=SF-WSH001', 'Faith', 'attendant')).not.toContain('1234');
+    expect(roleWithArticle('inventory')).toBe('an Inventory Staff');
+    expect(roleWithArticle('manager')).toBe('a Manager');
+  });
+
+  it('asks for a worker before offering a link nobody could use', async () => {
+    answer({ staff_device_list: ok({ devices: [] }) });
+    const addWorker = vi.fn();
+    render(<DeviceRequests store={{ ...shop(), staffMembers: [] }} onAddWorker={addWorker} />);
+    const panel = await screen.findByRole('region', { name: 'Invite workers' });
+    await waitFor(() => expect(rpc).toHaveBeenCalled());
+    expect(panel.textContent).toContain('Add a worker first: name, PIN and role.');
+    expect(panel.textContent).not.toContain('?join=');
+    expect(screen.queryByRole('button', { name: /Sync to add workers/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Add worker/ }));
+    expect(addWorker).toHaveBeenCalled();
   });
 
   it('tells a worker an unknown shop may simply not be online yet', () => {
