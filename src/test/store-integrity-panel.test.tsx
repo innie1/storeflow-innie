@@ -6,13 +6,23 @@ beforeEach(()=>{localStorage.clear();vi.spyOn(navigator,'onLine','get').mockRetu
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 it('shows the owner a read-only historical stock check',()=>{
  const store=createStore('Preview','retail');store.products=[{id:'p',name:'Soap',quantity:0.04,costPrice:1,sellingPrice:2,category:'Goods',isCartonSingleEnabled:true,singlesPerCarton:12}];
- // A shop with nothing waiting draws nothing at all now - no status line, no
- // Refresh - so this gives it something waiting before asking for the checks.
- localStorage.setItem('storeflow_sync_pending_'+store.accessCode,JSON.stringify({base:store,next:store,state:'pending'}));
+ // Drawn only when the owner has something to decide: a held sync.
+ localStorage.setItem('storeflow_sync_pending_'+store.accessCode,JSON.stringify({base:store,next:store,state:'conflict'}));
  const before=JSON.stringify(store);render(<StoreIntegrityPanel store={store} owner />);
+ expect(screen.getByRole('status')).toHaveTextContent('Sync needs your review');
+ expect(screen.getByRole('button',{name:'Review'})).toBeInTheDocument();
  fireEvent.click(screen.getByRole('button',{name:'Check records'}));expect(screen.getByText(/does not represent valid whole pieces/)).toBeInTheDocument();expect(JSON.stringify(store)).toBe(before);
 });
-it('shows offline pending status and retry without exposing owner controls to staff',()=>{
- const store=createStore('Pending','retail');localStorage.setItem('storeflow_sync_pending_'+store.accessCode,JSON.stringify({base:store,next:store,state:'pending'}));
- render(<StoreIntegrityPanel store={store} owner={false} />);expect(screen.getByRole('status')).toHaveTextContent('saved on this device');expect(screen.getByRole('button',{name:'Retry sync'})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'Check records'})).not.toBeInTheDocument();
+it('keeps waiting, syncing and failed tries off the page - the app retries them itself',()=>{
+ const store=createStore('Pending','retail');
+ for (const state of ['pending','syncing','error']) {
+  localStorage.setItem('storeflow_sync_pending_'+store.accessCode,JSON.stringify({base:store,next:store,state,error:'Sync failed.'}));
+  const { container } = render(<StoreIntegrityPanel store={store} owner />);
+  expect(container.innerHTML).toBe('');
+  cleanup();
+ }
+});
+it('shows a worker nothing, even when the sync is held - only the owner can settle it',()=>{
+ const store=createStore('Held','retail');localStorage.setItem('storeflow_sync_pending_'+store.accessCode,JSON.stringify({base:store,next:store,state:'conflict'}));
+ const { container } = render(<StoreIntegrityPanel store={store} owner={false} />);expect(container.innerHTML).toBe('');
 });

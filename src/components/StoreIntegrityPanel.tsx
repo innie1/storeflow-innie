@@ -20,12 +20,15 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
     setOpen(false); setReview(null); setAcknowledged(false);
     const update = () => setPending(getPendingStoreSync(store.accessCode));
     const retry = () => { const held = getPendingStoreSync(store.accessCode); if (held && held.state !== 'conflict') void retryStoreSync(store.accessCode).catch(() => {}); };
-    update(); retry();
+    // On opening and on coming back online, a held sync with no agreed copy is
+    // looked at again: if the cloud's copy is only older it settles itself.
+    const settle = () => { const held = getPendingStoreSync(store.accessCode); if (held?.state === 'conflict' && !held.base) void retryStoreSync(store.accessCode, { settleOlderCloud: true }).catch(() => {}); else retry(); };
+    update(); settle();
     window.addEventListener(STORE_SYNC_EVENT, update);
     window.addEventListener('storage', update);
-    window.addEventListener('online', retry);
+    window.addEventListener('online', settle);
     const interval = window.setInterval(retry, 30_000);
-    return () => { window.removeEventListener(STORE_SYNC_EVENT, update); window.removeEventListener('storage', update); window.removeEventListener('online', retry); window.clearInterval(interval); };
+    return () => { window.removeEventListener(STORE_SYNC_EVENT, update); window.removeEventListener('storage', update); window.removeEventListener('online', settle); window.clearInterval(interval); };
   }, [store.accessCode]);
   const act = async (action: () => Promise<void>) => {
     if (busy) return;
@@ -49,6 +52,15 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
    * affairs and the quieter screen.
    */
   if (!unsent) return null;
+  /*
+   * Only what the owner has to decide. Waiting, syncing and a failed try are
+   * the app's own business - it retries on opening, every half minute and on
+   * coming back online, and settles a cloud copy that is only older by
+   * itself - so they no longer sit above the page as a banner of status words
+   * and buttons. What is left is the one case only the owner can answer: the
+   * cloud has records this phone has never seen.
+   */
+  if (unsent.state !== 'conflict' || !owner) return null;
   const compare = () => void act(async () => { setReview(await inspectStoreConflict(store.accessCode)); setAcknowledged(false); });
   /*
    * A held sync's way out, where the owner can see it. It sat behind Check
@@ -65,13 +77,16 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
     <p className="text-muted-foreground">Using the cloud copy removes unuploaded changes from the active device records. A recovery copy is retained on this device.</p>
     <button disabled={!acknowledged || busy} className="w-full border rounded p-2 disabled:opacity-50" onClick={() => void act(async () => { await adoptReviewedCloudCopy(store.accessCode, review); setReview(null); setAcknowledged(false); })}>Keep recovery copy and use cloud records</button>
   </div>;
-  return <section className="rounded-xl border border-border bg-card p-3 text-sm space-y-2" aria-label="Store sync and record checks">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <span role="status">{unsent.state === 'syncing' ? 'Syncing saved records…' : unsent.state === 'conflict' ? 'Sync needs review — saved on this device' : 'Records waiting to sync — saved on this device'}</span>
-      <div className="flex gap-3">{owner && unsent.state === 'conflict' && !review && <button disabled={busy} className="font-bold text-primary" onClick={compare}>Review sync</button>}<button disabled={busy || unsent.state === 'syncing'} onClick={() => void act(() => retryStoreSync(store.accessCode))}>Retry sync</button>{owner && <button onClick={() => setOpen(v => !v)}>{open ? 'Close checks' : 'Check records'}</button>}</div>
+  return <section className="rounded-xl border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs space-y-2" aria-label="Store sync and record checks">
+    <div className="flex items-center justify-between gap-2">
+      <span role="status" className="text-amber-600 font-semibold">Sync needs your review</span>
+      <div className="flex items-center gap-3 shrink-0">
+        <button className="text-muted-foreground" onClick={() => setOpen(v => !v)}>{open ? 'Close checks' : 'Check records'}</button>
+        {!review && <button disabled={busy} className="font-bold text-primary" onClick={compare}>Review</button>}
+      </div>
     </div>
-    {unsent?.error && <p className="text-muted-foreground">{unsent.error}</p>}
-    {owner && !open && choose}
+    {review && !open && <p className="text-muted-foreground">{unsent.error}</p>}
+    {!open && choose}
     {open && owner && <div className="space-y-3">
       <p>These checks flag inconsistent records. Verify receipts and physical stock before making historical corrections.</p>
       <button className="underline" onClick={() => download(`storeflow-record-checks-${store.accessCode}.json`, { date: new Date().toISOString(), issues })}>Download findings</button>
