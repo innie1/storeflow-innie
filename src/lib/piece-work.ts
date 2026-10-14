@@ -132,8 +132,14 @@ export function workRecordFromOrder(order: any): WorkRecord | null {
     clientRef,
     tagCode: String(meta.tag_code || meta.receipt_number || order?.order_number || '').toUpperCase(),
     customerName: String(order?.customer_name || 'Walk-in Customer'),
+    /*
+     * A bundle saved on this phone names a line's garment `garmentType`; one
+     * from the cloud names it `garment_type`. Reading only the first made
+     * every bundle the cloud holds look empty, so Record work said "Nothing
+     * waiting" in a shop with bundles on every shelf.
+     */
     garments: lines
-      .map(line => ({ garmentType: String(line?.garmentType || '').trim(), quantity: Math.max(0, Number(line?.quantity) || 0) }))
+      .map(line => ({ garmentType: String(line?.garmentType || line?.garment_type || '').trim(), quantity: Math.max(0, Number(line?.quantity) || 0) }))
       .filter(line => line.garmentType && line.quantity > 0),
     workflowStage: String(order?.workflow_stage || 'received'),
   };
@@ -198,7 +204,8 @@ export function openJobsForTask(
   const source: WorkRecord[] = records ?? (accessCode ? shopLaundryRecords(accessCode) : []);
 
   return source
-    .filter(record => record.workflowStage !== 'collected')
+    // Collected or turned away: nothing was, or will be, done to it here.
+    .filter(record => record.workflowStage !== 'collected' && record.workflowStage !== 'rejected')
     .map(record => ({ record, items: remainingForTask(store, record, task) }))
     .filter(job => job.items.length > 0);
 }

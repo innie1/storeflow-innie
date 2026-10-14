@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StaffMember, StoreData } from '@/types/store';
 import {
-  approvePieceWork, hasMonthlySalary, isPerPieceWorker, payWorker, piecesCoveredByPayments, recordPieceWork, remainingForTask, workerEarnings,
+  approvePieceWork, hasMonthlySalary, isPerPieceWorker, openJobsForTask, payWorker, piecesCoveredByPayments, recordPieceWork, remainingForTask, workerEarnings, workRecordFromOrder,
 } from '@/lib/piece-work';
 import { readSource } from './helpers/source';
 
@@ -98,5 +98,26 @@ describe('a worker phone left open', () => {
     const index = readSource('src/pages/Index.tsx');
     expect(index).toContain("document.addEventListener('visibilitychange', onVisible)");
     expect(index).toContain('Date.now() - lastAsked < 60_000');
+  });
+});
+
+describe('bundles that came from the cloud', () => {
+  // Shaped as the cloud keeps them: `garment_type`, not `garmentType`.
+  const cloudBundle = (stage: string) => ({
+    client_ref: `ref-${stage}`, order_number: 'WSH-1', customer_name: 'Ada', workflow_stage: stage,
+    service_metadata: { client_ref: `ref-${stage}`, tag_code: 'WSH-1', garment_lines: [{ garment_type: 'Shirt', quantity: 4, unit_price: 500, subtotal: 2000 }] },
+  });
+
+  it('are offered in Record work with their clothes', () => {
+    const record = workRecordFromOrder(cloudBundle('ready'));
+    expect(record?.garments).toEqual([{ garmentType: 'Shirt', quantity: 4 }]);
+    const jobs = openJobsForTask(shop(), 'ironing', [record!]);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].items).toEqual([{ garmentType: 'Shirt', total: 4, remaining: 4 }]);
+  });
+
+  it('leave out what was collected or turned away', () => {
+    const records = ['collected', 'rejected', 'washing'].map(stage => workRecordFromOrder(cloudBundle(stage))!);
+    expect(openJobsForTask(shop(), 'ironing', records).map(job => job.record.workflowStage)).toEqual(['washing']);
   });
 });
