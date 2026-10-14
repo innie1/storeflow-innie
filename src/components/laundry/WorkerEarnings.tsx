@@ -106,19 +106,31 @@ export default function WorkerEarnings({ store, worker, canManage, onUpdate, onC
         )}
 
         {/* The three that matter on payday, said plainly. */}
+        {/*
+          Pieces beside the money, so "she says 125" can be checked at a
+          glance against what was already agreed and already paid for.
+          Payments cover the oldest approved work first; see
+          piecesCoveredByPayments.
+        */}
         <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3.5 space-y-1.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Earned and agreed</span>
-            <span className="font-display font-bold">{money(earnings.approvedTotal)}</span>
+            <span className="font-display font-bold"><span className="font-normal text-muted-foreground">{earnings.piecesApproved} pcs · </span>{money(earnings.approvedTotal)}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Already paid</span>
-            <span className="font-display font-bold">{money(earnings.paid)}</span>
+            <span className="font-display font-bold"><span className="font-normal text-muted-foreground">{earnings.piecesPaid} pcs · </span>{money(earnings.paid)}</span>
           </div>
           <div className="flex items-center justify-between text-sm border-t border-border pt-1.5">
             <span className="font-display font-black">Still owed</span>
-            <span className="font-display font-black text-primary">{money(earnings.balance)}</span>
+            <span className="font-display font-black text-primary"><span className="font-normal text-muted-foreground text-xs">{earnings.piecesOwed} pcs · </span>{money(earnings.balance)}</span>
           </div>
+          {worker.payType === 'salary_piece' && Number(worker.monthlySalary) > 0 && (
+            /* The wage is a fixed monthly cost of its own, not part of these. */
+            <p className="text-[10px] text-muted-foreground pt-1">
+              Plus the monthly salary of {money(Number(worker.monthlySalary))}, paid as usual.
+            </p>
+          )}
           {earnings.awaitingApproval > 0 && (
             /* Kept out of the total on purpose: it is a claim, not a debt. */
             <p className="text-[10px] text-muted-foreground pt-1">

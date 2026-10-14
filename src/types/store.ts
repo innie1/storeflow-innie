@@ -626,7 +626,12 @@ export interface StaffMember {
    * Absent means monthly, which is what every staff member recorded before
    * this existed was assumed to be.
    */
-  payType?: 'monthly' | 'per_piece' | 'none';
+  /*
+   * 'salary_piece' is both: a monthly wage, and by the piece for the tasks
+   * that have a rate - an attendant on a salary who is also paid for every
+   * shirt she irons.
+   */
+  payType?: 'monthly' | 'per_piece' | 'salary_piece' | 'none';
   /** What this person earns per piece, by task and item. See piece-work. */
   pieceRates?: PieceRate[];
   permissions: {

@@ -8,7 +8,7 @@ import {
   Briefcase, UserPlus, Lock, Key, Shield, Calendar, Play, Square, FileText, CheckSquare, Trash2, Edit, Check, X, Share2, Cloud
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
-import { ANY_GARMENT, pendingClaims, setPieceRate, taskLabel, WORK_TASKS } from '@/lib/piece-work';
+import { ANY_GARMENT, hasMonthlySalary, isPerPieceWorker, pendingClaims, setPieceRate, taskLabel, WORK_TASKS } from '@/lib/piece-work';
 import { getLaundryPricingConfig } from '@/lib/laundry-pricing';
 import RecordWork from '@/components/laundry/RecordWork';
 import WorkerEarnings from '@/components/laundry/WorkerEarnings';
@@ -132,7 +132,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
   const [phone, setPhone] = useState('');
   /** What they are paid a month. Feeds the shop's fixed costs. */
   const [salary, setSalary] = useState('');
-  const [payType, setPayType] = useState<'monthly' | 'per_piece' | 'none'>('monthly');
+  const [payType, setPayType] = useState<'monthly' | 'per_piece' | 'salary_piece' | 'none'>('monthly');
   const [pieceRates, setPieceRates] = useState<PieceRate[]>([]);
   const [newRateTask, setNewRateTask] = useState<string>(WORK_TASKS[0].id);
   const [newRateGarment, setNewRateGarment] = useState('');
@@ -235,9 +235,9 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
       name: name.trim(),
       pin: pin.trim(),
       phone: phone.trim(),
-      monthlySalary: payType === 'monthly' ? Math.max(0, Number(salary) || 0) : 0,
+      monthlySalary: hasMonthlySalary({ payType }) ? Math.max(0, Number(salary) || 0) : 0,
       payType,
-      pieceRates: payType === 'per_piece' ? pieceRates.filter(r => r.rate > 0) : [],
+      pieceRates: isPerPieceWorker({ payType }) ? pieceRates.filter(r => r.rate > 0) : [],
       role,
       permissions: {
         sales: salesAccess,
@@ -271,9 +271,9 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
       name: name.trim(),
       pin: pin.trim(),
       phone: phone.trim(),
-      monthlySalary: payType === 'monthly' ? Math.max(0, Number(salary) || 0) : 0,
+      monthlySalary: hasMonthlySalary({ payType }) ? Math.max(0, Number(salary) || 0) : 0,
       payType,
-      pieceRates: payType === 'per_piece' ? pieceRates.filter(r => r.rate > 0) : [],
+      pieceRates: isPerPieceWorker({ payType }) ? pieceRates.filter(r => r.rate > 0) : [],
       role,
       permissions: {
         sales: salesAccess,
@@ -539,9 +539,9 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                           {/* How somebody is paid changes what the shop owes
                               them, which is worth seeing on the row rather
                               than only inside the edit form. */}
-                          {s.payType === 'per_piece' && (
+                          {isPerPieceWorker(s) && (
                             <span className="inline-block px-1.5 py-0.5 rounded bg-primary/15 border border-primary/30 text-[8px] font-bold text-primary uppercase">
-                              per piece
+                              {s.payType === 'salary_piece' ? 'salary + piece' : 'per piece'}
                             </span>
                           )}
                           {s.role === 'supervisor' && s.permissions.money && (
@@ -583,7 +583,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                       is: somebody can turn up all day and iron nothing, and
                       the shop owes them for the ironing either way.
                     */}
-                    {s.payType === 'per_piece' && (
+                    {isPerPieceWorker(s) && (
                       <div className="flex gap-1.5">
                         <button
                           onClick={() => setRecordingFor(s)}
@@ -722,10 +722,11 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
               */}
               <div className="space-y-1 text-left">
                 <label className="text-xs text-muted-foreground uppercase font-bold">How they are paid</label>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
                   {([
                     ['monthly', 'Monthly'],
                     ['per_piece', 'Per piece'],
+                    ['salary_piece', 'Salary + per piece'],
                     ['none', 'None (owner)'],
                   ] as const).map(([id, label]) => (
                     <button
@@ -743,6 +744,8 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                 <p className="text-[10px] text-muted-foreground">
                   {payType === 'per_piece'
                     ? 'Paid for each item they finish. No rate is set until you type one.'
+                    : payType === 'salary_piece'
+                      ? 'A monthly wage, and paid extra for each item on the tasks you set a rate for - ironing, say.'
                     : payType === 'none'
                       ? 'An owner or family member who is not on the payroll.'
                       : 'A fixed wage every month, whatever the shop takes.'}
@@ -758,7 +761,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                 shop that pays one rate whatever the item. Nothing starts filled
                 in: a rate the owner did not type is a rate nobody agreed to.
               */}
-              {payType === 'per_piece' && (
+              {isPerPieceWorker({ payType }) && (
                 <div className="space-y-2.5 text-left rounded-xl border border-primary/25 bg-primary/5 p-3">
                   <p className="text-[11px] font-display font-black text-primary">What they earn per piece</p>
 
@@ -876,7 +879,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                 </div>
               )}
 
-              {payType === 'monthly' && (
+              {hasMonthlySalary({ payType }) && (
               <div className="space-y-1 text-left">
                 <label className="text-xs text-muted-foreground uppercase font-bold">Monthly salary</label>
                 <div className="flex items-center gap-2 w-full p-2.5 rounded-lg bg-surface-2 border border-border">

@@ -53,8 +53,14 @@ const DAY = 86400000;
 
 const money = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
+/** Paid for pieces - with or without a monthly salary beside it. */
 export function isPerPieceWorker(staff: Pick<StaffMember, 'payType'>): boolean {
-  return staff.payType === 'per_piece';
+  return staff.payType === 'per_piece' || staff.payType === 'salary_piece';
+}
+
+/** On a monthly wage - with or without pieces beside it. Absent means monthly. */
+export function hasMonthlySalary(staff: Pick<StaffMember, 'payType'>): boolean {
+  return !staff.payType || staff.payType === 'monthly' || staff.payType === 'salary_piece';
 }
 
 /**
@@ -286,6 +292,43 @@ export interface WorkerEarnings {
   paid: number;
   /** Approved less paid. What the shop owes right now. */
   balance: number;
+  /** Pieces the owner has approved, ever. */
+  piecesApproved: number;
+  /** Of those, how many the payments so far have covered - oldest work first. */
+  piecesPaid: number;
+  /** Approved and not yet covered by a payment. */
+  piecesOwed: number;
+}
+
+/**
+ * Which approved pieces the money paid so far has covered.
+ *
+ * Payments are money, and work is pieces at different rates, so the pieces
+ * are worked out rather than stored: every payment goes to the oldest
+ * approved work first. A shop that has approved 200 shirts and paid for 100
+ * reads "200 approved, 100 paid, 100 owed" - and when 125 more are approved
+ * later, the 100 already paid stay paid and are never owed again. Nothing new
+ * is saved for this, on the phone or in the cloud.
+ */
+export function piecesCoveredByPayments(approved: Pick<PieceWorkEntry, 'quantity' | 'amount' | 'at' | 'approvedAt'>[], paid: number) {
+  let left = Math.max(0, Number(paid) || 0);
+  let piecesApproved = 0;
+  let piecesPaid = 0;
+  const oldestFirst = [...approved].sort((a, b) => new Date(a.approvedAt || a.at).getTime() - new Date(b.approvedAt || b.at).getTime());
+  for (const entry of oldestFirst) {
+    const quantity = Math.max(0, Number(entry.quantity) || 0);
+    const amount = Math.max(0, Number(entry.amount) || 0);
+    piecesApproved += quantity;
+    if (amount <= left) {
+      piecesPaid += quantity;
+      left = money(left - amount);
+    } else {
+      // Part of this line: only whole pieces count as paid.
+      piecesPaid += Math.floor(quantity * left / amount);
+      left = 0;
+    }
+  }
+  return { piecesApproved, piecesPaid, piecesOwed: piecesApproved - piecesPaid };
 }
 
 function startOfDay(at: number): number {
@@ -331,8 +374,13 @@ export function workerEarnings(store: StoreData, workerId: string, now: number =
   const paid = (store.workerPayments || [])
     .filter(payment => payment.workerId === workerId)
     .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+  const pieces = piecesCoveredByPayments(
+    (store.pieceWork || []).filter(entry => entry.workerId === workerId && entry.approved),
+    paid,
+  );
 
   return {
+    ...pieces,
     piecesToday,
     earnedToday: money(earnedToday),
     earnedThisWeek: money(earnedThisWeek),

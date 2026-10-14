@@ -1462,7 +1462,24 @@ export default function Index() {
     };
     void refresh();
     window.addEventListener('online', refresh);
-    return () => { stopped = true; window.removeEventListener('online', refresh); };
+    /*
+     * And when the worker comes back to the app, so an owner's change - a new
+     * role, a pay rate, what they may open - reaches a phone left open all
+     * day, not only one that is restarted. Once a minute at most: one small
+     * call, nothing on a timer while the app sits in a pocket.
+     */
+    let lastAsked = Date.now();
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastAsked < 60_000) return;
+      lastAsked = Date.now();
+      void refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      window.removeEventListener('online', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [workerCopyCode]);
 
   // A worker's phone sends what it recorded a moment after it is recorded -
