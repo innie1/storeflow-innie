@@ -261,13 +261,13 @@ export function recordPieceWork(store: StoreData, claim: WorkClaim, at: Date = n
   return { ...store, pieceWork: [...entries, ...(store.pieceWork || [])] };
 }
 
-export function approvePieceWork(store: StoreData, ids: string[], at: Date = new Date()): StoreData {
+export function approvePieceWork(store: StoreData, ids: string[], at: Date = new Date(), by?: string): StoreData {
   const wanted = new Set(ids);
   return {
     ...store,
     pieceWork: (store.pieceWork || []).map(entry =>
       wanted.has(entry.id) && !entry.approved
-        ? { ...entry, approved: true, approvedAt: at.toISOString() }
+        ? { ...entry, approved: true, approvedAt: at.toISOString(), ...(by ? { approvedBy: by } : {}) }
         : entry,
     ),
   };

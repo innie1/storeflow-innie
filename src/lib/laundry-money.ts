@@ -221,6 +221,49 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
   return next;
 }
 
+/** One payment this phone took on a bundle, named the same way every time it is read. */
+export interface PaymentTakenHere {
+  id: string;
+  /** 'intake' is the bundle being taken in - with a deposit, or with nothing paid. */
+  kind: 'intake' | 'payment';
+  clientRef: string;
+  amount: number;
+  at: string;
+}
+
+/** Every payment recorded on this phone, by bundle - the deposit at intake, then each one after. */
+export function laundryPaymentsTakenHere(store: StoreData): PaymentTakenHere[] {
+  const out: PaymentTakenHere[] = [];
+  for (const owed of store.pendingPayments || []) {
+    if (!String(owed.id || '').startsWith('laundry-')) continue;
+    const clientRef = owed.id.slice('laundry-'.length);
+    const events = owed.events || [];
+    const deposit = events.filter(event => event.date === owed.createdAt).reduce((sum, event) => sum + (Number(event.amount) || 0), 0);
+    out.push({ id: `${owed.id}-in`, kind: 'intake', clientRef, amount: money(deposit), at: owed.createdAt });
+    for (const event of events) {
+      if (event.date === owed.createdAt || !(Number(event.amount) > 0)) continue;
+      out.push({ id: `${owed.id}-${Date.parse(event.date)}`, kind: 'payment', clientRef, amount: Number(event.amount), at: event.date });
+    }
+  }
+  return out;
+}
+
+/**
+ * What is still owed on a bundle a worker's phone got from the cloud.
+ *
+ * The cloud says what was paid so far, and which workers' payments that
+ * already counts; anything this phone took that is not among them is added.
+ * Null when the cloud knows nothing, so the phone's own figure stands.
+ */
+export function cloudBundleBalance(store: StoreData, clientRef: string, order: { total?: unknown; paid_so_far?: unknown; paid_ids?: unknown }): number | null {
+  if (typeof order.paid_so_far !== 'number') return null;
+  const counted = new Set(Array.isArray(order.paid_ids) ? order.paid_ids.map(String) : []);
+  const notYetCounted = laundryPaymentsTakenHere(store)
+    .filter(payment => payment.clientRef === clientRef && !counted.has(payment.id))
+    .reduce((sum, payment) => sum + payment.amount, 0);
+  return money(Math.max(0, (Number(order.total) || 0) - order.paid_so_far - notYetCounted));
+}
+
 /** What is still owed on a bundle, or 0 when it is settled or unknown. */
 export function laundryBalance(store: StoreData, clientRef: string): number {
   const entry = (store.pendingPayments || []).find(item => item.id === `laundry-${clientRef}`);

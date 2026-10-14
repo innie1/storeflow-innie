@@ -35,7 +35,6 @@ import BundlePhotos from '@/components/laundry/BundlePhotos';
 import ClaimTicket from '@/components/laundry/ClaimTicket';
 import { GUIDE_STEP_SIGNAL, guideStepOnScreen } from '@/lib/guide-activity';
 import LaundryRuns from '@/components/laundry/LaundryRuns';
-import { can } from '@/lib/permissions';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
 import { bundleModifiers } from '@/lib/laundry-modifiers';
 import { Bike } from 'lucide-react';
@@ -678,7 +677,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
           )}
         </>
       ) : view === 'runs' ? (
-        <LaundryRuns store={store} canSeeMoney={can(currentUser, 'money')} currentUser={currentUser} />
+        <LaundryRuns store={store} currentUser={currentUser} />
       ) : (
         <div className="space-y-3">
           <div className="flex gap-2">

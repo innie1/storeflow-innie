@@ -80,6 +80,20 @@ describe('never paying twice for the same shirt', () => {
   });
 });
 
+describe('who checks the work', () => {
+  it('names whoever approved it', () => {
+    const store = iron(shop(), 'b1', 10, 10);
+    const approved = approvePieceWork(store, [store.pieceWork![0].id], new Date(), 'Ada');
+    expect(approved.pieceWork?.[0]).toMatchObject({ approved: true, approvedBy: 'Ada' });
+  });
+
+  it('a manager may approve, but not their own claims, and only the owner pays', () => {
+    const staff = readSource('src/components/StaffManagement.tsx');
+    expect(staff).toContain("canApprove={currentUser?.role === 'owner' || (currentUser?.role === 'manager' && currentUser?.id !== earningsFor.id)}");
+    expect(staff).toContain("canPay={currentUser?.role === 'owner'}");
+  });
+});
+
 describe('the cloud side', () => {
   const sql = readSource('supabase/migrations/20261014100000_piece_work_salary_and_cap.sql');
 

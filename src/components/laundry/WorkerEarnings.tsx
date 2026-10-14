@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Check, Trash2, Wallet, X } from 'lucide-react';
 import type { StaffMember, StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
+import { recordActivityLog } from '@/lib/activity-log';
 import { showToast } from '@/components/Toast';
 import {
   approvePieceWork,
@@ -27,15 +28,19 @@ import {
 interface Props {
   store: StoreData;
   worker: StaffMember;
-  /** Only an owner may approve work or hand over money. */
-  canManage: boolean;
+  /** The owner, or a manager checking somebody else's work. */
+  canApprove: boolean;
+  /** Handing over money stays with the owner. */
+  canPay: boolean;
+  /** Stamped on what is approved and put in the activity log, so the owner sees who checked it. */
+  approver?: { name: string; role: string };
   onUpdate: (store: StoreData) => void;
   onClose: () => void;
 }
 
 const money = (value: number) => `₦${Math.round(value).toLocaleString()}`;
 
-export default function WorkerEarnings({ store, worker, canManage, onUpdate, onClose }: Props) {
+export default function WorkerEarnings({ store, worker, canApprove, canPay, approver, onUpdate, onClose }: Props) {
   const [payAmount, setPayAmount] = useState('');
   const earnings = useMemo(() => workerEarnings(store, worker.id), [store, worker.id]);
   const waiting = useMemo(
@@ -45,9 +50,20 @@ export default function WorkerEarnings({ store, worker, canManage, onUpdate, onC
 
   const persist = (next: StoreData) => { saveStore(next); onUpdate(next); };
 
+  const approve = (ids: string[]) => {
+    const chosen = waiting.filter(entry => ids.includes(entry.id));
+    let next = approvePieceWork(store, ids, new Date(), approver?.name);
+    if (approver && chosen.length) {
+      const pieces = chosen.reduce((sum, entry) => sum + entry.quantity, 0);
+      const amount = chosen.reduce((sum, entry) => sum + entry.amount, 0);
+      next = recordActivityLog(next, approver.name, approver.role, `Approved ${pieces} pieces of ${worker.name}'s work (${money(amount)})`);
+    }
+    persist(next);
+  };
+
   const approveAll = () => {
     if (!waiting.length) return;
-    persist(approvePieceWork(store, waiting.map(entry => entry.id)));
+    approve(waiting.map(entry => entry.id));
     showToast('Work approved — it is now owed', 'success');
   };
 
@@ -134,12 +150,12 @@ export default function WorkerEarnings({ store, worker, canManage, onUpdate, onC
           {earnings.awaitingApproval > 0 && (
             /* Kept out of the total on purpose: it is a claim, not a debt. */
             <p className="text-[10px] text-muted-foreground pt-1">
-              {money(earnings.awaitingApproval)} more is waiting for the owner to check it.
+              {money(earnings.awaitingApproval)} more is waiting to be checked.
             </p>
           )}
         </div>
 
-        {canManage && waiting.length > 0 && (
+        {canApprove && waiting.length > 0 && (
           <div className="rounded-2xl bg-card border border-border p-3.5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] uppercase font-black text-muted-foreground">Waiting for you</p>
@@ -156,7 +172,7 @@ export default function WorkerEarnings({ store, worker, canManage, onUpdate, onC
                   </div>
                   <span className="font-display font-bold shrink-0">{money(entry.amount)}</span>
                   <button
-                    onClick={() => { persist(approvePieceWork(store, [entry.id])); showToast('Approved', 'success'); }}
+                    onClick={() => { approve([entry.id]); showToast('Approved', 'success'); }}
                     aria-label="Approve"
                     className="w-8 h-8 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0"
                   >
@@ -177,7 +193,7 @@ export default function WorkerEarnings({ store, worker, canManage, onUpdate, onC
           </div>
         )}
 
-        {canManage && earnings.balance > 0 && (
+        {canPay && earnings.balance > 0 && (
           <div className="rounded-2xl bg-card border border-border p-3.5">
             <p className="text-[10px] uppercase font-black text-muted-foreground flex items-center gap-1.5">
               <Wallet className="w-3 h-3" /> Pay {worker.name}

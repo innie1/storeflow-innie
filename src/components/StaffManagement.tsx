@@ -56,7 +56,7 @@ function roleOpens(role: string, hasTill: boolean): string[] {
     case 'accountant':
       return ['Expenses and pending payments', 'Reports, ROI and the ledger', 'No changes to stock or prices'];
     case 'manager':
-      return ['Everything except store settings', 'Can delete records and see all takings', 'Cannot change staff accounts'];
+      return ['Everything except store settings', 'Can delete records and see all takings', "Approves workers' expenses and piece work", 'Cannot change staff accounts or pay workers'];
     default:
       return ['The dashboard and messages'];
   }
@@ -392,7 +392,9 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
         <WorkerEarnings
           store={store}
           worker={earningsFor}
-          canManage={currentUser?.role === 'owner'}
+          canApprove={currentUser?.role === 'owner' || (currentUser?.role === 'manager' && currentUser?.id !== earningsFor.id)}
+          canPay={currentUser?.role === 'owner'}
+          approver={{ name: currentUser?.role === 'owner' ? 'Owner' : String(currentUser?.name || 'Manager'), role: String(currentUser?.role || 'owner') }}
           onUpdate={onUpdate}
           onClose={() => setEarningsFor(null)}
         />

@@ -126,12 +126,19 @@ describe('the owner decides', () => {
     expect(approveStaffExpense(rejected, request.id, owner).expenses).toHaveLength(0);
   });
 
-  it('no worker can approve, not even a manager, and not their own', () => {
+  it('no other worker can approve, and nobody their own', () => {
     const { store, request } = submit(shop());
-    for (const who of [faith, { name: 'Ada', role: 'manager' }, { name: 'Sam', role: 'supervisor' }, { name: 'Bola', role: 'accountant' }]) {
+    for (const who of [faith, { id: 's1', name: 'Faith', role: 'manager' }, { name: 'Sam', role: 'supervisor' }, { name: 'Bola', role: 'accountant' }]) {
       expect(approveStaffExpense(store, request.id, who)).toBe(store);
       expect(rejectStaffExpense(store, request.id, who)).toBe(store);
     }
+  });
+
+  it('a manager can decide while the owner is away, under their own name', () => {
+    const { store, request } = submit(shop());
+    const approved = approveStaffExpense(store, request.id, { id: 's9', name: 'Ada', role: 'manager' });
+    expect(approved.expenses).toHaveLength(1);
+    expect(approved.activityLogs?.[0]).toMatchObject({ user: 'Ada', role: 'manager', action: "Approved Faith's expense: Consumables - ₦200 (Hypo)" });
   });
 });
 

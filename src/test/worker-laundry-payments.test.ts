@@ -4,7 +4,7 @@ import type { StoreData } from '@/types/store';
 const rpc = vi.fn();
 vi.mock('@/integrations/supabase/client', () => ({ rpcAheadOfTypes: (...args: unknown[]) => rpc(...args) }));
 
-import { recordLaundryPayment } from '@/lib/laundry-money';
+import { cloudBundleBalance, recordLaundryPayment } from '@/lib/laundry-money';
 import { sendWorkerRecords, unsentLaundryPayments } from '@/lib/staff-session';
 import { addArrivedPayments, type ArrivedPayment } from '@/lib/staff-records';
 import { readSource } from './helpers/source';
@@ -98,6 +98,33 @@ describe("the owner's phone", () => {
     const { store } = addArrivedPayments({ ...owner(), appliedStaffPayments: many } as StoreData, arrived);
     expect(store.appliedStaffPayments).toHaveLength(300);
     expect(store.appliedStaffPayments?.slice(-2)).toEqual(arrived.map(payment => payment.id));
+  });
+});
+
+describe('what a customer still owes, on the worker\'s phone', () => {
+  const fromCloud = (extra: Record<string, unknown>) => ({ id: 'o1', client_ref: REF, total: 3000, ...extra });
+  const empty = () => ({ accessCode: 'STAFF-SF-WSH001', pendingPayments: [] } as unknown as StoreData);
+
+  it('takes what the cloud says was paid on a bundle somebody else took in', () => {
+    expect(cloudBundleBalance(empty(), REF, fromCloud({ paid_so_far: 1000, paid_ids: [] }))).toBe(2000);
+  });
+
+  it('adds what this phone took that the cloud has not counted, and not twice once it has', () => {
+    const phone = recordLaundryPayment(empty(), { ...bundle, amountPaid: 2000, at: '2026-10-14T17:00:00.000Z' });
+    const [mine] = unsentLaundryPayments(phone);
+    expect(cloudBundleBalance(phone, REF, fromCloud({ paid_so_far: 1000, paid_ids: [] }))).toBe(0);
+    expect(cloudBundleBalance(phone, REF, fromCloud({ paid_so_far: 3000, paid_ids: [mine.id] }))).toBe(0);
+    expect(cloudBundleBalance(phone, REF, fromCloud({ paid_so_far: 2000, paid_ids: [mine.id] }))).toBe(1000);
+  });
+
+  it('leaves the phone\'s own figure when the cloud knows nothing', () => {
+    expect(cloudBundleBalance(empty(), REF, fromCloud({}))).toBeNull();
+  });
+
+  it('is sent by the cloud only when there are bundles to send', () => {
+    const sql = readSource('supabase/migrations/20261014120000_worker_sees_what_is_owed.sql');
+    expect(sql).toContain("if jsonb_array_length(v_orders) = 0 then");
+    expect(sql).toContain("'paid_ids'");
   });
 });
 

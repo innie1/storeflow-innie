@@ -14,7 +14,7 @@
 import type { StoreData } from '@/types/store';
 import { getLaundryRecordSearchText, parseLaundryRecordMetadata } from '@/lib/laundry-workspace';
 import { describeDue, type DueLabel } from '@/lib/laundry-due';
-import { laundryBalance, laundryTenderSummary } from '@/lib/laundry-money';
+import { cloudBundleBalance, laundryBalance, laundryTenderSummary } from '@/lib/laundry-money';
 import { LAUNDRY_SETTLED_STAGES, LAUNDRY_WORKFLOW_STAGES, type LaundryStageStep, type LaundryWorkflowStage } from '@/lib/laundry-offline';
 import { buildLaundryWhatsAppPayload } from '@/lib/laundry-whatsapp';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
@@ -160,7 +160,8 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     promisedAt,
     overdue: promisedAt !== null && promisedAt < Date.now() && !LAUNDRY_SETTLED_STAGES.includes(stage),
     clientRef,
-    balance: laundryBalance(store, clientRef),
+    // A worker's phone only has what it took itself; the cloud knows the rest.
+    balance: cloudBundleBalance(store, clientRef, order) ?? laundryBalance(store, clientRef),
     due: LAUNDRY_SETTLED_STAGES.includes(stage)
       ? describeDue(promisedAt, promisedAt !== null ? Math.min(Date.now(), promisedAt) : Date.now())
       : describeDue(promisedAt),

@@ -30,8 +30,6 @@ import {
 
 interface Props {
   store: StoreData;
-  /** Amounts are hidden from anyone without permission to see money. */
-  canSeeMoney: boolean;
   /** Stamped on each step, so a disputed delivery has a name against it. */
   currentUser?: { name?: string; role?: string } | null;
 }
@@ -63,7 +61,7 @@ function stopsFromStore(store: StoreData): RunStop[] {
     }));
 }
 
-export default function LaundryRuns({ store, canSeeMoney, currentUser }: Props) {
+export default function LaundryRuns({ store, currentUser }: Props) {
   const [tick, setTick] = useState(0);
   const { pickups, deliveries } = useMemo(() => {
     const runs = splitRuns(stopsFromStore(store));
@@ -112,9 +110,9 @@ export default function LaundryRuns({ store, canSeeMoney, currentUser }: Props) 
               <p className="text-[11px] text-amber-500 mt-0.5">No address on this bundle</p>
             )}
           </div>
-          {/* A rider needs to know to ask for money; they do not need the
-              shop's takings, so this follows the same permission as the rest. */}
-          {canSeeMoney && stop.balance > 0 && (
+          {/* A rider needs to know to ask for money - what this one bundle
+              still owes, never the shop's takings - whatever their role. */}
+          {stop.balance > 0 && (
             <span className="text-xs font-display font-black text-amber-500 shrink-0">
               ₦{stop.balance.toLocaleString()}
             </span>

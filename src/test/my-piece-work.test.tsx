@@ -108,7 +108,7 @@ describe("a per-piece worker's home screen", () => {
 
     expect(screen.getByText(/1 waiting for approval/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /My earnings/ }));
-    expect(screen.getByText('₦100 more is waiting for the owner to check it.')).toBeTruthy();
+    expect(screen.getByText('₦100 more is waiting to be checked.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Approve all' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pay' })).toBeNull();
   });

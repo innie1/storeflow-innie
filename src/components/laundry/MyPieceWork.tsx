@@ -83,7 +83,8 @@ export default function MyPieceWork({ store, orders, currentUser, onUpdate }: Pr
         <WorkerEarnings
           store={store}
           worker={me}
-          canManage={false}
+          canApprove={false}
+          canPay={false}
           onUpdate={onUpdate}
           onClose={() => setEarningsOpen(false)}
         />

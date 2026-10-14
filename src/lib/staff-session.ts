@@ -24,6 +24,7 @@ import type { StoreData } from '@/types/store';
 import { DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { rpcAheadOfTypes } from '@/integrations/supabase/client';
 import { deviceKey, readJoin, writeJoin, type JoinRecord } from '@/lib/staff-join';
+import { laundryPaymentsTakenHere, type PaymentTakenHere } from '@/lib/laundry-money';
 
 const SESSION_KEY = 'storeflow_staff_session';
 export const OFFLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -193,14 +194,7 @@ export function unsentRecords(store: StoreData): Unsent {
 }
 
 /** Money a worker took on a bundle, as the cloud's door takes it. */
-export interface WorkerLaundryPayment {
-  id: string;
-  /** 'intake' is the bundle being taken in - with a deposit, or with nothing paid. */
-  kind: 'intake' | 'payment';
-  clientRef: string;
-  amount: number;
-  at: string;
-}
+export type WorkerLaundryPayment = PaymentTakenHere;
 
 /**
  * The money this phone took that the owner has not got.
@@ -216,19 +210,7 @@ export interface WorkerLaundryPayment {
  */
 export function unsentLaundryPayments(store: StoreData): WorkerLaundryPayment[] {
   const sent = readSent(store.accessCode);
-  const out: WorkerLaundryPayment[] = [];
-  for (const owed of store.pendingPayments || []) {
-    if (!String(owed.id || '').startsWith('laundry-')) continue;
-    const clientRef = owed.id.slice('laundry-'.length);
-    const events = owed.events || [];
-    const deposit = events.filter(event => event.date === owed.createdAt).reduce((sum, event) => sum + (Number(event.amount) || 0), 0);
-    out.push({ id: `${owed.id}-in`, kind: 'intake', clientRef, amount: Math.round(deposit * 100) / 100, at: owed.createdAt });
-    for (const event of events) {
-      if (event.date === owed.createdAt || !(Number(event.amount) > 0)) continue;
-      out.push({ id: `${owed.id}-${Date.parse(event.date)}`, kind: 'payment', clientRef, amount: Number(event.amount), at: event.date });
-    }
-  }
-  return out.filter(payment => !sent.has(payment.id)).slice(0, 50);
+  return laundryPaymentsTakenHere(store).filter(payment => !sent.has(payment.id)).slice(0, 50);
 }
 
 export type SendResult = { state: 'sent' | 'nothing' | 'unchanged' | 'shut_out' };

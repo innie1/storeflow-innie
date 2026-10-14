@@ -29,9 +29,14 @@ export function recordsAsStaff(user: { id?: string; role?: string } | null | und
   return !!user?.id && !!user.role && !isManagement(user);
 }
 
-/** Only the owner agrees a worker's spending, so nobody approves their own. */
+/**
+ * The owner agrees a worker's spending, or a manager while the owner is away.
+ * Nobody approves their own: a manager's own spending goes straight in under
+ * their name, and `decide` refuses a request the approver recorded.
+ */
 export function canApproveStaffExpenses(user: { role?: string } | null | undefined): boolean {
-  return String(user?.role || '').toLowerCase() === 'owner';
+  const role = String(user?.role || '').toLowerCase();
+  return role === 'owner' || role === 'manager';
 }
 
 export interface StaffExpenseRule {
@@ -196,6 +201,7 @@ function decide(store: StoreData, requestId: string, approver: Actor, at: Date, 
   const request = (store.staffExpenseRequests || []).find(item => item.id === requestId);
   // Decided once. A second tap, or a stale screen, changes nothing.
   if (!request || request.status !== 'pending') return store;
+  if (approver.id && approver.id === request.recordedBy.staffId) return store;
 
   const readNotice = (s: StoreData): StoreData => ({
     ...s,

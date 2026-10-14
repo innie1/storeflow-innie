@@ -578,6 +578,8 @@ export interface PieceWorkEntry {
    */
   approved: boolean;
   approvedAt?: string;
+  /** Who checked it - the owner, or a manager while the owner was away. */
+  approvedBy?: string;
 }
 
 export interface WorkerPayment {
