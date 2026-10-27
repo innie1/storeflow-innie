@@ -3638,6 +3638,41 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         ))}
       </div>
 
+      {/* 4b. Workers' phones: they cannot open Settings, so the owner chooses for them */}
+      {!store.staffDevice && (() => {
+        const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
+        const workerTimer: LockTimer = settings.workerLockTimer || '1h';
+        const setWorkerTimer = (value: LockTimer) => {
+          const updated = { ...store, managerSettings: { ...settings, workerLockTimer: value } };
+          onUpdate(updated);
+          saveStore(updated);
+          showToast("Workers' phones will use this the next time they connect");
+        };
+        return (
+          <div className={`${card} p-4 space-y-2`}>
+            <h3 className="font-display font-bold text-sm text-left">Workers' Phones Lock Timer</h3>
+            <p className="text-xs text-muted-foreground text-left">
+              How long a worker's own phone stays open before asking for their PIN again. They still enter it at least once a day.
+            </p>
+            {[
+              { v: '1h' as LockTimer, l: '1 Hour' },
+              { v: '4h' as LockTimer, l: '4 Hours' },
+              { v: '8h' as LockTimer, l: '8 Hours' },
+              { v: '12h' as LockTimer, l: '12 Hours' },
+              { v: 'never' as LockTimer, l: 'Always Open' },
+            ].map(opt => (
+              <button key={opt.v} onClick={() => setWorkerTimer(opt.v)} aria-pressed={workerTimer === opt.v}
+                className={`w-full p-3 rounded-lg border text-left flex items-center justify-between cursor-pointer ${workerTimer===opt.v ? 'bg-primary/10 border-primary/40' : 'bg-surface-2 border-border text-foreground'}`}>
+                <span className="font-display font-semibold text-sm">{opt.l}</span>
+                <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${workerTimer===opt.v ? 'border-primary bg-primary' : 'border-muted-foreground'}`}>
+                  {workerTimer===opt.v && <span className="text-primary-foreground text-[10px]">✓</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* 5. Lock Action */}
       <div className="pt-4">
         <button onClick={handleLock} className="w-full p-3 rounded-xl bg-surface-2 border border-border text-foreground font-display font-semibold hover:bg-surface-3 cursor-pointer">

@@ -25,6 +25,7 @@ import { DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { rpcAheadOfTypes } from '@/integrations/supabase/client';
 import { deviceKey, readJoin, writeJoin, type JoinRecord } from '@/lib/staff-join';
 import { laundryPaymentsTakenHere, type PaymentTakenHere } from '@/lib/laundry-money';
+import { saveWorkerLockTimer } from '@/lib/store-session';
 
 const SESSION_KEY = 'storeflow_staff_session';
 export const OFFLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -306,6 +307,7 @@ export async function signInWorker(
     const store = workerStoreFromView(reply.view || {}, join, storeRef, existing);
     markViewAsSent(store.accessCode, reply.view || {});
     deps.saveCopy(store);
+    saveWorkerLockTimer(store.managerSettings?.workerLockTimer);
     const worker = reply.worker as Worker;
     writeWorkerSession({
       token: reply.token, expiresAt: reply.expires_at, lastOnlineAt: new Date(now).toISOString(),
@@ -358,6 +360,7 @@ export async function refreshWorkerCopy(
   const storeRef = String(reply.store_ref || session.storeRef);
   const store = workerStoreFromView(reply.view || {}, join, storeRef, deps.loadCopy(workerAccessCode(storeRef)));
   markViewAsSent(store.accessCode, reply.view || {});
+  saveWorkerLockTimer(store.managerSettings?.workerLockTimer);
   deps.saveCopy(store);
   const now = deps.now ? deps.now() : Date.now();
   writeWorkerSession({ ...session, worker: reply.worker, lastOnlineAt: new Date(now).toISOString(), storeRef });

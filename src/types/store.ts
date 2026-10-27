@@ -727,6 +727,12 @@ export interface BusinessChallenge {
 }
 
 export interface ManagerSettings {
+  /**
+   * How long a worker's own phone stays open before it asks for the PIN
+   * again. Workers cannot open Settings, so the owner chooses it here and
+   * the cloud carries it to their phones (staff_shop_view). Unset: 1 hour.
+   */
+  workerLockTimer?: '1h' | '4h' | '8h' | '12h' | 'never';
   /*
    * Optional, because that is how every reader already treats it: Mascot and
    * mascot-store-signal ask `enabled !== false` and StoreAccess writes

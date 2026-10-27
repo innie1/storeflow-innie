@@ -92,12 +92,29 @@ export function identityForStore(
 export type LockTimer = '1h' | '4h' | '8h' | '12h' | 'never';
 
 const LOCK_TIMER_KEY = 'storeflow_lock_timer';
+/** A worker's phone keeps the owner's choice apart from this phone's own. */
+const WORKER_LOCK_TIMER_KEY = 'storeflow_worker_lock_timer';
+const LOCK_TIMERS: LockTimer[] = ['1h', '4h', '8h', '12h', 'never'];
 const SESSION_KEY = 'storeflow_session';
 
 interface SessionData { accessCode: string; loginAt: number; lockTimer: LockTimer; }
 
 export function saveLockTimer(timer: LockTimer) { localStorage.setItem(LOCK_TIMER_KEY, timer); }
 export function getLockTimer(): LockTimer { return (localStorage.getItem(LOCK_TIMER_KEY) as LockTimer) || '1h'; }
+
+/** The owner's timer for workers' phones, as the cloud last sent it. */
+export function saveWorkerLockTimer(timer: string | undefined) {
+  try {
+    if (timer && LOCK_TIMERS.includes(timer as LockTimer)) localStorage.setItem(WORKER_LOCK_TIMER_KEY, timer);
+    else localStorage.removeItem(WORKER_LOCK_TIMER_KEY);
+  } catch { /* private mode */ }
+}
+export function getWorkerLockTimer(): LockTimer {
+  try {
+    const timer = localStorage.getItem(WORKER_LOCK_TIMER_KEY) as LockTimer | null;
+    return timer && LOCK_TIMERS.includes(timer) ? timer : '1h';
+  } catch { return '1h'; }
+}
 
 export function saveSession(accessCode: string) {
   const s: SessionData = { accessCode, loginAt: Date.now(), lockTimer: getLockTimer() };
@@ -114,7 +131,8 @@ export function getActiveSession(): string | null {
   if (!raw) return null;
   try {
     const session: SessionData = JSON.parse(raw);
-    const timer = getLockTimer();
+    // A worker copy (STAFF-<Store ID>) follows the owner's timer, not this phone's.
+    const timer = /^STAFF-/i.test(String(session.accessCode || '')) ? getWorkerLockTimer() : getLockTimer();
     if (timer === 'never') return session.accessCode;
     let maxMs = 3600000;
     if (timer === '4h') maxMs = 4 * 3600000;
