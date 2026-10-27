@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Store } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { loadStore, saveStore } from '@/lib/store-data';
-import { readJoin } from '@/lib/staff-join';
+import { issueRecoveryCode, joinErrorText, readJoin } from '@/lib/staff-join';
+import { keepPhoneData } from '@/lib/phone-keep';
+import { RecoveryCodeCard } from '@/components/staff/JoinStore';
 import { signInErrorText, signInWorker, type Worker } from '@/lib/staff-session';
 import { writeActiveUser } from '@/lib/store-session';
 import { resumeWorkerLaundry } from '@/lib/laundry-offline';
@@ -12,6 +14,10 @@ import { resumeWorkerLaundry } from '@/lib/laundry-offline';
  *
  * Shown on the opening screen once the phone has joined a shop. The PIN is
  * asked every time; see staff-session for what happens online and offline.
+ *
+ * A phone approved before recovery codes, or whose screenshot is gone, can
+ * get a new code here. It replaces the old one, and is useless without the
+ * PIN, so it needs nothing more than this phone.
  */
 
 interface Props {
@@ -25,6 +31,8 @@ export default function WorkerSignIn({ onSignedIn }: Props) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryError, setRecoveryError] = useState('');
   if (!join || join.status !== 'authorized') return null;
 
   const signIn = async () => {
@@ -40,6 +48,7 @@ export default function WorkerSignIn({ onSignedIn }: Props) {
     setBusy(false);
     setPin('');
     if ('error' in result) return setError(signInErrorText(result.error));
+    void keepPhoneData();
     const worker: Worker = result.worker;
     // Missing boxes are no, never yes: the cloud sends what the owner ticked.
     const ticked = worker.permissions || {};
@@ -50,6 +59,13 @@ export default function WorkerSignIn({ onSignedIn }: Props) {
     // A fresh pass: bundles taken in while it was away can go now.
     if (!result.offline) void resumeWorkerLaundry(result.store.accessCode).catch(() => {});
     onSignedIn(result.store);
+  };
+
+  const newRecoveryCode = async () => {
+    setRecoveryError('');
+    const issued = await issueRecoveryCode(join.requestId);
+    if ('error' in issued) return setRecoveryError(joinErrorText(issued.error));
+    setRecoveryCode(issued.recovery_code);
   };
 
   return (
@@ -81,6 +97,14 @@ export default function WorkerSignIn({ onSignedIn }: Props) {
       >
         {busy ? 'Signing in…' : 'Sign in'}
       </button>
+      {recoveryCode
+        ? <RecoveryCodeCard code={recoveryCode} />
+        : (
+          <button type="button" onClick={() => void newRecoveryCode()} className="w-full text-xs text-muted-foreground hover:text-foreground">
+            No recovery code saved? Get a new one
+          </button>
+        )}
+      {recoveryError && <p role="alert" className="text-xs text-destructive">{recoveryError}</p>}
     </section>
   );
 }

@@ -337,6 +337,9 @@ export default function DeviceRequests({ store, onGoOnline, refreshKey = 0, onSt
                   <div className="min-w-0">
                     <p className="text-sm truncate">{device.device_label || 'Phone'}</p>
                     <p className="text-[11px] text-muted-foreground">Approved {when(device.authorized_at)} · {lastSeen(device.last_seen_at)}</p>
+                    {device.recovered_at && (
+                      <p className="text-[11px] text-amber-600">Came back with its recovery code {when(device.recovered_at)}</p>
+                    )}
                   </div>
                   <button
                     type="button"

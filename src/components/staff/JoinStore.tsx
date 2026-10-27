@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Clock, Smartphone, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, KeyRound, Smartphone, XCircle } from 'lucide-react';
 import {
-  deviceLabel, identifyWorker, joinErrorText, joinStatus, readJoin, redeemCode, requestAccess, writeJoin,
-  type JoinRecord, type StaffMatch,
+  deviceLabel, identifyWorker, issueRecoveryCode, joinErrorText, joinStatus, normaliseRecoveryCode, readJoin,
+  recoverAccess, redeemCode, requestAccess, writeJoin, type JoinRecord, type StaffMatch,
 } from '@/lib/staff-join';
+import { inAppBrowser, keepPhoneData, openInChromeLink } from '@/lib/phone-keep';
 
 /**
  * "Join a Store", for somebody who works at a shop that uses StoreFlow.
@@ -12,6 +13,11 @@ import {
  * approves with a 6-digit code. The worker never sees or needs the owner's
  * email, password or access code. Leaving and coming back picks the request
  * up where it was.
+ *
+ * Once approved the phone shows a recovery code to keep as a screenshot. A
+ * phone that has lost what it knew - its browser data cleared, or opened in
+ * another browser - comes back with Store ID, PIN and that code, and needs
+ * the owner for nothing.
  */
 
 interface Props {
@@ -20,7 +26,7 @@ interface Props {
   initialStoreRef?: string;
 }
 
-type Step = 'details' | 'confirm' | 'waiting' | 'done' | 'rejected';
+type Step = 'details' | 'recover' | 'confirm' | 'waiting' | 'done' | 'rejected';
 
 const POLL_MS = 8000;
 
@@ -46,6 +52,11 @@ export default function JoinStore({ onBack, initialStoreRef = '' }: Props) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [codeReady, setCodeReady] = useState(false);
+  const [recoveryInput, setRecoveryInput] = useState('');
+  /** The recovery code to screenshot - shown once, the cloud keeps only its hash. */
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const elsewhere = inAppBrowser();
+  const chromeLink = elsewhere ? openInChromeLink() : '';
   const recordRef = useRef(record);
   recordRef.current = record;
 
@@ -123,6 +134,33 @@ export default function JoinStore({ onBack, initialStoreRef = '' }: Props) {
       return setError(joinErrorText(result.error, result.tries_left));
     }
     keep({ ...record, status: 'authorized' });
+    void keepPhoneData();
+    const issued = await issueRecoveryCode(record.requestId);
+    if (!('error' in issued)) setRecoveryCode(issued.recovery_code);
+  };
+
+  const recover = async () => {
+    setError('');
+    if (!storeRef.trim()) return setError('Type the Store ID the owner gave you.');
+    if (!/^\d{4}$/.test(pin.trim())) return setError('Your staff PIN is 4 digits.');
+    if (recoveryInput.replace(/-/g, '').length !== 12) return setError('The recovery code has 12 letters and numbers.');
+    setBusy(true);
+    const result = await recoverAccess(storeRef, pin, recoveryInput, label.trim() || 'Phone');
+    setBusy(false);
+    if ('error' in result) return setError(joinErrorText(result.error));
+    setPin('');
+    setRecoveryInput('');
+    setRecoveryCode(result.recovery_code);
+    keep({
+      requestId: result.request_id,
+      storeRef,
+      storeName: result.store_name,
+      staffId: result.staff_id,
+      staffName: result.staff_name,
+      staffRole: result.staff_role,
+      status: 'authorized',
+    });
+    void keepPhoneData();
   };
 
   const startOver = () => {
@@ -141,6 +179,21 @@ export default function JoinStore({ onBack, initialStoreRef = '' }: Props) {
       <button type="button" onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
+
+      {elsewhere && (step === 'details' || step === 'recover') && (
+        <div role="alert" className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 text-sm space-y-2">
+          <p className="flex gap-2 font-semibold">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+            This opened inside {elsewhere}, not in Chrome.
+          </p>
+          <p className="text-muted-foreground">
+            Join here and this phone is approved only inside {elsewhere}. Open StoreFlow from Chrome later and you would have to join all over again.
+          </p>
+          {chromeLink
+            ? <a href={chromeLink} className="block w-full h-10 leading-10 text-center rounded-lg bg-amber-500 text-black font-display font-bold">Open in Chrome</a>
+            : <p className="text-muted-foreground">Tap the menu (⋮) and choose <span className="font-semibold text-foreground">Open in browser</span>.</p>}
+        </div>
+      )}
 
       {step === 'details' && (
         <>
@@ -180,6 +233,62 @@ export default function JoinStore({ onBack, initialStoreRef = '' }: Props) {
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <button type="button" onClick={findMe} disabled={busy} className={primary}>
             {busy ? 'Checking…' : 'Continue'}
+          </button>
+          <button type="button" onClick={() => { setStep('recover'); setError(''); }} className="w-full text-sm text-primary font-semibold">
+            I joined before and have a recovery code
+          </button>
+        </>
+      )}
+
+      {step === 'recover' && (
+        <>
+          <div>
+            <h3 className="font-display font-black text-xl">Back in with your recovery code</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              The code you were shown when this shop first let you in - look for the screenshot. No need to ask the owner.
+            </p>
+          </div>
+          <label className="block">
+            <span className="text-xs font-semibold text-muted-foreground">Store ID</span>
+            <input
+              value={storeRef}
+              onChange={e => { setStoreRef(e.target.value.toUpperCase()); setError(''); }}
+              placeholder="SF-XXXXXX"
+              autoCapitalize="characters"
+              autoComplete="off"
+              className={`${input} font-mono tracking-wider`}
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-muted-foreground">Your staff PIN</span>
+            <input
+              value={pin}
+              onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(''); }}
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="4 digits"
+              className={`${input} ${pin ? 'tracking-[0.5em]' : ''}`}
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-muted-foreground">Recovery code</span>
+            <input
+              value={recoveryInput}
+              onChange={e => { setRecoveryInput(normaliseRecoveryCode(e.target.value)); setError(''); }}
+              placeholder="XXXX-XXXX-XXXX"
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              className={`${input} font-mono tracking-wider text-center`}
+            />
+          </label>
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <button type="button" onClick={recover} disabled={busy} className={primary}>
+            {busy ? 'Checking…' : 'Get back in'}
+          </button>
+          <button type="button" onClick={() => { setStep('details'); setError(''); }} className="w-full text-sm text-muted-foreground">
+            I don't have a recovery code
           </button>
         </>
       )}
@@ -262,7 +371,13 @@ export default function JoinStore({ onBack, initialStoreRef = '' }: Props) {
           <p className="text-sm text-muted-foreground">
             {record.staffName} can use <span className="font-semibold text-foreground">{record.storeName}</span> on this phone.
           </p>
-          <button type="button" onClick={onBack} className={primary}>Sign in now</button>
+          {recoveryCode && <RecoveryCodeCard code={recoveryCode} />}
+          <p className="text-xs text-muted-foreground">
+            Always open StoreFlow the same way - best from its icon on your home screen. Opened from WhatsApp or another browser, this phone will not know the shop.
+          </p>
+          <button type="button" onClick={onBack} className={primary}>
+            {recoveryCode ? "I've taken a screenshot - sign in" : 'Sign in now'}
+          </button>
         </div>
       )}
 
@@ -274,6 +389,21 @@ export default function JoinStore({ onBack, initialStoreRef = '' }: Props) {
           <button type="button" onClick={startOver} className={primary}>Ask again</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The recovery code, big enough to read back off a screenshot. */
+export function RecoveryCodeCard({ code }: { code: string }) {
+  return (
+    <div className="p-4 rounded-2xl border-2 border-primary/50 bg-primary/5 text-center space-y-2">
+      <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <KeyRound className="w-4 h-4" /> Your recovery code
+      </p>
+      <p className="font-mono font-black text-2xl tracking-wider select-all" data-testid="recovery-code">{code}</p>
+      <p className="text-xs text-muted-foreground">
+        Take a screenshot now. If this phone ever forgets the shop, this code, the Store ID and your PIN let you back in without the owner. It is shown only once.
+      </p>
     </div>
   );
 }

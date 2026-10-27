@@ -48,6 +48,8 @@ export interface DeviceRow {
   decided_at?: string;
   authorized_at?: string;
   last_seen_at?: string;
+  /** When the phone last came back with its recovery code. */
+  recovered_at?: string;
   code_live?: boolean;
   code_expires_at?: string;
 }
@@ -144,6 +146,35 @@ export function redeemCode(requestId: string, code: string) {
   });
 }
 
+/**
+ * A fresh recovery code for this approved phone, replacing any before it.
+ * The cloud keeps only its hash, so this is the one time it can be shown.
+ */
+export function issueRecoveryCode(requestId: string) {
+  return call<{ recovery_code: string }>('staff_recovery_issue', { p_request_id: requestId, p_device_key: deviceKey() });
+}
+
+/**
+ * Back in on a phone that lost what it knew: Store ID, PIN and the recovery
+ * code move the worker's approval onto this phone, with no owner and no
+ * 6-digit code. Answers with a new recovery code, the old one now used.
+ */
+export function recoverAccess(storeRef: string, pin: string, recoveryCode: string, label: string) {
+  return call<{
+    request_id: string; status: JoinStatus; store_name: string; staff_id: string; staff_name: string;
+    staff_role?: string; recovery_code: string;
+  }>('staff_join_recover', {
+    p_store_ref: normaliseStoreRef(storeRef), p_pin: pin.trim(), p_recovery_code: recoveryCode,
+    p_device_key: deviceKey(), p_device_label: label,
+  });
+}
+
+/** XXXX-XXXX-XXXX as it is typed: no I, O, 0 or 1, dashes put back. */
+export function normaliseRecoveryCode(value: string): string {
+  const chars = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  return chars.match(/.{1,4}/g)?.join('-') || '';
+}
+
 /** What to tell a worker when the cloud says no. */
 export function joinErrorText(error: string, triesLeft?: number): string {
   switch (error) {
@@ -154,6 +185,7 @@ export function joinErrorText(error: string, triesLeft?: number): string {
     case 'wrong_code': return `That code is not right.${triesLeft !== undefined ? ` ${triesLeft} ${triesLeft === 1 ? 'try' : 'tries'} left.` : ''}`;
     case 'expired': return 'That code has run out. Ask the owner for a new one.';
     case 'no_code': return 'There is no code to use. Ask the owner to approve again for a new one.';
+    case 'wrong_recovery': return 'That recovery code is not right for this PIN. Check the screenshot - or ask the owner to approve this phone again.';
     case 'bad_device': return 'This phone could not make its key. Try another browser.';
     case 'offline': return 'StoreFlow did not answer. Try again in a moment.';
     default: return 'Something went wrong. Try again.';
