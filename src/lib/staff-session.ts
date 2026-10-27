@@ -26,6 +26,7 @@ import { rpcAheadOfTypes } from '@/integrations/supabase/client';
 import { deviceKey, readJoin, writeJoin, type JoinRecord } from '@/lib/staff-join';
 import { laundryPaymentsTakenHere, type PaymentTakenHere } from '@/lib/laundry-money';
 import { saveWorkerLockTimer } from '@/lib/store-session';
+import { getServicePricingLabel, getStoredServicePricing } from '@/lib/service-pricing';
 
 const SESSION_KEY = 'storeflow_staff_session';
 export const OFFLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -140,6 +141,21 @@ export function workerStoreFromView(
   for (const key of UNION_BY_ID) {
     (next as any)[key] = unionById((base as any)[key], view[key]);
   }
+  // A manager's service the cloud has not taken yet stays, with its item
+  // prices, until it has - or the refresh would take it away again.
+  const role = (view.staffMembers || []).find((m: { id?: string }) => m?.id === record.staffId)?.role;
+  if (existing && existing.accessCode === accessCode && role === 'manager') {
+    for (const service of servicesNotYetSent(existing)) {
+      const products = next.products || [];
+      const at = products.findIndex(p => String(p.id) === String(service.id));
+      next.products = at >= 0 ? products.map((p, i) => i === at ? service : p) : [...products, service];
+      const row = (existing as any).laundryPricing?.matrix?.[String(service.id)];
+      if (row && typeof row === 'object') {
+        const pricing = (next as any).laundryPricing || (existing as any).laundryPricing || { version: 1 };
+        (next as any).laundryPricing = { ...pricing, matrix: { ...(pricing.matrix || {}), [String(service.id)]: row } };
+      }
+    }
+  }
   // The cloud leaves spending and debt out of a worker's copy; the screens
   // still expect the numbers to be there, so they read as nothing.
   next.customers = (next.customers || []).map(customer => ({
@@ -165,6 +181,108 @@ export function markViewAsSent(code: string, view: Record<string, any>): void {
   const sent = readSent(code);
   for (const key of UNION_BY_ID) for (const item of (view[key] || []) as { id?: string }[]) if (item?.id) sent.add(item.id);
   writeSent(code, sent);
+  // Services are told apart by what they say, not only by id: an edit is news.
+  const seen: Record<string, string> = {};
+  for (const product of (view.products || []) as StoreData['products']) {
+    if (product?.isService) seen[String(product.id)] = serviceFingerprint(serviceForCloud(product, view));
+  }
+  writeSeenServices(code, seen);
+}
+
+/* ── services a manager adds or changes on their own phone ──────────────── */
+
+const seenServicesKey = (code: string) => `storeflow_staff_services_seen_${code}`;
+
+/** Each service as the cloud last had it. Null until the first refresh. */
+function readSeenServices(code: string): Record<string, string> | null {
+  try {
+    const raw = localStorage.getItem(seenServicesKey(code));
+    return raw ? JSON.parse(raw) as Record<string, string> : null;
+  } catch { return null; }
+}
+
+function writeSeenServices(code: string, seen: Record<string, string>): void {
+  try { localStorage.setItem(seenServicesKey(code), JSON.stringify(seen)); } catch { /* private mode */ }
+}
+
+export interface ServiceForCloud {
+  id: string;
+  name: string;
+  description: string;
+  sellingPrice: number;
+  unit?: string;
+  unitLabel: string;
+  turnaround: string;
+  servicePricing: string;
+  serviceWorkflow: Record<string, unknown>;
+  discontinued: boolean;
+  /** A laundry's price for each item, for this service. */
+  garmentPrices?: Record<string, number>;
+}
+
+/**
+ * A service as staff_save_services takes it: what a manager may change, and
+ * nothing of stock. The same shape for the phone's copy and the cloud's, so
+ * comparing the two says whether there is anything to send.
+ */
+export function serviceForCloud(product: StoreData['products'][number], shop: object): ServiceForCloud {
+  const pricing = getStoredServicePricing(product);
+  const flow = ((product as any).serviceWorkflow || {}) as Record<string, unknown>;
+  const duration = Number(flow.durationMinutes);
+  const row = (shop as any)?.laundryPricing?.matrix?.[String(product.id)];
+  return {
+    id: String(product.id),
+    name: String(product.name || '').trim(),
+    description: String(product.description || '').trim(),
+    sellingPrice: Math.round((Number(product.sellingPrice) || 0) * 100) / 100,
+    unit: product.unit || undefined,
+    unitLabel: getServicePricingLabel(pricing).unitLabel,
+    turnaround: String(product.turnaround || '').trim(),
+    servicePricing: pricing,
+    serviceWorkflow: {
+      mode: ['job', 'session', 'appointment'].includes(String(flow.mode)) ? flow.mode : 'job',
+      requiresStart: flow.requiresStart !== false,
+      timer: flow.timer === true,
+      allowPause: flow.allowPause === true,
+      allowAddTime: flow.allowAddTime === true,
+      ...(duration >= 1 && duration <= 1440 ? { durationMinutes: Math.round(duration) } : {}),
+    },
+    discontinued: product.discontinued === true,
+    ...(row && typeof row === 'object' ? { garmentPrices: row as Record<string, number> } : {}),
+  };
+}
+
+/** The same service gives the same text, whatever order its keys came in. */
+function serviceFingerprint(service: ServiceForCloud): string {
+  const sorted = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(sorted);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.keys(value as object).sort()
+        .filter(key => (value as any)[key] !== undefined).map(key => [key, sorted((value as any)[key])]));
+    }
+    return value;
+  };
+  return JSON.stringify(sorted(service));
+}
+
+/** This phone's services that differ from the cloud's last copy, or that it has never had. */
+function servicesNotYetSent(store: StoreData): StoreData['products'] {
+  const seen = readSeenServices(store.accessCode);
+  // Before this phone has ever been told the cloud's services there is
+  // nothing to compare with - and sending the lot would write old copies
+  // over the owner's newer ones.
+  if (!seen) return [];
+  return (store.products || []).filter(product =>
+    product.isService && seen[String(product.id)] !== serviceFingerprint(serviceForCloud(product, store)));
+}
+
+/**
+ * The services a manager added or changed here, for the cloud's door. Only a
+ * manager's: nobody else may open Services, and the cloud would say no.
+ */
+export function unsentServices(store: StoreData): ServiceForCloud[] {
+  if (readWorkerSession()?.worker?.role !== 'manager') return [];
+  return servicesNotYetSent(store).slice(0, 50).map(product => serviceForCloud(product, store));
 }
 
 export interface Unsent {
@@ -221,8 +339,9 @@ export async function sendWorkerRecords(store: StoreData): Promise<SendResult> {
   if (!store.staffDevice) return { state: 'nothing' };
   const unsent = unsentRecords(store);
   const payments = unsentLaundryPayments(store);
+  const services = unsentServices(store);
   const records = unsent.customers.length + unsent.expenseRequests.length + unsent.pieceWork.length;
-  if (!records && !payments.length) return { state: 'nothing' };
+  if (!records && !payments.length && !services.length) return { state: 'nothing' };
   const session = readWorkerSession();
   if (!session || !navigator.onLine) return { state: 'unchanged' };
   const sent = readSent(store.accessCode);
@@ -250,6 +369,23 @@ export async function sendWorkerRecords(store: StoreData): Promise<SendResult> {
       // Only what the cloud took: a payment on a bundle the cloud has not got
       // yet waits, and goes with the next send once the bundle is there.
       for (const id of (Array.isArray(reply.payments) ? reply.payments : [])) sent.add(String(id));
+      any = true;
+    }
+  }
+
+  if (services.length) {
+    const reply = await callCloud('staff_save_services', { p_token: session.token, p_device_key: deviceKey(), p_services: services });
+    if (reply && !reply.ok && SHUT_OUT.has(reply.error)) { forgetWorkerPhone(); return { state: 'shut_out' }; }
+    if (reply?.ok) {
+      // Saved, or refused for a reason sending again would not change (no
+      // name, a price that is not money): either way, answered.
+      const answered = new Set([
+        ...(Array.isArray(reply.saved) ? reply.saved : []),
+        ...(Array.isArray(reply.refused) ? reply.refused.map((r: { id?: string }) => r?.id) : []),
+      ].map(String));
+      const seen = readSeenServices(store.accessCode) || {};
+      for (const service of services) if (answered.has(service.id)) seen[service.id] = serviceFingerprint(service);
+      writeSeenServices(store.accessCode, seen);
       any = true;
     }
   }

@@ -422,7 +422,8 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
                 <div className="flex items-center gap-1">
                   <button onClick={() => toggleService(selectedService)} aria-label={`${selectedService.discontinued ? 'Enable' : 'Disable'} ${selectedService.name}`} title={selectedService.discontinued ? 'Enable' : 'Disable'} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground"><Power className="w-4 h-4" /></button>
                   <button onClick={() => openEditService(selectedService)} aria-label={`Edit ${selectedService.name}`} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => removeService(selectedService)} aria-label={`Remove ${selectedService.name}`} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-destructive"><Trash2 className="w-4 h-4" /></button>
+                  {/* Removing a service stays with the owner: a manager's phone can switch it off. */}
+                  {!store.staffDevice && <button onClick={() => removeService(selectedService)} aria-label={`Remove ${selectedService.name}`} className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-destructive"><Trash2 className="w-4 h-4" /></button>}
                 </div>
               </div>
 
