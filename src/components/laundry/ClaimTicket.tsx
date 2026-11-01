@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { X } from 'lucide-react';
 import type { StoreData } from '@/types/store';
-import { laundryTenderSummary } from '@/lib/laundry-money';
+import { laundryPaymentLines, laundryTenderSummary, type LaundryPaymentLine } from '@/lib/laundry-money';
 
 /**
  * The half-ticket the customer walks away with.
@@ -33,6 +33,9 @@ export interface ClaimTicketRecord {
   promisedFor?: string;
   /** Who took the bundle in, so the customer and the shop both know. */
   recordedByName?: string;
+  clientRef?: string;
+  /** Who received the money, which may be somebody else on a later shift. */
+  payments?: LaundryPaymentLine[];
 }
 
 /**
@@ -73,6 +76,7 @@ export default function ClaimTicket({ store, record, onClose }: Props) {
   const balance = claimBalance(record);
   const shopPhone = store.profile?.phone || '';
   const tender = laundryTenderSummary(store, record.tagCode);
+  const payments = record.payments ?? laundryPaymentLines(store, record.clientRef || '');
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4" onClick={onClose} role="dialog" aria-label="Collection ticket">
@@ -138,6 +142,17 @@ export default function ClaimTicket({ store, record, onClose }: Props) {
               </div>
             </>
           ) : null}
+
+          {payments.map(payment => (
+            <div key={`${payment.amount}-${payment.at}`} className="flex justify-between gap-3" data-testid="payment-line">
+              <span className="text-neutral-500">
+                {money(payment.amount)} received
+                <span className="block text-[10px]">{new Date(payment.at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+              </span>
+              <span className="font-semibold text-right truncate">{payment.by ? `by ${payment.by}` : 'Name not recorded'}</span>
+            </div>
+          ))}
+          {payments.length === 0 && <p className="text-[11px] text-neutral-500">No money received yet</p>}
 
           {balance > 0 ? (
             <div className="flex justify-between gap-3 text-[13px]">

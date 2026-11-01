@@ -14,7 +14,7 @@
 import type { StoreData } from '@/types/store';
 import { getLaundryRecordSearchText, parseLaundryRecordMetadata } from '@/lib/laundry-workspace';
 import { describeDue, type DueLabel } from '@/lib/laundry-due';
-import { cloudBundleBalance, laundryBalance, laundryTenderSummary } from '@/lib/laundry-money';
+import { cloudBundleBalance, laundryBalance, laundryPaymentLines, laundryTenderSummary, type LaundryPaymentLine } from '@/lib/laundry-money';
 import { LAUNDRY_SETTLED_STAGES, LAUNDRY_WORKFLOW_STAGES, type LaundryStageStep, type LaundryWorkflowStage } from '@/lib/laundry-offline';
 import { buildLaundryWhatsAppPayload } from '@/lib/laundry-whatsapp';
 import type { LaundryFulfillment, LaundryRunStatus } from '@/lib/laundry-runs';
@@ -35,6 +35,8 @@ export interface DecoratedRecord {
   due: DueLabel | null;
   /** Still owed on this bundle, 0 when settled. */
   balance: number;
+  /** Each lot of money received on it, and who received it. */
+  payments: LaundryPaymentLine[];
   clientRef: string;
   /** Free-text shelf or rack, as the attendant wrote it at drop-off. */
   shelfLocation?: string;
@@ -101,7 +103,7 @@ export function readStageSteps(raw: unknown, statusHistory?: unknown): LaundrySt
  * Who did what to this bundle, start to finish: taken in, then every move.
  * A step from before names were kept simply has no name.
  */
-export function bundleTimeline(record: Pick<DecoratedRecord, 'createdAt' | 'recordedByName' | 'steps'>): { label: string; at: number; by?: string }[] {
+export function bundleTimeline(record: Pick<DecoratedRecord, 'createdAt' | 'recordedByName' | 'steps'> & { payments?: LaundryPaymentLine[] }): { label: string; at: number; by?: string }[] {
   const label = (stage: string) => stage === 'collected'
     ? 'Handed over'
     : (LAUNDRY_WORKFLOW_STAGES.find(item => item.id === stage)?.label || stage);
@@ -109,7 +111,8 @@ export function bundleTimeline(record: Pick<DecoratedRecord, 'createdAt' | 'reco
   return [
     ...taken,
     ...record.steps.filter(step => step.stage !== 'received').map(step => ({ label: step.label || label(step.stage), at: Date.parse(step.at), by: step.by })),
-  ];
+    ...(record.payments || []).map(payment => ({ label: `Received ₦${payment.amount.toLocaleString()}`, at: Date.parse(payment.at), by: payment.by })),
+  ].sort((a, b) => (a.at || 0) - (b.at || 0));
 }
 
 export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
@@ -162,6 +165,7 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     clientRef,
     // A worker's phone only has what it took itself; the cloud knows the rest.
     balance: cloudBundleBalance(store, clientRef, order) ?? laundryBalance(store, clientRef),
+    payments: laundryPaymentLines(store, clientRef, order),
     due: LAUNDRY_SETTLED_STAGES.includes(stage)
       ? describeDue(promisedAt, promisedAt !== null ? Math.min(Date.now(), promisedAt) : Date.now())
       : describeDue(promisedAt),

@@ -329,11 +329,14 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
       serviceName: record.serviceName,
       total: record.total,
       amountPaid: record.balance,
+      laterPayment: true,
+      takenBy: currentUser?.name,
+      takenByRole: currentUser?.role,
     });
     saveStore(next);
     onUpdate(next);
     showToast(`₦${record.balance.toLocaleString()} received for ${record.tagCode}`);
-  }, [store, onUpdate]);
+  }, [store, onUpdate, currentUser]);
 
   /**
    * Handing the clothes back is the last moment anyone can ask for the money.
@@ -406,6 +409,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
             amountPaid: ticket.total - ticket.balance,
             promisedFor: ticket.promisedAt ? new Date(ticket.promisedAt).toISOString() : undefined,
             recordedByName: ticket.recordedByName,
+            payments: ticket.payments,
           }}
           onClose={() => setTicket(null)}
         />

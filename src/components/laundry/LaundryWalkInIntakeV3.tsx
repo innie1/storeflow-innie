@@ -615,6 +615,8 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
         total,
         amountPaid: payment.tendered,
         promisedFor,
+        takenBy: currentUser?.name,
+        takenByRole: currentUser?.role,
       });
 
       const crossed = checkNewMilestone(nextStore);

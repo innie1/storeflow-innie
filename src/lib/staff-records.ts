@@ -26,6 +26,7 @@ export interface ArrivedPayment {
   amount: number;
   at: string;
   staffName?: string;
+  staffRole?: string;
   total?: number;
   tagCode?: string;
   customerName?: string;
@@ -80,6 +81,7 @@ export function addArrivedPayments(store: StoreData, payments: ArrivedPayment[] 
       promisedFor: payment.promisedFor,
       at: payment.at,
       takenBy: payment.staffName,
+      takenByRole: payment.staffRole,
     });
   }
   next = { ...next, appliedStaffPayments: [...(store.appliedStaffPayments || []), ...booked].slice(-APPLIED_KEPT) };

@@ -1,4 +1,5 @@
 import type { StoreData } from '@/types/store';
+import { laundryPaymentLines } from '@/lib/laundry-money';
 import { parseLaundryRecordMetadata } from '@/lib/laundry-workspace';
 
 export type LaundryMessageKind = 'received' | 'processing' | 'ready' | 'reminder' | 'completed';
@@ -111,6 +112,12 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
   }, 0);
   const total = money(order?.total);
   const lines: string[] = [`Hello ${name},`];
+  // Who took the clothes in and who received the money are often not the same person.
+  const clientRef = String(order?._localClientRef || order?.client_ref || meta.client_ref || '');
+  const whoDidWhat = [
+    ...(meta.recorded_by_name ? [`Taken in by: ${meta.recorded_by_name}`] : []),
+    ...laundryPaymentLines(store, clientRef, order).map(payment => `${money(payment.amount)} received${payment.by ? ` by ${payment.by}` : ''}`),
+  ];
 
   if (kind === 'received') {
     lines.push(
@@ -120,6 +127,7 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
       `Service: ${service}`,
       ...formatItemBlock(order, meta, pieces),
       `Total: ${total}`,
+      ...whoDidWhat,
       '',
       'We will keep you updated as your laundry moves through processing.',
     );
@@ -140,6 +148,7 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
       `Laundry code: ${tag}`,
       ...formatItemBlock(order, meta, pieces),
       `Total: ${total}`,
+      ...whoDidWhat,
       '',
       'Please bring or mention your laundry code when collecting.',
     );
@@ -158,6 +167,7 @@ export function buildLaundryWhatsAppPayload(store: StoreData, order: any): Laund
       '',
       `Laundry code: ${tag}`,
       ...formatItemBlock(order, meta, pieces),
+      ...whoDidWhat,
       '',
       'We appreciate your patronage and hope to serve you again.',
     );

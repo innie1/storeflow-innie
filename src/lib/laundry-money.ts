@@ -1,4 +1,5 @@
 import type { PendingPayment, Sale, StoreData } from '@/types/store';
+import { attribution } from '@/lib/recorded-by';
 
 /**
  * Money on a laundry bundle.
@@ -70,8 +71,11 @@ export interface LaundryPaymentInput {
   /** When the bundle is promised, so an unpaid balance has a due date. */
   promisedFor?: string;
   at?: string;
-  /** Who took the money, when it was not this phone's own user: a worker. */
+  /** Who received this money: whoever is signed in, or the worker it came from. */
   takenBy?: string;
+  takenByRole?: string;
+  /** Money on a bundle already taken in, here or on another phone - never the taking-in. */
+  laterPayment?: boolean;
 }
 
 const money = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
@@ -180,6 +184,7 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
       date: at,
       pendingPaymentId: `laundry-${input.clientRef}`,
       channel: 'in_store',
+      ...attribution({ name: input.takenBy, role: input.takenByRole }),
     };
     next = { ...next, sales: [...(next.sales || []), sale] };
   }
@@ -189,6 +194,7 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
     ? [{
         date: at,
         amount: actuallyTaken,
+        ...(input.takenBy ? { takenBy: input.takenBy } : {}),
         note: (settlement.change > 0
           ? `${input.tagCode} payment — ₦${settlement.tendered.toLocaleString()} tendered, ₦${settlement.change.toLocaleString()} change`
           : `${input.tagCode} payment`) + (input.takenBy ? ` (taken by ${input.takenBy})` : ''),
@@ -196,6 +202,7 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
     : [];
 
   const entry: PendingPayment = {
+    ...(existing?.takenInElsewhere || (!existing && input.laterPayment) ? { takenInElsewhere: true } : {}),
     id: `laundry-${input.clientRef}`,
     customerId: input.customerId || existing?.customerId,
     customerName: input.customerName,
@@ -221,6 +228,48 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
   return next;
 }
 
+/** One lot of money received on a bundle, and who received it, when that was kept. */
+export interface LaundryPaymentLine {
+  amount: number;
+  at: string;
+  by?: string;
+}
+
+/**
+ * Who received what on a bundle, oldest first.
+ *
+ * The person who takes the clothes in is often not the one who takes the money:
+ * the shift has changed by collection. Read from this phone's own record and
+ * from what the cloud said about the bundle (order.paid_by), since a worker's
+ * phone only holds what it took itself. The same money can be in both, so an
+ * amount at the same moment is one payment. Older payments kept the name only
+ * in their note; those from before names were kept simply have none.
+ */
+export function laundryPaymentLines(store: StoreData, clientRef: string, order?: { paid_by?: unknown } | null): LaundryPaymentLine[] {
+  const lines = new Map<string, LaundryPaymentLine>();
+  const add = (amount: unknown, at: unknown, by: unknown) => {
+    const value = money(Number(amount));
+    const time = Date.parse(String(at));
+    if (!(value > 0) || !Number.isFinite(time)) return;
+    const name = String(by || '').trim();
+    const key = `${value}|${time}`;
+    const known = lines.get(key);
+    if (known) {
+      if (!known.by && name) known.by = name;
+      return;
+    }
+    lines.set(key, { amount: value, at: new Date(time).toISOString(), ...(name ? { by: name } : {}) });
+  };
+  for (const line of (Array.isArray(order?.paid_by) ? order.paid_by : []) as { amount?: unknown; at?: unknown; by?: unknown }[]) {
+    add(line?.amount, line?.at, line?.by);
+  }
+  const owed = (store.pendingPayments || []).find(entry => entry.id === `laundry-${clientRef}`);
+  for (const event of owed?.events || []) {
+    add(event.amount, event.date, event.takenBy || String(event.note || '').match(/\(taken by ([^)]+)\)/)?.[1]);
+  }
+  return [...lines.values()].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
 /** One payment this phone took on a bundle, named the same way every time it is read. */
 export interface PaymentTakenHere {
   id: string;
@@ -238,10 +287,20 @@ export function laundryPaymentsTakenHere(store: StoreData): PaymentTakenHere[] {
     if (!String(owed.id || '').startsWith('laundry-')) continue;
     const clientRef = owed.id.slice('laundry-'.length);
     const events = owed.events || [];
-    const deposit = events.filter(event => event.date === owed.createdAt).reduce((sum, event) => sum + (Number(event.amount) || 0), 0);
-    out.push({ id: `${owed.id}-in`, kind: 'intake', clientRef, amount: money(deposit), at: owed.createdAt });
+    /*
+     * The taking-in has one name per bundle, so only the phone that took the
+     * bundle in may use it. A phone that first hears of a debt by taking money
+     * on it - another phone took the bundle in, or this one lost its storage -
+     * used to send that money under the same name, and the cloud, already
+     * holding the taking-in at nothing paid, took it for a repeat.
+     */
+    const elsewhere = owed.takenInElsewhere === true;
+    if (!elsewhere) {
+      const deposit = events.filter(event => event.date === owed.createdAt).reduce((sum, event) => sum + (Number(event.amount) || 0), 0);
+      out.push({ id: `${owed.id}-in`, kind: 'intake', clientRef, amount: money(deposit), at: owed.createdAt });
+    }
     for (const event of events) {
-      if (event.date === owed.createdAt || !(Number(event.amount) > 0)) continue;
+      if ((!elsewhere && event.date === owed.createdAt) || !(Number(event.amount) > 0)) continue;
       out.push({ id: `${owed.id}-${Date.parse(event.date)}`, kind: 'payment', clientRef, amount: Number(event.amount), at: event.date });
     }
   }

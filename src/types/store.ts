@@ -127,6 +127,8 @@ export interface PendingPaymentItem {
 }
 
 export interface PendingPaymentEvent {
+  /** Who received this money, which need not be who took the work in. */
+  takenBy?: string;
   allocation?: PaymentAllocation;
   date: string;
   amount: number;
@@ -135,6 +137,12 @@ export interface PendingPaymentEvent {
 }
 
 export interface PendingPayment {
+  /**
+   * A laundry debt this phone only knows from taking money on it: the bundle
+   * was taken in elsewhere, so nothing here is the taking-in. See
+   * laundryPaymentsTakenHere.
+   */
+  takenInElsewhere?: boolean;
   writtenOffAmount?: number;
   writtenOffAt?: string;
   id: string;
