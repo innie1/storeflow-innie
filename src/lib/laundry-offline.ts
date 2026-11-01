@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { appendRunEvent, type LaundryFulfillment, type LaundryRunStatus, type RunEvent } from '@/lib/laundry-runs';
 import { generateLaundryReceiptNumber, sanitizeGarmentSelections, summarizeLaundryGarments, type LaundryGarmentSelection } from '@/lib/laundry-intake';
-import { isWorkerCode, readWorkerSession } from '@/lib/staff-session';
+import { isWorkerCode, noteWorkerPassExpired, readWorkerSession } from '@/lib/staff-session';
 import { deviceKey } from '@/lib/staff-join';
 import { currentActor } from '@/lib/current-actor';
 
@@ -698,6 +698,7 @@ async function laundryDoor(
     p_token: session.token, p_device_key: deviceKey(), ...args,
   });
   if (error) return { data, error };
+  if (data && data.ok === false && data.error === 'expired') noteWorkerPassExpired(session.token);
   if (data && data.ok === false) return { data: null, error: { code: 'P0001', message: `Worker pass: ${data.error}` } };
   return { data, error: null };
 }
@@ -938,6 +939,7 @@ export async function changeLaundryService(
     if (!session) return { error: 'Sign in again with your PIN.' };
     const { data, error } = await (supabase as any).rpc('staff_change_laundry_service', { p_token: session.token, p_device_key: deviceKey(), ...args });
     if (error) return { error: String(error.message || 'Could not change it. Try again.') };
+    if (data?.ok === false && data.error === 'expired') noteWorkerPassExpired(session.token);
     if (!data?.ok) return { error: data?.error === 'not_allowed' ? 'Your role cannot change bundles.' : 'Sign in again with your PIN.' };
     order = data.order;
   } else {

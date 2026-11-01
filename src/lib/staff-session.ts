@@ -394,11 +394,31 @@ export async function sendWorkerRecords(store: StoreData): Promise<SendResult> {
   return { state: any ? 'sent' : 'unchanged' };
 }
 
+/*
+ * The pass lasts 24 hours, but nothing but a restart ever asked for the PIN. A
+ * phone left open past that kept taking work in with nothing able to leave it:
+ * every door said "expired", and every caller treated that as nothing to act
+ * on. So the first door to say it now says so to the app, which asks for the
+ * PIN on top of whatever is on screen. Signing out would be wrong - the work
+ * waits on the phone and goes as soon as there is a new pass.
+ */
+export const WORKER_PASS_EXPIRED_EVENT = 'storeflow:worker-pass-expired';
+export const WORKER_PASS_RENEWED_EVENT = 'storeflow:worker-pass-renewed';
+
+/** A door refused this pass. An answer to an older pass says nothing about the current one. */
+export function noteWorkerPassExpired(token?: unknown): void {
+  const current = readWorkerSession()?.token;
+  if (token !== undefined && current && token !== current) return;
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(WORKER_PASS_EXPIRED_EVENT));
+}
+
 async function callCloud(fn: string, args: Record<string, unknown>): Promise<Record<string, any> | null> {
   try {
     const { data, error } = await rpcAheadOfTypes(fn, args);
     if (error) return null;
-    return (data || null) as Record<string, any> | null;
+    const reply = (data || null) as Record<string, any> | null;
+    if (reply && reply.ok === false && reply.error === 'expired') noteWorkerPassExpired(args.p_token);
+    return reply;
   } catch {
     return null;
   }
@@ -449,6 +469,7 @@ export async function signInWorker(
       token: reply.token, expiresAt: reply.expires_at, lastOnlineAt: new Date(now).toISOString(),
       pinHash: await pinHash(pin), worker, storeRef,
     });
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(WORKER_PASS_RENEWED_EVENT));
     return { ok: true, store, worker, offline: false };
   }
 

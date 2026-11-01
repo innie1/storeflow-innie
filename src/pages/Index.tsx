@@ -29,7 +29,8 @@ import { identityForStore, readActiveUser, writeActiveUser } from '@/lib/store-s
 import { applyDisplayPreferences } from '@/lib/display-preferences';
 import { setFlowVoiceEnabled } from '@/lib/flow-voice';
 import { setCurrentActor } from '@/lib/current-actor';
-import { fetchWorkerBundles, forgetWorkerPhone, mergeBundles, refreshWorkerCopy, sendWorkerRecords, WORKER_BUNDLES_MS } from '@/lib/staff-session';
+import { fetchWorkerBundles, forgetWorkerPhone, mergeBundles, refreshWorkerCopy, sendWorkerRecords, WORKER_BUNDLES_MS, WORKER_PASS_EXPIRED_EVENT, WORKER_PASS_RENEWED_EVENT } from '@/lib/staff-session';
+import WorkerPassPrompt from '@/components/staff/WorkerPassPrompt';
 import InviteSwitchPrompt from '@/components/staff/InviteSwitchPrompt';
 import { collectStaffRecords } from '@/lib/staff-records';
 import { resumeWorkerLaundry } from '@/lib/laundry-offline';
@@ -1527,6 +1528,17 @@ export default function Index() {
     };
   }, [workerCopyCode]);
 
+  // The pass ran out with the app open: ask for the PIN over whatever is on
+  // screen, and take the prompt away if this stops being a worker's phone.
+  const [passRanOut, setPassRanOut] = useState(false);
+  useEffect(() => {
+    setPassRanOut(false);
+    if (!workerCopyCode) return;
+    const onExpired = () => setPassRanOut(true);
+    window.addEventListener(WORKER_PASS_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(WORKER_PASS_EXPIRED_EVENT, onExpired);
+  }, [workerCopyCode]);
+
   // A worker's phone sends what it recorded a moment after it is recorded -
   // an expense, a new customer, a piece-work claim - not on every keystroke.
   useEffect(() => {
@@ -1570,11 +1582,13 @@ export default function Index() {
     const onVisible = () => void pull();
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onVisible);
+    window.addEventListener(WORKER_PASS_RENEWED_EVENT, onVisible);
     return () => {
       stopped = true;
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onVisible);
+      window.removeEventListener(WORKER_PASS_RENEWED_EVENT, onVisible);
     };
   }, [workerCopyCode, getNormalizedStatus]);
 
@@ -2952,6 +2966,21 @@ export default function Index() {
       {String((store as any).businessType || store.storeType || '').toLowerCase() === 'laundry' && <LaundrySyncAgent store={store} />}
       <ToastContainer />
       <InstallPrompt />
+      {passRanOut && store.staffDevice && (
+        <WorkerPassPrompt
+          onRenewed={renewed => {
+            handleStoreLoaded(renewed);
+            setPassRanOut(false);
+            // What waited for the pass goes now; the bundles' own wait ended at sign-in.
+            void sendWorkerRecords(renewed).catch(() => {});
+          }}
+          onSignOut={handleLock}
+          onShutOut={() => {
+            handleLock();
+            showToast('This phone has been signed out of the shop.', 'info');
+          }}
+        />
+      )}
     </div>
   );
 }

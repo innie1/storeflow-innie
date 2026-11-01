@@ -22,11 +22,13 @@ import { resumeWorkerLaundry } from '@/lib/laundry-offline';
 
 interface Props {
   onSignedIn: (store: StoreData) => void;
+  /** The cloud said this phone is no longer let in, and it has forgotten the shop. */
+  onShutOut?: () => void;
 }
 
 const roleLabel = (role?: string) => role ? role.charAt(0).toUpperCase() + role.slice(1) : '';
 
-export default function WorkerSignIn({ onSignedIn }: Props) {
+export default function WorkerSignIn({ onSignedIn, onShutOut }: Props) {
   const join = readJoin();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
@@ -47,7 +49,10 @@ export default function WorkerSignIn({ onSignedIn }: Props) {
     });
     setBusy(false);
     setPin('');
-    if ('error' in result) return setError(signInErrorText(result.error));
+    if ('error' in result) {
+      if (!readJoin()) return onShutOut?.();
+      return setError(signInErrorText(result.error));
+    }
     void keepPhoneData();
     const worker: Worker = result.worker;
     // Missing boxes are no, never yes: the cloud sends what the owner ticked.

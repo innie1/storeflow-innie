@@ -3652,7 +3652,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
           <div className={`${card} p-4 space-y-2`}>
             <h3 className="font-display font-bold text-sm text-left">Workers' Phones Lock Timer</h3>
             <p className="text-xs text-muted-foreground text-left">
-              How long a worker's own phone stays open before asking for their PIN again. They still enter it at least once a day.
+              How long a worker's own phone stays signed in before asking for their PIN the next time the app is opened. Online, they still enter it at least once a day.
             </p>
             {[
               { v: '1h' as LockTimer, l: '1 Hour' },
