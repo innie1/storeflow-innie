@@ -116,9 +116,9 @@ describe('what Flow recommends', () => {
 describe('what Flow tells the owner', () => {
   const note = (store: StoreData) => generateNotifications(store).find(item => item.id.startsWith('laundry-flow-'));
 
-  it('sends clothes and money once a week, leading to the graph', () => {
+  it('sends clothes and money once a week, leading to the bundles', () => {
     const first = note(shop());
-    expect(first).toMatchObject({ title: 'Clothes and money this week', tone: 'warning', category: 'insight', actionTab: 'manager' });
+    expect(first).toMatchObject({ title: 'Clothes and money this week', tone: 'warning', category: 'insight', actionTab: 'laundry-records' });
     expect(first?.description).toContain('6 bundles worth ₦21,700');
     expect(first?.description).toContain('1 of the 6 customers');
     expect(note(shop())?.id).toBe(first?.id);

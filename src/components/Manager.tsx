@@ -1,7 +1,6 @@
 import { receivedBetween, runningCostsBetween } from '@/lib/money-figures';
 import { debtorKey } from '@/lib/customer-key';
 import { useState, useMemo, useEffect, useRef } from 'react';
-import LaundryFlowCard, { LaundryPaceCard } from '@/components/laundry/LaundryFlowCard';
 import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { resolveBusinessType } from '@/lib/business-runtime';
@@ -332,7 +331,9 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
                           animationDelay: `${i * 12}ms`,
                           transform: 'scaleY(0)'
                         }}
-                        aria-label={`${b.label}: ₦${b.revenue.toLocaleString()} revenue (${b.sales} sales)`} />
+                        aria-label={showClothes
+                          ? `${b.label}: ₦${b.revenue.toLocaleString()} worth of clothes (${b.sales} ${b.sales === 1 ? 'bundle' : 'bundles'})`
+                          : `${b.label}: ₦${b.revenue.toLocaleString()} revenue (${b.sales} sales)`} />
                     );
                   })}
                 </div>
@@ -992,7 +993,6 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
       {/* ─── OVERVIEW ─────────────────────────────────────────────────────── */}
       {tab === 'overview' && (
         <div className="space-y-4 animate-fade-in text-left">
-          {resolveBusinessType(store) === 'laundry' && <LaundryFlowCard store={store} />}
           {/* What the month must take, and how it went. Here rather than on
               the home screen: this is where somebody has come to think about
               the business, not to take a bundle in. */}
@@ -1466,7 +1466,6 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
       {/* ─── PREDICTIONS ──────────────────────────────────────────────────── */}
       {tab === 'predictions' && (
         <div className="space-y-4 animate-fade-in">
-          {resolveBusinessType(store) === 'laundry' && <LaundryPaceCard store={store} />}
           <div className="p-4 rounded-2xl bg-card shadow-card">
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-display font-bold text-base">Revenue Forecasts</h3>
@@ -1589,8 +1588,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
       {/* ─── ANALYSIS ─────────────────────────────────────────────────────── */}
       {tab === 'analysis' && (
         <div className="space-y-4 animate-fade-in">
-          {resolveBusinessType(store) === 'laundry' && <LaundryFlowCard store={store} />}
-          <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider pt-1">{resolveBusinessType(store) === 'laundry' ? 'When the shop is busy' : 'What is selling'}</h3>
+          <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider pt-1">What is selling</h3>
           {/* Activity graph */}
           <MostActivePeriodsCard store={store} />
 

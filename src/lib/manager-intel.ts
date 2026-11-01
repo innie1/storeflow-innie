@@ -1454,8 +1454,8 @@ function laundryFlowNote(store: StoreData, now: string): FlowNotification | null
     read: false,
     title: 'Clothes and money this week',
     description: `${line} ${flow.customersPaid} of the ${flow.customersBrought} customers who brought clothes have paid something.`,
-    actionLabel: 'See the graph',
-    actionTab: 'manager',
+    actionLabel: 'See the bundles',
+    actionTab: 'laundry-records',
     category: 'insight',
   };
 }

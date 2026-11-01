@@ -79,8 +79,8 @@ function walkInOrders(store: StoreData): AnyRecord[] {
 
 export default function BusinessAnalytics({ store, onBack }: { store: StoreData; onBack?: () => void }) {
   const [range, setRange] = useState<Range>('30d');
-  const [tab, setTab] = useState<'overview' | 'days' | 'customers' | 'scans'>('overview');
   const isLaundry = String(store.businessType || store.storeType || '').toLowerCase() === 'laundry';
+  const [tab, setTab] = useState<'overview' | 'days' | 'customers' | 'scans'>(isLaundry ? 'days' : 'overview');
 
   /*
    * The laundry's days, each recorded by its date. Brought up to date on
@@ -257,53 +257,20 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
     { label: 'Revenue', value: money(analytics.revenue), icon: BarChart3, period },
   ];
 
+  /*
+   * Clothes and money, at the top of a laundry's page, already says what came
+   * in, what was paid, what is owed and what was collected. Only what it does
+   * not say stays here.
+   */
+  const saidInClothesAndMoney = ['Jobs taken in', 'Handed back', 'Money received', 'Work taken in', 'Still owed'];
+  const laundryCards = serviceCards.filter(card => !saidInClothesAndMoney.includes(card.label));
+
   const cards = [
     ...(analytics.scans > 0 || !isService ? storefrontCards : []),
-    ...(isService ? serviceCards : retailCards),
+    ...(isLaundry ? laundryCards : isService ? serviceCards : retailCards),
   ];
 
-  return (
-    <div className="animate-fade-in space-y-5 pb-8">
-      <div className="flex items-center gap-3">
-        {onBack && <button onClick={onBack} className="w-10 h-10 rounded-xl border border-border bg-card flex items-center justify-center"><ArrowLeft className="w-4 h-4" /></button>}
-        <div className="flex-1">
-          <p className="text-xs uppercase tracking-widest text-primary font-bold">Business intelligence</p>
-          <h1 className="font-display font-black text-2xl">Analysis</h1>
-          <p className="text-sm text-muted-foreground">
-            {isService
-              ? 'Who brings you work, what you have handed back, and who comes again.'
-              : 'Understand who finds your store, who buys, and who comes back.'}
-          </p>
-        </div>
-      </div>
-
-      {isLaundry && <LaundryFlowCard store={store} />}
-
-      <div className="flex flex-wrap gap-2">
-        {([['7d', '7 days'], ['30d', '30 days'], ['all', 'Lifetime']] as [Range, string][]).map(([id, label]) => <button key={id} onClick={() => setRange(id)} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border ${range === id ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border'}`}>{label}</button>)}
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {cards.map(({ label, value, icon: Icon, period: stretch }) => <div key={label} className="rounded-2xl border border-border bg-card p-4"><Icon className="w-4 h-4 text-primary" /><p className="font-display font-black text-2xl mt-2">{value}</p><p className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</p>{stretch && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{stretch}</p>}</div>)}
-      </div>
-
-      <div className={`grid gap-2 ${isLaundry ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
-        {([
-          ['overview', 'Overview'],
-          ...(isLaundry ? [['days', 'Day by day'] as const] : []),
-          ['customers', 'Customers'],
-          ['scans', 'Scan activity'],
-        ] as const).map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`p-3 rounded-xl border text-xs font-bold ${tab === id ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'}`}>{label}</button>)}
-      </div>
-
-      {tab === 'overview' && <div className="grid md:grid-cols-2 gap-3">
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display font-bold">Customer journey</h2>
-          <div className="space-y-3 mt-4">
-            {[[isService ? 'Found you online' : 'Scanned storefront', analytics.scans], [isService ? 'Brought work in' : 'Placed an order', analytics.orders], [isService ? 'Handed back' : 'Successful purchase', analytics.successful], ['Bought more than once', analytics.returning]].map(([label, value]) => <div key={label as string} className="flex items-center justify-between gap-3"><span className="text-sm text-muted-foreground">{label}</span><b className="font-display">{value as number}</b></div>)}
-          </div>
-        </section>
-        {(analytics.online.orders > 0 || analytics.scans > 0) && (
+  const whereTheWorkComesFrom = (analytics.online.orders > 0 || analytics.scans > 0) && (
           <section className="rounded-2xl border border-border bg-card p-5">
             <h2 className="font-display font-bold">Where the work comes from</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -339,7 +306,52 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
               </p>
             )}
           </section>
-        )}
+        );
+
+  return (
+    <div className="animate-fade-in space-y-5 pb-8">
+      <div className="flex items-center gap-3">
+        {onBack && <button onClick={onBack} className="w-10 h-10 rounded-xl border border-border bg-card flex items-center justify-center"><ArrowLeft className="w-4 h-4" /></button>}
+        <div className="flex-1">
+          <p className="text-xs uppercase tracking-widest text-primary font-bold">Business intelligence</p>
+          <h1 className="font-display font-black text-2xl">Analysis</h1>
+          <p className="text-sm text-muted-foreground">
+            {isService
+              ? 'Who brings you work, what you have handed back, and who comes again.'
+              : 'Understand who finds your store, who buys, and who comes back.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {([['7d', '7 days'], ['30d', '30 days'], ['all', 'Lifetime']] as [Range, string][]).map(([id, label]) => <button key={id} onClick={() => setRange(id)} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border ${range === id ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border'}`}>{label}</button>)}
+      </div>
+
+      {isLaundry && <LaundryFlowCard store={store} range={range} />}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {cards.map(({ label, value, icon: Icon, period: stretch }) => <div key={label} className="rounded-2xl border border-border bg-card p-4"><Icon className="w-4 h-4 text-primary" /><p className="font-display font-black text-2xl mt-2">{value}</p><p className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</p>{stretch && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{stretch}</p>}</div>)}
+      </div>
+
+      {isLaundry && whereTheWorkComesFrom}
+
+      {/* A laundry's overview is Clothes and money, and it has no scans to list until somebody scans. */}
+      <div className={`grid gap-2 ${isLaundry && analytics.scans === 0 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+        {([
+          ...(isLaundry ? [['days', 'Day by day'] as const] : [['overview', 'Overview'] as const]),
+          ['customers', 'Customers'],
+          ...(isLaundry && analytics.scans === 0 ? [] : [['scans', 'Scan activity'] as const]),
+        ] as const).map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`p-3 rounded-xl border text-xs font-bold ${tab === id ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'}`}>{label}</button>)}
+      </div>
+
+      {tab === 'overview' && <div className="grid md:grid-cols-2 gap-3">
+        <section className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="font-display font-bold">Customer journey</h2>
+          <div className="space-y-3 mt-4">
+            {[[isService ? 'Found you online' : 'Scanned storefront', analytics.scans], [isService ? 'Brought work in' : 'Placed an order', analytics.orders], [isService ? 'Handed back' : 'Successful purchase', analytics.successful], ['Bought more than once', analytics.returning]].map(([label, value]) => <div key={label as string} className="flex items-center justify-between gap-3"><span className="text-sm text-muted-foreground">{label}</span><b className="font-display">{value as number}</b></div>)}
+          </div>
+        </section>
+        {whereTheWorkComesFrom}
 
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-display font-bold">What this means</h2>

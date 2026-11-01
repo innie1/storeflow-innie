@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StoreData } from '@/types/store';
-import { laundryFlow, laundryPace, type FlowBundle } from '@/lib/laundry-flow';
+import { laundryFlow, type FlowBundle } from '@/lib/laundry-flow';
 import { readSource } from './helpers/source';
 
 /**
@@ -118,25 +118,12 @@ describe('ranges', () => {
   });
 });
 
-describe('next week at this pace', () => {
-  it('will not estimate from under two weeks of records', () => {
-    expect(laundryPace(shop, bundles, NOW)).toMatchObject({ daysKnown: 7, enough: false });
-  });
-
-  it('averages clothes and money over the last four weeks', () => {
-    const steady = Array.from({ length: 28 }, (_, i) => bundle(`b${i}`, new Date(2026, 9, 5 + i, 10).toISOString(), 1000));
-    const money = { sales: Array.from({ length: 28 }, (_, i) => ({ date: new Date(2026, 9, 5 + i, 15).toISOString(), total: 400 })) } as unknown as StoreData;
-    expect(laundryPace(money, steady, NOW)).toMatchObject({ enough: true, bundlesPerWeek: 7, broughtInPerWeek: 7000, moneyPerWeek: 2800, gapPerWeek: 4200 });
-  });
-});
-
 describe('where it shows', () => {
-  it('is first in Overview and Analysis, and on the Analysis page, for a laundry only', () => {
+  it('is on the Analysis page only, and the candles in Flow count the clothes', () => {
     const manager = readSource('src/components/Manager.tsx');
-    expect(manager).toMatch(/text-left">\s+\{resolveBusinessType\(store\) === 'laundry' && <LaundryFlowCard store=\{store\} \/>\}/);
-    expect(manager).toContain("{resolveBusinessType(store) === 'laundry' && <LaundryPaceCard store={store} />}");
-    expect(readSource('src/components/analytics/BusinessAnalytics.tsx')).toContain('{isLaundry && <LaundryFlowCard store={store} />}');
+    expect(manager).not.toContain('LaundryFlowCard');
     expect(manager).toContain("[['clothes', 'Clothes in'], ['money', 'Money in']]");
+    expect(readSource('src/components/analytics/BusinessAnalytics.tsx')).toContain('{isLaundry && <LaundryFlowCard store={store} range={range} />}');
     expect(readSource('src/lib/manager-intel.ts')).toContain("id: 'laundry-clothes-not-paid'");
   });
 });

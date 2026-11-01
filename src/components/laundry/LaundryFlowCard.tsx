@@ -1,21 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { StoreData } from '@/types/store';
 import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
-import { laundryFlow, laundryPace, PACE_MIN_DAYS, type FlowBundle, type FlowPoint, type FlowRange } from '@/lib/laundry-flow';
+import { laundryFlow, type FlowBundle, type FlowPoint, type FlowRange } from '@/lib/laundry-flow';
 
 /**
  * Clothes coming in and money coming in, on one line graph, and what that
- * means in words. Shown first wherever a laundry owner comes to understand the
- * shop, so the answer is there before any tab has to be opened.
+ * means in words. First on a laundry's Analysis page, whose range buttons and
+ * day-by-day list it shares rather than repeats.
  */
-
-const RANGES: { id: FlowRange; label: string }[] = [
-  { id: '7d', label: '7 days' },
-  { id: '30d', label: '30 days' },
-  { id: 'all', label: 'All' },
-];
 
 const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
 
@@ -72,12 +66,10 @@ function ShareRow({ label, count, of, tone }: { label: string; count: number; of
   );
 }
 
-export default function LaundryFlowCard({ store }: { store: StoreData }) {
-  const [range, setRange] = useState<FlowRange>('30d');
+export default function LaundryFlowCard({ store, range }: { store: StoreData; range: FlowRange }) {
   const bundles = useBundles(store);
   const flow = useMemo(() => laundryFlow(store, bundles, range), [store, bundles, range]);
   const colors = seriesColors();
-  const worked = flow.points.filter(point => point.bundles > 0 || point.moneyIn > 0);
   const hasFlow = flow.broughtIn > 0 || flow.moneyIn > 0;
   // Over a short stretch each point is a day worth seeing, and a single point
   // has no line to draw at all.
@@ -85,40 +77,11 @@ export default function LaundryFlowCard({ store }: { store: StoreData }) {
 
   return (
     <section className="p-4 rounded-2xl bg-card shadow-card space-y-4 text-left" aria-label="Clothes and money">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display font-bold text-base">Clothes and money</h3>
-        <div className="flex gap-1">
-          {RANGES.map(item => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setRange(item.id)}
-              aria-pressed={range === item.id}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-display font-semibold ${range === item.id ? 'bg-primary/15 text-primary border border-primary/40' : 'bg-surface-2 text-muted-foreground border border-transparent'}`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <h3 className="font-display font-bold text-base">Clothes and money</h3>
 
       <div className="space-y-1" data-testid="flow-story">
         {flow.story.map(line => <p key={line} className="text-sm text-foreground leading-snug">{line}</p>)}
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        {[
-          ['Clothes brought in', naira(flow.broughtIn), `${flow.bundles} ${flow.bundles === 1 ? 'bundle' : 'bundles'} · ${flow.pieces} ${flow.pieces === 1 ? 'piece' : 'pieces'}`],
-          ['Money received', naira(flow.moneyIn), 'Includes older work paid now'],
-          ['Paid on these clothes', `${flow.paidShare}%`, naira(flow.paidOnThese)],
-          ['Still owed on these', naira(flow.owedOnThese), `${flow.nothingPaid} not paid at all`],
-        ].map(([label, value, note]) => (
-          <div key={label} className="p-2.5 rounded-xl bg-surface-2">
-            <p className="text-[10px] text-muted-foreground">{label}</p>
-            <p className="font-display font-black text-base tabular-nums leading-tight mt-0.5">{value}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{note}</p>
-          </div>
-        ))}
+        {flow.moneyIn > flow.paidOnThese && <p className="text-sm text-foreground leading-snug">Money received in that time, older work included: {naira(flow.moneyIn)}.</p>}
       </div>
 
       {hasFlow && (
@@ -129,7 +92,7 @@ export default function LaundryFlowCard({ store }: { store: StoreData }) {
           </div>
           <div className="h-52" role="img" aria-label={`Line graph by ${flow.unit}. ${flow.story.join(' ')}`}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={flow.points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <LineChart data={flow.points} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
                 <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} minTickGap={28} />
                 <YAxis width={40} tickFormatter={shortNaira} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} allowDecimals={false} />
@@ -143,93 +106,18 @@ export default function LaundryFlowCard({ store }: { store: StoreData }) {
       )}
 
       {flow.bundles > 0 && (
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <p className="text-xs font-display font-bold">The {flow.bundles} {flow.bundles === 1 ? 'bundle' : 'bundles'} brought in</p>
-            <ShareRow label="Paid in full" count={flow.paidInFull} of={flow.bundles} tone="bg-success" />
-            <ShareRow label="Part paid" count={flow.partPaid} of={flow.bundles} tone="bg-warning" />
-            <ShareRow label="Nothing paid yet" count={flow.nothingPaid} of={flow.bundles} tone="bg-destructive" />
-            <ShareRow label="Collected by the customer" count={flow.collected} of={flow.bundles} tone="bg-primary" />
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs font-display font-bold">The {flow.customersBrought} {flow.customersBrought === 1 ? 'customer' : 'customers'} who brought clothes</p>
-            <ShareRow label="Have paid something" count={flow.customersPaid} of={flow.customersBrought} tone="bg-success" />
-            <ShareRow label="Have not paid yet" count={flow.customersBrought - flow.customersPaid} of={flow.customersBrought} tone="bg-destructive" />
-          </div>
+        <div className="space-y-2">
+          <ShareRow label="Bundles paid in full" count={flow.paidInFull} of={flow.bundles} tone="bg-success" />
+          <ShareRow label="Bundles part paid" count={flow.partPaid} of={flow.bundles} tone="bg-warning" />
+          <ShareRow label="Bundles with nothing paid" count={flow.nothingPaid} of={flow.bundles} tone="bg-destructive" />
+          <ShareRow label="Bundles collected" count={flow.collected} of={flow.bundles} tone="bg-primary" />
+          <ShareRow label="Customers who have paid" count={flow.customersPaid} of={flow.customersBrought} tone="bg-success" />
         </div>
-      )}
-
-      {worked.length > 0 && (
-        <details className="text-xs">
-          <summary className="cursor-pointer font-display font-semibold text-primary">See the numbers for each {flow.unit}</summary>
-          <table className="w-full mt-2 tabular-nums">
-            <thead>
-              <tr className="text-[10px] text-muted-foreground text-right">
-                <th className="text-left font-medium py-1">{flow.unit === 'week' ? 'Week of' : 'Day'}</th>
-                <th className="font-medium">Bundles</th>
-                <th className="font-medium">Clothes in</th>
-                <th className="font-medium">Money in</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...worked].reverse().map(point => (
-                <tr key={point.key} className="border-t border-border/50 text-right">
-                  <td className="text-left py-1.5">{point.label}</td>
-                  <td>{point.bundles}</td>
-                  <td>{naira(point.broughtIn)}</td>
-                  <td>{naira(point.moneyIn)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
       )}
 
       {store.staffDevice && (
         <p className="text-[11px] text-muted-foreground leading-snug">
           On a worker's phone the money shown is only what this phone took. The owner's phone has the whole shop's money.
-        </p>
-      )}
-    </section>
-  );
-}
-
-/** If the next week goes like the last few: for the Forecasts tab. */
-export function LaundryPaceCard({ store }: { store: StoreData }) {
-  const bundles = useBundles(store);
-  const pace = useMemo(() => laundryPace(store, bundles), [store, bundles]);
-  return (
-    <section className="p-4 rounded-2xl bg-card shadow-card space-y-3 text-left" aria-label="Next week at this pace">
-      <div>
-        <h3 className="font-display font-bold text-base">Next week at this pace</h3>
-        <p className="text-xs text-muted-foreground mt-0.5">Clothes and money, if next week goes like the last {Math.min(pace.daysKnown, 28)} days. An average, not a promise.</p>
-      </div>
-      {store.staffDevice && (
-        <p className="text-[11px] text-muted-foreground">On a worker's phone the money shown is only what this phone took.</p>
-      )}
-      {pace.enough ? (
-        <>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="p-2 rounded-xl bg-surface-2">
-              <p className="text-[10px] text-muted-foreground">Bundles</p>
-              <p className="font-display font-bold text-sm tabular-nums">{pace.bundlesPerWeek}</p>
-            </div>
-            <div className="p-2 rounded-xl bg-surface-2">
-              <p className="text-[10px] text-muted-foreground">Clothes worth</p>
-              <p className="font-display font-bold text-sm tabular-nums">{naira(pace.broughtInPerWeek)}</p>
-            </div>
-            <div className="p-2 rounded-xl bg-surface-2">
-              <p className="text-[10px] text-muted-foreground">Money in</p>
-              <p className="font-display font-bold text-sm tabular-nums">{naira(pace.moneyPerWeek)}</p>
-            </div>
-          </div>
-          {pace.gapPerWeek > 0 && (
-            <p className="text-xs text-foreground">At this pace, about {naira(pace.gapPerWeek)} more of work comes in each week than money does.</p>
-          )}
-        </>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          The shop has {pace.daysKnown} {pace.daysKnown === 1 ? 'day' : 'days'} of records. An estimate needs at least {PACE_MIN_DAYS}, so one busy day does not decide it.
         </p>
       )}
     </section>
