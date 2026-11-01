@@ -63,3 +63,12 @@ for (const name of ["localStorage", "sessionStorage"] as const) {
   Object.defineProperty(globalThis, name, descriptor);
   if (typeof window !== "undefined") Object.defineProperty(window, name, descriptor);
 }
+
+// jsdom has no ResizeObserver, and charts measure their container with one.
+if (!('ResizeObserver' in globalThis)) {
+  (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

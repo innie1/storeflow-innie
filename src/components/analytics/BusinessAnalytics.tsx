@@ -7,6 +7,7 @@ import { ArrowLeft, BarChart3, CheckCircle2, Eye, Globe2, RefreshCw, ShoppingBag
 import { receivedBetween, receivedByChannel, waitingToCollect } from '@/lib/money-figures';
 import { dayKey, describeDay, getDayHistory, recordDays, type DayRecord } from '@/lib/day-records';
 import type { StoreData } from '@/types/store';
+import LaundryFlowCard from '@/components/laundry/LaundryFlowCard';
 
 type Range = '7d' | '30d' | 'all';
 
@@ -275,6 +276,8 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
           </p>
         </div>
       </div>
+
+      {isLaundry && <LaundryFlowCard store={store} />}
 
       <div className="flex flex-wrap gap-2">
         {([['7d', '7 days'], ['30d', '30 days'], ['all', 'Lifetime']] as [Range, string][]).map(([id, label]) => <button key={id} onClick={() => setRange(id)} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border ${range === id ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border'}`}>{label}</button>)}

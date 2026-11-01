@@ -2,7 +2,8 @@ import type { Customer, StoreData } from '@/types/store';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { debtorKey } from '@/lib/customer-key';
 import { hasGoneQuiet, quietAfterDays, usualGapDays } from '@/lib/customer-rhythm';
-import { getBusinessTemplate, isServiceFirstBusiness } from '@/lib/business-runtime';
+import { getBusinessTemplate, isServiceFirstBusiness, resolveBusinessType } from '@/lib/business-runtime';
+import { laundryFlow, type FlowBundle, type FlowRange } from '@/lib/laundry-flow';
 
 
 /**
@@ -144,10 +145,40 @@ export function serviceOverview(store: StoreData): string {
   if (snapshot.today > 0) lines.push(`📥 **${snapshot.today}** taken in today.`);
   if (snapshot.owed > 0) lines.push(`💳 **${money(snapshot.owed)}** still owed across ${snapshot.owedBy} customer${snapshot.owedBy === 1 ? '' : 's'}.`);
 
+  if (resolveBusinessType(store) === 'laundry' && store.accessCode && shopLaundryRecords(String(store.accessCode)).length > 0) {
+    lines.push('', clothesAndMoney(store));
+  }
+
   if (!snapshot.services.length) {
     lines.push('', 'You have no services set up yet, so I cannot price anything. Add one in your price list.');
   }
   return lines.join('\n');
+}
+
+/**
+ * Clothes and money, as Flow says it.
+ *
+ * Flow's answers about a laundry's business were money received and nothing
+ * else, which is half of it. The same figures the graph draws, in its words.
+ * A worker's phone holds only the money it took, so it says so rather than
+ * reporting the rest of the shop as unpaid.
+ */
+export function clothesAndMoney(store: StoreData, range: FlowRange = '30d'): string {
+  const records = store.accessCode ? shopLaundryRecords(String(store.accessCode)) : [];
+  const flow = laundryFlow(store, records as unknown as FlowBundle[], range);
+  const lines = [...flow.story];
+  if (flow.moneyIn > flow.paidOnThese) lines.push(`Money received in that time, older work included: ${money(flow.moneyIn)}.`);
+  if (store.staffDevice) lines.push("This phone only knows the money it took itself. The owner's phone has the whole shop's money.");
+  else if (flow.bundles >= 3 && flow.paidShare < 50) lines.push('Getting paid is the thing to work on: remind whoever has clothes ready, and ask for a deposit at drop-off.');
+  return lines.join('\n');
+}
+
+/** The recommendation these figures call for, when they call for one. */
+export function clothesRecommendation(store: StoreData): string | null {
+  if (resolveBusinessType(store) !== 'laundry' || store.staffDevice || !store.accessCode) return null;
+  const flow = laundryFlow(store, shopLaundryRecords(String(store.accessCode)) as unknown as FlowBundle[], '30d');
+  if (flow.bundles < 3 || flow.paidShare >= 50) return null;
+  return `Get paid for the work you have done: only **${flow.paidShare}%** of the clothes brought in have been paid for, and **${money(flow.owedOnThese)}** is still owed. Remind whoever has clothes ready, and ask for a deposit at drop-off.`;
 }
 
 /** What is on the floor, replacing the stock answer. */

@@ -3,7 +3,8 @@ import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { receivedBetween, runningCostsBetween } from '@/lib/money-figures';
 import { countDebtors } from '@/lib/customer-key';
 import { allowedNotifications, wantsNotification } from '@/lib/notification-gate';
-import { isServiceFirstBusiness } from '@/lib/business-runtime';
+import { isServiceFirstBusiness, resolveBusinessType } from '@/lib/business-runtime';
+import { laundryFlow, type FlowBundle } from '@/lib/laundry-flow';
 
 import { getLowStockThreshold } from '@/lib/settings';
 import { getPendingSummary, isStockPurchase } from '@/lib/store-data';
@@ -841,6 +842,14 @@ function getCancelReason(order: any): string | null {
   }
 }
 
+function flowBundles(store: StoreData): FlowBundle[] {
+  try {
+    return shopLaundryRecords(String(store.accessCode || '')) as unknown as FlowBundle[];
+  } catch {
+    return [];
+  }
+}
+
 export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard[] {
   const advice: AdviceCard[] = [];
   const h = healthScore(store);
@@ -854,6 +863,24 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
   const pending = getPendingSummary(store);
   const series7 = dailySeries(store, 7);
   const rev7 = series7.reduce((s, d) => s + d.revenue, 0);
+
+  // A laundry's work comes in days before its money, so being busy and being
+  // paid can drift apart. Sales alone never show it: only the money is there.
+  // Not on a worker's phone, which only holds the money it took itself.
+  if (resolveBusinessType(store) === 'laundry' && !store.staffDevice) {
+    const flow = laundryFlow(store, flowBundles(store), '30d');
+    if (flow.bundles >= 3 && flow.paidShare < 50) {
+      advice.push({
+        id: 'laundry-clothes-not-paid',
+        icon: '🧺',
+        title: `Only ${flow.paidShare}% of the clothes brought in have been paid for`,
+        detail: `In the last 30 days, ${flow.bundles} bundles worth ₦${Math.round(flow.broughtIn).toLocaleString()} came in, and ₦${Math.round(flow.owedOnThese).toLocaleString()} of that is still owed. ${flow.customersBrought - flow.customersPaid} of the ${flow.customersBrought} customers have not paid anything yet.`,
+        priority: 'high',
+        action: 'Remind customers whose clothes are ready, and take a deposit at drop-off.',
+        goTo: 'laundry-records',
+      });
+    }
+  }
 
   // Critical: running out of fast sellers or completely out of stock
   if (!isStoreOnboarding(store)) {
@@ -1405,6 +1432,43 @@ export function restockScore(store: StoreData): RestockScoreResult {
 }
 
 // ─── Notifications Generator ───────────────────────────────────────────────────
+/**
+ * Once a week, what came in and what was paid. Named for its week, so it
+ * arrives once and stays read. Not from a worker's phone, which holds only the
+ * money it took itself, and only with something to report.
+ */
+function laundryFlowNote(store: StoreData, now: string): FlowNotification | null {
+  if (resolveBusinessType(store) !== 'laundry' || store.staffDevice) return null;
+  const flow = laundryFlow(store, flowBundles(store), '7d');
+  if (flow.bundles === 0) return null;
+  const monday = new Date();
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const week = `${monday.getFullYear()}-${monday.getMonth() + 1}-${monday.getDate()}`;
+  const line = `${flow.bundles} ${flow.bundles === 1 ? 'bundle' : 'bundles'} worth ₦${Math.round(flow.broughtIn).toLocaleString()} came in. ₦${Math.round(flow.moneyIn).toLocaleString()} was received, and ₦${Math.round(flow.owedOnThese).toLocaleString()} is owed on these clothes.`;
+  return {
+    id: `laundry-flow-${week}`,
+    icon: '🧺',
+    text: line,
+    tone: flow.paidShare < 50 ? 'warning' : 'info',
+    date: now,
+    read: false,
+    title: 'Clothes and money this week',
+    description: `${line} ${flow.customersPaid} of the ${flow.customersBrought} customers who brought clothes have paid something.`,
+    actionLabel: 'See the graph',
+    actionTab: 'manager',
+    category: 'insight',
+  };
+}
+
+/** Raised from anywhere in the app, not only once somebody opens the Manager screen. */
+export function checkLaundryFlowNote(store: StoreData): StoreData | null {
+  const note = laundryFlowNote(store, new Date().toISOString());
+  if (!note || (store.flowNotifications || []).some(existing => existing.id === note.id)) return null;
+  const allowed = allowedNotifications(store, [note]);
+  if (!allowed.length) return null;
+  return { ...store, flowNotifications: [...allowed, ...(store.flowNotifications || [])] };
+}
+
 export function generateNotifications(store: StoreData): FlowNotification[] {
   if (isStoreOnboarding(store)) {
     return [];
@@ -1418,6 +1482,11 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
   const ea = expenseAnalysis(store, ['Restock']);
   const h = healthScore(store);
   const pending = getPendingSummary(store);
+
+  // Listed here as well as raised for the whole app, so this screen knows it is
+  // still this week's and does not tidy it away once read.
+  const flowNote = laundryFlowNote(store, now);
+  if (flowNote) notes.push(flowNote);
 
   stock.filter(f => f.urgency === 'critical').forEach(f => {
     notes.push({

@@ -43,7 +43,7 @@ import { runStreakCheck, getStreakLine, getFreezeUsedLine } from '@/lib/streaks'
 import StreakFlame from '@/components/streaks/StreakFlame';
 import StreakDetailsPanel from '@/components/streaks/StreakDetailsPanel';
 import StreakRewardReveal from '@/components/streaks/StreakRewardReveal';
-import { checkDebtExpenseReminders, checkWeeklyRestockDraft } from '@/lib/manager-intel';
+import { checkDebtExpenseReminders, checkLaundryFlowNote, checkWeeklyRestockDraft } from '@/lib/manager-intel';
 import StoreAccess from '@/components/StoreAccess';
 import AppLockScreen from '@/components/AppLockScreen';
 import { appLockActive } from '@/lib/app-lock';
@@ -1418,6 +1418,12 @@ export default function Index() {
         const withReminders = checkDebtExpenseReminders(next);
         if (withReminders) {
           next = withReminders;
+        }
+
+        // A laundry's week: clothes in and money in.
+        const withFlowNote = checkLaundryFlowNote(next);
+        if (withFlowNote) {
+          next = withFlowNote;
         }
 
         // 3. Weekly Auto Restock Draft

@@ -1,6 +1,10 @@
 import { receivedBetween, runningCostsBetween } from '@/lib/money-figures';
 import { debtorKey } from '@/lib/customer-key';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import LaundryFlowCard, { LaundryPaceCard } from '@/components/laundry/LaundryFlowCard';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
+import { shopLaundryRecords } from '@/lib/shop-laundry';
+import { resolveBusinessType } from '@/lib/business-runtime';
 import { isServiceFirstBusiness, runsATill } from '@/lib/business-runtime';
 import { createPortal } from 'react-dom';
 import { allowedNotifications } from '@/lib/notification-gate';
@@ -243,7 +247,22 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
   const settings = store.managerSettings || DEFAULT_MANAGER_SETTINGS;
   const interval = settings.graphInterval || 30;
 
-  const data = useMemo(() => mostActivePeriods(store, range, interval), [store, range, interval]);
+  /*
+   * A laundry has two busy times: when clothes come in, and when money does.
+   * This only ever counted the money, so a morning of drop-offs read as a
+   * quiet morning. A bundle counts in the same slots, at what it is worth.
+   */
+  const isLaundry = resolveBusinessType(store) === 'laundry';
+  const [measure, setMeasure] = useState<'clothes' | 'money'>('clothes');
+  const showClothes = isLaundry && measure === 'clothes';
+  const laundryVersion = useShopLaundryVersion();
+  const data = useMemo(() => {
+    if (!showClothes) return mostActivePeriods(store, range, interval);
+    let bundles: { createdAt: string; total: number }[] = [];
+    try { bundles = shopLaundryRecords(String(store.accessCode || '')); } catch { /* nothing readable: an empty graph */ }
+    const asSales = bundles.map(bundle => ({ date: bundle.createdAt, total: Number(bundle.total) || 0, profit: 0 }));
+    return mostActivePeriods({ ...store, sales: asSales as unknown as StoreData['sales'] }, range, interval);
+  }, [store, range, interval, showClothes, laundryVersion]);
   const maxRevenue = Math.max(1, ...data.buckets.map(b => b.revenue));
 
   const formatYAxisValue = (pct: number) => {
@@ -267,7 +286,17 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
       <div className="flex items-start justify-between gap-3 mb-1">
         <div>
           <h3 className="font-display font-bold text-sm">Most Active Periods</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Revenue by {interval}-min slots</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">{showClothes ? 'Value of clothes brought in' : 'Revenue'} by {interval}-min slots</p>
+          {isLaundry && (
+            <div className="flex gap-1 mt-2">
+              {([['clothes', 'Clothes in'], ['money', 'Money in']] as const).map(([id, label]) => (
+                <button key={id} type="button" onClick={() => setMeasure(id)} aria-pressed={measure === id}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-display font-semibold ${measure === id ? 'bg-primary/15 text-primary border border-primary/40' : 'bg-surface-2 text-muted-foreground border border-transparent'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex gap-1 flex-shrink-0">
           {rangeLabels.map(r => (
@@ -277,7 +306,7 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
         </div>
       </div>
       {data.totalSales === 0 ? (
-        <div className="py-8 text-center"><p className="text-sm text-muted-foreground">No sales in this period yet.</p></div>
+        <div className="py-8 text-center"><p className="text-sm text-muted-foreground">{showClothes ? 'No clothes came in during this period.' : 'No sales in this period yet.'}</p></div>
       ) : (
         <>
           <div className="mt-3 relative">
@@ -329,7 +358,7 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
               <TrendingUp className="w-4 h-4 text-primary shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs"><span className="text-foreground">Peak: </span><span className="font-display font-bold text-primary">{data.peakWindow.startLabel} – {data.peakWindow.endLabel}</span></p>
-                <p className="text-[11px] text-muted-foreground">Plan stock and promotions around these hours.</p>
+                <p className="text-[11px] text-muted-foreground">{isLaundry ? (showClothes ? 'Have enough people at the counter for these hours.' : 'Most money comes in around these hours.') : 'Plan stock and promotions around these hours.'}</p>
               </div>
             </div>
           )}
@@ -340,9 +369,9 @@ function MostActivePeriodsCard({ store }: { store: StoreData }) {
           <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-4 animate-slide-up space-y-2" onClick={e => e.stopPropagation()}>
             <h4 className="font-display font-bold text-base">{selected.label} – {fmtPlusInterval(selected.minute, interval)}</h4>
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Sales</p><p className="font-display font-bold">{selected.sales}</p></div>
-              <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Revenue</p><p className="font-display font-bold text-yellow-500 text-xs">₦{Math.round(selected.revenue).toLocaleString()}</p></div>
-              <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Profit</p><p className="font-display font-bold text-success text-xs">₦{Math.round(selected.profit).toLocaleString()}</p></div>
+              <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">{showClothes ? 'Bundles' : 'Sales'}</p><p className="font-display font-bold">{selected.sales}</p></div>
+              <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">{showClothes ? 'Worth' : 'Revenue'}</p><p className="font-display font-bold text-yellow-500 text-xs">₦{Math.round(selected.revenue).toLocaleString()}</p></div>
+              {!showClothes && <div className="p-2 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Profit</p><p className="font-display font-bold text-success text-xs">₦{Math.round(selected.profit).toLocaleString()}</p></div>}
             </div>
             <button onClick={() => setSelected(null)} className="w-full mt-2 p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-bold text-sm">Close</button>
           </div>
@@ -963,6 +992,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
       {/* ─── OVERVIEW ─────────────────────────────────────────────────────── */}
       {tab === 'overview' && (
         <div className="space-y-4 animate-fade-in text-left">
+          {resolveBusinessType(store) === 'laundry' && <LaundryFlowCard store={store} />}
           {/* What the month must take, and how it went. Here rather than on
               the home screen: this is where somebody has come to think about
               the business, not to take a bundle in. */}
@@ -1436,6 +1466,7 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
       {/* ─── PREDICTIONS ──────────────────────────────────────────────────── */}
       {tab === 'predictions' && (
         <div className="space-y-4 animate-fade-in">
+          {resolveBusinessType(store) === 'laundry' && <LaundryPaceCard store={store} />}
           <div className="p-4 rounded-2xl bg-card shadow-card">
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-display font-bold text-base">Revenue Forecasts</h3>
@@ -1558,7 +1589,8 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
       {/* ─── ANALYSIS ─────────────────────────────────────────────────────── */}
       {tab === 'analysis' && (
         <div className="space-y-4 animate-fade-in">
-          <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider pt-1">What is selling</h3>
+          {resolveBusinessType(store) === 'laundry' && <LaundryFlowCard store={store} />}
+          <h3 className="font-display font-bold text-xs px-1 text-muted-foreground uppercase tracking-wider pt-1">{resolveBusinessType(store) === 'laundry' ? 'When the shop is busy' : 'What is selling'}</h3>
           {/* Activity graph */}
           <MostActivePeriodsCard store={store} />
 

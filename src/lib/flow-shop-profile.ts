@@ -1,5 +1,6 @@
 import type { StoreData } from '@/types/store';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
+import { laundryFlow, type FlowBundle } from '@/lib/laundry-flow';
 
 
 /**
@@ -96,6 +97,18 @@ export function shopProfile(store: StoreData): ShopProfile {
       text: `A typical job here is ${money(median(totals))}.`,
       evidence: totals.length,
     });
+  }
+
+  // ── How much of the work gets paid for
+  // Not on a worker's phone, which only holds the money it took itself.
+  if (!store.staffDevice) {
+    const flow = laundryFlow(store, records as unknown as FlowBundle[], 'all');
+    if (flow.broughtIn > 0) {
+      facts.push({
+        text: `Customers have paid ${flow.paidShare}% of the work brought in: ${money(flow.paidOnThese)} of ${money(flow.broughtIn)}. ${flow.customersPaid} of ${flow.customersBrought} customers have paid something.`,
+        evidence: flow.bundles,
+      });
+    }
   }
 
   // ── How long work actually takes ─────────────────────────────────────
