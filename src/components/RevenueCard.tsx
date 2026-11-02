@@ -11,9 +11,9 @@ import { RANGES, revenueInRange, type Range } from '@/lib/revenue-window';
  * reads zero whatever kind of month the shop is having, and a shop that opens
  * the app to a zero learns to stop opening it.
  *
- * Yesterday says whether the day just gone was any good. Today is the running
- * total. Fourteen days is long enough to see a pattern through a quiet
- * Tuesday. All time is what the shop has taken since it started, which is the
+ * So it opens on the week, which is long enough to see a pattern through a quiet
+ * Tuesday. Today is the running total, and a month shows how the shop is going
+ * over a longer stretch. All time is what the shop has taken since it started, which is the
  * number people actually want when they are wondering whether any of this has
  * been worth it.
  *
@@ -29,7 +29,7 @@ interface Props {
 }
 
 export default function RevenueCard({ store, trailing }: Props) {
-  const [range, setRange] = useState<Range>('today');
+  const [range, setRange] = useState<Range>('week');
   const total = useMemo(() => revenueInRange(store, range), [store, range]);
   const label = RANGES.find(option => option.id === range)?.label || '';
 

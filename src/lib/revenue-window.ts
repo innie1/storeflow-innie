@@ -10,12 +10,12 @@
 import type { StoreData } from '@/types/store';
 import { receivedBetween } from '@/lib/money-figures';
 
-export type Range = 'yesterday' | 'today' | 'fortnight' | 'all';
+export type Range = 'today' | 'week' | 'month' | 'all';
 
 export const RANGES: { id: Range; label: string }[] = [
-  { id: 'yesterday', label: 'Yesterday' },
   { id: 'today', label: 'Today' },
-  { id: 'fortnight', label: '14 days' },
+  { id: 'week', label: '1 week' },
+  { id: 'month', label: '1 month' },
   { id: 'all', label: 'All time' },
 ];
 
@@ -31,10 +31,11 @@ export function startOfToday(now: number): number {
 export function revenueInRange(store: StoreData, range: Range, now: number = Date.now()): number {
   const dayStart = startOfToday(now);
   const windows: Record<Range, { from: number; to: number }> = {
-    yesterday: { from: dayStart - DAY, to: dayStart },
     today: { from: dayStart, to: dayStart + DAY },
-    // Thirteen days back plus today, so "14 days" is fourteen days.
-    fortnight: { from: dayStart - 13 * DAY, to: dayStart + DAY },
+    // Six days back plus today, so "1 week" is seven days.
+    week: { from: dayStart - 6 * DAY, to: dayStart + DAY },
+    // And "1 month" is thirty, whichever month it is.
+    month: { from: dayStart - 29 * DAY, to: dayStart + DAY },
     all: { from: 0, to: Number.MAX_SAFE_INTEGER },
   };
   const window = windows[range];

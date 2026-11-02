@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StoreData } from '@/types/store';
 import { laundryDayBoard, dayBoardSentence } from '@/lib/laundry-day';
 import type { DecoratedRecord } from '@/lib/laundry-records';
-import { revenueInRange } from '@/lib/revenue-window';
+import { RANGES, revenueInRange } from '@/lib/revenue-window';
 import { readSource } from './helpers/source';
 
 /**
@@ -136,12 +136,31 @@ describe('revenue over the window being asked about', () => {
     expect(revenueInRange(store, 'today', NOON)).toBe(1000);
   });
 
-  it('yesterday is yesterday only, not everything up to now', () => {
-    expect(revenueInRange(store, 'yesterday', NOON)).toBe(2000);
+  it('a week means seven days including today', () => {
+    expect(revenueInRange(store, 'week', NOON)).toBe(1000 + 2000);
+    const edges = {
+      sales: [
+        { total: 100, date: new Date(NOON - 6 * DAY).toISOString() },
+        { total: 200, date: new Date(NOON - 7 * DAY).toISOString() },
+      ],
+    } as unknown as StoreData;
+    expect(revenueInRange(edges, 'week', NOON)).toBe(100);
   });
 
-  it('fourteen days means fourteen days including today', () => {
-    expect(revenueInRange(store, 'fortnight', NOON)).toBe(1000 + 2000 + 4000);
+  it('a month means thirty days including today', () => {
+    expect(revenueInRange(store, 'month', NOON)).toBe(1000 + 2000 + 4000);
+    const edges = {
+      sales: [
+        { total: 100, date: new Date(NOON - 29 * DAY).toISOString() },
+        { total: 200, date: new Date(NOON - 30 * DAY).toISOString() },
+      ],
+    } as unknown as StoreData;
+    expect(revenueInRange(edges, 'month', NOON)).toBe(100);
+  });
+
+  it('offers today, a week, a month and all time, and opens on the week', () => {
+    expect(RANGES.map(range => range.label)).toEqual(['Today', '1 week', '1 month', 'All time']);
+    expect(readSource('src/components/RevenueCard.tsx')).toContain("useState<Range>('week')");
   });
 
   it('all time is all of it', () => {
