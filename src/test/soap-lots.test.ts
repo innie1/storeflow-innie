@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { StoreData } from '@/types/store';
 import { laundryLocalStorageKey } from '@/lib/laundry-offline';
-import { consumablePace, DEFAULT_SOAP_PER_PIECE, RECENT_LOTS, soapPaceSentence } from '@/lib/cost-estimator';
+import {
+  consumablePace,
+  DEFAULT_SOAP_PER_PIECE,
+  estimateUnitCost,
+  powerPaceSentence,
+  RECENT_LOTS,
+  soapPaceSentence,
+  utilityKey,
+  utilityPace,
+} from '@/lib/cost-estimator';
 import { breakEven, monthlyFixedCosts } from '@/lib/service-breakeven';
 import { monthlyRent, rentFrequency } from '@/lib/rent';
 import { rentAnalysis } from '@/lib/manager-intel';
@@ -92,6 +101,38 @@ describe('soap that keeps adjusting', () => {
     bundles([{ daysAgo: 30, pieces: 40 }, { daysAgo: 29, pieces: 30, service: 'Ironing Only' }]);
     const [pace] = consumablePace(laundry({ expenses: [soap(8_000, 40), soap(8_000, 0)] as any }));
     expect(pace.lots[0].washed).toBe(40);
+  });
+});
+
+describe('light bills, by the pieces they paid for', () => {
+  it('knows a light bill from diesel and water', () => {
+    expect(utilityKey({ note: 'Light bill' })).toBe('electricity');
+    expect(utilityKey({ note: 'NEPA token' })).toBe('electricity');
+    expect(utilityKey({ note: 'Diesel for gen' })).toBe('fuel');
+    expect(utilityKey({ note: 'Water' })).toBe('water');
+  });
+
+  it('spreads each bill over every piece done until the next, ironing included', () => {
+    bundles([{ daysAgo: 20, pieces: 30 }, { daysAgo: 15, pieces: 10, service: 'Ironing Only' }]);
+    const bill = (amount: number, daysAgo: number) => ({ id: `u${Math.random()}`, amount, category: 'Utilities', note: 'Light bill', date: ago(daysAgo) });
+    const store = laundry({ expenses: [bill(6_000, 25), bill(6_000, 0)] as any });
+
+    const [pace] = utilityPace(store);
+    expect(pace.key).toBe('electricity');
+    expect(pace.usedWashed).toBe(40);
+    expect(pace.perPiece).toBe(150);
+    expect(powerPaceSentence(store)).toContain('₦150 a piece');
+
+    // In the estimate: ₦150 of light on all 40 pieces, not the ₦12,000 paid in the window.
+    const estimate = estimateUnitCost(store);
+    expect(estimate.breakdown.find(line => line.category === 'Utilities')!.amount).toBe(6_000);
+  });
+
+  it('keeps a single bill in the last 30 days until there is a second', () => {
+    bundles([{ daysAgo: 5, pieces: 20 }]);
+    const store = laundry({ expenses: [{ id: 'u', amount: 3_000, category: 'Utilities', note: 'Light bill', date: ago(6) }] as any });
+    expect(estimateUnitCost(store).breakdown.find(line => line.category === 'Utilities')!.amount).toBe(3_000);
+    expect(powerPaceSentence(store)).toContain('next bill');
   });
 });
 

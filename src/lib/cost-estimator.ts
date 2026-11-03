@@ -219,19 +219,52 @@ export interface SupplyPace {
  * pieces one pack washes.
  */
 export function consumablePace(store: StoreData): SupplyPace[] {
+  return lotPaces(store, 'Consumables', expense => consumableKey(store, expense), washesClothes);
+}
+
+/**
+ * Which bill a utility payment was: power, fuel for the generator, water.
+ * A light bill is measured against the last light bill, never the diesel.
+ */
+export function utilityKey(expense: Pick<Expense, 'note' | 'supply'>): string {
+  const text = String(expense.supply || expense.note || '').trim().toLowerCase();
+  if (/light|nepa|phcn|electric|power|token|prepaid|meter/.test(text)) return 'electricity';
+  if (/diesel|fuel|petrol|generator|gen\b/.test(text)) return 'fuel';
+  if (/water|borehole/.test(text)) return 'water';
+  return text.split(/ — | \(/)[0].trim() || 'utilities';
+}
+
+/**
+ * How many pieces each bill paid for.
+ *
+ * The same reading as soap, for the same reason: a light bill or a load of
+ * diesel lasts until the next one, so it is what it cost over the pieces done
+ * until it was paid again - every piece this time, because the iron runs on
+ * the same power as the machines.
+ */
+export function utilityPace(store: StoreData): SupplyPace[] {
+  return lotPaces(store, 'Utilities', utilityKey, () => true);
+}
+
+function lotPaces(
+  store: StoreData,
+  category: ExpenseCategory,
+  keyOf: (expense: Expense) => string,
+  counts: (record: { serviceId?: string; serviceName?: string }) => boolean,
+): SupplyPace[] {
   const groups = new Map<string, { at: number; amount: number; packs: number | null }[]>();
   for (const expense of store.expenses || []) {
-    if (expense.category !== 'Consumables') continue;
+    if (expense.category !== category) continue;
     const at = new Date(expense.date || '').getTime();
     const amount = Math.max(0, Number(expense.amount) || 0);
     if (!Number.isFinite(at) || amount <= 0) continue;
-    const key = consumableKey(store, expense);
+    const key = keyOf(expense);
     groups.set(key, [...(groups.get(key) || []), { at, amount, packs: packsIn(expense.note) }]);
   }
 
   const accessCode = String(store.accessCode || '');
   const washed = (accessCode ? shopLaundryRecords(accessCode) : [])
-    .filter(washesClothes)
+    .filter(counts)
     .map(record => ({
       at: new Date(String(record.createdAt || '')).getTime(),
       pieces: Number(record.pieceCount) || 0,
@@ -350,8 +383,9 @@ export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
 
   for (const expense of store.expenses || []) {
     if (!within(expense.date) || !categories.includes(expense.category)) continue;
-    // Spread over how long it lasts, below, not charged on the day it was bought.
+    // Spread over the pieces it lasts for, below, not charged on the day it was bought.
     if (expense.category === 'Consumables') continue;
+    if (expense.category === 'Utilities') continue;
     /*
      * Paying a worker is not when the work cost something - approving it was.
      * The payment is still an expense, because the cash really left, but
@@ -410,6 +444,29 @@ export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
     totals.set('Consumables', consumed);
   }
 
+  /*
+   * Bills, the same way, once a second one shows how many pieces the first
+   * paid for. Before that the bills in the window are spread over its pieces,
+   * as they always were - a real cost the shop recorded, and the month's
+   * target checks it cannot be most of the price of the work.
+   */
+  if (categories.includes('Utilities')) {
+    let bills = 0;
+    for (const pace of utilityPace(store)) {
+      if (pace.perPiece !== null) {
+        bills += pace.perPiece * pieces;
+        continue;
+      }
+      bills += (store.expenses || [])
+        .filter(expense => expense.category === 'Utilities' && within(expense.date) && utilityKey(expense) === pace.key)
+        .reduce((total, expense) => total + Math.max(0, Number(expense.amount) || 0), 0);
+    }
+    if (bills > 0) {
+      spend += bills;
+      totals.set('Utilities', bills);
+    }
+  }
+
   const breakdown = Array.from(totals.entries())
     .map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount);
@@ -457,6 +514,21 @@ export function soapPaceSentence(store: StoreData): string {
   const which = recent === 1 ? 'the last lot' : `the last ${recent} lots`;
   return `${Noun} costs about ${naira(pace.perPiece)} a piece washed: ${which} washed ${count(pace.usedWashed)} pieces${perPack}. `
     + `The ${naira(pace.lastAmount)} you have now should wash about ${count(pace.piecesLeft || 0)} more.`;
+}
+
+/** How far a light bill goes, once there have been two to measure between. */
+export function powerPaceSentence(store: StoreData): string {
+  const pace = utilityPace(store).find(entry => entry.key === 'electricity');
+  if (!pace) return '';
+  const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
+  if (pace.perPiece === null) {
+    return pace.buys > 1
+      ? `Light: too few pieces were recorded between your bills to say what power costs a piece yet.`
+      : `Light: once you record your next bill I will know how many pieces ${naira(pace.lastAmount)} of power covered.`;
+  }
+  const recent = Math.min(RECENT_LOTS, pace.lots.filter(lot => lot.finished).length);
+  const which = recent === 1 ? 'your last bill' : `your last ${recent} bills`;
+  return `Light costs about ${naira(pace.perPiece)} a piece: ${which} covered ${Math.round(pace.usedWashed).toLocaleString()} pieces.`;
 }
 
 /** "₦38 a piece — soap and electricity over the last 30 days, across 214 pieces." */

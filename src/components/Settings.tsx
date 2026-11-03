@@ -91,7 +91,7 @@ import { speakAsFlow, type FlowVoiceGender } from '@/lib/flow-voice';
 import { getBusinessTemplate, hasBusinessModule, isServiceFirstBusiness } from '@/lib/business-runtime';
 import { clearPin, enrollFingerprint, fingerprintEnrolled, fingerprintSupported, forgetFingerprint, hasPin, PIN_LENGTH, setPin as savePin } from '@/lib/app-lock';
 import { saveLockTimer, getLockTimer, saveSession, clearSession, type LockTimer } from '@/lib/store-session';
-import { rentFrequency } from '@/lib/rent';
+import { monthlyRent, rentFrequency } from '@/lib/rent';
 
 /*
  * The session helpers live in lib/store-session, not here.
@@ -1312,6 +1312,10 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
   const [revealProfilePass, setRevealProfilePass] = useState(false);
   const [payment, setPayment] = useState<PaymentInfo>(store.profile?.payment || {});
   const [rent, setRent] = useState<RentInfo>(store.profile?.rent || { isRented: false });
+  // Each rent change saves as it is made; this says so, briefly.
+  const [rentSaved, setRentSaved] = useState(false);
+  const rentSavedTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(rentSavedTimer.current), []);
   const [mgr, setMgr] = useState<ManagerSettings>({ ...DEFAULT_MANAGER_SETTINGS, ...(store.managerSettings || {}) });
   const [loyalty, setLoyalty] = useState(store.loyaltySettings || {
     enabled: false, earnPerHundred: 1, redeemThreshold: 100, redeemValueNaira: 500,
@@ -1493,6 +1497,9 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     const next = { ...rent, ...patch, frequency: rentFrequency({ ...rent, ...patch }) };
     setRent(next);
     persistProfile(profile, payment, next);
+    setRentSaved(true);
+    clearTimeout(rentSavedTimer.current);
+    rentSavedTimer.current = setTimeout(() => setRentSaved(false), 2500);
   };
 
   const handleThemeChange = (t: ThemeId) => {
@@ -2557,7 +2564,12 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
 
         {/* Rent Card */}
         <div className={`${card} p-5 space-y-3`}>
-          <h3 className="font-display font-bold text-base text-foreground">Store Rent</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-display font-bold text-base text-foreground">Store Rent</h3>
+            <span role="status" aria-live="polite" className={`text-[11px] font-display font-bold text-success transition-opacity ${rentSaved ? 'opacity-100' : 'opacity-0'}`}>
+              {rentSaved ? '✓ Saved' : ''}
+            </span>
+          </div>
           <p className="text-xs text-muted-foreground -mt-1">Is your store property rented?</p>
           <div className="flex gap-2">
             {[{v:true,l:'Yes'},{v:false,l:'No · Property Owned'}].map(o => (
@@ -2586,10 +2598,13 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 <Field label="Landlord Contact" value={rent.landlordContact || ''} onChange={v => updateRent({ landlordContact: v })} />
               </div>
               {rent.amount ? (
-                <div className="p-3 rounded-xl bg-success/10 border border-success/30 text-xs text-success font-semibold">
-                  Flow will plan for a 10% buffer → target ₦{Math.round((rent.amount || 0) * 1.1).toLocaleString()}
+                <div className="p-3 rounded-xl bg-success/10 border border-success/30 text-xs text-success font-semibold space-y-1">
+                  {/* What the month's target actually uses, so a wrong period shows at once. */}
+                  <p>Counted as ₦{Math.round(monthlyRent(rent)).toLocaleString()} a month in your monthly target.</p>
+                  <p className="font-normal">Flow will plan for a 10% buffer → target ₦{Math.round((rent.amount || 0) * 1.1).toLocaleString()}</p>
                 </div>
               ) : null}
+              <p className="text-[10px] text-muted-foreground">Changes here save as you make them.</p>
             </div>
           )}
           {!rent.isRented && (
