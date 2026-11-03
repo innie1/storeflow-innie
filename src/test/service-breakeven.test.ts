@@ -24,6 +24,12 @@ const expense = (amount: number, category: any, note = '') => ({
   id: `e${Math.random()}`, amount, category, date: today(), note,
 });
 
+/** A lot of soap used up across the bundles in the test, and the next one bought just after. */
+const soapUsedUp = (amount: number) => [
+  { id: `e${Math.random()}`, amount, category: 'Consumables', note: 'Detergent', date: new Date(Date.now() - 20 * 86400000).toISOString() },
+  { id: `e${Math.random()}`, amount, category: 'Consumables', note: 'Detergent', date: new Date(Date.now() + 60000).toISOString() },
+];
+
 /** A drop-off of `pieces` shirts for `total`. */
 const bundle = (pieces: number, total: number) => createLocalLaundryRecord({
   accessCode: CODE,
@@ -93,7 +99,7 @@ describe('what a piece costs to do', () => {
 
   it('divides real consumable spending by real pieces', () => {
     for (let i = 0; i < 5; i += 1) bundle(10, 5_000);
-    const s = store({ expenses: [expense(10_000, 'Consumables')] as any });
+    const s = store({ expenses: soapUsedUp(10_000) as any });
     expect(variableCostPerPiece(s)).toBe(200);
   });
 
@@ -107,9 +113,9 @@ describe('what a piece costs to do', () => {
     expect(variableCostPerPiece(store({ expenses: [expense(10_000, 'Consumables')] as any }))).toBeNull();
   });
 
-  it('says nothing when no consumables have been bought', () => {
+  it('starts at a small figure for soap when none has been bought', () => {
     bundle(50, 25_000);
-    expect(variableCostPerPiece(store())).toBeNull();
+    expect(variableCostPerPiece(store())).toBe(30);
   });
 });
 
@@ -118,7 +124,7 @@ describe('where the month stands', () => {
 
   it('raises the target above fixed costs once the work has a cost', () => {
     for (let i = 0; i < 10; i += 1) bundle(10, 5_000);
-    const s = store({ expenses: [expense(100_000, 'Rent'), expense(10_000, 'Consumables')] as any });
+    const s = store({ expenses: [expense(100_000, 'Rent'), ...soapUsedUp(10_000)] as any });
     const state = breakEven(s);
 
     // 100 pieces at 50,000... revenue 50,000, consumed 10,000: 80% of each
@@ -144,7 +150,9 @@ describe('where the month stands', () => {
     });
     const state = breakEven(s);
     expect(state.reached).toBe(true);
-    expect(state.surplus).toBe(250_000);
+    // Rent, raised a little by the soap in 300 pieces at the starting figure.
+    expect(state.surplus).toBe(300_000 - state.target);
+    expect(Math.round(state.target)).toBe(Math.round(50_000 / 0.97));
     expect(breakEvenSentence(state)).toContain('above them');
   });
 
@@ -167,7 +175,8 @@ describe('where the month stands', () => {
     for (let i = 0; i < 30; i += 1) bundle(10, 10_000);
     const state = breakEven(store({ expenses: [expense(50_000, 'Rent')] as any }));
     expect(state.reached).toBe(false);
-    expect(state.remaining).toBe(50_000);
+    expect(state.remaining).toBe(state.target);
+    expect(state.target).toBeGreaterThan(50_000);
   });
 });
 

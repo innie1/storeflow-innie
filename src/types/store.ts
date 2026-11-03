@@ -240,6 +240,11 @@ export interface Expense {
   recordedBy?: ExpenseRecorder;
   /** When the owner agreed a staff expense, if it had to wait. */
   approvedAt?: string;
+  /**
+   * For a consumable, which thing it bought - "detergent", "starch". Buys of
+   * the same thing are measured against each other to see how long one lasts.
+   */
+  supply?: string;
 }
 
 export type ExpensePaidFrom = 'cash' | 'bank' | 'wallet';

@@ -11,6 +11,7 @@ import { getPendingSummary, isStockPurchase } from '@/lib/store-data';
 import type { AutoFixSpec } from '@/lib/auto-fix';
 import type { ProductFocus } from '@/lib/product-focus';
 import { productMarkup } from '@/lib/pricing-math';
+import { monthlyRent } from '@/lib/rent';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -752,7 +753,7 @@ export interface RentAnalysis {
 export function rentAnalysis(store: StoreData): RentAnalysis | null {
   const rent = store.profile?.rent;
   if (!rent?.isRented || !rent.amount) return null;
-  const monthly = rent.frequency === 'yearly' ? rent.amount / 12 : rent.frequency === 'quarterly' ? rent.amount / 3 : rent.amount;
+  const monthly = Math.round(monthlyRent(rent));
   const weeklyTarget = Math.ceil(monthly / 4.33);
   const emergencyBuffer = Math.ceil(weeklyTarget * 0.1);
   const increaseBuffer = Math.ceil(monthly * 0.1);

@@ -21,11 +21,18 @@ import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { receivedBetween } from '@/lib/money-figures';
 import { estimateUnitCost, isVariableCost } from '@/lib/cost-estimator';
 import { isStockPurchase } from '@/lib/store-data';
+import { monthlyRent } from '@/lib/rent';
 
 const DAY = 86400000;
 
 /** Enough pieces that dividing by them means something. */
 export const MIN_PIECES_FOR_UNIT_COST = 10;
+
+/** More than this share of the work's price is not what doing the work cost. */
+export const MAX_COST_SHARE = 0.75;
+
+/** A weekly bill comes round this many times a month, not four. */
+const WEEKS_A_MONTH = 52 / 12;
 
 export interface MonthWindow {
   start: number;
@@ -81,7 +88,7 @@ export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthW
     ))
     .reduce((sum, bill) => {
       const amount = Number(bill.amount) || 0;
-      return sum + (bill.frequency === 'weekly' ? amount * 4 : amount);
+      return sum + (bill.frequency === 'weekly' ? amount * WEEKS_A_MONTH : amount);
     }, 0);
 
   /*
@@ -121,12 +128,9 @@ export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthW
   const rent = store.profile?.rent;
   let profileRent = 0;
   if (rent?.isRented && Number(rent.amount) > 0) {
-    const amount = Number(rent.amount);
-    // Monthly, quarterly or yearly - the three the profile offers. Anything
-    // unset is treated as monthly, which is how the rest of the app reads it.
-    const monthly = rent.frequency === 'yearly' ? amount / 12
-      : rent.frequency === 'quarterly' ? amount / 3
-      : amount;
+    // Monthly, quarterly or yearly - the three the profile offers. Unset is
+    // yearly, because that is what the form showed when it was filled in.
+    const monthly = monthlyRent(rent);
 
     const rentPaid = (store.expenses || [])
       .filter(expense => inWindow(expense.date, window))
@@ -210,6 +214,8 @@ export interface BreakEven {
   /** Taken above break-even, once it is passed. */
   surplus: number;
   variableCostPerPiece: number | null;
+  /** The costs per piece came to more of the work's price than they can, so were left out. */
+  costsDoubtful: boolean;
 }
 
 /**
@@ -239,7 +245,18 @@ export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
    * month with a lot still unpaid would read as almost no margin and the
    * target would balloon to many times the real costs.
    */
-  const marginRate = workTakenIn > 0 && consumed > 0 ? Math.max(0.05, (workTakenIn - consumed) / workTakenIn) : 1;
+  /*
+   * And not from figures that cannot be true. A month's light bill spread over
+   * the few bundles a shop has started putting in the app reads as most of
+   * the price of each one, and dividing the rent by what is left put a ₦350,000
+   * month's target at ₦2.5 million. Costs taking more than three quarters of
+   * the price of the work is bundles missing from the app, so the target falls
+   * back to the fixed costs and says why.
+   */
+  const costsDoubtful = workTakenIn > 0 && consumed > MAX_COST_SHARE * workTakenIn;
+  const marginRate = workTakenIn > 0 && consumed > 0 && !costsDoubtful
+    ? Math.max(0.05, (workTakenIn - consumed) / workTakenIn)
+    : 1;
   const target = marginRate > 0 ? fixedCosts / marginRate : fixedCosts;
 
   const remaining = Math.max(0, target - revenue);
@@ -270,7 +287,8 @@ export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
     daysLeft,
     pace,
     surplus: Math.max(0, revenue - target),
-    variableCostPerPiece: perPiece,
+    variableCostPerPiece: costsDoubtful ? null : perPiece,
+    costsDoubtful,
   };
 }
 

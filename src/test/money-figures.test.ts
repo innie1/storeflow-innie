@@ -156,7 +156,8 @@ describe('the break-even ring reads money received', () => {
     const state = breakEven(shop({
       expenses: [
         { id: 'r', amount: 100_000, category: 'Rent', date: new Date().toISOString() },
-        { id: 'c', amount: 10_000, category: 'Consumables', date: new Date().toISOString() },
+        { id: 'c', amount: 10_000, category: 'Consumables', date: new Date(Date.now() - 20 * 86400000).toISOString() },
+        { id: 'c2', amount: 10_000, category: 'Consumables', date: new Date(Date.now() + 60000).toISOString() },
       ] as any,
     }));
     expect(Math.round(state.target)).toBe(125_000);
@@ -168,7 +169,8 @@ describe('the break-even ring reads money received', () => {
     const state = breakEven(shop({
       expenses: [
         { id: 'r', amount: 100_000, category: 'Rent', date: new Date().toISOString() },
-        { id: 'c', amount: 10_000, category: 'Consumables', date: new Date().toISOString() },
+        { id: 'c', amount: 10_000, category: 'Consumables', date: new Date(Date.now() - 20 * 86400000).toISOString() },
+        { id: 'c2', amount: 10_000, category: 'Consumables', date: new Date(Date.now() + 60000).toISOString() },
       ] as any,
       sales: [payment(25_000, 0)] as any,
     }));

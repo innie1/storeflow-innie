@@ -9,7 +9,7 @@ import {
   soapHistorySentence,
   soapLog,
 } from '@/lib/soap-log';
-import { estimateUnitCost } from '@/lib/cost-estimator';
+import { consumablePace } from '@/lib/cost-estimator';
 
 const CODE = 'SOAP01';
 const DAY = 86400000;
@@ -75,7 +75,9 @@ describe('what the answer does', () => {
     expect(consumables).toHaveLength(1);
     expect(consumables[0].amount).toBe(12_000);
     expect(consumables[0].note).toContain('Waw');
-    expect(estimateUnitCost(store).spend).toBe(12_000);
+    // Soap, whatever the brand, waiting for the next buy to show how long it lasts.
+    expect(consumables[0].supply).toBe('detergent');
+    expect(consumablePace(store)).toEqual([expect.objectContaining({ key: 'detergent', buys: 1, perPiece: null })]);
   });
 
   it('remembers the brand without deciding anything about it', () => {

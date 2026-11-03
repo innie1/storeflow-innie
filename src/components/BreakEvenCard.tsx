@@ -3,6 +3,8 @@ import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { Target } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { breakEven, breakEvenSentence } from '@/lib/service-breakeven';
+import { consumablePace, soapPaceSentence } from '@/lib/cost-estimator';
+import { consumableAsk } from '@/lib/trade-supplies';
 import { claimSpotlight, scrollSpotlightIntoView, SPOTLIGHT_CLASS, SPOTLIGHT_MS, SPOTLIGHT_SIGNAL } from '@/lib/spotlight';
 
 /** What the month ring asks for when it sends somebody here. */
@@ -35,6 +37,12 @@ const PACE_TONE: Record<string, string> = {
 export default function BreakEvenCard({ store, canSeeMoney }: Props) {
   const laundryVersion = useShopLaundryVersion();
   const state = useMemo(() => breakEven(store), [store, laundryVersion]);
+  const soapLine = useMemo(() => soapPaceSentence(store), [store, laundryVersion]);
+  const soapNoun = consumableAsk(store).noun;
+  const soapLots = useMemo(
+    () => consumablePace(store).find(pace => pace.key === soapNoun.toLowerCase())?.lots || [],
+    [store, soapNoun, laundryVersion],
+  );
 
   /*
    * Lit, briefly, when the ring on the home screen sent somebody here.
@@ -130,8 +138,46 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
       */}
       {state.variableCostPerPiece !== null && (
         <p className="text-[10px] text-muted-foreground mt-1.5">
-          {money(state.variableCostPerPiece)} of soap and electricity per piece, from this month's {state.pieces} pieces.
+          {money(state.variableCostPerPiece)} of soap and electricity per piece, over the last 30 days.
         </p>
+      )}
+      {state.costsDoubtful && (
+        <p className="text-[10px] text-amber-500 mt-1.5">
+          Soap and electricity came to most of the price of the work, which usually means some bundles are
+          not in the app yet. The target is your fixed costs alone until they are.
+        </p>
+      )}
+
+      {/* What a piece of soap-work costs, which is what its share above comes from. */}
+      {state.target > 0 && soapLine && (
+        <p className="text-[10px] text-muted-foreground mt-1">{soapLine}</p>
+      )}
+
+      {/* Each lot on its own, so one that went much faster than usual can be asked about. */}
+      {soapLots.length > 1 && (
+        <details className="mt-1.5">
+          <summary className="text-[10px] font-bold text-primary cursor-pointer">Each lot of {soapNoun}</summary>
+          <ul className="mt-1.5 space-y-1.5">
+            {[...soapLots].reverse().map(lot => (
+              <li key={lot.boughtAt} className="text-[10px] text-muted-foreground leading-relaxed">
+                <span className="font-bold text-foreground">
+                  {new Date(lot.boughtAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {money(lot.amount)}
+                  {lot.packs ? ` · ${lot.packs} ${lot.packs === 1 ? 'pack' : 'packs'}` : ''}
+                </span>
+                {' - '}
+                {lot.finished
+                  ? `washed ${lot.washed} pieces${lot.perPiece !== null ? `, ${money(lot.perPiece)} a piece` : ''}`
+                  : `in use, ${lot.washed} pieces so far`}
+                {lot.high && <span className="text-amber-500 font-bold"> · used more than usual</span>}
+                {lot.washers.length > 0 && (
+                  <span className="block">
+                    Washed by {lot.washers.map(washer => `${washer.name} (${washer.pieces})`).join(', ')}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );

@@ -48,7 +48,12 @@ describe('how the month went', () => {
   it('takes both kinds of cost off the money received', () => {
     for (let i = 0; i < 5; i += 1) job(10, 20_000);
     const store = laundry({
-      expenses: [spend(50_000, 'Rent'), spend(10_000, 'Consumables')] as any,
+      // A lot of soap that ran out across these bundles, and the next one bought.
+      expenses: [
+        spend(50_000, 'Rent'),
+        { ...spend(10_000, 'Consumables'), date: new Date(Date.now() - 20 * 86400000).toISOString() },
+        { ...spend(10_000, 'Consumables'), date: new Date(Date.now() + 60000).toISOString() },
+      ] as any,
       sales: [{ id: 'paid', total: 100_000, profit: 100_000, date: today() }] as any,
     });
     const report = monthReport(store);

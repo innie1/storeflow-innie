@@ -119,6 +119,7 @@ export function buildSupplyExpense(purchase: SupplyPurchase): Expense {
     category: CONSUMABLES_CATEGORY,
     date: new Date().toISOString(),
     note: purchase.note ? `${label} — ${purchase.note}` : label,
+    supply: purchase.supply.name.toLowerCase(),
     source: 'manual',
     paidFrom: 'cash',
   };

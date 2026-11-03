@@ -135,7 +135,13 @@ function unitCostFor(store: StoreData, product: Product, sharedCost: number | nu
 }
 
 export function pricingAdvice(store: StoreData): AdvisorState {
-  const shared = isServiceFirstBusiness(store) ? estimateUnitCost(store).perPiece : null;
+  const estimate = isServiceFirstBusiness(store) ? estimateUnitCost(store) : null;
+  /*
+   * The starting soap figure is enough to keep a month's target honest, not to
+   * tell a shop its price is wrong. With nothing but that behind the cost, the
+   * advisor says it does not know yet.
+   */
+  const shared = estimate && estimate.spend > estimate.guessedSpend ? estimate.perPiece : null;
   const volume = monthlyVolume(store);
   const seen = Array.from(volume.values()).reduce((sum, count) => sum + count, 0);
   const products = sellable(store);

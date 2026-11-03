@@ -154,6 +154,8 @@ export function recordSoapAnswer(
     category: 'Consumables',
     date: at.toISOString(),
     note,
+    // So the next buy is measured against this one, whatever brand it was.
+    supply: consumableAsk(store).noun,
   });
 }
 

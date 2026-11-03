@@ -91,6 +91,7 @@ import { speakAsFlow, type FlowVoiceGender } from '@/lib/flow-voice';
 import { getBusinessTemplate, hasBusinessModule, isServiceFirstBusiness } from '@/lib/business-runtime';
 import { clearPin, enrollFingerprint, fingerprintEnrolled, fingerprintSupported, forgetFingerprint, hasPin, PIN_LENGTH, setPin as savePin } from '@/lib/app-lock';
 import { saveLockTimer, getLockTimer, saveSession, clearSession, type LockTimer } from '@/lib/store-session';
+import { rentFrequency } from '@/lib/rent';
 
 /*
  * The session helpers live in lib/store-session, not here.
@@ -1488,7 +1489,8 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
     persistProfile(profile, next, rent);
   };
   const updateRent = (patch: Partial<RentInfo>) => {
-    const next = { ...rent, ...patch };
+    // Saved with the frequency the box is showing, so it never has to be guessed.
+    const next = { ...rent, ...patch, frequency: rentFrequency({ ...rent, ...patch }) };
     setRent(next);
     persistProfile(profile, payment, next);
   };
@@ -2571,7 +2573,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
                 <Field label="Rent Amount (₦)" value={String(rent.amount ?? '')} onChange={v => updateRent({ amount: Number(v) || 0 })} type="number" />
                 <div>
                   <label className="block text-xs text-muted-foreground font-bold mb-1">Frequency</label>
-                  <select value={rent.frequency || 'yearly'} onChange={e => updateRent({ frequency: e.target.value as RentFrequency })} className={inputClass}>
+                  <select value={rentFrequency(rent)} onChange={e => updateRent({ frequency: e.target.value as RentFrequency })} className={inputClass}>
                     <option value="monthly">Monthly</option>
                     <option value="quarterly">Quarterly</option>
                     <option value="yearly">Yearly</option>

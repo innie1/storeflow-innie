@@ -17,7 +17,13 @@ const service = (id: string, name: string, price: number) => ({
   id, name, sellingPrice: price, costPrice: 0, quantity: 0, isService: true,
 });
 
-const consumables = (amount: number) => ({ id: 'e1', amount, category: 'Consumables', date: today() });
+/*
+ * The cost these tests price against: power, which a laundry's machines use
+ * by the piece. Soap is counted only once a lot has run out (see
+ * cost-estimator), so it would not stand still long enough to test advice on.
+ * Soap itself adds its starting ₦30 a piece on top.
+ */
+const consumables = (amount: number) => ({ id: 'e1', amount, category: 'Utilities', date: today() });
 
 /** `pieces` pieces of `serviceId`, charged `total`. */
 const job = (serviceId: string, pieces: number, total: number) => createLocalLaundryRecord({
@@ -54,7 +60,8 @@ describe('it says when it does not know', () => {
 
   it('will not judge a price with no cost behind it', () => {
     for (let i = 0; i < 4; i += 1) job('svc', 5, 2_500);
-    // No consumables recorded, so nothing is known about what a piece costs.
+    // Nothing recorded, so nothing is known about what a piece costs - the
+    // starting soap figure is not enough to judge a price on.
     const state = pricingAdvice(laundry({ products: [service('svc', 'Wash & Iron', 500)] as any }));
     expect(state.advice[0].kind).toBe('learning');
     expect(state.advice[0].why).toContain('No cost recorded');
@@ -69,7 +76,7 @@ describe('what it says once it knows', () => {
     return laundry({ products: [service('svc', 'Wash & Iron', price)] as any, expenses: [consumables(8_000)] as any });
   };
 
-  /** 20 pieces, ₦8,000 of consumables → ₦400 a piece. */
+  /** 20 pieces, ₦8,000 of power → ₦400 a piece, and ₦30 of soap. */
   it('calls out a service sold below what it costs', () => {
     const item = pricingAdvice(traded(300)).advice[0];
     expect(item.kind).toBe('losing');

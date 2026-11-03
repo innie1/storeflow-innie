@@ -321,7 +321,7 @@ describe('the labour reaches the figures that price the work', () => {
   const shop = (over: Record<string, unknown>) => {
     localStorage.setItem(laundryLocalStorageKey('SHOP1'), JSON.stringify([{
       clientRef: 'r1', accessCode: 'SHOP1', tagCode: 'LT-1', customerName: 'Musa',
-      garments: [{ garmentType: 'Shirt', quantity: 20 }], pieceCount: 20,
+      serviceName: 'Ironing', garments: [{ garmentType: 'Shirt', quantity: 20 }], pieceCount: 20,
       createdAt: NOW_ISO, workflowStage: 'washing',
     }]));
     return {
