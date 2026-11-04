@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StoreData } from '@/types/store';
 import { laundryDayBoard, dayBoardSentence } from '@/lib/laundry-day';
 import type { DecoratedRecord } from '@/lib/laundry-records';
-import { RANGES, revenueInRange } from '@/lib/revenue-window';
+import { RANGES, rangeDates, revenueInRange } from '@/lib/revenue-window';
 import { readSource } from './helpers/source';
 
 /**
@@ -136,30 +136,50 @@ describe('revenue over the window being asked about', () => {
     expect(revenueInRange(store, 'today', NOON)).toBe(1000);
   });
 
-  it('a week means seven days including today', () => {
+  // NOON is Tuesday 8 September 2026.
+  it('this week starts on Monday', () => {
     expect(revenueInRange(store, 'week', NOON)).toBe(1000 + 2000);
     const edges = {
       sales: [
-        { total: 100, date: new Date(NOON - 6 * DAY).toISOString() },
-        { total: 200, date: new Date(NOON - 7 * DAY).toISOString() },
+        { total: 100, date: new Date('2026-09-07T00:30:00').toISOString() },
+        { total: 200, date: new Date('2026-09-06T23:30:00').toISOString() },
       ],
     } as unknown as StoreData;
     expect(revenueInRange(edges, 'week', NOON)).toBe(100);
   });
 
-  it('a month means thirty days including today', () => {
-    expect(revenueInRange(store, 'month', NOON)).toBe(1000 + 2000 + 4000);
+  it('a Sunday belongs to the week that began on Monday', () => {
+    const sunday = new Date('2026-09-13T18:00:00').getTime();
     const edges = {
       sales: [
-        { total: 100, date: new Date(NOON - 29 * DAY).toISOString() },
-        { total: 200, date: new Date(NOON - 30 * DAY).toISOString() },
+        { total: 100, date: new Date('2026-09-07T09:00:00').toISOString() },
+        { total: 200, date: new Date('2026-09-06T09:00:00').toISOString() },
+      ],
+    } as unknown as StoreData;
+    expect(revenueInRange(edges, 'week', sunday)).toBe(100);
+  });
+
+  it('this month starts on the 1st', () => {
+    expect(revenueInRange(store, 'month', NOON)).toBe(1000 + 2000);
+    const edges = {
+      sales: [
+        { total: 100, date: new Date('2026-09-01T00:30:00').toISOString() },
+        { total: 200, date: new Date('2026-08-31T23:30:00').toISOString() },
       ],
     } as unknown as StoreData;
     expect(revenueInRange(edges, 'month', NOON)).toBe(100);
   });
 
-  it('offers today, a week, a month and all time, and opens on the week', () => {
-    expect(RANGES.map(range => range.label)).toEqual(['Today', '1 week', '1 month', 'All time']);
+  it('says which dates the figure covers', () => {
+    expect(rangeDates('today', NOON)).toBe('Tue 8 Sept');
+    expect(rangeDates('week', NOON)).toBe('Mon 7 Sept – today');
+    expect(rangeDates('month', NOON)).toBe('1 Sept – today');
+    expect(rangeDates('week', new Date('2026-09-07T10:00:00').getTime())).toBe('Mon 7 Sept (today)');
+    expect(rangeDates('all', NOON)).toBe('Since the shop started');
+  });
+
+  it('offers today, this week, this month and lifetime, and opens on this week', () => {
+    expect(RANGES.map(range => range.label)).toEqual(['Today', 'This week', 'This month', 'Lifetime']);
     expect(readSource('src/components/RevenueCard.tsx')).toContain("useState<Range>('week')");
   });
 

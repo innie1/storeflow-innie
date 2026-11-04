@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { StoreData } from '@/types/store';
-import { RANGES, revenueInRange, type Range } from '@/lib/revenue-window';
+import { RANGES, rangeDates, revenueInRange, type Range } from '@/lib/revenue-window';
 
 /**
  * Revenue, over whichever stretch is being asked about.
@@ -11,11 +11,12 @@ import { RANGES, revenueInRange, type Range } from '@/lib/revenue-window';
  * reads zero whatever kind of month the shop is having, and a shop that opens
  * the app to a zero learns to stop opening it.
  *
- * So it opens on the week, which is long enough to see a pattern through a quiet
- * Tuesday. Today is the running total, and a month shows how the shop is going
- * over a longer stretch. All time is what the shop has taken since it started, which is the
- * number people actually want when they are wondering whether any of this has
- * been worth it.
+ * So it opens on this week, from Monday, which is long enough to see a pattern
+ * through a quiet Tuesday. Today is the running total, and this month, from the
+ * 1st, shows how the shop is going over a longer stretch. Lifetime is what the
+ * shop has taken since it started, which is the number people actually want
+ * when they are wondering whether any of this has been worth it. The dates sit
+ * under the figure so nobody has to guess which days it covers.
  *
  * The choice sticks for the session but is not saved: it is a glance, not a
  * setting, and a shop that left it on "all time" a month ago should not open
@@ -32,6 +33,7 @@ export default function RevenueCard({ store, trailing }: Props) {
   const [range, setRange] = useState<Range>('week');
   const total = useMemo(() => revenueInRange(store, range), [store, range]);
   const label = RANGES.find(option => option.id === range)?.label || '';
+  const dates = rangeDates(range);
 
   return (
     <div className="rounded-2xl bg-card border border-border p-4">
@@ -74,7 +76,7 @@ export default function RevenueCard({ store, trailing }: Props) {
       <p className="font-display font-black text-2xl text-primary mt-1.5">
         ₦{Math.round(total).toLocaleString()}
       </p>
-      <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+      <p className="text-[10px] text-muted-foreground mt-0.5">{label} · {dates}</p>
     </div>
   );
 }
