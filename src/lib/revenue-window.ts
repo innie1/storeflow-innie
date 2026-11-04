@@ -6,25 +6,24 @@
  * work it out again. Two answers to one question is how a shop stops trusting
  * the number, and this one is on two screens at once every evening.
  *
- * Each stretch follows the calendar. "This week" starts on Monday and "this
- * month" on the 1st, so the figure matches the dates an owner sees on the wall
- * calendar and in the bank app. A rolling "last seven days" changed every
- * morning and never matched either.
+ * Each stretch is a calendar one. This week is Monday to Sunday, this month
+ * the 1st to the last day, last month the whole of the month before. A
+ * rolling "last seven days" changed every morning and matched no date an
+ * owner counts by.
  */
 
 import type { StoreData } from '@/types/store';
 import { receivedBetween } from '@/lib/money-figures';
 
-export type Range = 'today' | 'week' | 'month' | 'all';
+export type Range = 'today' | 'week' | 'month' | 'lastMonth' | 'all';
 
 export const RANGES: { id: Range; label: string }[] = [
   { id: 'today', label: 'Today' },
   { id: 'week', label: 'This week' },
   { id: 'month', label: 'This month' },
+  { id: 'lastMonth', label: 'Last month' },
   { id: 'all', label: 'Lifetime' },
 ];
-
-const DAY = 86400000;
 
 /** Midnight this morning, where the reader is. */
 export function startOfToday(now: number): number {
@@ -37,24 +36,33 @@ export function startOfToday(now: number): number {
 export function startOfWeek(now: number): number {
   const date = new Date(startOfToday(now));
   // getDay() is 0 on Sunday; Sunday belongs to the week that began six days before.
-  const sinceMonday = (date.getDay() + 6) % 7;
-  date.setDate(date.getDate() - sinceMonday);
+  date.setDate(date.getDate() - (date.getDay() + 6) % 7);
   return date.getTime();
 }
 
-/** Midnight on the 1st of this month. */
-export function startOfMonth(now: number): number {
-  const date = new Date(startOfToday(now));
-  date.setDate(1);
-  return date.getTime();
+/** Midnight on the 1st of the month, `offset` months from this one. */
+export function startOfMonth(now: number, offset = 0): number {
+  const date = new Date(now);
+  return new Date(date.getFullYear(), date.getMonth() + offset, 1).getTime();
 }
 
+/** From midnight on the first day to midnight after the last. */
 export function rangeWindow(range: Range, now: number = Date.now()): { from: number; to: number } {
-  const to = startOfToday(now) + DAY;
   switch (range) {
-    case 'today': return { from: startOfToday(now), to };
-    case 'week': return { from: startOfWeek(now), to };
-    case 'month': return { from: startOfMonth(now), to };
+    case 'today': {
+      const from = startOfToday(now);
+      const to = new Date(from);
+      to.setDate(to.getDate() + 1);
+      return { from, to: to.getTime() };
+    }
+    case 'week': {
+      const from = startOfWeek(now);
+      const to = new Date(from);
+      to.setDate(to.getDate() + 7);
+      return { from, to: to.getTime() };
+    }
+    case 'month': return { from: startOfMonth(now), to: startOfMonth(now, 1) };
+    case 'lastMonth': return { from: startOfMonth(now, -1), to: startOfMonth(now) };
     default: return { from: 0, to: Number.MAX_SAFE_INTEGER };
   }
 }
@@ -65,23 +73,17 @@ export function revenueInRange(store: StoreData, range: Range, now: number = Dat
   return receivedBetween(store, window.from, window.to);
 }
 
-/** The dates under the figure: "Mon 2 Nov – today", "1 Nov – today". */
+/** The dates under the figure: "Mon 2 Nov – Sun 8 Nov", "1 Nov – 30 Nov". */
 export function rangeDates(range: Range, now: number = Date.now()): string {
-  const day = (time: number, weekday = false) => new Date(time).toLocaleDateString('en-GB', {
-    ...(weekday ? { weekday: 'short' } : {}),
+  if (range === 'all') return 'Since the shop started';
+  const day = (time: number) => new Date(time).toLocaleDateString('en-GB', {
+    ...(range === 'today' || range === 'week' ? { weekday: 'short' } : {}),
     day: 'numeric',
     month: 'short',
   });
-  switch (range) {
-    case 'today': return day(now, true);
-    case 'week': {
-      const from = startOfWeek(now);
-      return from === startOfToday(now) ? `${day(from, true)} (today)` : `${day(from, true)} – today`;
-    }
-    case 'month': {
-      const from = startOfMonth(now);
-      return from === startOfToday(now) ? `${day(from)} (today)` : `${day(from)} – today`;
-    }
-    default: return 'Since the shop started';
-  }
+  const { from, to } = rangeWindow(range, now);
+  if (range === 'today') return day(from);
+  // The last day is the one before `to`; an hour back steps over midnight
+  // whatever the clocks did that night.
+  return `${day(from)} – ${day(to - 3600000)}`;
 }

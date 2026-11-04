@@ -11,9 +11,10 @@ import { RANGES, rangeDates, revenueInRange, type Range } from '@/lib/revenue-wi
  * reads zero whatever kind of month the shop is having, and a shop that opens
  * the app to a zero learns to stop opening it.
  *
- * So it opens on this week, from Monday, which is long enough to see a pattern
- * through a quiet Tuesday. Today is the running total, and this month, from the
- * 1st, shows how the shop is going over a longer stretch. Lifetime is what the
+ * So it opens on this week, Monday to Sunday, which is long enough to see a
+ * pattern through a quiet Tuesday. Today is the running total, this month (the
+ * 1st to the last day) shows how the shop is going over a longer stretch, and
+ * last month is a whole month to hold it against. Lifetime is what the
  * shop has taken since it started, which is the number people actually want
  * when they are wondering whether any of this has been worth it. The dates sit
  * under the figure so nobody has to guess which days it covers.

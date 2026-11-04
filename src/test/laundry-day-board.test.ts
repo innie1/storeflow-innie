@@ -170,16 +170,33 @@ describe('revenue over the window being asked about', () => {
     expect(revenueInRange(edges, 'month', NOON)).toBe(100);
   });
 
+  it('last month is the whole of the month before', () => {
+    const edges = {
+      sales: [
+        { total: 100, date: new Date('2026-08-01T00:30:00').toISOString() },
+        { total: 200, date: new Date('2026-08-31T23:30:00').toISOString() },
+        { total: 400, date: new Date('2026-07-31T23:30:00').toISOString() },
+        { total: 800, date: new Date('2026-09-01T00:30:00').toISOString() },
+      ],
+    } as unknown as StoreData;
+    expect(revenueInRange(edges, 'lastMonth', NOON)).toBe(100 + 200);
+    // In January, last month is December of the year before.
+    const january = new Date('2027-01-15T12:00:00').getTime();
+    const december = { sales: [{ total: 500, date: new Date('2026-12-20T10:00:00').toISOString() }] } as unknown as StoreData;
+    expect(revenueInRange(december, 'lastMonth', january)).toBe(500);
+  });
+
   it('says which dates the figure covers', () => {
     expect(rangeDates('today', NOON)).toBe('Tue 8 Sept');
-    expect(rangeDates('week', NOON)).toBe('Mon 7 Sept – today');
-    expect(rangeDates('month', NOON)).toBe('1 Sept – today');
-    expect(rangeDates('week', new Date('2026-09-07T10:00:00').getTime())).toBe('Mon 7 Sept (today)');
+    expect(rangeDates('week', NOON)).toBe('Mon 7 Sept – Sun 13 Sept');
+    expect(rangeDates('month', NOON)).toBe('1 Sept – 30 Sept');
+    expect(rangeDates('lastMonth', NOON)).toBe('1 Aug – 31 Aug');
+    expect(rangeDates('lastMonth', new Date('2026-03-10T12:00:00').getTime())).toBe('1 Feb – 28 Feb');
     expect(rangeDates('all', NOON)).toBe('Since the shop started');
   });
 
-  it('offers today, this week, this month and lifetime, and opens on this week', () => {
-    expect(RANGES.map(range => range.label)).toEqual(['Today', 'This week', 'This month', 'Lifetime']);
+  it('offers today, this week, this month, last month and lifetime, and opens on this week', () => {
+    expect(RANGES.map(range => range.label)).toEqual(['Today', 'This week', 'This month', 'Last month', 'Lifetime']);
     expect(readSource('src/components/RevenueCard.tsx')).toContain("useState<Range>('week')");
   });
 
