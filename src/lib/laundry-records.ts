@@ -166,9 +166,9 @@ export function decorateRecord(order: any, store: StoreData): DecoratedRecord {
     // A worker's phone only has what it took itself; the cloud knows the rest.
     balance: cloudBundleBalance(store, clientRef, order) ?? laundryBalance(store, clientRef),
     payments: laundryPaymentLines(store, clientRef, order),
-    due: LAUNDRY_SETTLED_STAGES.includes(stage)
-      ? describeDue(promisedAt, promisedAt !== null ? Math.min(Date.now(), promisedAt) : Date.now())
-      : describeDue(promisedAt),
+    // Ready or collected, nothing is due. Measuring it from the promised time
+    // made every finished bundle read "Due in 1m".
+    due: LAUNDRY_SETTLED_STAGES.includes(stage) ? null : describeDue(promisedAt),
     address: meta.customer_address || '',
     washMethod: meta.wash_method_name || '',
     dryMethod: meta.dry_method_name || '',

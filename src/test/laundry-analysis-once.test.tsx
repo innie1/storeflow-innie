@@ -57,11 +57,11 @@ describe("a laundry's Analysis page", () => {
   it('has one set of range buttons, and they move the story', () => {
     render(<BusinessAnalytics store={shop()} />);
     const card = screen.getByRole('region', { name: 'Clothes and money' });
-    expect(within(card).queryByRole('button', { name: '7 days' })).toBeNull();
-    expect(screen.getAllByRole('button', { name: '7 days' })).toHaveLength(1);
-    expect(within(card).getByTestId('flow-story').textContent).toContain('In the last 30 days');
-    fireEvent.click(screen.getByRole('button', { name: '7 days' }));
-    expect(within(card).getByTestId('flow-story').textContent).toContain('In the last 7 days');
+    expect(within(card).queryByRole('button', { name: 'This week' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'This week' })).toHaveLength(1);
+    expect(within(card).getByTestId('flow-story').textContent).toContain('This month');
+    fireEvent.click(screen.getByRole('button', { name: 'This week' }));
+    expect(within(card).getByTestId('flow-story').textContent).toContain('This week');
   });
 
   it('opens on its weeks, and lists the days once a tap away', () => {

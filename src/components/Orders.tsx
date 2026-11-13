@@ -1,3 +1,4 @@
+import DateField from '@/components/DateField';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Search, SlidersHorizontal, Calendar, User, Phone, MapPin, Package, ArrowLeftRight, Wallet, ChevronUp, ChevronDown, Bell, AlertTriangle, Receipt, CheckCircle2, XCircle } from 'lucide-react';
 import { StoreData } from '@/types/store';
@@ -516,11 +517,10 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
               <div className="space-y-1">
                 <label className="text-[10px] text-muted-foreground font-semibold uppercase">From (Date & Time)</label>
                 <div className="flex gap-1.5">
-                  <input
-                    type="date"
+                  <DateField
                     value={startDate}
-                    onChange={e => { setStartDate(e.target.value); setDatePreset('custom'); }}
-                    className="flex-1 px-2.5 py-1.5 bg-surface-2 border border-border/60 rounded-lg text-xs text-foreground focus:outline-none focus:border-primary/40"
+                    onChange={value => { setStartDate(value); setDatePreset('custom'); }}
+                    className="flex-1 min-w-0"
                   />
                   <input
                     type="time"
@@ -534,11 +534,10 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
               <div className="space-y-1">
                 <label className="text-[10px] text-muted-foreground font-semibold uppercase">To (Date & Time)</label>
                 <div className="flex gap-1.5">
-                  <input
-                    type="date"
+                  <DateField
                     value={endDate}
-                    onChange={e => { setEndDate(e.target.value); setDatePreset('custom'); }}
-                    className="flex-1 px-2.5 py-1.5 bg-surface-2 border border-border/60 rounded-lg text-xs text-foreground focus:outline-none focus:border-primary/40"
+                    onChange={value => { setEndDate(value); setDatePreset('custom'); }}
+                    className="flex-1 min-w-0"
                   />
                   <input
                     type="time"

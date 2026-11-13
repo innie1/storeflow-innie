@@ -46,21 +46,22 @@ export default function BusinessPulse({ store, orders = [], onNavigate }: Props)
         </div>
         <p className="mt-2 font-display text-xl font-black">₦{earnings.today.toLocaleString()} today</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          {earnings.dailyChange === null ? 'Building your 7-day baseline' : `${Math.abs(Math.round(earnings.dailyChange))}% ${earnings.dailyChange >= 0 ? 'above' : 'below'} your recent daily average`}
+          {earnings.dailyChange === null
+            ? earnings.action
+            : `${Math.abs(Math.round(earnings.dailyChange))}% ${earnings.dailyChange >= 0 ? 'above' : 'below'} a normal day by now. ${earnings.action}`}
         </p>
-        <p className="mt-3 rounded-xl bg-surface-2 p-3 text-[11px] leading-relaxed">{earnings.action}</p>
       </div>
 
       <button onClick={() => onNavigate('customers')} className="rounded-2xl border border-border bg-card p-4 text-left">
         <div className="flex items-center gap-2 text-xs font-black uppercase text-muted-foreground"><Users className="h-4 w-4 text-primary" /> Customer activity</div>
         <p className="mt-2 font-display text-xl font-black">{attention} need attention</p>
-        <p className="mt-1 text-xs text-muted-foreground">Frequent, slowing and inactive customers have prepared follow-up drafts in Customer Book.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Regulars who have gone quiet. Tap to message them.</p>
       </button>
 
       <button onClick={() => onNavigate(urgentOrders.some(order => order.business_type === 'laundry') ? 'laundry-records' : 'orders')} className="rounded-2xl border border-border bg-card p-4 text-left">
         <div className="flex items-center gap-2 text-xs font-black uppercase text-muted-foreground"><BellRing className="h-4 w-4 text-amber-500" /> Promised-time reminders</div>
         <p className="mt-2 font-display text-xl font-black">{urgentOrders.length} due / due soon</p>
-        <p className="mt-1 text-xs text-muted-foreground">Uses each order’s promised pickup or delivery time.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Late, or due in the next 2 hours.</p>
       </button>
     </section>
   );

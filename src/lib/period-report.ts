@@ -296,6 +296,11 @@ export function describeChange(change: Change): string {
   }
 }
 
+/** What came in, in one line. The figures under it say up or down. */
+export function periodHeadline(report: PeriodReport): string {
+  return periodSentence(report).split(' Against ')[0];
+}
+
 /** The period in a sentence or two, the way the owner would say it. */
 export function periodSentence(report: PeriodReport): string {
   const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;

@@ -18,7 +18,8 @@ import { dayKey } from '@/lib/day-records';
  *     stretch, however late they were paid. That is the percentages.
  */
 
-export type FlowRange = '7d' | '30d' | 'all';
+/** The last 7 or 30 days, this calendar week (from Monday) or month (from the 1st), or everything. */
+export type FlowRange = '7d' | '30d' | 'week' | 'month' | 'all';
 
 export interface FlowBundle {
   clientRef: string;
@@ -112,7 +113,7 @@ function busiestWeekday(bundles: FlowBundle[]): LaundryFlow['busiestWeekday'] {
 }
 
 function tellStory(flow: Omit<LaundryFlow, 'story'>): string[] {
-  const when = flow.range === '7d' ? 'In the last 7 days' : flow.range === '30d' ? 'In the last 30 days' : 'So far';
+  const when = { '7d': 'In the last 7 days', '30d': 'In the last 30 days', week: 'This week', month: 'This month', all: 'So far' }[flow.range];
   if (flow.bundles === 0) {
     return flow.moneyIn > 0
       ? [`${when}, no clothes came in, and ${naira(flow.moneyIn)} was received for earlier work.`]
@@ -141,7 +142,11 @@ export function laundryFlow(
   const earliest = Math.min(today, ...dated.map(bundle => startOfDay(timeOf(bundle.createdAt))), ...sales.map(sale => startOfDay(timeOf(sale.date))));
   // Never before the shop's first record: those days are not quiet days, they
   // are days nobody was recording, and drawn as zero they flatten everything.
-  const wanted = range === '7d' ? addDays(today, -6) : range === '30d' ? addDays(today, -29) : earliest;
+  const wanted = range === '7d' ? addDays(today, -6)
+    : range === '30d' ? addDays(today, -29)
+    : range === 'week' ? addDays(today, -((new Date(today).getDay() + 6) % 7))
+    : range === 'month' ? new Date(new Date(today).getFullYear(), new Date(today).getMonth(), 1).getTime()
+    : earliest;
   const from = Math.max(wanted, earliest);
   const until = addDays(today, 1);
 

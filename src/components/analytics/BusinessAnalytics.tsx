@@ -9,8 +9,19 @@ import { dayKey, describeDay, getDayHistory, recordDays, type DayRecord } from '
 import type { StoreData } from '@/types/store';
 import LaundryFlowCard from '@/components/laundry/LaundryFlowCard';
 import PeriodCompare from '@/components/laundry/PeriodCompare';
+import DateField from '@/components/DateField';
 
-type Range = '7d' | '30d' | 'all';
+// Calendar stretches, the same as the Revenue card: Monday to now, the 1st to now.
+type Range = 'week' | 'month' | 'all';
+
+function rangeStart(range: Range, now: number = Date.now()): number {
+  if (range === 'all') return 0;
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+  if (range === 'month') date.setDate(1);
+  else date.setDate(date.getDate() - (date.getDay() + 6) % 7);
+  return date.getTime();
+}
 
 type AnyRecord = Record<string, any>;
 
@@ -34,9 +45,7 @@ function dateOf(row: AnyRecord): number {
 }
 
 function within(t: number, range: Range): boolean {
-  if (range === 'all') return true;
-  const days = range === '7d' ? 7 : 30;
-  return t >= Date.now() - days * 86400000;
+  return t >= rangeStart(range);
 }
 
 function isSuccessfulOrder(order: AnyRecord): boolean {
@@ -79,7 +88,7 @@ function walkInOrders(store: StoreData): AnyRecord[] {
 }
 
 export default function BusinessAnalytics({ store, onBack }: { store: StoreData; onBack?: () => void }) {
-  const [range, setRange] = useState<Range>('30d');
+  const [range, setRange] = useState<Range>('month');
   const isLaundry = String(store.businessType || store.storeType || '').toLowerCase() === 'laundry';
   // A laundry opens on its weeks: this week against last, and any week before.
   const [tab, setTab] = useState<'overview' | 'weeks' | 'days' | 'customers' | 'scans'>(isLaundry ? 'weeks' : 'overview');
@@ -90,11 +99,14 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
    */
   const [days, setDays] = useState<DayRecord[]>(() => getDayHistory(String(store.accessCode || '')));
   const [pickedDay, setPickedDay] = useState('');
+  // A long-running shop has hundreds of days: show a month, then more on a tap.
+  const [dayCount, setDayCount] = useState(30);
+  const laundryVersion = useShopLaundryVersion();
+  // A bundle recorded while the page is open shows on its day straight away.
   useEffect(() => {
     if (isLaundry) setDays(recordDays(store));
-  }, [store, isLaundry]);
+  }, [store, isLaundry, laundryVersion]);
 
-  const laundryVersion = useShopLaundryVersion();
   const analytics = useMemo(() => {
     const scans = listFromStore(store, ['scanEvents', 'scan_events', 'qrScans', 'qr_scans']);
     const online = listFromStore(store, ['orders', 'customerOrders', 'customer_orders']);
@@ -123,7 +135,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
     };
 
     // The stretch the buttons choose, so every money figure reads the same time.
-    const windowFrom = range === 'all' ? 0 : Date.now() - (range === '7d' ? 7 : 30) * 86400000;
+    const windowFrom = rangeStart(range);
     const windowTo = Number.MAX_SAFE_INTEGER;
 
     const customerMap = new Map<string, AnyRecord>();
@@ -216,7 +228,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
 
   const isService = isServiceFirstBusiness(store);
   // Said on every figure measured over time, so no number is read as a different stretch.
-  const period = range === '7d' ? 'Last 7 days' : range === '30d' ? 'Last 30 days' : 'All time';
+  const period = range === 'week' ? 'This week' : range === 'month' ? 'This month' : 'All time';
   const money = (value: number) => `₦${Math.round(value).toLocaleString()}`;
   // What a job is priced at: the work taken in, over the jobs it came from.
   const average = analytics.orders > 0 ? analytics.workTakenIn / analytics.orders : 0;
@@ -314,19 +326,11 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
     <div className="animate-fade-in space-y-5 pb-8">
       <div className="flex items-center gap-3">
         {onBack && <button onClick={onBack} className="w-10 h-10 rounded-xl border border-border bg-card flex items-center justify-center"><ArrowLeft className="w-4 h-4" /></button>}
-        <div className="flex-1">
-          <p className="text-xs uppercase tracking-widest text-primary font-bold">Business intelligence</p>
-          <h1 className="font-display font-black text-2xl">Analysis</h1>
-          <p className="text-sm text-muted-foreground">
-            {isService
-              ? 'Who brings you work, what you have handed back, and who comes again.'
-              : 'Understand who finds your store, who buys, and who comes back.'}
-          </p>
-        </div>
+        <h1 className="flex-1 font-display font-black text-2xl">Analysis</h1>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {([['7d', '7 days'], ['30d', '30 days'], ['all', 'Lifetime']] as [Range, string][]).map(([id, label]) => <button key={id} onClick={() => setRange(id)} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border ${range === id ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border'}`}>{label}</button>)}
+        {([['week', 'This week'], ['month', 'This month'], ['all', 'Lifetime']] as [Range, string][]).map(([id, label]) => <button key={id} onClick={() => setRange(id)} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border ${range === id ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border'}`}>{label}</button>)}
       </div>
 
       {isLaundry && <LaundryFlowCard store={store} range={range} />}
@@ -371,29 +375,24 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       {tab === 'days' && isLaundry && (() => {
         const today = dayKey(new Date());
         const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
-        const shown = pickedDay ? days.filter(day => day.key === pickedDay) : days;
+        const shown = pickedDay ? days.filter(day => day.key === pickedDay) : days.slice(0, dayCount);
+        const more = pickedDay ? 0 : days.length - shown.length;
         return (
           <section className="rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="p-4 border-b border-border flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="font-display font-bold">Day by day</h2>
-                <p className="text-xs text-muted-foreground mt-1">Every day the shop worked, recorded by its date on its own.</p>
-              </div>
-              <label className="text-[11px] text-muted-foreground">
-                <span className="block mb-1">Go to a date</span>
-                <input
-                  type="date"
-                  value={pickedDay}
-                  max={today}
-                  onChange={event => setPickedDay(event.target.value)}
-                  aria-label="Go to a date"
-                  className="h-9 px-2 rounded-lg bg-surface-2 border border-border text-xs text-foreground"
-                />
-              </label>
+            <div className="p-4 border-b border-border space-y-3">
+              <h2 className="font-display font-bold">Day by day</h2>
+              <DateField
+                value={pickedDay}
+                max={today}
+                onChange={setPickedDay}
+                placeholder="Go to a date"
+                ariaLabel="Go to a date"
+                clearable
+              />
             </div>
             {shown.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                {pickedDay ? `Nothing was recorded on ${describeDay(pickedDay)}.` : 'No days recorded yet. Each day is added on its own as the shop works.'}
+                {pickedDay ? `Nothing was recorded on ${describeDay(pickedDay)}.` : 'No days recorded yet.'}
                 {pickedDay && <button type="button" onClick={() => setPickedDay('')} className="block mx-auto mt-2 text-primary font-bold text-xs">Show every day</button>}
               </div>
             ) : (
@@ -417,6 +416,11 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
                 ))}
                 {pickedDay && (
                   <button type="button" onClick={() => setPickedDay('')} className="w-full p-3 text-xs font-bold text-primary">Show every day</button>
+                )}
+                {more > 0 && (
+                  <button type="button" onClick={() => setDayCount(count => count + 30)} className="w-full p-3 text-xs font-bold text-primary">
+                    Show {Math.min(30, more)} more {Math.min(30, more) === 1 ? 'day' : 'days'}
+                  </button>
                 )}
               </div>
             )}

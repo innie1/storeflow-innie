@@ -5,6 +5,7 @@ import { saveStore } from '@/lib/store-data';
 import { mustWait, PAID_FROM_LABEL, STAFF_EXPENSE_CATEGORIES, submitStaffExpense, type SubmitResult } from '@/lib/staff-expenses';
 import ScrollLock from '@/components/ScrollLock';
 import { categoryFromName } from '@/lib/expense-names';
+import DateField from '@/components/DateField';
 
 /**
  * The worker's expense form.
@@ -153,7 +154,7 @@ export default function RecordExpenseSheet({ store, worker, onUpdate, onClose }:
 
               <label className="block">
                 <span className="text-[11px] font-semibold text-muted-foreground">Date</span>
-                <input type="date" value={date} max={today()} onChange={e => { setDate(e.target.value); setError(''); }} className={input} />
+                <DateField value={date} max={today()} onChange={value => { setDate(value); setError(''); }} className="mt-1" />
               </label>
 
               <div>

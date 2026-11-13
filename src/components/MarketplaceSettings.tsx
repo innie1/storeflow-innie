@@ -1,3 +1,4 @@
+import DateField from '@/components/DateField';
 import React, { useState, useEffect, useMemo } from 'react';
 import { StoreData, Product, StoreType } from '@/types/store';
 import { showToast } from '@/components/Toast';
@@ -842,11 +843,9 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                   </div>
                   <div>
                     <label className="block text-xs text-muted-foreground uppercase font-bold mb-1">Expiry Date</label>
-                    <input
-                      type="date"
+                    <DateField
                       value={form.deliveryExpiryDate}
-                      onChange={e => handleChange('deliveryExpiryDate', e.target.value)}
-                      className="w-full p-2 bg-card border border-border rounded text-xs text-foreground"
+                      onChange={value => handleChange('deliveryExpiryDate', value)}
                     />
                   </div>
                 </div>

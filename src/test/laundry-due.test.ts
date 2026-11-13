@@ -95,7 +95,7 @@ describe('nothing promised, nothing said', () => {
 });
 
 describe('a finished bundle is not called late', () => {
-  it('stops the clock at the promised time once it settles', () => {
+  it('gives a settled bundle no countdown at all', () => {
     // A bundle on the Ready shelf past its time is done and waiting for
     // someone to come for it, so it should not shout in red.
     // decorateRecord moved out of the workspace into laundry-records so the
@@ -103,7 +103,9 @@ describe('a finished bundle is not called late', () => {
     // is unchanged; only where it lives is.
     const records = readSource('src/lib/laundry-records.ts');
     expect(records).toContain('LAUNDRY_SETTLED_STAGES.includes(stage)');
-    expect(records).toContain('Math.min(Date.now(), promisedAt)');
+    // Stopping the clock at the promised time left every Ready and Collected
+    // bundle saying "Due in 1m", so a settled bundle has no due line.
+    expect(records).toContain('LAUNDRY_SETTLED_STAGES.includes(stage) ? null : describeDue(promisedAt)');
   });
 
   it('and the overdue flag already agreed', () => {

@@ -216,6 +216,9 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         if (sortMode === 'newest') return b.createdAt - a.createdAt;
         const rank = urgencyRank(a) - urgencyRank(b);
         if (rank !== 0) return rank;
+        // Collected bundles have no due time left: newest first, not the
+        // oldest from months ago at the top of the pile.
+        if (a.stage === 'collected' && b.stage === 'collected') return b.createdAt - a.createdAt;
         if (a.promisedAt !== b.promisedAt) {
           if (a.promisedAt === null) return 1;
           if (b.promisedAt === null) return -1;
@@ -578,17 +581,8 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
         </div>
       )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] uppercase tracking-wider text-primary font-black">Laundry workspace</p>
-          <h1 className="font-display font-black text-xl mt-0.5">{view === 'record' ? 'Record Laundry' : view === 'runs' ? 'Runs' : 'Laundry Records'}</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            {view === 'record'
-              ? 'Take in a bundle and give the customer their tag.'
-              : view === 'runs'
-                ? 'Today’s collections and deliveries.'
-                : 'Search by tag, customer or item.'}
-          </p>
-        </div>
+        {/* The title, and nothing under it: the tabs beside it say the rest. */}
+        <h1 className="font-display font-black text-xl">{view === 'record' ? 'Record Laundry' : view === 'runs' ? 'Runs' : 'Laundry Records'}</h1>
 
         <div className="flex gap-2 shrink-0">
           {/*
@@ -832,7 +826,6 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                       </div>
                       <div className="sm:text-right shrink-0">
                         <p className="font-display font-black text-base">₦{record.total.toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground mt-1">{record.createdAt ? new Date(record.createdAt).toLocaleString() : ''}</p>
                       </div>
                     </div>
 

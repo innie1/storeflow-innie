@@ -80,8 +80,9 @@ export default function LaundryFlowCard({ store, range }: { store: StoreData; ra
       <h3 className="font-display font-bold text-base">Clothes and money</h3>
 
       <div className="space-y-1" data-testid="flow-story">
-        {flow.story.map(line => <p key={line} className="text-sm text-foreground leading-snug">{line}</p>)}
-        {flow.moneyIn > flow.paidOnThese && <p className="text-sm text-foreground leading-snug">Money received in that time, older work included: {naira(flow.moneyIn)}.</p>}
+        {/* What came in and what is paid on it. Who paid is in the bars below. */}
+        {flow.story.slice(0, 2).map(line => <p key={line} className="text-sm text-foreground leading-snug">{line}</p>)}
+        {flow.moneyIn > flow.paidOnThese && <p className="text-xs text-muted-foreground leading-snug">Money received in that time, older work included: {naira(flow.moneyIn)}.</p>}
       </div>
 
       {hasFlow && (

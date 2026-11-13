@@ -8,10 +8,11 @@ import ConsumableAsk from '@/components/ConsumableAsk';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import { lowSupplies } from '@/lib/consumables';
 import ConfirmAccessCode from '@/components/ConfirmAccessCode';
-import { Banknote, Droplets, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon, Shirt} from 'lucide-react';
+import { Banknote, ChevronDown, Droplets, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon, Shirt} from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import { takeExpenseFormRequest } from '@/lib/expense-shortcut';
 import { categoryFromName, COMMON_EXPENSE_NAMES } from '@/lib/expense-names';
+import DateField from '@/components/DateField';
 
 interface ExpensesProps {
   store: StoreData;
@@ -130,7 +131,10 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
     const byCategory = new Map<ExpenseCategory, number>();
     expenses.forEach(e => byCategory.set(e.category, (byCategory.get(e.category) || 0) + e.amount));
     const byWho = filterExpenseBook(expenses, who, staffFilter || undefined);
-    const filtered = filter === 'all' ? byWho : byWho.filter(e => e.category === filter);
+    // Newest first by the day it was spent, not the order it was typed in.
+    const filtered = (filter === 'all' ? byWho : byWho.filter(e => e.category === filter))
+      .slice()
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return { total, byCategory, byWho, filtered };
   }, [expenses, filter, who, staffFilter]);
 
@@ -261,8 +265,9 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
       <div className="p-4 rounded-xl bg-card border border-border">
         <p className="text-xs text-muted-foreground mb-1">Total Expenses</p>
         <p className="font-display font-bold text-2xl text-destructive">₦{total.toLocaleString()}</p>
+        {/* Only what money went on: eight tiles of ₦0 said nothing. */}
         <div className="grid grid-cols-3 gap-1.5 mt-3">
-          {EXPENSE_CATEGORIES.map(cat => {
+          {EXPENSE_CATEGORIES.filter(cat => (byCategory.get(cat) || 0) > 0).map(cat => {
             const v = byCategory.get(cat) || 0;
             return (
               <div key={cat} className="p-1.5 rounded-lg bg-surface-2 text-center">
@@ -327,7 +332,7 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
               </p>
             </div>
           </div>
-          <span className="text-muted-foreground text-sm">{showBills ? '▲' : '▼'}</span>
+          <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${showBills ? 'rotate-180' : ''}`} aria-hidden />
         </button>
         {showBills && (
           <div className="px-3.5 pb-3.5 space-y-2 border-t border-border/60 pt-3">
@@ -412,11 +417,10 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
                     <option value="weekly">Weekly</option>
                     <option value="monthly">Monthly</option>
                   </select>
-                  <input
-                    type="date"
+                  <DateField
                     value={billDueDate}
-                    onChange={e => setBillDueDate(e.target.value)}
-                    className={inputClass}
+                    onChange={setBillDueDate}
+                    placeholder="Next due date"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -623,7 +627,7 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
                   <p className="text-[10px] text-muted-foreground mb-1">Filed as {category} from the name. Tap another to change it.</p>
                 )}
                 <div className="grid grid-cols-3 gap-1.5">
-                  {EXPENSE_CATEGORIES.map(cat => (
+                  {EXPENSE_CATEGORIES.filter(cat => !serviceShop || cat !== 'Restock').map(cat => (
                     <button
                       key={cat}
                       onClick={() => { setCategory(cat); setCategoryChosen(true); }}
@@ -638,11 +642,9 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
               </div>
               <div>
                 <label className="text-[10px] text-muted-foreground uppercase">Date</label>
-                <input
-                  type="date"
+                <DateField
                   value={date}
-                  onChange={e => setDate(e.target.value)}
-                  className={inputClass}
+                  onChange={setDate}
                 />
               </div>
               <div>

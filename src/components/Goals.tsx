@@ -1,9 +1,10 @@
+import DateField from '@/components/DateField';
 import { useState, useMemo } from 'react';
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { StoreData, BusinessGoal } from '@/types/store';
 import { addGoal, updateGoal, deleteGoal, saveStore, getOperatingExpenses } from '@/lib/store-data';
 import { 
-  Target, Plus, Calendar, Coins, TrendingUp, Sparkles, Award, Trash2, Edit3, ArrowRight
+  Target, Plus, Calendar, Coins, TrendingUp, Sparkles, Award, Trash2, Edit3, ArrowRight, ChevronDown
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 import { getFlowMemory, claimReferral } from '@/lib/flow-memory';
@@ -305,11 +306,9 @@ export default function Goals({ store, onUpdate }: GoalsProps) {
 
                 <div className="space-y-1 text-left">
                   <label className="text-xs text-muted-foreground uppercase font-bold">Target Date</label>
-                  <input 
-                    type="date" 
-                    value={deadline} 
-                    onChange={e => setDeadline(e.target.value)}
-                    className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
+                  <DateField
+                    value={deadline}
+                    onChange={value => setDeadline(value)}
                   />
                 </div>
               </div>
@@ -631,7 +630,7 @@ function FlowWalletCard({ store, onUpdate }: { store: StoreData; onUpdate: (s: S
             className="w-full flex items-center justify-between p-2.5 rounded-xl bg-surface-2 border border-border text-xs text-muted-foreground font-display font-semibold hover:text-white transition cursor-pointer"
           >
             <span>📜 Recent Transactions ({flowTransactions.length})</span>
-            <span>{showTx ? '▲' : '▼'}</span>
+            <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${showTx ? 'rotate-180' : ''}`} aria-hidden />
           </button>
           
           {showTx && (

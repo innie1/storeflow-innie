@@ -1,3 +1,4 @@
+import DateField from '@/components/DateField';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StoreData, StoreProfile, ManagerSettings, DEFAULT_MANAGER_SETTINGS, Product,
@@ -4253,9 +4254,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
               onClick={() => setHelpOpen(helpOpen === q ? null : q)}
             >
               <p className="text-sm font-display font-semibold text-foreground leading-snug">{q}</p>
-              <span className="shrink-0 text-muted-foreground text-xs mt-0.5">
-                {helpOpen === q ? '▴' : '▾'}
-              </span>
+              <ChevronDown className={`w-4 h-4 shrink-0 mt-0.5 text-muted-foreground transition-transform ${helpOpen === q ? 'rotate-180' : ''}`} aria-hidden />
             </button>
             {helpOpen === q && (
               <p className="pb-4 text-sm text-muted-foreground leading-relaxed animate-fade-in">{a}</p>
@@ -4448,7 +4447,7 @@ export default function Settings({ store, onUpdate, onLock, currentUser, isActiv
         id: 'intake', icon: <Shirt className="w-4 h-4" />, iconBg: 'rgba(245, 197, 60, 0.12)', iconColor: '#F5C53C', title: 'Taking a bundle in',
         body: (
           <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-            <p>Intake, then Record a walk-in bundle. Type the customer name, count what they brought, and the price adds itself up from your price list.</p>
+            <p>Intake, then New bundle. Type the customer name, count what they brought, and the price adds itself up from your price list.</p>
             <p><b className="text-foreground">The phone number is optional.</b> A customer who will not give one can still be recorded; you simply will not be able to message them when the clothes are ready.</p>
             <p>Add a shelf or rack so you can find the bundle later, and a photo if the clothes need one. Neither is required.</p>
             <p className="text-[10px] italic">Every bundle gets a tag code. Write it on the clothes.</p>
@@ -4933,7 +4932,9 @@ function Field({ label, value, onChange, placeholder, type='text', trailing }: {
       {/* `relative` always, so anything passed in sits inside the field rather
           than pushing the row around. */}
       <div className="relative">
-        <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type} className={`${inputClass} ${trailing ? 'pr-11' : ''}`} />
+        {type === 'date'
+          ? <DateField value={value} onChange={onChange} placeholder={placeholder} ariaLabel={label} />
+          : <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type} className={`${inputClass} ${trailing ? 'pr-11' : ''}`} />}
         {trailing}
       </div>
     </div>

@@ -19,23 +19,32 @@ export function getEarningsPulse(store: StoreData, now = new Date()) {
   const end = now.getTime();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const today = amountInRange(store, todayStart, end + 1);
-  const priorSeven = amountInRange(store, todayStart - 7 * DAY, todayStart);
+  /*
+   * Each of the last seven days up to this same time. Against whole days,
+   * every morning read as "100% below" a normal day that had not happened yet.
+   */
+  const soFar = end + 1 - todayStart;
+  let priorSeven = 0;
+  for (let back = 1; back <= 7; back += 1) {
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back).getTime();
+    priorSeven += amountInRange(store, dayStart, dayStart + soFar);
+  }
   const dailyBaseline = priorSeven / 7;
 
-  const day = now.getDay();
-  const weekStart = todayStart - day * DAY;
+  // Monday, like every other week in the app.
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (now.getDay() + 6) % 7).getTime();
   const thisWeek = amountInRange(store, weekStart, end + 1);
   const lastWeek = amountInRange(store, weekStart - 7 * DAY, weekStart);
   const dailyChange = dailyBaseline > 0 ? ((today - dailyBaseline) / dailyBaseline) * 100 : null;
   const weeklyChange = lastWeek > 0 ? ((thisWeek - lastWeek) / lastWeek) * 100 : null;
 
   const action = dailyChange === null
-    ? 'Record sales consistently for seven days to unlock a useful comparison.'
+    ? 'After a week of records, this compares today with a normal day.'
     : dailyChange < -20
-      ? 'Follow up with inactive regulars and check which usual products or services did not sell today.'
+      ? 'Slower than usual. Check on regulars who have not come in.'
       : dailyChange > 20
-        ? 'You are above your recent daily pace. Protect stock and service capacity for the items driving today.'
-        : 'Earnings are close to your normal pace. Keep serving repeat customers and monitor today’s open orders.';
+        ? 'Busier than usual today.'
+        : 'About a normal day so far.';
 
   return { today, dailyBaseline, dailyChange, thisWeek, lastWeek, weeklyChange, action };
 }

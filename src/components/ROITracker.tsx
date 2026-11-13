@@ -1,3 +1,4 @@
+import DateField from '@/components/DateField';
 import { useState, useMemo } from 'react';
 import { StoreData, Investment, Loan, Withdrawal } from '@/types/store';
 import { 
@@ -590,11 +591,9 @@ export default function ROITracker({ store, onUpdate }: ROITrackerProps) {
 
                 <div>
                   <label className="block text-[10px] text-muted-foreground uppercase font-bold mb-1">Repayment Due Date (optional)</label>
-                  <input 
-                    type="date"
+                  <DateField
                     value={loanDueDate}
-                    onChange={e => setLoanDueDate(e.target.value)}
-                    className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-primary"
+                    onChange={value => setLoanDueDate(value)}
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">You'll get a reminder starting 3 days before this date.</p>
                 </div>

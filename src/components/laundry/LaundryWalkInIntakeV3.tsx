@@ -751,7 +751,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
         onClick={openIntake}
         className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-display font-black text-sm flex items-center justify-center gap-2 active:scale-[.99] transition-transform"
       >
-        <Plus className="w-4 h-4" strokeWidth={3} /> Record a walk-in bundle
+        <Plus className="w-4 h-4" strokeWidth={3} /> New bundle
       </button>
 
       {open && <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center" onClick={close}>
@@ -882,10 +882,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
             </div>
           </> : <>
             <div className="shrink-0 flex items-center justify-between gap-3 border-b border-border p-4 pb-3">
-              <div>
-                <p className="text-[10px] uppercase text-primary font-black">Physical store</p>
-                <h3 className="font-display font-black text-lg mt-0.5">Record Laundry</h3>
-              </div>
+              <h3 className="font-display font-black text-lg">New bundle</h3>
               <button onClick={close} className="p-2 rounded-xl bg-surface-2 shrink-0"><X className="w-4 h-4" /></button>
             </div>
 

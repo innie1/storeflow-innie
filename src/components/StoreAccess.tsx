@@ -224,9 +224,16 @@ export default function StoreAccess({ onStoreLoaded }: StoreAccessProps) {
         setAccessMood(pickedLogo ? 'confident' : 'thinking');
         say(pickedLogo
           ? "Looks sharp. Create the store and we're in."
-          : 'Last one — pick a look. You can change it later.');
+          : 'Pick a look. You can change it later.');
         return;
       }
+    }
+
+    // The store is made: Flow says so, rather than going back to the start.
+    if (mode === 'create' && newCode) {
+      setAccessMood('happy');
+      say('Your store is ready. Keep this code safe.');
+      return;
     }
 
     const line = lines[mode];

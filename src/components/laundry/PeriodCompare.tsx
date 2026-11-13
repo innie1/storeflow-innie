@@ -8,7 +8,7 @@ import {
   periodLabel,
   periodDates,
   periodReport,
-  periodSentence,
+  periodHeadline,
   periodsSoFar,
   type Change,
   type PeriodBundle,
@@ -77,12 +77,12 @@ export default function PeriodCompare({ store, now: at }: { store: StoreData; no
   const most = Math.max(1, ...report.parts.map(part => Math.max(part.workTakenIn, part.received)));
   const beforeWord = unit === 'week' ? 'last week' : 'last month';
   const sameStretch = report.current;
-  const before = (value: number, whole: number) => sameStretch
-    ? `${value} same days ${beforeWord} · ${whole} all ${unit}`
-    : `${value} ${beforeWord}`;
-  const beforeMoney = (value: number, whole: number) => sameStretch
-    ? `${naira(value)} same days ${beforeWord} · ${naira(whole)} all ${unit}`
-    : `${naira(value)} ${beforeWord}`;
+  // While it runs, last week by this same day, and its whole total.
+  const Before = beforeWord[0].toUpperCase() + beforeWord.slice(1);
+  const before = (value: number | string, whole: number | string) => sameStretch
+    ? `${Before}: ${value} by now · ${whole} in all`
+    : `${Before}: ${value}`;
+  const beforeMoney = (value: number, whole: number) => before(naira(value), naira(whole));
 
   const switchUnit = (next: PeriodUnit) => {
     setUnit(next);
@@ -145,7 +145,7 @@ export default function PeriodCompare({ store, now: at }: { store: StoreData; no
         <div>
           <p className="font-bold text-sm">{report.label}{report.current ? ' · so far' : ''}</p>
           <p className="text-[11px] text-muted-foreground">{report.dates}</p>
-          <p className="text-sm text-foreground leading-snug mt-2" data-testid="period-sentence">{periodSentence(report)}</p>
+          <p className="text-sm text-foreground leading-snug mt-2" data-testid="period-sentence">{periodHeadline(report)}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">

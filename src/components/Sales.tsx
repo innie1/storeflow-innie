@@ -1,3 +1,4 @@
+import DateField from '@/components/DateField';
 import { commitCheckout } from '@/lib/committed-checkout';
 import { money, salePrice, packSize, stockBase } from '@/lib/inventory-sale-math';
 import { useMemo, useState, useEffect, useRef } from 'react';
@@ -1146,8 +1147,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
-                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                      className="p-1.5 rounded bg-card border border-border text-xs w-full text-muted-foreground" />
+                    <DateField value={dueDate} onChange={setDueDate} placeholder="Due date" className="h-9 text-xs" />
                     <input placeholder="Notes" value={customerNote} onChange={e => setCustomerNote(e.target.value)}
                       className="p-1.5 rounded bg-card border border-border text-xs w-full" />
                   </div>

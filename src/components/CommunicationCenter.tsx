@@ -1,3 +1,4 @@
+import DateField from '@/components/DateField';
 import { useState, useMemo } from 'react';
 import { StoreData, TabId, Product, Customer, Supplier, StaffMember, CommunicationMessage } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
@@ -617,16 +618,14 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <label className="text-[10px] text-muted-foreground font-bold uppercase">Shift Date</label>
-                        <input
-                          type="date"
+                        <DateField
                           value={shiftDate}
-                          onChange={e => {
-                            setShiftDate(e.target.value);
+                          onChange={value => {
+                            setShiftDate(value);
                             if (selectedEmp) {
-                              setReviewedText(`Hello ${selectedEmp.name},\n\nThis is your shift schedule for tomorrow.\nShift Date: ${e.target.value}\nShift Hours: ${shiftTime}\n\nPlease confirm you have received this.\n\nThank you,\n${store.storeName} Management`);
+                              setReviewedText(`Hello ${selectedEmp.name},\n\nThis is your shift schedule for tomorrow.\nShift Date: ${value}\nShift Hours: ${shiftTime}\n\nPlease confirm you have received this.\n\nThank you,\n${store.storeName} Management`);
                             }
                           }}
-                          className="w-full p-2 rounded-lg bg-surface-2 border border-border text-foreground text-xs focus:outline-none"
                         />
                       </div>
                       <div className="space-y-1">

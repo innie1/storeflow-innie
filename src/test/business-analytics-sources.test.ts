@@ -91,7 +91,9 @@ describe('the cards describe this trade', () => {
 
 describe('what it says', () => {
   it('describes a service shop in its own words', () => {
-    expect(analytics).toContain('Who brings you work, what you have handed back, and who comes again.');
+    // The page heading is just its name now; the wording lives on the cards.
+    expect(analytics).toContain('Brought to the counter, or booked through your storefront.');
+    expect(analytics).toContain("isService ? 'Handed back' : 'Successful purchase'");
   });
 
   it('counts money received, the same figure as the dashboard', () => {
@@ -108,7 +110,8 @@ describe('what it says', () => {
   });
 
   it('says what stretch of time each figure covers', () => {
-    expect(analytics).toContain("const period = range === '7d' ? 'Last 7 days' : range === '30d' ? 'Last 30 days' : 'All time';");
+    // Calendar stretches: Monday to Sunday, and the 1st to the month's end.
+    expect(analytics).toContain("const period = range === 'week' ? 'This week' : range === 'month' ? 'This month' : 'All time';");
     expect(analytics).toContain("period: 'Right now'");
   });
 

@@ -1,3 +1,4 @@
+import DateField from '@/components/DateField';
 import { countDebtors } from '@/lib/customer-key';
 import { useState, useMemo, useEffect } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
@@ -944,20 +945,16 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                   <div className="grid grid-cols-2 gap-2 text-left">
                     <div>
                       <label className="text-[10px] text-muted-foreground uppercase font-semibold">From</label>
-                      <input
-                        type="date"
+                      <DateField
                         value={customStart}
-                        onChange={e => setCustomStart(e.target.value)}
-                        className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground focus:outline-none focus:border-primary"
+                        onChange={value => setCustomStart(value)}
                       />
                     </div>
                     <div>
                       <label className="text-[10px] text-muted-foreground uppercase font-semibold">To</label>
-                      <input
-                        type="date"
+                      <DateField
                         value={customEnd}
-                        onChange={e => setCustomEnd(e.target.value)}
-                        className="w-full text-sm bg-surface-2 border border-border rounded p-1.5 text-foreground focus:outline-none focus:border-primary"
+                        onChange={value => setCustomEnd(value)}
                       />
                     </div>
                   </div>
