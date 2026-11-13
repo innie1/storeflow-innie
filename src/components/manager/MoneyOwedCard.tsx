@@ -1,6 +1,6 @@
 import { debtorKey } from '@/lib/customer-key';
 import { StoreData } from '@/types/store';
-import { getPendingSummary } from '@/lib/store-data';
+import { getPendingSummary, wasEverOwed } from '@/lib/store-data';
 import { CreditCard } from 'lucide-react';
 
 // ─── Money Owed Card ──────────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ export default function MoneyOwedCard({ store, onClick }: { store: StoreData; on
    * payment four times when two different Musas had two each.
    */
   const byCustomer = new Map<string, { name: string; count: number }>();
-  (store.pendingPayments || []).forEach(p => {
+  (store.pendingPayments || []).filter(wasEverOwed).forEach(p => {
     const key = debtorKey(p);
     if (!key) return;
     const entry = byCustomer.get(key) || { name: p.customerName, count: 0 };

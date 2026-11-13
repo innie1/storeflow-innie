@@ -116,23 +116,24 @@ describe('the Flow page', () => {
       expect(screen.queryByRole('region', { name: 'Clothes and money' })).toBeNull();
       expect(screen.queryByText('Next week at this pace')).toBeNull();
     }
-    expect(screen.getByText('What is selling')).toBeTruthy();
+    expect(screen.getByText('What sells')).toBeTruthy();
   });
 
-  it('moves the candles when clothes are received, before any money', () => {
+  it('moves the bars when clothes are received, before any money, and colours what is paid', () => {
     const now = new Date().toISOString();
     const key = laundryLocalStorageKey(CODE);
     localStorage.setItem(key, JSON.stringify([record('a', 4000, 0), record('b', 500, 0)].map(item => ({ ...item, createdAt: now }))));
     const view = render(page(noMoney()));
     open('Analysis');
-    expect(screen.getByRole('button', { name: /₦4,500 worth of clothes \(2 bundles\)/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /2 bundles, ₦0 paid, ₦4,500 not paid/ })).toBeTruthy();
 
     localStorage.setItem(key, JSON.stringify(['a', 'b', 'c'].map(ref => ({ ...record(ref, 1500, 0), createdAt: now }))));
     view.rerender(page(noMoney()));
-    expect(screen.getByRole('button', { name: /₦4,500 worth of clothes \(3 bundles\)/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /3 bundles, ₦0 paid, ₦4,500 not paid/ })).toBeTruthy();
 
-    open('Money in');
-    expect(screen.queryByRole('button', { name: /worth of clothes/ })).toBeNull();
-    expect(screen.getByText('No sales in this period yet.')).toBeTruthy();
+    // A payment on one of them turns its share green.
+    const paid = { id: 'laundry-a', customerName: 'A', items: [], total: 1500, paid: 1500, balance: 0, createdAt: now, status: 'paid', events: [], saleIds: [] };
+    view.rerender(page(noMoney({ pendingPayments: [paid] })));
+    expect(screen.getByRole('button', { name: /3 bundles, ₦1,500 paid, ₦3,000 not paid/ })).toBeTruthy();
   });
 });

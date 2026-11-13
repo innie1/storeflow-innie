@@ -9,8 +9,8 @@ export interface DailyPoint {
   revenue: number; profit: number; expenses: number; stockPurchases: number; salesCount: number;
 }
 
-export function dailySeries(store: StoreData, days: number): DailyPoint[] {
-  const today = startOfDay(new Date());
+export function dailySeries(store: StoreData, days: number, now: Date = new Date()): DailyPoint[] {
+  const today = startOfDay(now);
   const buckets: DailyPoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today); d.setDate(today.getDate() - i);
@@ -162,7 +162,7 @@ export interface Forecast {
   caveat?: string; // shown for long horizons where the estimate is necessarily rougher
 }
 
-export function forecastHorizon(store: StoreData, horizonDays: number): Forecast {
+export function forecastHorizon(store: StoreData, horizonDays: number, now: Date = new Date()): Forecast {
   // Only look back as far as the shop has existed.
   //
   // dailySeries always built 30 buckets, so a store open a week was regressed
@@ -170,12 +170,17 @@ export function forecastHorizon(store: StoreData, horizonDays: number): Forecast
   // quarter of the truth, and — because they all sit at the start of the window
   // — tilted the line upward, producing a confident-looking forecast of growth
   // that was really just the shop opening.
-  const openedAt = store.createdAt ? new Date(store.createdAt).getTime() : 0;
+  //
+  // From the first sale when that is earlier than the store record. A shop
+  // that moved to a new phone, restored a backup or brought its history in
+  // has a store record days old and months of takings, and the forecast was
+  // built on those few days alone.
+  const openedAt = tradingSince(store);
   const daysOpen = openedAt
-    ? Math.floor((Date.now() - openedAt) / 86400000) + 1
+    ? Math.floor((now.getTime() - openedAt) / 86400000) + 1
     : 30;
   const window = Math.max(2, Math.min(30, daysOpen));
-  const series = dailySeries(store, window);
+  const series = dailySeries(store, window, now);
   const rev = linReg(series.map(s => s.revenue));
   const prof = linReg(series.map(s => s.profit));
   const exp = linReg(series.map(s => s.expenses));
@@ -244,6 +249,99 @@ export function forecastHorizon(store: StoreData, horizonDays: number): Forecast
     daysObserved: window,
     caveat,
   };
+}
+
+/** When the shop's records begin: the store record, or an earlier first sale. */
+function tradingSince(store: StoreData): number {
+  let earliest = store.createdAt ? new Date(store.createdAt).getTime() : Infinity;
+  for (const sale of store.sales || []) {
+    const at = new Date(sale.date).getTime();
+    if (Number.isFinite(at) && at < earliest) earliest = at;
+  }
+  return Number.isFinite(earliest) ? earliest : 0;
+}
+
+// ─── Track record ─────────────────────────────────────────────────────────────
+export interface ForecastCheck {
+  /** First day the forecast was about. */
+  from: number;
+  /** The day after its last. */
+  to: number;
+  predicted: number;
+  low: number;
+  high: number;
+  actual: number;
+  /** The real figure landed inside the range the forecast gave. */
+  withinRange: boolean;
+  /** How far off, as a share of what was predicted. */
+  errorPct: number;
+}
+
+export interface ForecastTrackRecord {
+  checks: ForecastCheck[];
+  /** Average closeness, 0-100, or null with nothing to check yet. */
+  accuracyPct: number | null;
+  hits: number;
+}
+
+/**
+ * How right this forecast has been, worked out rather than asked.
+ *
+ * The page used to end every forecast with "Was this accurate? Correct /
+ * Incorrect", which asks the owner to remember a number and do the sum. The
+ * app has both halves already: it can make the same forecast as it would
+ * have made on an earlier day, from only what was recorded by then, and set
+ * it beside what actually came in afterwards. Up to four stretches back, the
+ * latest first, each ending before today so a half-finished day never counts.
+ */
+export function forecastTrackRecord(store: StoreData, horizonDays: number, now: Date = new Date(), rounds = 4): ForecastTrackRecord {
+  const DAY = 86400000;
+  const today = startOfDay(now).getTime();
+  // Judged from the first sale: a forecast made before there were any takings
+  // to go on says nothing about how good the forecast is.
+  let since = Infinity;
+  for (const sale of store.sales || []) {
+    const at = new Date(sale.date).getTime();
+    if (Number.isFinite(at) && at < since) since = at;
+  }
+  const checks: ForecastCheck[] = [];
+  for (let k = 1; k <= rounds; k++) {
+    const from = today - k * horizonDays * DAY;
+    const to = from + horizonDays * DAY;
+    // A forecast needs a week of history behind it to be worth judging.
+    if (!Number.isFinite(since) || from - 7 * DAY < startOfDay(new Date(since)).getTime()) break;
+    const before = (date: unknown) => new Date(String(date)).getTime() < from;
+    const then: StoreData = {
+      ...store,
+      sales: (store.sales || []).filter(sale => before(sale.date)),
+      expenses: (store.expenses || []).filter(expense => before(expense.date)),
+    };
+    const made = forecastHorizon(then, horizonDays, new Date(from - 1));
+    const actual = (store.sales || [])
+      .filter(sale => {
+        const at = new Date(sale.date).getTime();
+        return at >= from && at < to;
+      })
+      .reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
+    if (made.expectedRevenue <= 0 && actual <= 0) continue;
+    const errorPct = made.expectedRevenue > 0
+      ? Math.abs(actual - made.expectedRevenue) / made.expectedRevenue * 100
+      : 100;
+    checks.push({
+      from,
+      to,
+      predicted: made.expectedRevenue,
+      low: made.revenueLow,
+      high: made.revenueHigh,
+      actual,
+      withinRange: actual >= made.revenueLow && actual <= made.revenueHigh,
+      errorPct,
+    });
+  }
+  const accuracyPct = checks.length
+    ? Math.round(checks.reduce((sum, check) => sum + Math.max(0, 100 - check.errorPct), 0) / checks.length)
+    : null;
+  return { checks, accuracyPct, hits: checks.filter(check => check.withinRange).length };
 }
 
 /** Legacy compat */

@@ -1,5 +1,6 @@
 import { StoreData, FlowNotification } from '@/types/store';
 import { allowedNotifications } from '@/lib/notification-gate';
+import { wasEverOwed } from '@/lib/store-data';
 
 // ─── Customer Repayment Insights ──────────────────────────────────────────────
 export interface CustomerRepaymentInsight {
@@ -32,7 +33,9 @@ export interface RepaymentInsightsSummary {
 }
 
 export function getRepaymentInsights(store: StoreData): RepaymentInsightsSummary {
-  const all = store.pendingPayments || [];
+  // Bundles paid in full on the day are not debts, and scoring them as
+  // repayments filled this with customers who never owed anything.
+  const all = (store.pendingPayments || []).filter(wasEverOwed);
   const groups = new Map<string, typeof all>();
   all.forEach(p => {
     // Group by phone number when available — it's a much more reliable

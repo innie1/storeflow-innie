@@ -72,11 +72,11 @@ describe('laundry operations and business insights', () => {
     // Customer Activity / Promised-Time Reminders cards entirely — the merchant
     // asked for them removed as clutter, not just error-isolated.
     expect(owner).not.toContain('BusinessPulse');
-    expect(businessOwner).toContain('<FeatureErrorBoundary name="Business insights">');
     expect(boundary).toContain('sales, orders, laundry records');
-    // One door to the figures: the insights open at the top of Analysis,
-    // rather than in a box of their own on Home beside an Analysis button.
-    expect(businessOwner).toContain('insights={<FeatureErrorBoundary name="Business insights">');
+    // Nor do they head Analysis any more: each copied a figure that has a
+    // home of its own, and they pushed the page's own figures down.
+    expect(businessOwner).not.toContain('BusinessPulse');
+    expect(fs.existsSync('src/components/BusinessPulse.tsx')).toBe(false);
     expect(businessOwner).not.toContain('showInsights');
     expect(businessOwner).not.toContain('Start here');
     expect(businessOwner).toContain("'New bundle'");

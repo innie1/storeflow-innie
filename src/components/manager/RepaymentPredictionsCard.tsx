@@ -30,7 +30,7 @@ export default function RepaymentPredictionsCard({ store }: { store: StoreData }
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="font-display font-bold text-base">Repayment Predictions</h3>
-          <p className="text-xs text-muted-foreground">Learned from {insights.customers.length} customer{insights.customers.length === 1 ? '' : 's'} · {insights.customers.reduce((s, c) => s + c.sampleSize, 0)} payment events.</p>
+          <p className="text-xs text-muted-foreground">Learned from {insights.customers.length} customer{insights.customers.length === 1 ? '' : 's'} · {insights.customers.reduce((s, c) => s + c.sampleSize, 0)} payments.</p>
         </div>
         <div className={`px-2.5 py-1 rounded-full text-[10px] font-display font-bold border ${toneClass(insights.overallReliability)}`}>
           {insights.overallReliability}% avg reliability
@@ -91,7 +91,7 @@ export default function RepaymentPredictionsCard({ store }: { store: StoreData }
                   <div className={`text-[10px] font-display font-bold px-2 py-0.5 rounded-full border ${chip}`}>
                     {c.reliabilityScore}%
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{c.sampleSize} events</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{c.sampleSize} {c.sampleSize === 1 ? 'payment' : 'payments'}</p>
                 </div>
               </button>
               {isOpen && (

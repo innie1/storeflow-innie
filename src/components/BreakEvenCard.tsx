@@ -3,7 +3,7 @@ import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { Target } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { breakEven, breakEvenSentence } from '@/lib/service-breakeven';
-import { consumablePace, powerPaceSentence, soapPaceSentence } from '@/lib/cost-estimator';
+import { consumablePace, estimateUnitCost, pieceCostSentence, powerPaceSentence, soapPaceSentence } from '@/lib/cost-estimator';
 import { consumableAsk } from '@/lib/trade-supplies';
 import { claimSpotlight, scrollSpotlightIntoView, SPOTLIGHT_CLASS, SPOTLIGHT_MS, SPOTLIGHT_SIGNAL } from '@/lib/spotlight';
 
@@ -39,6 +39,7 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
   const state = useMemo(() => breakEven(store), [store, laundryVersion]);
   const soapLine = useMemo(() => soapPaceSentence(store), [store, laundryVersion]);
   const powerLine = useMemo(() => powerPaceSentence(store), [store, laundryVersion]);
+  const pieceCost = useMemo(() => pieceCostSentence(store, estimateUnitCost(store)), [store, laundryVersion]);
   const soapNoun = consumableAsk(store).noun;
   const soapLots = useMemo(
     () => consumablePace(store).find(pace => pace.key === soapNoun.toLowerCase())?.lots || [],
@@ -137,10 +138,8 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
         owner typed. It is derived from real spending divided by real pieces
         and sharpens every month the shop trades.
       */}
-      {state.variableCostPerPiece !== null && (
-        <p className="text-[10px] text-muted-foreground mt-1.5">
-          {money(state.variableCostPerPiece)} of soap and electricity per piece, over the last 30 days.
-        </p>
+      {state.variableCostPerPiece !== null && pieceCost && (
+        <p className="text-[10px] text-muted-foreground mt-1.5">{pieceCost}</p>
       )}
       {state.costsDoubtful && (
         <p className="text-[10px] text-amber-500 mt-1.5">

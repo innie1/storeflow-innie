@@ -531,6 +531,57 @@ export function powerPaceSentence(store: StoreData): string {
   return `Light costs about ${naira(pace.perPiece)} a piece: ${which} covered ${Math.round(pace.usedWashed).toLocaleString()} pieces.`;
 }
 
+export interface PieceCostPart {
+  /** What it is, in the shop's words: "soap", "light", "ironing pay". */
+  label: string;
+  perPiece: number;
+  /** A figure the app is still assuming rather than one the shop recorded. */
+  assumed: boolean;
+}
+
+/**
+ * The per-piece figure taken apart.
+ *
+ * One number for "soap and electricity" could not be checked: it also held
+ * piece-work pay when the shop had any, and a single light bill spread over
+ * the month's pieces looked like soap had gone up. Each part on its own says
+ * where the money goes and which part to question.
+ */
+export function pieceCostParts(store: StoreData, estimate: CostEstimate): PieceCostPart[] {
+  if (estimate.learning || estimate.pieces <= 0) return [];
+  const noun = consumableAsk(store).noun.toLowerCase();
+  const bills = new Set(
+    (store.expenses || [])
+      .filter(expense => expense.category === 'Utilities')
+      .map(expense => utilityKey(expense)),
+  );
+  const billNames = [...bills].map(key => (key === 'electricity' ? 'light' : key));
+  const labelFor = (category: ExpenseCategory) => {
+    if (category === 'Consumables') return noun;
+    if (category === 'Utilities') return billNames.length ? billNames.join(' and ') : 'light';
+    if (category === PIECE_WORK_CATEGORY) return 'piece-work pay';
+    return category.toLowerCase();
+  };
+  return estimate.breakdown
+    .filter(entry => entry.amount > 0)
+    .map(entry => ({
+      label: labelFor(entry.category),
+      perPiece: entry.amount / estimate.pieces,
+      // Soap is assumed while it still runs on the starting figure, and only
+      // when nothing measured was added to it.
+      assumed: entry.category === 'Consumables' && estimate.soapGuessed && entry.amount <= estimate.guessedSpend + 0.5,
+    }));
+}
+
+/** "₦49 a piece to do the work: soap ₦30, light ₦19." */
+export function pieceCostSentence(store: StoreData, estimate: CostEstimate): string {
+  const parts = pieceCostParts(store, estimate);
+  if (!parts.length || estimate.perPiece === null) return '';
+  const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
+  const list = parts.map(part => `${part.label} ${naira(part.perPiece)}${part.assumed ? ' (starting figure)' : ''}`).join(', ');
+  return `${naira(estimate.perPiece)} a piece to do the work: ${list}. From the last ${estimate.days} days, ${estimate.pieces.toLocaleString()} pieces.`;
+}
+
 /** "₦38 a piece — soap and electricity over the last 30 days, across 214 pieces." */
 export function explainUnitCost(estimate: CostEstimate): string {
   if (estimate.learning) {

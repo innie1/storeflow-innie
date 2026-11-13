@@ -183,6 +183,31 @@ export function deletePendingPayment(store: StoreData, id: string): StoreData {
   return updated;
 }
 
+/**
+ * Whether anybody ever owed money on this.
+ *
+ * A laundry writes one of these for every bundle, so it can take a part
+ * payment later, and most are paid in full at the counter the day they come
+ * in. Counted as debts, a customer who always paid on the spot read as having
+ * "delayed payment" once per bundle and the average debt was the average
+ * bundle. Owed means something was still unpaid at the end of the day it was
+ * brought, or is unpaid now.
+ */
+export function wasEverOwed(payment: PendingPayment): boolean {
+  if (payment.status === 'pending') return true;
+  if (payment.status === 'written_off') return true;
+  const created = new Date(payment.createdAt);
+  const endOfDay = new Date(created);
+  endOfDay.setHours(24, 0, 0, 0);
+  const events = payment.events || [];
+  // Nothing to go by: trust the record's own figure.
+  if (!events.length) return (Number(payment.paid) || 0) < (Number(payment.total) || 0) && !Number.isNaN(created.getTime());
+  const paidThatDay = events
+    .filter(event => new Date(event.date).getTime() < endOfDay.getTime())
+    .reduce((sum, event) => sum + (Number(event.amount) || 0), 0);
+  return paidThatDay < (Number(payment.total) || 0);
+}
+
 export function getPendingSummary(store: StoreData) {
   const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
   const totalOwed = list.reduce((s, p) => s + p.balance, 0);
@@ -192,7 +217,9 @@ export function getPendingSummary(store: StoreData) {
   let collectedThisMonth = 0;
   let collectedAllTime = 0;
   let originatedAllTime = 0;
-  (store.pendingPayments || []).forEach(p => {
+  // Recovered of what was actually owed: a bundle paid at the counter was
+  // never a debt, and counting it made every laundry look 95% recovered.
+  (store.pendingPayments || []).filter(wasEverOwed).forEach(p => {
     originatedAllTime += p.total;
     (p.events || []).forEach(e => {
       collectedAllTime += e.amount;

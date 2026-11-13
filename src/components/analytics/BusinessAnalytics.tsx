@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
 
@@ -87,7 +87,7 @@ function walkInOrders(store: StoreData): AnyRecord[] {
   }));
 }
 
-export default function BusinessAnalytics({ store, onBack, insights }: { store: StoreData; onBack?: () => void; insights?: ReactNode }) {
+export default function BusinessAnalytics({ store, onBack }: { store: StoreData; onBack?: () => void }) {
   const [range, setRange] = useState<Range>('month');
   const isLaundry = String(store.businessType || store.storeType || '').toLowerCase() === 'laundry';
   // A laundry opens on its weeks: this week against last, and any week before.
@@ -328,10 +328,6 @@ export default function BusinessAnalytics({ store, onBack, insights }: { store: 
         {onBack && <button onClick={onBack} className="w-10 h-10 rounded-xl border border-border bg-card flex items-center justify-center"><ArrowLeft className="w-4 h-4" /></button>}
         <h1 className="flex-1 font-display font-black text-2xl">Analysis</h1>
       </div>
-
-      {/* Today's pulse, the customers gone quiet and the promised times -
-          what Home used to keep in a box of its own behind a "View". */}
-      {insights && <section aria-label="Business insights">{insights}</section>}
 
       <div className="flex flex-wrap gap-2">
         {([['week', 'This week'], ['month', 'This month'], ['all', 'Lifetime']] as [Range, string][]).map(([id, label]) => <button key={id} onClick={() => setRange(id)} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border ${range === id ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border'}`}>{label}</button>)}

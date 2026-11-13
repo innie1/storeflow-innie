@@ -119,10 +119,12 @@ describe('ranges', () => {
 });
 
 describe('where it shows', () => {
-  it('is on the Analysis page only, and the candles in Flow count the clothes', () => {
+  it('is on the Analysis page only, and the busy-times bars in Flow are the clothes, paid and not', () => {
     const manager = readSource('src/components/Manager.tsx');
     expect(manager).not.toContain('LaundryFlowCard');
-    expect(manager).toContain("[['clothes', 'Clothes in'], ['money', 'Money in']]");
+    // One chart, two colours, instead of a Clothes in / Money in switch.
+    expect(manager).not.toContain("'Clothes in'");
+    expect(manager).toContain('debts.get(`laundry-${bundle.clientRef}`)?.paid');
     expect(readSource('src/components/analytics/BusinessAnalytics.tsx')).toContain('{isLaundry && <LaundryFlowCard store={store} range={range} />}');
     expect(readSource('src/lib/manager-intel.ts')).toContain("id: 'laundry-clothes-not-paid'");
   });

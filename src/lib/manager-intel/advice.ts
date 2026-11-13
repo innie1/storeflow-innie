@@ -149,7 +149,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
 
   // High: large outstanding debts
   if (pending.totalOwed > rev7 * 0.3) {
-    advice.push({ id: 'debt', icon: '💳', title: 'Chase outstanding payments', detail: `₦${pending.totalOwed.toLocaleString()} owed. ${pending.overdue.length} customers are overdue. Collect this to improve cash flow.`, priority: 'high' });
+    advice.push({ id: 'debt', icon: '💳', title: 'Chase outstanding payments', detail: `₦${pending.totalOwed.toLocaleString()} owed by ${pending.customerCount} ${pending.customerCount === 1 ? 'customer' : 'customers'}${pending.overdue.length ? `, ${pending.overdue.length} past the day they promised` : ''}. Collecting it puts the money in your hands.`, priority: 'high', goTo: 'pending' });
   }
 
   // Medium/High: customers cancelling orders — surface the count and, when

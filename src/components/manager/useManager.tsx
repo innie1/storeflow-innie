@@ -23,7 +23,7 @@ import {
 import { recordStreak, addFlowReward, hydrateFlowMemoryFromCloud } from '@/lib/flow-memory';
 import { showToast } from '@/components/Toast';
 import { executeAutoFix, AutoFixSpec } from '@/lib/auto-fix';
-import { logPrediction, submitPredictionFeedback } from '@/lib/prediction-log';
+import { logPrediction } from '@/lib/prediction-log';
 import { ManagerProps, ManagerTab } from './model';
 import type { MascotMood } from '@/components/Mascot';
 
@@ -58,13 +58,6 @@ export function useManager(props: ManagerProps) {
   const [poListOpen, setPoListOpen] = useState(false);
   const [ratingsOpen, setRatingsOpen] = useState(false);
   const [predictionHistoryOpen, setPredictionHistoryOpen] = useState(false);
-  const [forecastFeedback, setForecastFeedback] = useState<Record<number, 'correct' | 'incorrect'>>({});
-  const handleForecastFeedback = (horizonDays: number, feedback: 'correct' | 'incorrect') => {
-    setForecastFeedback(prev => ({ ...prev, [horizonDays]: feedback }));
-    submitPredictionFeedback(store, horizonDays, feedback).then(ok => {
-      if (ok) showToast(feedback === 'correct' ? 'Thanks — noted as correct 👍' : 'Thanks — noted as incorrect, Flow will learn from this', 'success');
-    });
-  };
   const [autoFixTarget, setAutoFixTarget] = useState<AutoFixSpec | null>(null);
   const [autoFixBusy, setAutoFixBusy] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
@@ -344,9 +337,6 @@ const advicePriorityColor: Record<string, string> = { critical: 'border-destruct
     setRatingsOpen,
     predictionHistoryOpen,
     setPredictionHistoryOpen,
-    forecastFeedback,
-    setForecastFeedback,
-    handleForecastFeedback,
     autoFixTarget,
     setAutoFixTarget,
     autoFixBusy,

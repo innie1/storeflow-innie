@@ -6,8 +6,6 @@ import { StoreData } from '@/types/store';
 import { getBusinessTemplate } from '@/lib/business-templates';
 import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-workspace';
 import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
-import BusinessPulse from '@/components/BusinessPulse';
-import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
 import LaundryDayBoard, { LaundryMoneyLines, useLaundryDayBoard } from '@/components/laundry/LaundryDayBoard';
 import RevenueCard from '@/components/RevenueCard';
 import BreakEvenPip from '@/components/BreakEvenPip';
@@ -107,18 +105,15 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
   };
 
   /*
-   * Business insights used to be a box of its own on Home, with a "View"
-   * that opened it in place and an "Analysis" beside it that opened the
-   * same kind of figures on another page - two buttons for one errand. They
-   * are one door now: Analysis, with the insights at its top.
+   * Analysis used to open on three cards - an earnings pulse, customers gone
+   * quiet and promised-time reminders - each a copy of something with a home
+   * of its own: today's takings on the Revenue card, due and late bundles on
+   * the day board, quiet regulars on Customers. They pushed the figures this
+   * page is for below the fold, so it opens on those figures now.
    */
   if (showAnalysis) {
     return (
-      <BusinessAnalytics
-        store={store}
-        onBack={() => setShowAnalysis(false)}
-        insights={<FeatureErrorBoundary name="Business insights"><BusinessPulse store={store} orders={orders} onNavigate={onNavigate} /></FeatureErrorBoundary>}
-      />
+      <BusinessAnalytics store={store} onBack={() => setShowAnalysis(false)} />
     );
   }
 

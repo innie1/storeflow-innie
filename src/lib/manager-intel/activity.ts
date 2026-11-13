@@ -62,3 +62,81 @@ export function mostActivePeriods(store: StoreData, range: ActivityRange = '7d',
   }
   return { buckets, peakWindow, totalSales };
 }
+
+// ─── Busy times, paid and not ─────────────────────────────────────────────────
+export interface SlotActivity {
+  minute: number; label: string; shortLabel: string;
+  /** Jobs or sales that came in during this slot. */
+  count: number;
+  /** What was paid on them, and what was not. */
+  paid: number; unpaid: number;
+}
+
+export interface BusyTimes {
+  slots: SlotActivity[];
+  peakWindow?: { startLabel: string; endLabel: string };
+  total: number;
+  paid: number;
+  unpaid: number;
+}
+
+/**
+ * When the work comes in, split by whether it has been paid for.
+ *
+ * The graph used to offer two separate readings - "clothes in" and "money in"
+ * - and an owner had to flip between them to see that the busy hour was also
+ * the hour most of the unpaid work arrived. One bar a slot, in two colours,
+ * answers both at once: how busy it was, and how much of it is money in hand.
+ */
+export function busyTimes(
+  items: { at: string; paid: number; unpaid: number }[],
+  range: ActivityRange = 'today',
+  interval: number = 30,
+  now: number = Date.now(),
+): BusyTimes {
+  let cutoff = 0;
+  if (range === 'today') { const d = new Date(now); d.setHours(0, 0, 0, 0); cutoff = d.getTime(); }
+  else if (range === '7d') cutoff = now - 7 * 86400000;
+  else if (range === '30d') cutoff = now - 30 * 86400000;
+  else if (range === '1y') cutoff = now - 365 * 86400000;
+
+  const N = Math.floor(1440 / interval);
+  const labelEvery = interval === 10 ? 120 : interval === 30 ? 180 : 120;
+  const slots: SlotActivity[] = [];
+  for (let i = 0; i < N; i++) {
+    const minute = i * interval; const h = Math.floor(minute / 60);
+    slots.push({
+      minute,
+      label: fmtMin(minute),
+      shortLabel: minute % labelEvery === 0 ? `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}` : '',
+      count: 0, paid: 0, unpaid: 0,
+    });
+  }
+
+  let total = 0, paid = 0, unpaid = 0;
+  for (const item of items) {
+    const t = new Date(item.at).getTime();
+    if (!Number.isFinite(t) || t < cutoff || t > now) continue;
+    const d = new Date(t);
+    const slot = slots[Math.floor((d.getHours() * 60 + d.getMinutes()) / interval)];
+    if (!slot) continue;
+    const p = Math.max(0, Number(item.paid) || 0);
+    const u = Math.max(0, Number(item.unpaid) || 0);
+    slot.count += 1; slot.paid += p; slot.unpaid += u;
+    total += 1; paid += p; unpaid += u;
+  }
+
+  let peakWindow: BusyTimes['peakWindow'];
+  if (total > 0) {
+    const worth = (slot: SlotActivity) => slot.paid + slot.unpaid;
+    const sorted = slots.map(worth).sort((a, b) => b - a);
+    const cut = sorted[Math.min(8, sorted.length - 1)] || 1;
+    let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+    slots.forEach((slot, i) => {
+      if (worth(slot) >= cut && worth(slot) > 0) { if (curStart < 0) curStart = i; curLen++; if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; } }
+      else { curStart = -1; curLen = 0; }
+    });
+    if (bestStart >= 0) peakWindow = { startLabel: slots[bestStart].label, endLabel: fmtMin(Math.min(1440, (bestStart + bestLen) * interval)) };
+  }
+  return { slots, peakWindow, total, paid, unpaid };
+}

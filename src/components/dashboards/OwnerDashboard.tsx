@@ -1,4 +1,5 @@
 import DateField from '@/components/DateField';
+import MessageIcon from '@/components/MessageIcon';
 import { countDebtors } from '@/lib/customer-key';
 import { useState, useMemo, useEffect } from 'react';
 import { StoreData, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
@@ -533,7 +534,7 @@ export default function OwnerDashboard({ store, orders = [], onNavigate }: Owner
                 {managerEnabled &&
                   insights.slice(0, 4).map(i => (
                     <p key={i.id} className="text-[11px] text-foreground/90 leading-snug flex gap-1.5">
-                      <span>{i.icon}</span>
+                      <span className="shrink-0 mt-px text-primary"><MessageIcon emoji={i.icon} className="w-3.5 h-3.5" /></span>
                       <span className="flex-1">{i.text}</span>
                     </p>
                   ))}

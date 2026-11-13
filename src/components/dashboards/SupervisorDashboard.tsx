@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import MessageIcon from '@/components/MessageIcon';
 import { StoreData } from '@/types/store';
 import { healthScore } from '@/lib/manager-intel';
 import { Users, Calendar, Sparkles, Shield, Heart } from 'lucide-react';
@@ -171,7 +172,7 @@ export default function SupervisorDashboard({ store, onNavigate }: SupervisorDas
             ) : (
               notifications.map(n => (
                 <div key={n.id} className="p-3 rounded-xl bg-surface-2/50 border border-border/30 flex items-start gap-2.5 text-xs text-left">
-                  <span className="text-base shrink-0">{n.icon}</span>
+                  <span className="shrink-0 mt-0.5 text-primary"><MessageIcon emoji={n.icon} /></span>
                   <div className="flex-1 min-w-0">
                     <p className="text-foreground leading-normal">{n.text}</p>
                     <p className="text-[9px] text-muted-foreground mt-1 font-mono">{new Date(n.date).toLocaleDateString()}</p>

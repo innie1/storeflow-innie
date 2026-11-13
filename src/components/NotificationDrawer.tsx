@@ -6,6 +6,7 @@ import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import { visibleNotifications } from '@/lib/notification-gate';
 import { describeWhen, isToday } from '@/lib/notification-time';
 import type { ActingUser } from '@/lib/permissions';
+import MessageIcon from '@/components/MessageIcon';
 
 interface NotificationDrawerProps {
   store: StoreData;
@@ -24,6 +25,14 @@ const TONE_TILE: Record<string, string> = {
   warning: 'bg-warning/15',
   info: 'bg-primary/15',
   danger: 'bg-destructive/15',
+};
+
+/** And the icon itself, in the colour that goes with the tint. */
+const TONE_INK: Record<string, string> = {
+  success: 'text-success',
+  warning: 'text-warning',
+  info: 'text-primary',
+  danger: 'text-destructive',
 };
 
 type Note = NonNullable<StoreData['flowNotifications']>[number];
@@ -131,8 +140,8 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
                 <ul>
                   {group.items.map(n => (
                     <li key={n.id} className="flex items-start gap-3 py-3 border-t border-border first:border-t-0">
-                      <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base ${TONE_TILE[n.tone] || 'bg-surface-2'}`} aria-hidden>
-                        {n.icon || '🔔'}
+                      <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${TONE_TILE[n.tone] || 'bg-surface-2'} ${TONE_INK[n.tone] || 'text-muted-foreground'}`} aria-hidden>
+                        <MessageIcon emoji={n.icon || '🔔'} />
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-foreground leading-snug">{n.title || 'Flow alert'}</p>
