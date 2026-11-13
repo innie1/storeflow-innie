@@ -118,9 +118,10 @@ describe('what Flow tells the owner', () => {
 
   it('sends clothes and money once a week, leading to the bundles', () => {
     const first = note(shop());
-    expect(first).toMatchObject({ title: 'Clothes and money this week', tone: 'warning', category: 'insight', actionTab: 'laundry-records' });
-    expect(first?.description).toContain('6 bundles worth ₦21,700');
-    expect(first?.description).toContain('1 of the 6 customers');
+    // One line, named for the seven days it counts, not "this week".
+    expect(first).toMatchObject({ title: 'Last 7 days: 6 bundles came in', tone: 'warning', category: 'insight', actionTab: 'laundry-records' });
+    expect(first?.description).toContain('Worth ₦21,700.');
+    expect(first?.description).toContain('still owed.');
     expect(note(shop())?.id).toBe(first?.id);
   });
 
@@ -133,7 +134,7 @@ describe('what Flow tells the owner', () => {
 
   it('arrives without the Manager screen being opened, and only once', () => {
     const raised = checkLaundryFlowNote(shop())!;
-    expect(raised.flowNotifications?.map(item => item.title)).toEqual(['Clothes and money this week']);
+    expect(raised.flowNotifications?.map(item => item.title)).toEqual(['Last 7 days: 6 bundles came in']);
     expect(checkLaundryFlowNote(raised)).toBeNull();
     expect(generateNotifications(raised).find(item => item.id === raised.flowNotifications![0].id)).toBeTruthy();
     expect(checkLaundryFlowNote(shop({ managerSettings: { notifyInsights: false } }))).toBeNull();

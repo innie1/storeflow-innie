@@ -159,6 +159,26 @@ export function workspaceKeyFor(store: Partial<StoreData> | null | undefined): s
 const started = new Set<ScreenName>();
 
 /**
+ * Whether fetching screens ahead of time is worth the data.
+ *
+ * Always, once the installed app's service worker is in charge: it keeps
+ * every screen on the phone already, so a fetch ahead is read from the
+ * phone's own storage and costs nothing. That was the case the old rule got
+ * wrong - on 2G, the very phones where opening a screen is slowest, nothing
+ * was fetched ahead at all, even though all of it was already there.
+ *
+ * Otherwise not with data saver on, nor on 2G.
+ */
+export function mayPreload(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (navigator.serviceWorker?.controller) return true;
+  const connection = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (connection?.saveData) return false;
+  if (typeof connection?.effectiveType === 'string' && /2g/i.test(connection.effectiveType)) return false;
+  return true;
+}
+
+/**
  * Start fetching screens that have not been asked for yet.
  *
  * Called when the phone has nothing better to do, so the first tap on a screen

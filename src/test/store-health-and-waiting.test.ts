@@ -126,7 +126,10 @@ describe('what is waiting to be collected', () => {
   });
 
   it('is shown on the home screen and on Analysis', () => {
-    expect(readSource('src/components/laundry/LaundryDayBoard.tsx')).toContain('Waiting to be collected');
+    // Said as what it is: ready to collect, and the rest still being washed.
+    const board = readSource('src/components/laundry/LaundryDayBoard.tsx');
+    expect(board).toContain('ready to collect');
+    expect(board).toContain('more still being washed');
     expect(readSource('src/components/analytics/BusinessAnalytics.tsx')).toContain('waiting: waitingToCollect(store)');
   });
 });

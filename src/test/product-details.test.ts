@@ -73,8 +73,8 @@ describe('the sheet follows the app theme', () => {
   });
 
   it('uses the semantic tokens the rest of the app uses', () => {
-    const code = source();
-    const sheet = code.slice(code.indexOf('{selectedDetailProduct && ('));
+    // The sheet is its own part of the Inventory screen now.
+    const sheet = readSource('src/components/inventory/ProductDetailSheet.tsx');
     expect(sheet).toContain('text-success');
     expect(sheet).toContain('bg-primary/5');
   });

@@ -107,7 +107,7 @@ export default function BreakEvenPip({ store, canSeeMoney, onOpen }: Props) {
           strokeDashoffset={circumference * (1 - filled)}
         />
       </svg>
-      <span className={`text-[11px] font-display font-black ${text}`}>{label}</span>
+      <span className={`text-xs font-display font-bold ${text}`}>{label}</span>
     </button>
   );
 }

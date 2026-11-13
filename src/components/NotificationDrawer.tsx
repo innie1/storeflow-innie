@@ -1,8 +1,10 @@
+import { Flame, X } from 'lucide-react';
 import type { TabId } from '@/types/store';
 import { StoreData } from '@/types/store';
 import { saveStore } from '@/lib/store-data';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
 import { visibleNotifications } from '@/lib/notification-gate';
+import { describeWhen, isToday } from '@/lib/notification-time';
 import type { ActingUser } from '@/lib/permissions';
 
 interface NotificationDrawerProps {
@@ -12,12 +14,40 @@ interface NotificationDrawerProps {
   onNavigate?: (tab: TabId, param?: string) => void;
   /** Who is looking, so a worker is not shown the owner's money. */
   currentUser?: ActingUser | null;
+  /** The streak lives in here now, rather than as a flame on the top bar. */
+  onOpenStreak?: () => void;
 }
 
-export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate, currentUser }: NotificationDrawerProps) {
+/** The tint behind each alert's icon, by how urgent it is. */
+const TONE_TILE: Record<string, string> = {
+  success: 'bg-success/15',
+  warning: 'bg-warning/15',
+  info: 'bg-primary/15',
+  danger: 'bg-destructive/15',
+};
+
+type Note = NonNullable<StoreData['flowNotifications']>[number];
+
+/**
+ * The one inbox.
+ *
+ * An alert used to be a tinted card holding a paragraph, a timestamp in the
+ * American order ("11/13/2026 · 02:58 PM") and a tiny button - one of them
+ * filled the panel. Each is a line now: what happened, a second line kept to
+ * two rows, when, and one thing to do about it. The newest come first, under
+ * Today and Earlier.
+ */
+export default function NotificationDrawer({ store, onClose, onUpdate, onNavigate, currentUser, onOpenStreak }: NotificationDrawerProps) {
   useBodyScrollLock();
-  // Only display unread notifications in the tray
-  const notes = visibleNotifications(store.flowNotifications || [], currentUser).filter(n => !n.read);
+  // Only display unread notifications in the tray, newest first.
+  const notes = visibleNotifications(store.flowNotifications || [], currentUser)
+    .filter(n => !n.read)
+    .sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0));
+  const groups = [
+    { title: 'Today', items: notes.filter(n => isToday(n.date)) },
+    { title: 'Earlier', items: notes.filter(n => !isToday(n.date)) },
+  ].filter(group => group.items.length > 0);
+  const streak = store.streak?.count || 0;
 
   // Closing the tray used to mark every notification read. Since the tray only
   // shows unread ones, opening it and acting on a single alert wiped the rest —
@@ -49,78 +79,91 @@ export default function NotificationDrawer({ store, onClose, onUpdate, onNavigat
     onUpdate(updated);
   };
 
-  const toneStyle: Record<string, string> = {
-    success: 'bg-success/10 border-success/30 text-success',
-    warning: 'bg-warning/10 border-warning/30 text-warning',
-    info: 'bg-primary/10 border-primary/30 text-primary',
-    danger: 'bg-destructive/10 border-destructive/30 text-destructive',
+  const act = (n: Note) => {
+    // Acting on it is attending to it — and only to it.
+    dismiss(n.id);
+    // actionTab is a plain string on the stored notification. Index renders
+    // "That screen isn't available" for anything it does not know, so an
+    // unrecognised one is handled rather than fatal.
+    if (onNavigate && n.actionTab) onNavigate(n.actionTab as TabId, n.actionParam);
+    handleClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end" onClick={handleClose}>
       <div className="w-full bg-card rounded-t-3xl shadow-2xl animate-slide-up max-h-[80vh] flex flex-col" style={{ maxWidth: '448px', margin: '0 auto' }} onClick={e => e.stopPropagation()}>
         <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1.5 rounded-full bg-border" /></div>
-        <div className="px-5 py-3 flex items-center justify-between border-b border-border">
-          <div>
-            <h3 className="font-display font-bold text-base text-foreground">Notifications</h3>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Alerts, insights and forecasts from Flow</p>
-          </div>
+        <div className="px-5 pt-2 pb-3 flex items-center justify-between">
+          <h3 className="font-display font-bold text-[17px] text-foreground">Notifications</h3>
           {notes.length > 0 && (
-            <button onClick={markAllRead} className="text-xs text-primary font-display font-semibold hover:underline">
+            <button onClick={markAllRead} className="text-sm text-primary font-display font-bold">
               Mark all read
             </button>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px] no-scrollbar">
+
+        <div className="flex-1 overflow-y-auto px-5 pb-3 min-h-[200px] no-scrollbar">
+          {streak > 0 && onOpenStreak && (
+            <button
+              type="button"
+              onClick={onOpenStreak}
+              className="w-full flex items-center gap-3 py-3 text-left"
+            >
+              <span className="w-9 h-9 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
+                <Flame className="w-[18px] h-[18px] text-orange-400" />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm text-foreground">{streak}-day streak</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">Keep recording every day</span>
+              </span>
+              <span className="text-sm font-bold text-primary shrink-0">See it ›</span>
+            </button>
+          )}
+
           {notes.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground text-xs">
-              No notifications yet. Flow alerts appear here.
+            <div className="text-center py-10 text-muted-foreground text-sm">
+              Nothing new. Alerts from Flow show up here.
             </div>
           ) : (
-            notes.map(n => (
-              <div key={n.id} className={`p-3 rounded-xl border flex gap-3 text-left ${toneStyle[n.tone] || 'bg-surface-2 border-border/40'}`}>
-                <span className="text-lg shrink-0 mt-0.5">{n.icon || '🔔'}</span>
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-display font-bold text-foreground leading-normal">{n.title || 'Flow Alert'}</p>
-                    <button
-                      onClick={() => dismiss(n.id)}
-                      aria-label="Dismiss this notification"
-                      className="shrink-0 -mt-0.5 -mr-1 w-6 h-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-surface-3"
-                    >
-                      <span className="text-sm leading-none">×</span>
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-normal">{n.description || n.text}</p>
-                  <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-border/10">
-                    <p className="text-[9px] text-muted-foreground/80 font-mono">
-                      {new Date(n.date).toLocaleDateString()} · {new Date(n.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    {n.actionTab && onNavigate && (
+            groups.map(group => (
+              <section key={group.title} aria-label={group.title}>
+                <p className="text-xs text-muted-foreground pt-3 pb-1">{group.title}</p>
+                <ul>
+                  {group.items.map(n => (
+                    <li key={n.id} className="flex items-start gap-3 py-3 border-t border-border first:border-t-0">
+                      <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base ${TONE_TILE[n.tone] || 'bg-surface-2'}`} aria-hidden>
+                        {n.icon || '🔔'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground leading-snug">{n.title || 'Flow alert'}</p>
+                        {(n.description || n.text) && (
+                          <p className="text-xs text-muted-foreground leading-snug mt-0.5 line-clamp-2">{n.description || n.text}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1.5">
+                          <span className="text-xs text-muted-foreground">{describeWhen(n.date)}</span>
+                          {n.actionTab && onNavigate && (
+                            <button type="button" onClick={() => act(n)} className="text-sm font-bold text-primary">
+                              <span>{n.actionLabel || 'Open'}</span> ›
+                            </button>
+                          )}
+                        </div>
+                      </div>
                       <button
-                        onClick={() => {
-                          // Acting on it is attending to it — and only to it.
-                          dismiss(n.id);
-                          // actionTab is a plain string on the stored
-                          // notification. Index renders "That screen isn't
-                          // available" for anything it does not know, so an
-                          // unrecognised one is handled rather than fatal.
-                          if (onNavigate) onNavigate(n.actionTab as TabId, n.actionParam);
-                          handleClose();
-                        }}
-                        className="px-2.5 py-1 rounded bg-primary text-primary-foreground text-[9px] font-display font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                        onClick={() => dismiss(n.id)}
+                        aria-label="Dismiss this notification"
+                        className="shrink-0 -mr-1.5 w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-surface-2"
                       >
-                        {n.actionLabel || 'Take Action →'}
+                        <X className="w-4 h-4" />
                       </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))
           )}
         </div>
         <div className="p-4 border-t border-border">
-          <button onClick={handleClose} aria-label="Close notifications" className="w-full py-2.5 rounded-xl bg-surface-2 border border-border text-xs font-display font-bold hover:bg-surface-3 transition-colors">
+          <button onClick={handleClose} aria-label="Close notifications" className="w-full h-11 rounded-xl bg-surface-2 border border-border text-sm font-display font-bold hover:bg-surface-3 transition-colors">
             Close
           </button>
         </div>

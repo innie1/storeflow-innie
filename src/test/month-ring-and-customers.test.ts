@@ -237,13 +237,15 @@ describe('the ring sits with the revenue, and explains itself', () => {
      * The period used to sit in its own box on the right, which put the thing
      * being measured and the thing measuring it at opposite ends of the card.
      */
-    const header = revenue.slice(revenue.indexOf('>Revenue<') - 400, revenue.indexOf('>Revenue<') + 400);
+    const header = revenue.slice(revenue.indexOf('Revenue ·') - 400, revenue.indexOf('Revenue ·') + 400);
     expect(header).toContain('<ChevronDown');
   });
 
   it('puts which stretch you are looking at under the figure, small', () => {
+    // The stretch's name is on the control itself; its dates sit under the figure.
     const body = revenue.slice(revenue.indexOf('toLocaleString()'));
-    expect(body).toContain('{label}');
+    expect(body).toContain('{dates}');
+    expect(revenue.slice(0, revenue.indexOf('toLocaleString()'))).toContain('{label}');
   });
 
   it('carries the ring in its corner on both screens', () => {

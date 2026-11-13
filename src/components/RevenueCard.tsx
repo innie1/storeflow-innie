@@ -28,56 +28,52 @@ interface Props {
   store: StoreData;
   /** Sits in the card's top-right. The month ring goes here on both screens. */
   trailing?: ReactNode;
+  /** Lines under the figure that belong with the money: who owes, what is ready. */
+  children?: ReactNode;
+  /** Half a phone wide on the simple home, where the full-size figure would not fit. */
+  compact?: boolean;
 }
 
-export default function RevenueCard({ store, trailing }: Props) {
+export default function RevenueCard({ store, trailing, children, compact = false }: Props) {
   const [range, setRange] = useState<Range>('week');
   const total = useMemo(() => revenueInRange(store, range), [store, range]);
   const label = RANGES.find(option => option.id === range)?.label || '';
   const dates = rangeDates(range);
 
   return (
-    <div className="rounded-2xl bg-card border border-border p-4">
-      {/*
-        Wraps. On a phone the card is half the screen wide, and "Revenue"
-        and the month ring side by side are wider than that - neither may
-        shrink, so the ring ran out past the card's edge. Where they do not
-        fit, the ring takes the line under the word instead.
-      */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        {/*
-          The word is the control.
+    <section aria-label="Revenue" className="rounded-2xl bg-card border border-border overflow-hidden">
+      <div className="p-4 flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          {/*
+            The period is the control, and it says which period it is.
 
-          The period used to sit in its own box on the right, which put the
-          thing being measured and the thing measuring it at opposite ends of
-          the card. The arrow belongs against "Revenue" - that is what it
-          changes - and which stretch you are looking at belongs under the
-          figure, small, where it reads as a caption rather than a button.
-
-          It is a real select underneath, so a phone opens its own picker.
-        */}
-        <div className="relative inline-flex items-center gap-1 shrink-0">
-          <span className="text-xs text-muted-foreground">Revenue</span>
-          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-          <select
-            value={range}
-            onChange={event => setRange(event.target.value as Range)}
-            aria-label="Period"
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          >
-            {RANGES.map(option => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
+            It read "Revenue ⌄", which named the card but not the stretch,
+            so the stretch had to be repeated in small print under the
+            figure. It is a real select underneath, so a phone opens its own
+            picker.
+          */}
+          <div className="relative inline-flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Revenue · <span className="text-foreground font-bold">{label}</span></span>
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            <select
+              value={range}
+              onChange={event => setRange(event.target.value as Range)}
+              aria-label="Period"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            >
+              {RANGES.map(option => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+          <p className={`font-display font-bold ${compact ? 'text-2xl' : 'text-[28px]'} leading-tight mt-1 truncate`}>
+            ₦{Math.round(total).toLocaleString()}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">Received · {dates}</p>
         </div>
-
         {trailing}
       </div>
-
-      <p className="font-display font-black text-2xl text-primary mt-1.5">
-        ₦{Math.round(total).toLocaleString()}
-      </p>
-      <p className="text-[10px] text-muted-foreground mt-0.5">{label} · {dates}</p>
-    </div>
+      {children}
+    </section>
   );
 }

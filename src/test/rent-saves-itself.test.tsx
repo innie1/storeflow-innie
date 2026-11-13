@@ -19,7 +19,7 @@ const store = {
 
 const openProfile = () => {
   const onUpdate = vi.fn();
-  render(<Settings store={store} onUpdate={onUpdate} />);
+  render(<Settings store={store} onUpdate={onUpdate} onLock={vi.fn()} />);
   fireEvent.click(screen.getAllByText('Washlie')[0].closest('button')!);
   const card = screen.getByRole('heading', { name: 'Store Rent' }).closest('div')!.parentElement!;
   return { onUpdate, card };

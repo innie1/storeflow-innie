@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ClipboardList, DollarSign, Fuel, Gamepad2, Package, Receipt, Shirt, Sparkles, Tag, TrendingUp, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { BarChart3, ClipboardList, DollarSign, Fuel, Gamepad2, Package, Plus, Receipt, Shirt, Sparkles, Tag, TrendingUp, Users, Wallet, type LucideIcon } from 'lucide-react';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
 import CelebrationRibbon from '@/components/CelebrationRibbon';
 import { StoreData } from '@/types/store';
@@ -8,7 +8,7 @@ import { getLaundryActionView, requestLaundryWorkspace } from '@/lib/laundry-wor
 import BusinessAnalytics from '@/components/analytics/BusinessAnalytics';
 import BusinessPulse from '@/components/BusinessPulse';
 import FeatureErrorBoundary from '@/components/FeatureErrorBoundary';
-import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
+import LaundryDayBoard, { LaundryMoneyLines, useLaundryDayBoard } from '@/components/laundry/LaundryDayBoard';
 import RevenueCard from '@/components/RevenueCard';
 import BreakEvenPip from '@/components/BreakEvenPip';
 import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
@@ -38,11 +38,14 @@ interface BusinessOwnerDashboardProps {
 const icon = (Glyph: LucideIcon) => <Glyph className="w-5 h-5" />;
 
 const quickActions: Record<string, { label: string; tab: string; icon: ReactNode }[]> = {
+  /*
+   * Price List and Laundry Records were shortcuts here as well as tabs in
+   * the bottom bar (Price List, Intake), so the screen offered two doors to
+   * each. The bar keeps them; Home keeps what the bar does not have.
+   */
   laundry: [
     { label: 'Record Laundry', tab: 'laundry-records', icon: icon(Shirt) },
-    { label: 'Price List', tab: 'inventory', icon: icon(Tag) },
     { label: 'Customers', tab: 'customers', icon: icon(Users) },
-    { label: 'Laundry Records', tab: 'laundry-records', icon: icon(Receipt) },
   ],
   gas_filling: [
     { label: 'New Gas Sale', tab: 'sales', icon: icon(Fuel) },
@@ -79,7 +82,6 @@ const quickActions: Record<string, { label: string; tab: string; icon: ReactNode
 export default function BusinessOwnerDashboard({ store, orders = [], onNavigate, currentUser }: BusinessOwnerDashboardProps) {
   const isLaundry = String(store.businessType || store.storeType || '').toLowerCase() === 'laundry';
   const [showAnalysis, setShowAnalysis] = useState(false);
-  const [showInsights, setShowInsights] = useState(false);
   const template = getBusinessTemplate(store.storeType);
   const tradeActions = quickActions[store.storeType] || [
     { label: template.labels.primaryAction, tab: 'orders', icon: icon(Sparkles) },
@@ -92,6 +94,8 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
   const actions = canOpenTab('expenses', currentUser) && isBusinessTabAllowed(store, 'expenses')
     ? [...tradeActions, { label: 'Record Expense', tab: 'expenses', icon: icon(Wallet) }]
     : tradeActions;
+  const board = useLaundryDayBoard(store, orders || [], isLaundry);
+  const seesMoney = canSeeMoney(currentUser);
 
   const handleQuickAction = (action: { label: string; tab: string }) => {
     if (action.tab === 'expenses') requestExpenseForm();
@@ -102,7 +106,21 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
     onNavigate(action.tab);
   };
 
-  if (showAnalysis) return <BusinessAnalytics store={store} onBack={() => setShowAnalysis(false)} />;
+  /*
+   * Business insights used to be a box of its own on Home, with a "View"
+   * that opened it in place and an "Analysis" beside it that opened the
+   * same kind of figures on another page - two buttons for one errand. They
+   * are one door now: Analysis, with the insights at its top.
+   */
+  if (showAnalysis) {
+    return (
+      <BusinessAnalytics
+        store={store}
+        onBack={() => setShowAnalysis(false)}
+        insights={<FeatureErrorBoundary name="Business insights"><BusinessPulse store={store} orders={orders} onNavigate={onNavigate} /></FeatureErrorBoundary>}
+      />
+    );
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const todaySales = (store.sales || []).filter(s => s.date?.slice(0, 10) === today);
@@ -157,70 +175,50 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
           ];
 
   const primaryAction = actions[0];
-  const secondaryActions = actions.slice(1);
+  // A laundry's big button says what it does, in the Intake screen's own words.
+  const primaryLabel = isLaundry && primaryAction?.label === 'Record Laundry' ? 'New bundle' : primaryAction?.label;
+  const shortcuts = [
+    ...actions.slice(1).map(action => ({
+      key: action.label,
+      label: action.label === 'Record Expense' ? 'Add expense' : action.label,
+      icon: action.icon,
+      run: () => handleQuickAction(action),
+    })),
+    { key: 'analysis', label: 'Analysis', icon: icon(BarChart3), run: () => setShowAnalysis(true) },
+  ];
 
   return (
-    // pb-20: the Flow button floats over the bottom-right corner, and
-    // without room to scroll past it the last card's own controls sit
-    // underneath it - the Analysis button was half-covered.
-    <div className="space-y-3 animate-fade-in pb-20">
+    <div className="space-y-3 animate-fade-in pb-4">
       <CelebrationRibbon store={store} />
-      <FlowStrategyCard store={store} onNavigate={onNavigate} />
       {/*
-        The shop's own name is not news to the shop.
-        
-        A whole card carrying the name, the trade and one button sat directly
-        under an app header already showing the name and the trade. It was the
-        second-largest thing on a screen that had just gained the day's work,
-        and it told nobody anything. Analysis moved down to Business insights,
-        which is the same errand - going to look at the numbers - and already
-        had a row of its own.
+        The day's work, before anything else: what is late, what is promised
+        today, what is ready, and what is owed - the four a paper book cannot
+        answer. One card, one row.
       */}
-      {/*
-        The day's work, before anything else.
-        
-        This screen opened with a strip of three figures - today's takings, how
-        many services the shop offers, how many customers it has ever had - and
-        none of them tell an owner what to do. Takings read zero at eight in
-        the morning however good the month is, the service count changes about
-        twice a year, and the customer count only goes up.
-        
-        What is late, what is promised today, what is finished and waiting, and
-        who owes money: those are the four a paper book physically cannot
-        answer, and they are the reason to open this app instead of the book.
-      */}
-      {isLaundry && (
-        <LaundryDayBoard
-          store={store}
-          orders={orders || []}
-          onNavigate={onNavigate as (tab: any) => void}
-          canSeeMoney={canSeeMoney(currentUser)}
-        />
-      )}
+      {isLaundry && <LaundryDayBoard board={board} onNavigate={onNavigate as (tab: any) => void} canSeeMoney={seesMoney} />}
 
       {/* The evening "How today went" card lived here. The day is recorded
           by date on its own now, and read back in Analysis. */}
 
+      {/*
+        One button, saying what it does. It carried "START HERE" in small
+        capitals above the words every day, long after the owner had started.
+      */}
       {primaryAction && (
-        <button onClick={() => handleQuickAction(primaryAction)} className="w-full rounded-2xl bg-primary px-4 py-4 text-left text-primary-foreground shadow-sm active:scale-[0.99] transition-transform">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-black/10 [&>svg]:w-6 [&>svg]:h-6">{primaryAction.icon}</span>
-            <span className="flex-1"><span className="block text-[10px] font-black uppercase tracking-wider opacity-70">Start here</span><span className="font-display text-lg font-black">{primaryAction.label}</span></span>
-            <span className="text-xl" aria-hidden="true">→</span>
-          </div>
+        <button
+          onClick={() => handleQuickAction(primaryAction)}
+          className="w-full h-14 rounded-2xl bg-primary text-primary-foreground shadow-sm flex items-center justify-center gap-2 font-display font-bold text-base active:scale-[0.99] transition-transform"
+        >
+          {isLaundry ? <Plus className="w-5 h-5" strokeWidth={2.5} /> : <span className="[&>svg]:w-5 [&>svg]:h-5">{primaryAction.icon}</span>}
+          {primaryLabel}
         </button>
       )}
 
       {/*
-        Revenue, over whichever stretch is being asked about rather than today
-        alone - and beside it, how the month is going.
-
-        The ring only existed on the simple home screen, so anybody on the full
-        dashboard - which is the default - had never seen it. It is the one
-        thing that says whether the shop is covering itself, which is worth a
-        corner of every screen and was in the corner of none.
+        The money, in one card: takings over the chosen stretch with the
+        month's costs ring beside them, then who owes and what is ready.
       */}
-      {canSeeMoney(currentUser) && (
+      {seesMoney && (
         <RevenueCard
           store={store}
           trailing={<BreakEvenPip
@@ -228,42 +226,43 @@ export default function BusinessOwnerDashboard({ store, orders = [], onNavigate,
               canSeeMoney
               onOpen={() => { requestSpotlight(BREAK_EVEN_SPOTLIGHT); onNavigate('manager'); }}
             />}
-        />
+        >
+          {isLaundry && <LaundryMoneyLines board={board} onNavigate={onNavigate as (tab: any) => void} />}
+        </RevenueCard>
       )}
 
-      <section className="grid grid-cols-3 overflow-hidden rounded-2xl border border-border bg-card">
-        {stats.map(stat => (
-          <div key={stat.label} className="min-w-0 border-r border-border p-3 last:border-r-0">
-            <div className="font-display font-black text-sm truncate">{stat.value}</div>
-            <div className="text-[9px] text-muted-foreground mt-0.5 truncate">{stat.label}</div>
-          </div>
+      {/*
+        A laundry's strip read "0 Services · 9 Customers · 63 Recorded" in
+        nine-pixel type: three numbers that never change the day. It is gone
+        for a laundry; other trades keep the figures of their day in it.
+      */}
+      {!isLaundry && (
+        <section className="grid grid-cols-3 overflow-hidden rounded-2xl border border-border bg-card">
+          {stats.map(stat => (
+            <div key={stat.label} className="min-w-0 border-r border-border p-3 last:border-r-0">
+              <div className="font-display font-bold text-base truncate">{stat.value}</div>
+              <div className="text-xs text-muted-foreground mt-0.5 truncate">{stat.label}</div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className={`grid ${shortcuts.length >= 4 ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
+        {shortcuts.map(shortcut => (
+          <button
+            key={shortcut.key}
+            onClick={shortcut.run}
+            className="min-h-[76px] rounded-2xl border border-border bg-card px-2 py-3 flex flex-col items-center justify-center gap-2 text-center hover:border-primary/50 active:scale-[0.99] transition-all"
+          >
+            <span className="text-muted-foreground">{shortcut.icon}</span>
+            <span className="font-display font-bold text-[13px] leading-tight">{shortcut.label}</span>
+          </button>
         ))}
       </section>
 
-      <section>
-        <div className={`grid ${secondaryActions.length === 4 ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
-          {secondaryActions.map(action => (
-            <button key={action.label} onClick={() => handleQuickAction(action)} className="min-h-20 rounded-xl border border-border bg-card p-3 text-left hover:border-primary/50 active:scale-[0.99] transition-all">
-              <div className="text-muted-foreground">{action.icon}</div>
-              <div className="font-display font-bold text-[11px] mt-1.5 leading-tight">{action.label}</div>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="flex items-center gap-2 p-4">
-          <button type="button" onClick={() => setShowInsights(value => !value)} className="flex flex-1 items-center justify-between gap-3 text-left min-w-0">
-            <span className="min-w-0"><span className="block font-display text-sm font-black">Business insights</span><span className="mt-0.5 block text-[10px] text-muted-foreground truncate">Earnings, customers and promised times</span></span>
-            <span className="text-sm text-muted-foreground shrink-0">{showInsights ? 'Hide' : 'View'}</span>
-          </button>
-          <button type="button" onClick={() => setShowAnalysis(true)} className="shrink-0 rounded-xl border border-border px-3 py-2 text-[11px] font-display font-bold">
-            Analysis
-          </button>
-        </div>
-        {showInsights && <div className="border-t border-border p-3"><FeatureErrorBoundary name="Business insights"><BusinessPulse store={store} orders={orders} onNavigate={onNavigate} /></FeatureErrorBoundary></div>}
-      </section>
-
+      {/* Flow's suggestion follows the day's own figures rather than standing
+          in front of them. */}
+      <FlowStrategyCard store={store} onNavigate={onNavigate} />
     </div>
   );
 }

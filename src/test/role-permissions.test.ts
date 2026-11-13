@@ -252,16 +252,17 @@ describe('the simple home screen asks the role too', () => {
     // all time rather than today alone, which makes the gate matter more, not
     // less: an attendant would otherwise be holding the shop's whole history.
     // The revenue card, wherever it sits in the markup, is behind the gate.
-    const gate = home.indexOf('canSeeMoney(currentUser) && (');
-    expect(gate).toBeGreaterThan(-1);
-    expect(home.slice(gate, gate + 200)).toContain('<RevenueCard');
+    const card = home.indexOf('<RevenueCard');
+    expect(card).toBeGreaterThan(-1);
+    expect(home.slice(card - 200, card)).toContain('canSeeMoney(currentUser) && (');
   });
 
   it('but does show the shop floor the work', () => {
     // Late, due today and ready are the attendant's job. Only the money owed
     // inside the day board is held back, which the board decides for itself.
     const board = readSource('src/components/laundry/LaundryDayBoard.tsx');
-    expect(board).toContain('canSeeMoney && board.owed > 0');
+    // Owed is the Today card's fourth number, and only for those who see money.
+    expect(board).toMatch(/\.\.\.\(canSeeMoney\s+\? \[\{ key: 'owed'/);
   });
 
   it('keeps the tab rule in one place, where a screen can ask it', () => {

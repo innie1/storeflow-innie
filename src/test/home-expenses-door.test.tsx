@@ -4,7 +4,7 @@ import type { StoreData } from '@/types/store';
 
 vi.mock('@/components/FlowStrategyCard', () => ({ default: () => null }));
 vi.mock('@/components/CelebrationRibbon', () => ({ default: () => null }));
-vi.mock('@/components/laundry/LaundryDayBoard', () => ({ default: () => null }));
+vi.mock('@/components/laundry/LaundryDayBoard', () => ({ default: () => null, LaundryMoneyLines: () => null, useLaundryDayBoard: () => ({ empty: true }) }));
 vi.mock('@/components/BreakEvenWatcher', () => ({ default: () => null }));
 
 import BusinessSimpleHome from '@/components/simple/BusinessSimpleHome';

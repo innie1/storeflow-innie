@@ -79,13 +79,17 @@ describe('laundry workspace routing', () => {
   });
 
   it('declares businessTemplate before the Price List navigation uses it', () => {
-    const source = readSource('src/pages/Index.tsx');
-    const declaration = source.indexOf('const businessTemplate = getBusinessTemplate(store);');
-    const usage = source.indexOf('{businessTemplate.name}');
+    // The shell's state lives in its hook; the declaration has to come before
+    // the tab list built from it there, or opening the app throws.
+    const hook = readSource('src/pages/index/useIndexScreen.tsx');
+    const declaration = hook.indexOf('const businessTemplate = getBusinessTemplate(store);');
+    const usage = hook.indexOf('icon: businessTemplate.icon');
 
     expect(declaration).toBeGreaterThan(-1);
     expect(usage).toBeGreaterThan(declaration);
-    expect(source).toContain("businessType === 'laundry' ? 'Price List' : 'Services'");
+    expect(hook).toContain("businessType === 'laundry' ? 'Price List' : 'Services'");
+    // The sidebar shows it, reading it from the hook's state.
+    expect(readSource('src/pages/index/DesktopSidebar.tsx')).toContain('{businessTemplate.name}');
   });
 
   it('routes only laundry Services to the garment-by-service price list', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
+import { readSource } from './helpers/source';
 import { getCustomerActivitySignals, getEarningsPulse, getPromisedTime } from '@/lib/business-insights';
 
 describe('laundry operations and business insights', () => {
@@ -73,15 +74,16 @@ describe('laundry operations and business insights', () => {
     expect(owner).not.toContain('BusinessPulse');
     expect(businessOwner).toContain('<FeatureErrorBoundary name="Business insights">');
     expect(boundary).toContain('sales, orders, laundry records');
-    expect(businessOwner).toContain('Start here');
-    expect(businessOwner).toContain('showInsights &&');
-    // Anchored on the rendered heading, not the words: a comment mentioning
-    // the section earlier in the file is not the section moving.
-    expect(businessOwner.indexOf('primaryAction.label')).toBeLessThan(businessOwner.indexOf('>Business insights<'));
+    // One door to the figures: the insights open at the top of Analysis,
+    // rather than in a box of their own on Home beside an Analysis button.
+    expect(businessOwner).toContain('insights={<FeatureErrorBoundary name="Business insights">');
+    expect(businessOwner).not.toContain('showInsights');
+    expect(businessOwner).not.toContain('Start here');
+    expect(businessOwner).toContain("'New bundle'");
   });
 
   it('uses remount-safe realtime channel names on merchant order screens', () => {
-    const index = fs.readFileSync('src/pages/Index.tsx', 'utf8');
+    const index = readSource('src/pages/Index.tsx');
     const serviceOrders = fs.readFileSync('src/components/games/ServiceOrders.tsx', 'utf8');
     expect(index).toContain('store-orders-${store.id}-${channelInstance}');
     expect(index).toContain('store-notifications-${store.id}-${channelInstance}');

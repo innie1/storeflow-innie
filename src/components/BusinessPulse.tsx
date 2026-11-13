@@ -41,7 +41,7 @@ export default function BusinessPulse({ store, orders = [], onNavigate }: Props)
   return (
     <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
       <div className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center gap-2 text-xs font-black uppercase text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
           {direction === 'down' ? <TrendingDown className="h-4 w-4 text-destructive" /> : <TrendingUp className="h-4 w-4 text-success" />} Earnings pulse
         </div>
         <p className="mt-2 font-display text-xl font-black">₦{earnings.today.toLocaleString()} today</p>
@@ -53,13 +53,13 @@ export default function BusinessPulse({ store, orders = [], onNavigate }: Props)
       </div>
 
       <button onClick={() => onNavigate('customers')} className="rounded-2xl border border-border bg-card p-4 text-left">
-        <div className="flex items-center gap-2 text-xs font-black uppercase text-muted-foreground"><Users className="h-4 w-4 text-primary" /> Customer activity</div>
+        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground"><Users className="h-4 w-4 text-primary" /> Customer activity</div>
         <p className="mt-2 font-display text-xl font-black">{attention} need attention</p>
         <p className="mt-1 text-xs text-muted-foreground">Regulars who have gone quiet. Tap to message them.</p>
       </button>
 
       <button onClick={() => onNavigate(urgentOrders.some(order => order.business_type === 'laundry') ? 'laundry-records' : 'orders')} className="rounded-2xl border border-border bg-card p-4 text-left">
-        <div className="flex items-center gap-2 text-xs font-black uppercase text-muted-foreground"><BellRing className="h-4 w-4 text-amber-500" /> Promised-time reminders</div>
+        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground"><BellRing className="h-4 w-4 text-amber-500" /> Promised-time reminders</div>
         <p className="mt-2 font-display text-xl font-black">{urgentOrders.length} due / due soon</p>
         <p className="mt-1 text-xs text-muted-foreground">Late, or due in the next 2 hours.</p>
       </button>

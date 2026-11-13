@@ -36,7 +36,10 @@ describe('a barcode survives being typed', () => {
   });
 
   it('is read back onto the form when a product is edited', () => {
-    const seed = inventory.slice(inventory.indexOf('setEditDraft({'));
+    // Opening the editor seeds its draft in one place, in the screen's state hook.
+    const hook = readSource('src/components/inventory/useInventory.tsx');
+    const opener = hook.slice(hook.indexOf('const openEditFor'));
+    const seed = opener.slice(opener.indexOf('setEditDraft({'));
     expect(seed.slice(0, seed.indexOf('});'))).toContain('barcode: p.barcode');
   });
 

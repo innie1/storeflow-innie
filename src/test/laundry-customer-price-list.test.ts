@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
+import { readSource } from './helpers/source';
 import { getLaundryPricingConfig, removeLaundryGarmentType, renameLaundryGarmentType } from '@/lib/laundry-pricing';
 
 describe('laundry customer price-list connection', () => {
   it('opens the garment price editor from the merchant Price List tab', () => {
-    const index = fs.readFileSync('src/pages/Index.tsx', 'utf8');
+    const index = readSource('src/pages/Index.tsx');
     // Fetched when the tab is opened rather than imported at the top - every
     // screen being in the startup bundle is what made the app slow to open.
     const screens = fs.readFileSync('src/pages/screens.ts', 'utf8');

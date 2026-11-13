@@ -4,7 +4,7 @@ import BreakEvenPip from '@/components/BreakEvenPip';
 import { BREAK_EVEN_SPOTLIGHT } from '@/components/BreakEvenCard';
 import { requestSpotlight } from '@/lib/spotlight';
 import BreakEvenWatcher from '@/components/BreakEvenWatcher';
-import LaundryDayBoard from '@/components/laundry/LaundryDayBoard';
+import LaundryDayBoard, { LaundryMoneyLines, useLaundryDayBoard } from '@/components/laundry/LaundryDayBoard';
 import RevenueCard from '@/components/RevenueCard';
 import { isServiceShop } from '@/lib/flow-service-brain';
 import FlowStrategyCard from '@/components/FlowStrategyCard';
@@ -30,6 +30,7 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
   const isAppointment = template.modes.includes('appointments');
   const isSession = template.modes.includes('sessions');
   const isLaundry = template.type === 'laundry';
+  const board = useLaundryDayBoard(store, orders || [], isLaundry);
   const primary = isLaundry ? 'Record Laundry' : template.labels.primaryAction;
   const noun = template.labels.offeringNoun;
 
@@ -107,11 +108,17 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
       */}
       {isLaundry && (
         <LaundryDayBoard
-          store={store}
-          orders={orders || []}
+          board={board}
           onNavigate={onNavigate}
           canSeeMoney={canSeeMoney(currentUser)}
         />
+      )}
+      {/* Who owes and what is ready, under the Today card: the revenue card
+          is half the width here, too narrow to carry them. */}
+      {isLaundry && canSeeMoney(currentUser) && (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden [&>div>button:first-child]:border-t-0">
+          <LaundryMoneyLines board={board} onNavigate={onNavigate} />
+        </div>
       )}
 
       {/* The evening "How today went" card lived here. The day is recorded
@@ -125,6 +132,7 @@ export default function BusinessSimpleHome({ store, onNavigate, currentUser, ord
         {canSeeMoney(currentUser) && (
           <RevenueCard
             store={store}
+            compact
             trailing={<BreakEvenPip
               store={store}
               canSeeMoney
