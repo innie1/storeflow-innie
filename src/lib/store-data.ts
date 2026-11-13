@@ -13,6 +13,7 @@ import {
 import { attribution } from '@/lib/recorded-by';
 import { currentActor } from '@/lib/current-actor';
 import { backfillAttribution } from '@/lib/attribution-backfill';
+import { fileExpensesByName } from '@/lib/expense-names';
 import { backfillCustomerBook } from '@/lib/customer-backfill';
 import { countDebtors } from '@/lib/customer-key';
 import { getLowStockThreshold } from '@/lib/settings';
@@ -948,6 +949,9 @@ export function loadStore(code: string): StoreData | null {
   // open rather than forced into a save, so it can never be the reason a sync
   // clashes; it is kept whenever the shop is next saved anyway.
   store = backfillAttribution(store);
+  // Expenses saved on a button nobody pressed - a light bill under Rent -
+  // filed by their names. The same way: on every open, kept at the next save.
+  store = fileExpensesByName(store);
   store = runScheduledSavingsDeduction(store);
   store = syncStoreData(store);
   store = syncProductPerformance(store);

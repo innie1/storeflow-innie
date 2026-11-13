@@ -8,6 +8,7 @@ import { receivedBetween, receivedByChannel, waitingToCollect } from '@/lib/mone
 import { dayKey, describeDay, getDayHistory, recordDays, type DayRecord } from '@/lib/day-records';
 import type { StoreData } from '@/types/store';
 import LaundryFlowCard from '@/components/laundry/LaundryFlowCard';
+import PeriodCompare from '@/components/laundry/PeriodCompare';
 
 type Range = '7d' | '30d' | 'all';
 
@@ -80,7 +81,8 @@ function walkInOrders(store: StoreData): AnyRecord[] {
 export default function BusinessAnalytics({ store, onBack }: { store: StoreData; onBack?: () => void }) {
   const [range, setRange] = useState<Range>('30d');
   const isLaundry = String(store.businessType || store.storeType || '').toLowerCase() === 'laundry';
-  const [tab, setTab] = useState<'overview' | 'days' | 'customers' | 'scans'>(isLaundry ? 'days' : 'overview');
+  // A laundry opens on its weeks: this week against last, and any week before.
+  const [tab, setTab] = useState<'overview' | 'weeks' | 'days' | 'customers' | 'scans'>(isLaundry ? 'weeks' : 'overview');
 
   /*
    * The laundry's days, each recorded by its date. Brought up to date on
@@ -336,9 +338,9 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       {isLaundry && whereTheWorkComesFrom}
 
       {/* A laundry's overview is Clothes and money, and it has no scans to list until somebody scans. */}
-      <div className={`grid gap-2 ${isLaundry && analytics.scans === 0 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+      <div className={`grid gap-2 ${isLaundry && analytics.scans > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
         {([
-          ...(isLaundry ? [['days', 'Day by day'] as const] : [['overview', 'Overview'] as const]),
+          ...(isLaundry ? [['weeks', 'Week & month'] as const, ['days', 'Day by day'] as const] : [['overview', 'Overview'] as const]),
           ['customers', 'Customers'],
           ...(isLaundry && analytics.scans === 0 ? [] : [['scans', 'Scan activity'] as const]),
         ] as const).map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`p-3 rounded-xl border text-xs font-bold ${tab === id ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'}`}>{label}</button>)}
@@ -363,6 +365,8 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
           </div>
         </section>
       </div>}
+
+      {tab === 'weeks' && isLaundry && <PeriodCompare store={store} />}
 
       {tab === 'days' && isLaundry && (() => {
         const today = dayKey(new Date());

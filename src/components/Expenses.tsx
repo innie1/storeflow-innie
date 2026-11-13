@@ -11,6 +11,7 @@ import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import { Banknote, Droplets, Home, Lightbulb, Package, Receipt, RefreshCw, Truck, Users, Wallet, type LucideIcon, Shirt} from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import { takeExpenseFormRequest } from '@/lib/expense-shortcut';
+import { categoryFromName, COMMON_EXPENSE_NAMES } from '@/lib/expense-names';
 
 interface ExpensesProps {
   store: StoreData;
@@ -51,6 +52,9 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
   useEffect(() => { if (takeExpenseFormRequest()) setShowAdd(true); }, []);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('Rent');
+  // Until a category button is pressed, the name decides it: "Light bill"
+  // is Utilities without anybody having to find the button.
+  const [categoryChosen, setCategoryChosen] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState('');
   const [paidFrom, setPaidFrom] = useState<ExpensePaidFrom>('cash');
@@ -73,6 +77,7 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
   const [billLabel, setBillLabel] = useState('');
   const [billAmount, setBillAmount] = useState('');
   const [billCategory, setBillCategory] = useState<ExpenseCategory>('Rent');
+  const [billCategoryChosen, setBillCategoryChosen] = useState(false);
   const [billFrequency, setBillFrequency] = useState<'weekly' | 'monthly'>('monthly');
   const [billDueDate, setBillDueDate] = useState('');
   const [confirmDelBill, setConfirmDelBill] = useState<RecurringBill | null>(null);
@@ -141,9 +146,16 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
     setNote('');
     setPaidFrom('cash');
     setCategory('Rent');
+    setCategoryChosen(false);
     setDate(new Date().toISOString().slice(0, 10));
     setShowAdd(false);
     showToast('Expense added');
+  };
+
+  const nameExpense = (value: string) => {
+    setNote(value);
+    const named = categoryFromName(value);
+    if (named && !categoryChosen) setCategory(named);
   };
 
   const handleDelete = (e: Expense) => {
@@ -187,6 +199,7 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
     setBillLabel('');
     setBillAmount('');
     setBillCategory('Rent');
+    setBillCategoryChosen(false);
     setBillFrequency('monthly');
     setBillDueDate('');
     setShowAddBill(false);
@@ -374,8 +387,12 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
               <div className="space-y-2 p-2.5 rounded-lg bg-surface-2 border border-border">
                 <input
                   value={billLabel}
-                  onChange={e => setBillLabel(e.target.value)}
-                  placeholder="e.g. Shop Rent"
+                  onChange={e => {
+                    setBillLabel(e.target.value);
+                    const named = categoryFromName(e.target.value);
+                    if (named && !billCategoryChosen) setBillCategory(named);
+                  }}
+                  placeholder="e.g. Shop Rent, Light bill"
                   className={inputClass}
                 />
                 <div className="grid grid-cols-2 gap-2">
@@ -386,7 +403,7 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
                     placeholder="Amount ₦"
                     className={inputClass}
                   />
-                  <select value={billCategory} onChange={e => setBillCategory(e.target.value as ExpenseCategory)} className={inputClass}>
+                  <select value={billCategory} onChange={e => { setBillCategory(e.target.value as ExpenseCategory); setBillCategoryChosen(true); }} className={inputClass}>
                     {EXPENSE_CATEGORIES.filter(c => c !== 'Restock' && (serviceShop || c !== 'Consumables')).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                 </div>
@@ -573,12 +590,43 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
                 />
               </div>
               <div>
+                <label className="text-[10px] text-muted-foreground uppercase">
+                  What was it for? {category === 'Other' ? <span className="text-destructive">(required)</span> : ''}
+                </label>
+                <input
+                  value={note}
+                  onChange={e => nameExpense(e.target.value)}
+                  placeholder={category === 'Other' ? 'Explain what this expense is for' : 'e.g. Light bill, Soap, Diesel'}
+                  className={inputClass}
+                />
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {COMMON_EXPENSE_NAMES.map(item => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() => { setNote(item.name); setCategory(item.category); setCategoryChosen(false); }}
+                      className={`px-2 py-1 rounded-full text-[11px] border transition-colors ${
+                        note === item.name ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border hover:border-primary/30'
+                      }`}
+                    >
+                      {item.name}
+                    </button>
+                  ))}
+                </div>
+                {category === 'Other' && !note.trim() && (
+                  <p className="text-[10px] text-destructive mt-1">This expense must be explained.</p>
+                )}
+              </div>
+              <div>
                 <label className="text-[10px] text-muted-foreground uppercase">Category</label>
+                {!categoryChosen && categoryFromName(note) === category && (
+                  <p className="text-[10px] text-muted-foreground mb-1">Filed as {category} from the name. Tap another to change it.</p>
+                )}
                 <div className="grid grid-cols-3 gap-1.5">
                   {EXPENSE_CATEGORIES.map(cat => (
                     <button
                       key={cat}
-                      onClick={() => setCategory(cat)}
+                      onClick={() => { setCategory(cat); setCategoryChosen(true); }}
                       className={`p-2 rounded-lg text-xs font-display font-semibold border transition-colors ${
                         category === cat ? 'bg-primary text-primary-foreground border-primary' : 'bg-surface-2 text-foreground border-border hover:border-primary/30'
                       }`}
@@ -613,20 +661,6 @@ export default function Expenses({ store, onUpdate, currentUser }: ExpensesProps
                     </button>
                   ))}
                 </div>
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase">
-                  Note {category === 'Other' ? <span className="text-destructive">(required)</span> : '(optional)'}
-                </label>
-                <input
-                  value={note}
-                  onChange={e => setNote(e.target.value)}
-                  placeholder={category === 'Other' ? 'Explain what this expense is for' : 'e.g. October rent'}
-                  className={inputClass}
-                />
-                {category === 'Other' && !note.trim() && (
-                  <p className="text-[10px] text-destructive mt-1">This expense must be explained.</p>
-                )}
               </div>
               <button onClick={handleAdd} className="w-full p-2.5 rounded-lg bg-primary text-primary-foreground font-display font-semibold hover:opacity-90">
                 Save Expense

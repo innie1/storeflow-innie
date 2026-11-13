@@ -4,6 +4,7 @@ import type { ExpenseCategory, ExpensePaidFrom, StoreData } from '@/types/store'
 import { saveStore } from '@/lib/store-data';
 import { mustWait, PAID_FROM_LABEL, STAFF_EXPENSE_CATEGORIES, submitStaffExpense, type SubmitResult } from '@/lib/staff-expenses';
 import ScrollLock from '@/components/ScrollLock';
+import { categoryFromName } from '@/lib/expense-names';
 
 /**
  * The worker's expense form.
@@ -42,6 +43,8 @@ const today = () => {
 export default function RecordExpenseSheet({ store, worker, onUpdate, onClose }: Props) {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('Consumables');
+  // The name picks the category until a button is pressed (expense-names.ts).
+  const [categoryChosen, setCategoryChosen] = useState(false);
   const [note, setNote] = useState('');
   const [date, setDate] = useState(today);
   const [paidFrom, setPaidFrom] = useState<ExpensePaidFrom>('cash');
@@ -125,7 +128,7 @@ export default function RecordExpenseSheet({ store, worker, onUpdate, onClose }:
                   {STAFF_EXPENSE_CATEGORIES.map(cat => {
                     const Icon = ICON[cat] || Receipt;
                     return (
-                      <button key={cat} type="button" onClick={() => setCategory(cat)} className={chip(category === cat)}>
+                      <button key={cat} type="button" onClick={() => { setCategory(cat); setCategoryChosen(true); }} className={chip(category === cat)}>
                         <Icon className="w-3.5 h-3.5" /> {cat}
                       </button>
                     );
@@ -137,7 +140,12 @@ export default function RecordExpenseSheet({ store, worker, onUpdate, onClose }:
                 <span className="text-[11px] font-semibold text-muted-foreground">What was bought / reason</span>
                 <input
                   value={note}
-                  onChange={e => { setNote(e.target.value); setError(''); }}
+                  onChange={e => {
+                    setNote(e.target.value);
+                    setError('');
+                    const named = categoryFromName(e.target.value);
+                    if (named && !categoryChosen && STAFF_EXPENSE_CATEGORIES.includes(named)) setCategory(named);
+                  }}
                   placeholder={HINT[category]}
                   className={input}
                 />

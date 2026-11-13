@@ -41,8 +41,10 @@ describe("a laundry's Analysis page", () => {
     for (const repeated of ['Jobs taken in', 'Handed back', 'Work taken in', 'Still owed', 'Customer journey', 'What this means']) {
       expect(screen.queryByText(repeated)).toBeNull();
     }
-    // The graph's own legend, and no card beside it.
-    expect(screen.getAllByText('Money received')).toHaveLength(1);
+    // The graph's own legend, and no card beside it. The week below has its
+    // own, for one week against the one before.
+    const week = screen.getByRole('region', { name: 'Week and month' });
+    expect(screen.getAllByText('Money received').filter(node => !week.contains(node))).toHaveLength(1);
   });
 
   it('keeps the figures Clothes and money does not give', () => {
@@ -62,8 +64,10 @@ describe("a laundry's Analysis page", () => {
     expect(within(card).getByTestId('flow-story').textContent).toContain('In the last 7 days');
   });
 
-  it('opens on the days, and lists them once', () => {
+  it('opens on its weeks, and lists the days once a tap away', () => {
     render(<BusinessAnalytics store={shop()} />);
+    expect(screen.getByRole('heading', { name: 'Week by week' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Day by day' }));
     expect(screen.getByRole('heading', { name: 'Day by day' })).toBeTruthy();
     expect(screen.queryByText(/See the numbers for each/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Overview' })).toBeNull();

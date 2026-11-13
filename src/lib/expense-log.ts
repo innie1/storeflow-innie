@@ -1,6 +1,7 @@
 import type { Expense, ExpenseRecorder, StoreData } from '@/types/store';
 import { recordActivityLog } from '@/lib/activity-log';
 import { currentActor, type Actor } from '@/lib/current-actor';
+import { fileExpenseByName } from '@/lib/expense-names';
 
 /**
  * The one way into the expense book.
@@ -43,7 +44,11 @@ export function enterExpenses(
 ): StoreData {
   if (expenses.length === 0) return store;
   const actor = options.actor || currentActor();
-  const stamped = expenses.map(expense => expense.recordedBy ? expense : { ...expense, recordedBy: recorderFor(actor) });
+  // Filed by what it was called, so a "Light bill" saved on the button the
+  // form started on still reaches the light-bill sums (expense-names.ts).
+  const stamped = expenses
+    .map(fileExpenseByName)
+    .map(expense => expense.recordedBy ? expense : { ...expense, recordedBy: recorderFor(actor) });
   let next: StoreData = { ...store, expenses: [...stamped, ...(store.expenses || [])] };
   for (const expense of stamped) {
     next = recordActivityLog(next, actor.name, actor.role, options.action?.(expense) || `Recorded expense: ${describeExpense(expense)}`);
