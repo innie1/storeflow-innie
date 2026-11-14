@@ -1,5 +1,6 @@
 import { StoreData } from '@/types/store';
 import { STORE_PREFIX } from './keys';
+import { shopStorage } from '@/lib/shop-storage';
 
 export const STORE_INDEX_KEY = 'storeflow_index';
 
@@ -55,7 +56,7 @@ export function backfillStoreIndexTypes(): StoreIndexEntry[] {
 /** A read that must never mutate or persist: loadStore does both. */
 export function loadStoreQuietly(code: string): StoreData | null {
   try {
-    const raw = localStorage.getItem(`${STORE_PREFIX}${String(code || '').toUpperCase()}`);
+    const raw = shopStorage.getItem(`${STORE_PREFIX}${String(code || '').toUpperCase()}`);
     return raw ? JSON.parse(raw) as StoreData : null;
   } catch {
     return null;
@@ -87,5 +88,5 @@ export function upsertStoreIndex(store: StoreData) {
 export function removeStoreFromIndex(code: string) {
   const idx = getStoreIndex().filter(s => s.code !== code);
   localStorage.setItem(STORE_INDEX_KEY, JSON.stringify(idx));
-  localStorage.removeItem(STORE_PREFIX + code);
+  shopStorage.removeItem(STORE_PREFIX + code);
 }

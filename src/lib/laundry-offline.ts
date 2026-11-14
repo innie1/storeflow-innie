@@ -4,6 +4,7 @@ import { generateLaundryReceiptNumber, sanitizeGarmentSelections, summarizeLaund
 import { isWorkerCode, noteWorkerPassExpired, readWorkerSession } from '@/lib/staff-session';
 import { deviceKey } from '@/lib/staff-join';
 import { currentActor } from '@/lib/current-actor';
+import { shopStorage } from '@/lib/shop-storage';
 
 /**
  * One move of a bundle along the wash: to which stage, when, and who did it.
@@ -241,7 +242,7 @@ function emit(name: string, record?: LocalLaundryRecord) {
 export function getLocalLaundryRecords(accessCode: string): LocalLaundryRecord[] {
   if (typeof localStorage === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(laundryLocalStorageKey(accessCode));
+    const raw = shopStorage.getItem(laundryLocalStorageKey(accessCode));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -257,7 +258,7 @@ export function getLocalLaundryRecords(accessCode: string): LocalLaundryRecord[]
  */
 function writeLocalLaundryRecords(accessCode: string, records: LocalLaundryRecord[], announce = true): void {
   if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(laundryLocalStorageKey(accessCode), JSON.stringify(records.slice(0, 1000)));
+  shopStorage.setItem(laundryLocalStorageKey(accessCode), JSON.stringify(records.slice(0, 1000)));
   if (announce) emit(LAUNDRY_LOCAL_CHANGED_EVENT);
 }
 

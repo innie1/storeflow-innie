@@ -2,6 +2,7 @@ import { Product, StoreData, Investment, StoreCategory, StoreType, GameService }
 import { STORE_PREFIX } from './keys';
 import { generateCode, generateId, generateStoreUniqueCode, generatePermanentStoreId } from './ids';
 import { upsertStoreIndex } from './store-index';
+import { shopStorage } from '@/lib/shop-storage';
 
 export const DEFAULT_GAMES: Omit<GameService, 'id'>[] = [
   { name: 'PlayStation', icon: '🎮', price: 500, enabled: false, order: 0 },
@@ -56,7 +57,7 @@ export function createStore(storeName: string, category: StoreCategory = 'retail
       uniqueCode: generateStoreUniqueCode(),
     }
   };
-  localStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
+  shopStorage.setItem(STORE_PREFIX + code, JSON.stringify(store));
   upsertStoreIndex(store);
   return store;
 }

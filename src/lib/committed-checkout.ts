@@ -4,6 +4,7 @@ import { cloudSnapshot, markStoreInCloud, requireStoreSynced, queueStoreSync, re
 import { money, salePrice } from './inventory-sale-math';
 import { FINANCIAL_FIELDS, same, serializeStoreSync } from './store-sync-guard';
 import { cloudNotReached, cloudRecentlyUnreachable, counterDeadline, hasCloudSession, noteCloudUnreachable } from './cloud-reach';
+import { shopStorage } from '@/lib/shop-storage';
 
 const committing = new Set<string>();
 type Items = Parameters<typeof recordCheckout>[1];
@@ -18,7 +19,7 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
   try {
     await requireStoreSynced(store.accessCode);
     return await serializeStoreSync(store.accessCode, async () => {
-    const raw = localStorage.getItem('storeflow_' + store.accessCode);
+    const raw = shopStorage.getItem('storeflow_' + store.accessCode);
     const current = raw ? JSON.parse(raw) : baseStore;
     if (FINANCIAL_FIELDS.some(k => !same(current[k], baseStore[k]))) return failure('Stock or payments changed. Refresh your cart before saving.');
     const result = recordCheckout(store, items, { ...options, deferSave: true });
@@ -46,7 +47,7 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
        * sale is written down here and mirrored when there is somewhere to
        * mirror it to, which is exactly what the laundry does with a bundle.
        */
-      localStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(result.store));
+      shopStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(result.store));
       queueStoreSync(result.store, baseStore);
       return result;
     }
@@ -55,7 +56,7 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
     // is visibly pending, and retries submit the same IDs and complete snapshot.
     // It is the one copy kept beside the shop: the shop does not hold this sale yet.
     const journal = { base: baseStore, journal: result.store, state: 'syncing' };
-    localStorage.setItem('storeflow_sync_pending_' + store.accessCode, JSON.stringify(journal));
+    shopStorage.setItem('storeflow_sync_pending_' + store.accessCode, JSON.stringify(journal));
     window.dispatchEvent(new CustomEvent(STORE_SYNC_EVENT, { detail: { code: store.accessCode } }));
     const { data, error } = await (supabase as any).rpc('commit_store_snapshot', {
       p_store_id: row.id, p_base: cloudSnapshot(baseStore), p_next: cloudSnapshot(result.store),
@@ -66,8 +67,8 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
       // A definite database rejection has no side effects. Unknown network
       // outcomes retain the exact proposal for idempotent recovery.
       if (error.code && !['PGRST000','PGRST001','PGRST002'].includes(error.code)) {
-        const held = JSON.parse(localStorage.getItem('storeflow_sync_pending_' + store.accessCode) || 'null');
-        if (same(held?.journal ?? held?.next, result.store)) localStorage.removeItem('storeflow_sync_pending_' + store.accessCode);
+        const held = JSON.parse(shopStorage.getItem('storeflow_sync_pending_' + store.accessCode) || 'null');
+        if (same(held?.journal ?? held?.next, result.store)) shopStorage.removeItem('storeflow_sync_pending_' + store.accessCode);
         window.dispatchEvent(new CustomEvent(STORE_SYNC_EVENT, { detail: { code: store.accessCode } }));
         // Refusals are P0001 now (40001 made the server retry them forever), so
         // they are told by their words; 40001 still counts for a real one.
@@ -76,28 +77,28 @@ export async function commitCheckout(store: StoreData, items: Items, options: Op
       }
       // The line dropped mid-sale: the next sale should not wait on it too.
       noteCloudUnreachable();
-      const live = JSON.parse(localStorage.getItem('storeflow_' + store.accessCode) || 'null');
+      const live = JSON.parse(shopStorage.getItem('storeflow_' + store.accessCode) || 'null');
       if (live && !same(live, current)) {
-        localStorage.setItem('storeflow_sync_pending_' + store.accessCode, JSON.stringify({ base: baseStore, uncertainCheckout: result.store, state: 'conflict', error: 'The sale response was lost while another edit was made. Both copies are kept. Review cloud records before retrying this sale.' }));
+        shopStorage.setItem('storeflow_sync_pending_' + store.accessCode, JSON.stringify({ base: baseStore, uncertainCheckout: result.store, state: 'conflict', error: 'The sale response was lost while another edit was made. Both copies are kept. Review cloud records before retrying this sale.' }));
         window.dispatchEvent(new CustomEvent(STORE_SYNC_EVENT, { detail: { code: store.accessCode } }));
         return failure('Sale status is uncertain. Review the saved sync copies before trying again.');
       }
-      localStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(result.store));
+      shopStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(result.store));
       queueStoreSync(result.store, baseStore);
       return result;
     }
-    const latestRaw = localStorage.getItem('storeflow_' + store.accessCode);
+    const latestRaw = shopStorage.getItem('storeflow_' + store.accessCode);
     if (latestRaw && !same(JSON.parse(latestRaw), current) && !same(JSON.parse(latestRaw), result.store)) {
       // A newer local edit still uses the old base. Keep it active and require
       // review against the now-committed sale; never silently overwrite it.
       const latest = JSON.parse(latestRaw);
-      localStorage.setItem('storeflow_sync_pending_' + store.accessCode, JSON.stringify({ base: baseStore, state: 'conflict', error: 'The sale was saved online while another local edit was made. Compare both copies before continuing.' }));
+      shopStorage.setItem('storeflow_sync_pending_' + store.accessCode, JSON.stringify({ base: baseStore, state: 'conflict', error: 'The sale was saved online while another local edit was made. Compare both copies before continuing.' }));
       window.dispatchEvent(new CustomEvent(STORE_SYNC_EVENT, { detail: { code: store.accessCode } }));
       return { ...result, store: latest };
     }
     const accepted = { ...result.store, ...data.data, managerSettings: { ...result.store.managerSettings, ...data.data.managerSettings } };
-    localStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(accepted));
-    localStorage.removeItem('storeflow_sync_pending_' + store.accessCode);
+    shopStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(accepted));
+    shopStorage.removeItem('storeflow_sync_pending_' + store.accessCode);
     window.dispatchEvent(new CustomEvent(STORE_SYNC_EVENT, { detail: { code: store.accessCode, store: accepted } }));
     return { ...result, store: accepted };
     });

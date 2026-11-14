@@ -6,6 +6,7 @@ import { initTheme } from "./lib/theme";
 import { workInProgress } from "@/lib/work-in-progress";
 import { showToast } from "@/components/Toast";
 import { captureInviteFromUrl } from "@/lib/staff-join";
+import { hydrateShopStorage, onShopStorageWriteFailure, shopStorageBlocked } from "@/lib/shop-storage";
 
 initTheme();
 // A staff invite link is kept before anything draws, so an open shop cannot
@@ -184,5 +185,32 @@ if (isPreviewHost || isInIframe || isLocalDev) {
   });
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+/*
+ * Records that outgrew the phone's small store live in its larger one, which
+ * has to be read before anything asks for a shop - so the app waits for it.
+ * For a shop that has never needed the room this is an empty read, a few
+ * milliseconds.
+ */
+onShopStorageWriteFailure(() => {
+  showToast("Not saved: this phone could not keep the last change. Make a backup in Settings, under Data & Storage, then contact support.", "error", 9000);
+});
+
+void hydrateShopStorage().then(() => {
+  const root = document.getElementById("root")!;
+  if (shopStorageBlocked()) {
+    // The shop's records are in the larger store and it would not open. Going
+    // on would show an empty shop and let new records be written where the
+    // real ones belong, so this stops and says so.
+    root.innerHTML = `
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#08080f;color:#f5f5f5;font-family:Inter,system-ui,sans-serif;text-align:center">
+        <div style="max-width:340px">
+          <h1 style="font-size:20px;font-weight:800;margin:0 0 8px">Your records could not be opened</h1>
+          <p style="font-size:14px;line-height:1.5;color:#a1a1aa;margin:0 0 20px">Nothing is lost. The phone's storage did not open this time. Close the app completely and open it again.</p>
+          <button onclick="location.reload()" style="padding:12px 20px;border-radius:12px;border:0;background:#f7c531;color:#08080f;font-weight:800;font-size:14px">Try again</button>
+        </div>
+      </div>`;
+    return;
+  }
+  createRoot(root).render(<App />);
+});
 watchForNotificationOrder();

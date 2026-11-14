@@ -28,6 +28,7 @@ import { hasBusinessModule } from '@/lib/business-runtime';
 import { fingerprintEnrolled, hasPin } from '@/lib/app-lock';
 import { saveLockTimer, getLockTimer, saveSession, clearSession, type LockTimer } from '@/lib/store-session';
 import { rentFrequency } from '@/lib/rent';
+import { shopStorage } from '@/lib/shop-storage';
 
 export type View =
   | 'home' | 'profile' | 'flow' | 'pricing' | 'inventory' | 'savings'
@@ -1001,9 +1002,9 @@ export function useSettings(props: SettingsProps) {
       return showToast('Access code already in use by another store', 'error');
     }
 
-    localStorage.removeItem(STORE_PREFIX + store.accessCode);
+    shopStorage.removeItem(STORE_PREFIX + store.accessCode);
     const updated = { ...store, accessCode: cleanCode };
-    localStorage.setItem(STORE_PREFIX + cleanCode, JSON.stringify(updated));
+    shopStorage.setItem(STORE_PREFIX + cleanCode, JSON.stringify(updated));
     localStorage.setItem('storeflow_active_session', cleanCode);
 
     const updatedIndex = index.map(s => s.code === store.accessCode ? { ...s, code: cleanCode } : s);

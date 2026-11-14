@@ -78,6 +78,7 @@ import { useCelebrationShowing } from '@/lib/celebrations';
 import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { autoSubscribeIfGranted, clearAllStoreFlowNotifications } from '@/lib/push-notifications';
+import { shopStorage } from '@/lib/shop-storage';
 import { forceUnlockBodyScroll } from '@/hooks/use-body-scroll-lock';
 import { saveSession, clearSession, getActiveSession } from '@/lib/store-session';
 import { Settings as SettingsIcon } from 'lucide-react';
@@ -725,7 +726,7 @@ export function useIndexScreen() {
       const latest = loadStore(store.accessCode);
       if (!getPendingStoreSync(store.accessCode) && (!latest || same(latest, local))) {
         const accepted = { ...proposal.store, ...data.data, managerSettings: { ...proposal.store.managerSettings, ...data.data.managerSettings } };
-        localStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(accepted));
+        shopStorage.setItem('storeflow_' + store.accessCode, JSON.stringify(accepted));
         setStore(accepted);
       } else {
         showToast('Order saved. Newer counter records are kept on this device for sync review.', 'info');

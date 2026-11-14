@@ -1,5 +1,6 @@
 import { StoreData } from '@/types/store';
 import { STORE_PREFIX } from './keys';
+import { shopStorage } from '@/lib/shop-storage';
 
 export function generateCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -41,7 +42,7 @@ export function ensureStoreId(store: StoreData): StoreData {
   const updated = { ...store, storeId };
   // Persist immediately to localStorage
   try {
-    localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(updated));
+    shopStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(updated));
   } catch (_) { /* storage quota — non-fatal */ }
   return updated;
 }

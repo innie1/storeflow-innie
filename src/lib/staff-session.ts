@@ -27,6 +27,7 @@ import { deviceKey, readJoin, writeJoin, type JoinRecord } from '@/lib/staff-joi
 import { laundryPaymentsTakenHere, type PaymentTakenHere } from '@/lib/laundry-money';
 import { saveWorkerLockTimer } from '@/lib/store-session';
 import { getServicePricingLabel, getStoredServicePricing } from '@/lib/service-pricing';
+import { shopStorage } from '@/lib/shop-storage';
 
 const SESSION_KEY = 'storeflow_staff_session';
 export const OFFLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -431,7 +432,7 @@ export function forgetWorkerPhone(): void {
   const ref = session?.storeRef || join?.storeRef;
   try {
     if (ref) {
-      localStorage.removeItem(`storeflow_${workerAccessCode(ref)}`);
+      shopStorage.removeItem(`storeflow_${workerAccessCode(ref)}`);
       localStorage.removeItem(sentKey(workerAccessCode(ref)));
     }
   } catch { /* private mode */ }

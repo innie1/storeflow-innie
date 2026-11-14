@@ -1,4 +1,5 @@
 import { StoreData } from '@/types/store';
+import { shopStorage } from '@/lib/shop-storage';
 
 /**
  * The little bit of store state the mascot actually reacts to.
@@ -74,7 +75,7 @@ export function readStoreSignal(): MascotStoreSignal {
       return cached.signal;
     }
 
-    const raw = localStorage.getItem(key);
+    const raw = shopStorage.getItem(key);
     if (!raw) return EMPTY_SIGNAL;
 
     // Deliberately not loadStore(): this must stay a read. loadStore mutates

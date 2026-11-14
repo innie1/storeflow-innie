@@ -9,6 +9,7 @@ import { syncProductPerformance } from './inventory-movements';
 import { generateId, generateStoreUniqueCode, ensureStoreId } from './ids';
 import { upsertStoreIndex } from './store-index';
 import { sumOperatingExpenses } from './money';
+import { shopStorage } from '@/lib/shop-storage';
 
 export function recalculateSavings(store: StoreData): StoreData {
   const goals = getSavingsGoals(store);
@@ -335,7 +336,7 @@ export function retireAdminRole(store: any): any {
   // on every load.
   try {
     if (typeof localStorage !== 'undefined' && migrated.accessCode) {
-      localStorage.setItem(STORE_PREFIX + migrated.accessCode, JSON.stringify(migrated));
+      shopStorage.setItem(STORE_PREFIX + migrated.accessCode, JSON.stringify(migrated));
     }
   } catch { /* private mode: the in-memory copy is still correct */ }
   return migrated;
@@ -346,7 +347,7 @@ export function loadStore(code: string): StoreData | null {
   const journal = localStorage.getItem('storeflow_transfer_journal');
   if (journal) {
     const pair = JSON.parse(journal);
-    for (const value of [pair.source, pair.destination]) localStorage.setItem(STORE_PREFIX + value.accessCode, JSON.stringify(value));
+    for (const value of [pair.source, pair.destination]) shopStorage.setItem(STORE_PREFIX + value.accessCode, JSON.stringify(value));
     localStorage.removeItem('storeflow_transfer_journal');
     saveStore(pair.source, { cloudBase: pair.sourceBase });
     saveStore(pair.destination, { cloudBase: pair.destinationBase });
@@ -354,7 +355,7 @@ export function loadStore(code: string): StoreData | null {
   if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') {
     return null;
   }
-  const data = localStorage.getItem(STORE_PREFIX + code.toUpperCase());
+  const data = shopStorage.getItem(STORE_PREFIX + code.toUpperCase());
   if (!data) return null;
   let store = JSON.parse(data);
 
@@ -409,7 +410,7 @@ function warnStorageFull(): void {
 }
 
 export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean; cloudBase?: StoreData }): void {
-  const before = options?.cloudBase ? JSON.stringify(options.cloudBase) : typeof localStorage !== 'undefined' ? localStorage.getItem(STORE_PREFIX + store.accessCode) : null;
+  const before = options?.cloudBase ? JSON.stringify(options.cloudBase) : typeof localStorage !== 'undefined' ? shopStorage.getItem(STORE_PREFIX + store.accessCode) : null;
   const synced = syncStoreData(store);
   const scheduled = runScheduledSavingsDeduction(synced);
   Object.assign(store, scheduled);
@@ -420,7 +421,7 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean;
 
   if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
     try {
-      localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
+      shopStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
     } catch (error) {
       /*
        * The phone would not keep it, almost always because the browser's

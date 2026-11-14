@@ -3,6 +3,7 @@ import type { StoreData } from '@/types/store';
 import { cloudSnapshot, getPendingStoreSync, inspectStoreConflict, retryStoreSync, STORE_SYNC_EVENT, adoptReviewedCloudCopy, adoptThisDeviceCopy } from '@/lib/store-cloud-sync';
 import { inspectStoreRecords } from '@/lib/store-reconciliation';
 import { showToast } from './Toast';
+import { shopStorage } from '@/lib/shop-storage';
 
 function download(name: string, value: unknown) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
@@ -92,8 +93,8 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
       <button className="underline" onClick={() => download(`storeflow-record-checks-${store.accessCode}.json`, { date: new Date().toISOString(), issues })}>Download findings</button>
       {issues.length ? <ul className="space-y-2 max-h-72 overflow-auto">{issues.map((issue, index) => <li key={`${issue.id}-${index}`} className="border-b pb-2"><strong>{issue.record}</strong>: {issue.issue}<p className="text-muted-foreground">{issue.fix}</p></li>)}</ul> : <p>No discrepancies found by these checks. Historical records may still need receipt and stock-count verification.</p>}
       <button className="underline" onClick={() => {
-        const copies = Object.keys(localStorage).filter(key => key.startsWith(`storeflow_sync_archive_${store.accessCode}_`)).map(key => {
-          const held = JSON.parse(localStorage.getItem(key)!);
+        const copies = shopStorage.keys().filter(key => key.startsWith(`storeflow_sync_archive_${store.accessCode}_`)).map(key => {
+          const held = JSON.parse(shopStorage.getItem(key)!);
           return { savedAt: key.split('_').pop(), base: held.base ? cloudSnapshot(held.base) : undefined, device: cloudSnapshot(held.next), uncertainCheckout: held.uncertainCheckout ? cloudSnapshot(held.uncertainCheckout) : undefined };
         });
         if (!copies.length) return showToast('No archived recovery copies on this device.', 'info');

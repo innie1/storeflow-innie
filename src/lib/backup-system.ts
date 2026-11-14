@@ -1,5 +1,6 @@
 import { StoreData, Product, Sale, Expense, PendingPayment, DEFAULT_MANAGER_SETTINGS } from '@/types/store';
 import { saveLocalBackup, getLocalBackups, deleteLocalBackup } from './backup-db';
+import { shopStorage } from '@/lib/shop-storage';
 
 const BACKUP_PREFIX = 'storeflow_';
 
@@ -23,8 +24,10 @@ export function compileBackupPayload(): BackupPayload {
   let lockTimer = undefined;
   let theme = undefined;
 
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
+  // Every key, including a shop whose records have moved to the phone's
+  // larger store: a backup that read the small store alone would leave the
+  // biggest shops out of their own backups.
+  for (const key of shopStorage.keys()) {
     if (!key) continue;
 
     // The shop's own records. A device secret never goes in, and the keys with
@@ -32,7 +35,7 @@ export function compileBackupPayload(): BackupPayload {
     // be swallowed here, which is why theme, low stock and the lock timer were
     // never actually filled in.
     if (key.startsWith('storeflow_') && !isDeviceSecretKey(key) && !KEYS_WITH_OWN_FIELD.has(key)) {
-      stores[key] = localStorage.getItem(key) || '';
+      stores[key] = shopStorage.getItem(key) || '';
     } else if (key === 'storeflow_index') {
       index = localStorage.getItem(key) || '[]';
     } else if (key === 'storeflow_flow_memory') {
@@ -293,10 +296,10 @@ export function restoreBackupPayload(payload: BackupPayload): {
       continue;
     }
 
-    const localStoreRaw = localStorage.getItem(storeKey);
+    const localStoreRaw = shopStorage.getItem(storeKey);
     if (!localStoreRaw) {
       // The store does not exist locally. We import it fully as-is!
-      localStorage.setItem(storeKey, JSON.stringify(backupStore));
+      shopStorage.setItem(storeKey, JSON.stringify(backupStore));
       
       // Calculate imported stats
       productsMerged += backupStore.products?.length || 0;
@@ -408,7 +411,7 @@ export function restoreBackupPayload(payload: BackupPayload): {
         managerSettings: { ...DEFAULT_MANAGER_SETTINGS, ...(backupStore.managerSettings || {}), ...(localStore.managerSettings || {}) },
       };
 
-      localStorage.setItem(storeKey, JSON.stringify(updatedStore));
+      shopStorage.setItem(storeKey, JSON.stringify(updatedStore));
       storesRestoredCount++;
     }
   }
@@ -430,9 +433,9 @@ export function restoreBackupPayload(payload: BackupPayload): {
     if (isDeviceSecretKey(key)) continue;
     const bare = key.replace(/^storeflow_(store_)?/, '').toUpperCase();
     if (restoredCodes.has(bare)) continue; // the store record itself, merged above
-    if (localStorage.getItem(key) !== null) continue;
+    if (shopStorage.getItem(key) !== null) continue;
     try {
-      localStorage.setItem(key, value);
+      shopStorage.setItem(key, value);
       domainsRestored++;
     } catch { /* storage full */ }
   }

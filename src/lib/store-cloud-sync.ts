@@ -3,6 +3,7 @@ import { same, serializeStoreSync } from './store-sync-guard';
 import { prepareStoreForMarketplacePublish } from './marketplace-publish';
 import { generateStoreUrl } from './qr-code';
 import { cloudNotReached, cloudRecentlyUnreachable, counterDeadline, noteCloudUnreachable } from './cloud-reach';
+import { shopStorage } from '@/lib/shop-storage';
 
 export const STORE_SYNC_EVENT = 'storeflow:sync-state';
 /*
@@ -57,12 +58,12 @@ function storeInCloud(code: string): boolean {
   try { return localStorage.getItem(knownKey(code)) === '1'; } catch { return false; }
 }
 function readShop(code: string): StoreData | null {
-  const raw = localStorage.getItem(`storeflow_${code}`);
+  const raw = shopStorage.getItem(`storeflow_${code}`);
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
 }
 export function getPendingStoreSync(code: string): PendingStoreSync | null {
-  const raw = localStorage.getItem(keyFor(code));
+  const raw = shopStorage.getItem(keyFor(code));
   if (!raw) return null;
   let held: Partial<PendingStoreSync>;
   try { held = JSON.parse(raw); }
@@ -83,7 +84,7 @@ function writePending(code: string, pending: PendingStoreSync) {
   const { next: _readFromShop, ...kept } = pending;
   // A shop that has only ever lived on this phone has no cloud copy to compare against.
   if (kept.awaitingAccount && !storeInCloud(code)) delete kept.base;
-  localStorage.setItem(keyFor(code), JSON.stringify(kept));
+  shopStorage.setItem(keyFor(code), JSON.stringify(kept));
   signal(code);
 }
 /** Only public application data crosses the network; local credentials stay local. */
@@ -199,7 +200,7 @@ export async function retryStoreSync(code: string, options: { settleOlderCloud?:
           }
           // Only older: this phone's copy goes up over it, as changes to it.
           // The cloud's copy is kept here first - a quota error stops this.
-          localStorage.setItem(`storeflow_sync_archive_${code}_${Date.now()}`, JSON.stringify({ next: existing.data, cloudCopy: true }));
+          shopStorage.setItem(`storeflow_sync_archive_${code}_${Date.now()}`, JSON.stringify({ next: existing.data, cloudCopy: true }));
           base = existing.data;
         }
         const { data, error } = await (supabase as any).rpc('commit_store_snapshot', {
@@ -227,14 +228,14 @@ export async function retryStoreSync(code: string, options: { settleOlderCloud?:
       // It reached the cloud, so whatever this record said about waiting for an
       // account is out of date.
       if (latest?.awaitingAccount) writePending(code, { ...latest, awaitingAccount: false });
-      const localRaw = localStorage.getItem(`storeflow_${code}`);
+      const localRaw = shopStorage.getItem(`storeflow_${code}`);
       const local = localRaw ? JSON.parse(localRaw) : held.next;
       if (latest && same(latest.next, held.next) && (same(local, held.next) || same(local, held.base))) {
         const accepted = { ...held.next, ...remote } as StoreData;
         // Keep nested local-only credentials too.
         accepted.managerSettings = { ...held.next.managerSettings, ...remote.managerSettings };
-        localStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
-        localStorage.removeItem(keyFor(code));
+        shopStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
+        shopStorage.removeItem(keyFor(code));
         signal(code, accepted);
       } else if (latest) {
         // The upload succeeded while a newer local edit was being made. Advance
@@ -291,11 +292,11 @@ export async function adoptReviewedCloudCopy(code: string, reviewed: Awaited<Ret
       const latest = getPendingStoreSync(code);
       if (!latest || !same(latest.next, reviewed.next)) throw new Error('Local records changed. Review the comparison again.');
       // A quota error aborts recovery: never discard a copy that could not be retained.
-      localStorage.setItem(`storeflow_sync_archive_${code}_${Date.now()}`, JSON.stringify(latest));
+      shopStorage.setItem(`storeflow_sync_archive_${code}_${Date.now()}`, JSON.stringify(latest));
       const remote = data.data as unknown as StoreData;
       const accepted = { ...latest.next, ...remote, managerSettings: { ...latest.next.managerSettings, ...remote.managerSettings } };
-      localStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
-      localStorage.removeItem(keyFor(code));
+      shopStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
+      shopStorage.removeItem(keyFor(code));
       signal(code, accepted);
       resolve(accepted);
     }).catch(reject);
@@ -328,15 +329,15 @@ export async function adoptThisDeviceCopy(code: string, reviewed: Awaited<Return
       if (error) throw error;
       if (!same(row.data, reviewed.remote)) throw new Error('Cloud records changed. Review the comparison again.');
       // A quota error aborts this: never overwrite a copy that could not be kept.
-      localStorage.setItem(`storeflow_sync_archive_${code}_${Date.now()}`, JSON.stringify({ next: row.data, cloudCopy: true }));
+      shopStorage.setItem(`storeflow_sync_archive_${code}_${Date.now()}`, JSON.stringify({ next: row.data, cloudCopy: true }));
       const { data, error: commitError } = await (supabase as any).rpc('commit_store_snapshot', {
         p_store_id: row.id, p_base: row.data, p_next: cloudSnapshot(current.next), p_reply: 'changes',
       });
       if (commitError) throw commitError;
       const remote = (data?.data || {}) as Record<string, any>;
       const accepted = { ...current.next, ...remote, managerSettings: { ...current.next.managerSettings, ...remote.managerSettings } } as StoreData;
-      localStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
-      localStorage.removeItem(keyFor(code));
+      shopStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
+      shopStorage.removeItem(keyFor(code));
       markStoreInCloud(code);
       signal(code, accepted);
       resolve(accepted);
@@ -347,15 +348,15 @@ export async function adoptThisDeviceCopy(code: string, reviewed: Awaited<Return
 export async function refreshStoreFromCloud(code: string): Promise<void> {
   return serializeStoreSync(code, async () => {
     if (getPendingStoreSync(code)) throw new Error('Resolve pending sync before refreshing cloud records.');
-    const before = localStorage.getItem(`storeflow_${code}`);
+    const before = shopStorage.getItem(`storeflow_${code}`);
     if (!before) return;
     const { supabase } = await import('@/integrations/supabase/client');
     const { data, error } = await supabase.from('stores').select('data').eq('access_code', code).single();
     if (error) throw error;
-    if (getPendingStoreSync(code) || localStorage.getItem(`storeflow_${code}`) !== before) throw new Error('Local records changed during refresh. Try again after syncing.');
+    if (getPendingStoreSync(code) || shopStorage.getItem(`storeflow_${code}`) !== before) throw new Error('Local records changed during refresh. Try again after syncing.');
     const local = JSON.parse(before), remote = data.data as unknown as StoreData;
     const accepted = { ...local, ...remote, managerSettings: { ...local.managerSettings, ...remote.managerSettings } };
-    localStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
+    shopStorage.setItem(`storeflow_${code}`, JSON.stringify(accepted));
     signal(code, accepted);
   });
 }

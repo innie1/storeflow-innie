@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { speakAsFlow, stopFlowVoice, type FlowVoiceGender } from '@/lib/flow-voice';
+import { shopStorage } from '@/lib/shop-storage';
 
 // ─── Notification Drawer removed inline ──────────────────────────────────────
 
@@ -37,7 +38,7 @@ export function Typewriter({ text, speed = 50, speak = false }: { text: string; 
       const sessionRaw = localStorage.getItem('storeflow_session');
       if (sessionRaw) {
         const session = JSON.parse(sessionRaw);
-        const activeStoreRaw = localStorage.getItem(`storeflow_${session.accessCode}`);
+        const activeStoreRaw = shopStorage.getItem(`storeflow_${session.accessCode}`);
         if (activeStoreRaw) {
           const saved = JSON.parse(activeStoreRaw)?.managerSettings?.voiceGender;
           if (saved) gender = saved as FlowVoiceGender;

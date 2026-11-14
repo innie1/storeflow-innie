@@ -58,3 +58,19 @@ returns the entry file followed by every file in its parts folder, in name
 order. Moving code into a part therefore does not break a test that looks
 for it. A test that checks the order of two things in one file should read
 that file by its own path.
+
+## Where the shop's records are kept
+
+The shop's records, the spare copies cloud sync keeps, and the laundry bundle
+records are read and written through `shopStorage` (`src/lib/shop-storage.ts`),
+never through `localStorage` directly.
+
+- While an entry fits in the browser's small store (about 5 MB for the whole
+  app) it stays there, written at once, as it always was.
+- The first time the small store has no room for an entry, that entry moves to
+  the phone's larger store (IndexedDB) for good. It is read from memory, which
+  `main.tsx` fills before the app draws, and each change is written through.
+
+`shopStorage` has `getItem`, `setItem`, `removeItem` and `keys()`. Use `keys()`
+rather than looping over `localStorage`, or a shop that has moved is missed.
+Small settings (theme, session, lock timer) stay on `localStorage`.
