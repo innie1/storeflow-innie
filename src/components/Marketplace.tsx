@@ -222,18 +222,15 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
     showToast('Claimed Daily login reward! +50 FLOW.', 'success');
   };
 
+  /*
+   * Redeeming took the coins and said "check your email/notifications for
+   * instructions" - and nothing was ever sent: no email, no apron, no ad
+   * credit, no premium month. A shop paid 1,000 FLOW for a promise nobody was
+   * keeping. Until a reward can really be delivered, nothing is taken and the
+   * app says so.
+   */
   const handleRedeem = (item: typeof REDEEMABLES[0]) => {
-    if (coinsBalance < item.cost) {
-      showToast('Insufficient FLOW balance!', 'error');
-      return;
-    }
-    const updated = {
-      ...store,
-      coins: coinsBalance - item.cost,
-    };
-    onUpdate(updated);
-    saveStore(updated);
-    showToast(`🎉 Redeemed: ${item.name}! Check your email/notifications for instructions.`, 'success');
+    showToast(`${item.name} is not open yet. Your FLOW has not been touched.`, 'info');
   };
 
   const openAddInventoryModal = (name: string, costPrice: number, category: string) => {
@@ -1213,6 +1210,10 @@ export default function Marketplace({ store, onUpdate }: MarketplaceProps) {
                 <span>{coinsBalance} FLOW</span>
               </div>
             </div>
+
+            <p className="text-[11px] text-muted-foreground text-center">
+              Rewards are not open yet. Keep earning: nothing is taken from your balance until they are.
+            </p>
 
             <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
               {REDEEMABLES.map(item => {

@@ -396,6 +396,18 @@ export function loadStore(code: string): StoreData | null {
   return store;
 }
 
+let warnedStorageFull = 0;
+/** Said at most once a minute, so a burst of saves is one message, not ten. */
+function warnStorageFull(): void {
+  if (Date.now() - warnedStorageFull < 60_000) return;
+  warnedStorageFull = Date.now();
+  void import('@/components/Toast').then(({ showToast }) => showToast(
+    "Not saved: this phone has no room left for the shop's records. Make a backup in Settings, under Data & Storage, then contact support.",
+    'error',
+    9000,
+  )).catch(() => {});
+}
+
 export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean; cloudBase?: StoreData }): void {
   const before = options?.cloudBase ? JSON.stringify(options.cloudBase) : typeof localStorage !== 'undefined' ? localStorage.getItem(STORE_PREFIX + store.accessCode) : null;
   const synced = syncStoreData(store);
@@ -407,7 +419,19 @@ export function saveStore(store: StoreData, options?: { skipCloudSync?: boolean;
   store.trash = trash;
 
   if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
-    localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
+    try {
+      localStorage.setItem(STORE_PREFIX + store.accessCode, JSON.stringify(store));
+    } catch (error) {
+      /*
+       * The phone would not keep it, almost always because the browser's
+       * storage for this app is full. This threw with nothing said: the tap
+       * simply did nothing, and a shopkeeper had no way to know the sale was
+       * not kept. It still stops here - carrying on as though it had saved
+       * would be worse - but now it says why, and what to do.
+       */
+      warnStorageFull();
+      throw error;
+    }
   }
   if (store.managerSettings?.autoBackupsEnabled !== false) {
     createAutoBackupSnapshot().catch(() => {});

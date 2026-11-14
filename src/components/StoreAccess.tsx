@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import Mascot from '@/components/Mascot';
 import { Users, Cloud } from 'lucide-react';
 import JoinStore from '@/components/staff/JoinStore';
@@ -15,7 +16,13 @@ import AuthStoreCreateStep from './store-access/AuthStoreCreateStep';
 import CreateStoreStep from './store-access/CreateStoreStep';
 import SetupSecurityStep from './store-access/SetupSecurityStep';
 import AccessCodeStep from './store-access/AccessCodeStep';
-import AccessQrScanner from './store-access/AccessQrScanner';
+/*
+ * The camera scanner brings a 330 kB scanning library with it. Imported
+ * plainly it rode in the startup file, so every phone downloaded and parsed
+ * it on every launch to serve the few who scan a code to sign in. It loads
+ * when the scanner is opened now.
+ */
+const AccessQrScanner = lazy(() => import('./store-access/AccessQrScanner'));
 import PasswordLoginStep from './store-access/PasswordLoginStep';
 import PinLoginStep from './store-access/PinLoginStep';
 import RecoveryStep from './store-access/RecoveryStep';
@@ -187,7 +194,7 @@ export default function StoreAccess(props: StoreAccessProps) {
         {mode === 'access' && <AccessCodeStep s={s} />}
 
         {/* QR Scanner Overlay for Store Identification */}
-        {showQRScanner && <AccessQrScanner s={s} />}
+        {showQRScanner && <Suspense fallback={null}><AccessQrScanner s={s} /></Suspense>}
 
         {mode === 'login-select' && (
           <div className="space-y-4 text-left">
