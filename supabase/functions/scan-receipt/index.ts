@@ -1,4 +1,26 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// scan-receipt
+//
+// Reads a photograph of a supplier's receipt and returns the products on it,
+// so a shop can add what it bought to its stock without typing each line.
+//
+// The picture is read by Claude. Only a signed-in merchant may call this: it
+// spends the project's AI credit, and an open endpoint would let anybody with
+// the address spend it too.
+//
+// Required secret: ANTHROPIC_API_KEY
+// Already-available secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import Anthropic from "npm:@anthropic-ai/sdk";
+import {
+  bareBase64,
+  cleanReceipt,
+  imageMediaType,
+  MAX_IMAGE_BASE64_CHARS,
+  RECEIPT_INSTRUCTIONS,
+  RECEIPT_SCHEMA,
+} from "./receipt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,154 +28,86 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+const reply = (status: number, body: Record<string, unknown>) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") return reply(405, { error: "Send the receipt as a POST" });
 
   try {
-    const { imageBase64 } = await req.json();
-    if (!imageBase64) {
-      return new Response(JSON.stringify({ error: "No image provided" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Who is asking. The anonymous key every visitor holds is not a person.
+    const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: userData } = token ? await supabase.auth.getUser(token) : { data: null };
+    if (!userData?.user?.id) return reply(401, { error: "Sign in to your StoreFlow account to scan receipts." });
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "API key not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey) return reply(503, { error: "Receipt scanning is not switched on yet." });
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    const body = await req.json().catch(() => null);
+    const image = bareBase64(body?.imageBase64);
+    if (!image) return reply(400, { error: "No image provided" });
+    if (image.length > MAX_IMAGE_BASE64_CHARS) return reply(413, { error: "That picture is too large. Take it again a little further away." });
+    const mediaType = imageMediaType(image);
+    if (!mediaType) return reply(415, { error: "That file is not a picture this can read. Use a photo or a screenshot." });
+
+    const client = new Anthropic({ apiKey });
+    const response = await client.beta.messages.create({
+      model: "claude-opus-5-5",
+      max_tokens: 16000,
+      // A declined request is retried on another model inside the same call.
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      system: RECEIPT_INSTRUCTIONS,
+      output_config: {
+        effort: "medium",
+        format: { type: "json_schema", schema: RECEIPT_SCHEMA },
       },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `You are a receipt/invoice scanner. Extract all items from the receipt image.
-For each item, extract:
-- name: the product name (clean, readable)
-- costPrice: estimated cost price (use 60-70% of selling price if not shown)
-- sellingPrice: the price shown on receipt
-- quantity: the quantity purchased (default 1 if not shown)
-- category: categorize as one of: Groceries, Beverages, Toiletries, Snacks, Bakery, Baby, General
-
-You MUST respond with ONLY a valid JSON object, no markdown, no explanation. Format:
-{"items": [{"name": "...", "costPrice": 0, "sellingPrice": 0, "quantity": 0, "category": "..."}]}
-
-If you cannot read the receipt clearly, return: {"items": [], "error": "Could not read receipt clearly"}`,
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extract all items from this receipt/invoice image. Return JSON only.",
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
-                },
-              },
-            ],
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "extract_receipt_items",
-              description: "Extract items from a receipt image",
-              parameters: {
-                type: "object",
-                properties: {
-                  items: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        name: { type: "string" },
-                        costPrice: { type: "number" },
-                        sellingPrice: { type: "number" },
-                        quantity: { type: "number" },
-                        category: { type: "string", enum: ["Groceries", "Beverages", "Toiletries", "Snacks", "Bakery", "Baby", "General"] },
-                      },
-                      required: ["name", "costPrice", "sellingPrice", "quantity", "category"],
-                      additionalProperties: false,
-                    },
-                  },
-                  error: { type: "string" },
-                },
-                required: ["items"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "extract_receipt_items" } },
-      }),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
+            { type: "text", text: "List the products on this receipt." },
+          ],
+        },
+      ],
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds in Settings > Workspace > Usage." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "Failed to process receipt" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (response.stop_reason === "refusal") {
+      return reply(200, { items: [], error: "This picture could not be read as a receipt." });
+    }
+    if (response.stop_reason === "max_tokens") {
+      return reply(200, { items: [], error: "This receipt is too long to read in one go. Photograph it in two halves." });
     }
 
-    const data = await response.json();
-    
-    // Extract from tool call response
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      const parsed = JSON.parse(toolCall.function.arguments);
-      return new Response(JSON.stringify(parsed), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const text = response.content.flatMap(block => (block.type === "text" ? [block.text] : [])).join("");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      console.error("scan-receipt: reply was not JSON", text.slice(0, 200));
+      return reply(200, { items: [], error: "Could not read the receipt. Try a clearer picture." });
     }
-
-    // Fallback: try to parse from content
-    const content = data.choices?.[0]?.message?.content || "";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return new Response(JSON.stringify(parsed), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    return reply(200, cleanReceipt(parsed));
+  } catch (error) {
+    if (error instanceof Anthropic.RateLimitError) {
+      return reply(429, { error: "Too many receipts at once. Try again in a moment." });
     }
-
-    return new Response(JSON.stringify({ items: [], error: "Could not parse receipt" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("scan-receipt error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+      console.error("scan-receipt: the AI key was refused", error.status);
+      return reply(503, { error: "Receipt scanning is not switched on yet." });
+    }
+    if (error instanceof Anthropic.BadRequestError) {
+      console.error("scan-receipt: request refused", error.message);
+      return reply(400, { error: "That picture could not be read. Try a clearer one." });
+    }
+    if (error instanceof Anthropic.APIError) {
+      console.error("scan-receipt: AI error", error.status, error.message);
+      return reply(502, { error: "Receipt scanning is having trouble. Try again shortly." });
+    }
+    console.error("scan-receipt error:", error);
+    return reply(500, { error: "Could not scan the receipt." });
   }
 });

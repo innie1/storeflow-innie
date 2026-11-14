@@ -6,6 +6,7 @@ import { showToast } from '@/components/Toast';
 import { supabase } from '@/integrations/supabase/client';
 import { interpretProductName, lookupStoreMemory } from '@/lib/import-intel';
 import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock';
+import { downscaleImageToDataUrl } from '@/lib/downscale-image';
 
 interface ScannedItem {
   name: string;
@@ -201,13 +202,13 @@ export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, 
     setItems([]);
 
     try {
-      const base64 = await fileToBase64(file);
+      const base64 = await receiptImageBase64(file);
 
       const { data, error: fnError } = await supabase.functions.invoke('scan-receipt', {
         body: { imageBase64: base64 },
       });
 
-      if (fnError) throw new Error(fnError.message || 'Scan failed');
+      if (fnError) throw new Error(await scanErrorMessage(fnError));
       if (data?.error) throw new Error(data.error);
 
       if (data?.items?.length > 0) {
@@ -1050,6 +1051,39 @@ export default function ReceiptScanner({ store, onUpdate, onClose, currentUser, 
       </div>
     </div>
   );
+}
+
+/**
+ * The receipt, small enough to send.
+ *
+ * A phone photographs a receipt at four to twelve megabytes, and that went up
+ * whole: slow on a market's connection, and over the size the scanner
+ * accepts. Print stays readable at 1,600 pixels on the long edge, which is a
+ * few hundred kilobytes. If the picture cannot be shrunk it goes as it is.
+ */
+async function receiptImageBase64(file: File): Promise<string> {
+  try {
+    const dataUrl = await downscaleImageToDataUrl(file, { maxEdge: 1600, quality: 0.85 });
+    const comma = dataUrl.indexOf(',');
+    if (comma > 0) return dataUrl.slice(comma + 1);
+  } catch { /* fall through to the original file */ }
+  return fileToBase64(file);
+}
+
+/**
+ * Why the scan was refused, in the scanner's own words.
+ *
+ * A refusal used to read "Edge Function returned a non-2xx status code",
+ * whatever the reason. The reason is in the reply: not signed in, the picture
+ * too large, scanning not switched on.
+ */
+async function scanErrorMessage(error: { message?: string; context?: unknown }): Promise<string> {
+  try {
+    const context = error.context as Response | undefined;
+    const body = context && typeof context.json === 'function' ? await context.json() : null;
+    if (body?.error) return String(body.error);
+  } catch { /* the reply had no readable body */ }
+  return 'The scan could not be done. Check your connection and try again.';
 }
 
 function fileToBase64(file: File): Promise<string> {
