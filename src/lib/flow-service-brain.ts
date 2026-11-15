@@ -4,6 +4,7 @@ import { debtorKey } from '@/lib/customer-key';
 import { hasGoneQuiet, quietAfterDays, usualGapDays } from '@/lib/customer-rhythm';
 import { getBusinessTemplate, isServiceFirstBusiness, resolveBusinessType } from '@/lib/business-runtime';
 import { laundryFlow, type FlowBundle, type FlowRange } from '@/lib/laundry-flow';
+import { splitOwed } from '@/lib/owed';
 
 
 /**
@@ -75,9 +76,12 @@ export function serviceSnapshot(store: StoreData): ServiceSnapshot {
 
 const money = (value: number) => `₦${Math.round(value || 0).toLocaleString()}`;
 
-/** Unsettled balances, wherever they came from. */
+/**
+ * Unsettled balances on work that has been handed over. A balance on clothes
+ * still in the shop is to be paid on collection, not owed (src/lib/owed.ts).
+ */
 function openDebts(store: StoreData) {
-  return (store.pendingPayments || []).filter(payment => payment.status === 'pending' && Number(payment.balance) > 0);
+  return splitOwed(store).debts.filter(payment => Number(payment.balance) > 0);
 }
 
 const normaliseName = (value: unknown) => String(value || '').trim().toLowerCase();
@@ -178,7 +182,7 @@ export function clothesRecommendation(store: StoreData): string | null {
   if (resolveBusinessType(store) !== 'laundry' || store.staffDevice || !store.accessCode) return null;
   const flow = laundryFlow(store, shopLaundryRecords(String(store.accessCode)) as unknown as FlowBundle[], '30d');
   if (flow.bundles < 3 || flow.paidShare >= 50) return null;
-  return `Get paid for the work you have done: only **${flow.paidShare}%** of the clothes brought in have been paid for, and **${money(flow.owedOnThese)}** is still owed. Remind whoever has clothes ready, and ask for a deposit at drop-off.`;
+  return `Get paid for the work you have done: only **${flow.paidShare}%** of the clothes brought in have been paid for, and **${money(flow.owedOnThese)}** is not paid yet. Remind whoever has clothes ready, and ask for a deposit at drop-off.`;
 }
 
 /** What is on the floor, replacing the stock answer. */

@@ -121,8 +121,9 @@ describe('what is waiting to be collected', () => {
     expect(board.waitingCount).toBe(2);
     expect(board.waitingValue).toBe(3_000);
     expect(board.waitingUnpaid).toBe(1_500);
-    // Owed still counts the bundle that left unpaid; waiting does not.
-    expect(board.owed).toBe(4_500);
+    // Owed is the bundle that left unpaid, and only that one: the ₦1,500 on
+    // the bundle still on the shelf is to be paid on collection.
+    expect(board.owed).toBe(3_000);
   });
 
   it('is shown on the home screen and on Analysis', () => {

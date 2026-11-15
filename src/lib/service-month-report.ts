@@ -141,7 +141,7 @@ function summarise(part: {
   if (part.jobs === 0 && part.revenue === 0) return 'No work recorded this month.';
 
   const work = part.jobs > 0
-    ? ` You took in ${part.jobs} ${part.jobs === 1 ? 'drop-off' : 'drop-offs'} (${part.pieces} ${part.pieces === 1 ? 'piece' : 'pieces'}) worth ${money(part.workTakenIn)}${part.owed > 0 ? `, ${money(part.owed)} of it still owed` : ''}.`
+    ? ` You took in ${part.jobs} ${part.jobs === 1 ? 'drop-off' : 'drop-offs'} (${part.pieces} ${part.pieces === 1 ? 'piece' : 'pieces'}) worth ${money(part.workTakenIn)}${part.owed > 0 ? `, ${money(part.owed)} of it not paid yet` : ''}.`
     : '';
   const took = `You received ${money(part.revenue)} this month.${work}`;
   const costs = `Running the shop cost ${money(part.fixedCosts)}, and the washing itself ${money(part.variableCosts)}.`;

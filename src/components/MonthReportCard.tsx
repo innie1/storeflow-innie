@@ -93,7 +93,7 @@ export default function MonthReportCard({ store, canSeeMoney }: Props) {
             <Row label="Pieces" value={String(shown.pieces)} />
             <Row label="Average drop-off" value={money(shown.averageJob)} />
             {!legacy && <Row label="Work taken in" value={money(shown.workTakenIn)} />}
-            {!legacy && shown.owed > 0 && <Row label="Still owed on it" value={money(shown.owed)} tone="text-warning" />}
+            {!legacy && shown.owed > 0 && <Row label="Not paid yet" value={money(shown.owed)} tone="text-warning" />}
             <Row
               label="Costs covered on"
               value={shown.breakEvenOn ? new Date(shown.breakEvenOn).toLocaleDateString() : 'Not yet'}

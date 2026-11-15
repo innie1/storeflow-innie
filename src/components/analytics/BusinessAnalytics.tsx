@@ -409,7 +409,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
                     <div className="text-right shrink-0">
                       <p className="font-display font-black text-sm text-success">{naira(day.received)}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        received{day.owedOnDay > 0 ? ` · ${naira(day.owedOnDay)} owed` : ''}
+                        received{day.owedOnDay > 0 ? ` · ${naira(day.owedOnDay)} not paid` : ''}
                       </p>
                     </div>
                   </div>

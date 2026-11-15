@@ -108,7 +108,8 @@ describe('what a customer means to the shop', () => {
     const history = customerHistory(store, musaWithNumber, [fromCloud('o1', 'BBBBB1', 'Musa Bello', '08011111111', { workflow_stage: 'collected' })], NOW);
 
     expect(history.broughtIn).toBe(1900);
-    expect(history.owes).toBe(600);
+    // The ₦600 is on a bundle still in the shop: to be paid on collection, not owed.
+    expect(history.owes).toBe(0);
     expect(history.dropOffs).toBe(2);
     expect(history.pieces).toBe(5);
     expect(history.waitingCount).toBe(1);

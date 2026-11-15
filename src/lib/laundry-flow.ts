@@ -122,8 +122,8 @@ function tellStory(flow: Omit<LaundryFlow, 'story'>): string[] {
   const story = [
     `${when}, ${plural(flow.bundles, 'bundle')} (${plural(flow.pieces, 'piece')}) worth ${naira(flow.broughtIn)} came in.`,
     flow.paidOnThese > 0
-      ? `${naira(flow.paidOnThese)} of that has been paid (${flow.paidShare}%), and ${naira(flow.owedOnThese)} is still owed.`
-      : `None of that has been paid yet, so ${naira(flow.owedOnThese)} is still owed.`,
+      ? `${naira(flow.paidOnThese)} of that has been paid (${flow.paidShare}%), and ${naira(flow.owedOnThese)} is not paid yet.`
+      : `None of that has been paid yet, so ${naira(flow.owedOnThese)} is waiting to be paid.`,
     `${flow.customersPaid} of the ${plural(flow.customersBrought, 'customer')} who brought clothes ${flow.customersPaid === 1 ? 'has' : 'have'} paid something.`,
   ];
   if (flow.busiestWeekday) story.push(`Clothes come in most on ${flow.busiestWeekday.name}: ${plural(flow.busiestWeekday.bundles, 'bundle')}.`);

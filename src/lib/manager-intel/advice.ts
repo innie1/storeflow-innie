@@ -82,7 +82,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
         id: 'laundry-clothes-not-paid',
         icon: '🧺',
         title: `Only ${flow.paidShare}% of the clothes brought in have been paid for`,
-        detail: `In the last 30 days, ${flow.bundles} bundles worth ₦${Math.round(flow.broughtIn).toLocaleString()} came in, and ₦${Math.round(flow.owedOnThese).toLocaleString()} of that is still owed. ${flow.customersBrought - flow.customersPaid} of the ${flow.customersBrought} customers have not paid anything yet.`,
+        detail: `In the last 30 days, ${flow.bundles} bundles worth ₦${Math.round(flow.broughtIn).toLocaleString()} came in, and ₦${Math.round(flow.owedOnThese).toLocaleString()} of that has not been paid yet. ${flow.customersBrought - flow.customersPaid} of the ${flow.customersBrought} customers have not paid anything yet.`,
         priority: 'high',
         action: 'Remind customers whose clothes are ready, and take a deposit at drop-off.',
         goTo: 'laundry-records',

@@ -302,7 +302,7 @@ export function laundryFlowNote(store: StoreData, now: string): FlowNotification
    * tell. It also ran to four sentences in a panel meant to be glanced at.
    */
   const title = `Last 7 days: ${flow.bundles} ${flow.bundles === 1 ? 'bundle' : 'bundles'} came in`;
-  const line = `Worth ₦${Math.round(flow.broughtIn).toLocaleString()}. ₦${Math.round(flow.moneyIn).toLocaleString()} received, ₦${Math.round(flow.owedOnThese).toLocaleString()} still owed.`;
+  const line = `Worth ₦${Math.round(flow.broughtIn).toLocaleString()}. ₦${Math.round(flow.moneyIn).toLocaleString()} received, ₦${Math.round(flow.owedOnThese).toLocaleString()} not paid yet.`;
   return {
     id: `laundry-flow-${week}`,
     icon: '🧺',

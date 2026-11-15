@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { StoreData } from '@/types/store';
-import { RANGES, rangeDates, revenueInRange, type Range } from '@/lib/revenue-window';
+import { RANGES, olderWorkInRange, rangeDates, rangeInWords, revenueInRange, type Range } from '@/lib/revenue-window';
+import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 
 /**
  * Revenue, over whichever stretch is being asked about.
@@ -37,6 +38,8 @@ interface Props {
 export default function RevenueCard({ store, trailing, children, compact = false }: Props) {
   const [range, setRange] = useState<Range>('week');
   const total = useMemo(() => revenueInRange(store, range), [store, range]);
+  const laundryVersion = useShopLaundryVersion();
+  const older = useMemo(() => olderWorkInRange(store, range), [store, range, laundryVersion]);
   const label = RANGES.find(option => option.id === range)?.label || '';
   const dates = rangeDates(range);
 
@@ -70,6 +73,17 @@ export default function RevenueCard({ store, trailing, children, compact = false
             ₦{Math.round(total).toLocaleString()}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">Received · {dates}</p>
+          {/*
+            Money counts in the stretch it is paid, so some of this is older
+            clothes being paid for. Said here, where the figure is, so a week
+            of old debts coming home is not read as a week of new work. The
+            full split is on Analysis.
+          */}
+          {older > 0 && !compact && (
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+              ₦{Math.round(older).toLocaleString()} of it for clothes brought in before {rangeInWords(range)}
+            </p>
+          )}
         </div>
         {trailing}
       </div>

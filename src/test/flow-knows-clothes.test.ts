@@ -121,7 +121,7 @@ describe('what Flow tells the owner', () => {
     // One line, named for the seven days it counts, not "this week".
     expect(first).toMatchObject({ title: 'Last 7 days: 6 bundles came in', tone: 'warning', category: 'insight', actionTab: 'laundry-records' });
     expect(first?.description).toContain('Worth ₦21,700.');
-    expect(first?.description).toContain('still owed.');
+    expect(first?.description).toContain('not paid yet.');
     expect(note(shop())?.id).toBe(first?.id);
   });
 

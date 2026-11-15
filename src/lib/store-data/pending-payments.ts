@@ -13,6 +13,7 @@ import type { PendingPayment, PaymentMethod } from '@/types/store';
 import { syncProductPerformance } from './inventory-movements';
 import { saveStore } from './load-save';
 import { recordSale } from './sales';
+import { splitOwed } from '@/lib/owed';
 
 export function pid(): string { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -209,8 +210,19 @@ export function wasEverOwed(payment: PendingPayment): boolean {
 }
 
 export function getPendingSummary(store: StoreData) {
-  const list = (store.pendingPayments || []).filter(p => p.status === 'pending');
+  /*
+   * Owed is what has been handed over and not paid for. A balance on clothes
+   * still in the shop is not a debt yet - the shop holds the clothes - so it
+   * is kept apart, as what is to be paid on collection. See src/lib/owed.ts.
+   */
+  const split = splitOwed(store);
+  const list = split.debts;
   const totalOwed = list.reduce((s, p) => s + p.balance, 0);
+  const onCollection = {
+    list: split.onCollection,
+    total: split.onCollectionTotal,
+    count: split.onCollection.length,
+  };
   // By customer, not by name: two customers who share a name are two debtors.
   const customerCount = countDebtors(list);
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
@@ -219,7 +231,9 @@ export function getPendingSummary(store: StoreData) {
   let originatedAllTime = 0;
   // Recovered of what was actually owed: a bundle paid at the counter was
   // never a debt, and counting it made every laundry look 95% recovered.
-  (store.pendingPayments || []).filter(wasEverOwed).forEach(p => {
+  // Nor is a balance on clothes still in the shop: it has not fallen due.
+  const heldIds = new Set(split.onCollection.map(p => p.id));
+  (store.pendingPayments || []).filter(wasEverOwed).filter(p => !heldIds.has(p.id)).forEach(p => {
     originatedAllTime += p.total;
     (p.events || []).forEach(e => {
       collectedAllTime += e.amount;
@@ -228,5 +242,5 @@ export function getPendingSummary(store: StoreData) {
   });
   const recoveryRate = originatedAllTime > 0 ? Math.round((collectedAllTime / originatedAllTime) * 100) : 0;
   const overdue = list.filter(p => p.dueDate && new Date(p.dueDate) < new Date());
-  return { totalOwed, customerCount, collectedThisMonth, recoveryRate, overdue, list };
+  return { totalOwed, customerCount, collectedThisMonth, recoveryRate, overdue, list, onCollection };
 }

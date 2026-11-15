@@ -84,14 +84,26 @@ describe('the day board counts the work', () => {
 });
 
 describe('the day board counts the money owed', () => {
-  it('adds up every balance and says how many bundles it is spread across', () => {
+  it('adds up the balances on collected bundles and says how many it is spread across', () => {
     const board = laundryDayBoard([
-      record({ balance: 2000 }),
-      record({ balance: 500 }),
-      record({ balance: 0 }),
+      record({ stage: 'collected', balance: 2000 }),
+      record({ stage: 'collected', balance: 500 }),
+      record({ stage: 'collected', balance: 0 }),
     ], NOON);
     expect(board.owed).toBe(2500);
     expect(board.owedCount).toBe(2);
+  });
+
+  it('keeps a balance on clothes still in the shop apart, as what is to be paid on collection', () => {
+    const board = laundryDayBoard([
+      record({ stage: 'washing', balance: 700 }),
+      record({ stage: 'ready', balance: 300 }),
+      record({ stage: 'collected', balance: 2000 }),
+    ], NOON);
+    expect(board.owed).toBe(2000);
+    expect(board.owedCount).toBe(1);
+    expect(board.waitingUnpaid).toBe(1000);
+    expect(board.waitingUnpaidCount).toBe(2);
   });
 
   it('still counts money owed on a bundle that has already been handed over', () => {

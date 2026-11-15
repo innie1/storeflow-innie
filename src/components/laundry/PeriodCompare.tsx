@@ -231,7 +231,7 @@ export default function PeriodCompare({ store, now: at }: { store: StoreData; no
               <div className="h-full rounded-full bg-success" style={{ width: `${report.paidShare}%` }} />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {naira(report.owed)} still owed · {report.collected} of {report.bundles} {report.bundles === 1 ? 'bundle' : 'bundles'} collected · {report.customers} {report.customers === 1 ? 'customer' : 'customers'}
+              {naira(report.owed)} not paid yet · {report.collected} of {report.bundles} {report.bundles === 1 ? 'bundle' : 'bundles'} collected · {report.customers} {report.customers === 1 ? 'customer' : 'customers'}
             </p>
           </div>
         )}

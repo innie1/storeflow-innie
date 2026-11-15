@@ -97,7 +97,7 @@ export default function CustomerSheet({
           {history.waitingCount > 0 && (
             <p className="text-[11px] text-amber-500 font-semibold">
               {history.waitingCount} {history.waitingCount === 1 ? 'bundle' : 'bundles'} still in the shop
-              {history.waitingUnpaid > 0 ? ` · ${money(history.waitingUnpaid)} not paid yet` : ''}
+              {history.waitingUnpaid > 0 ? ` · ${money(history.waitingUnpaid)} to pay on collection` : ''}
             </p>
           )}
         </div>

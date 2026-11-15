@@ -16,7 +16,7 @@ function daysFromNow(iso?: string) {
 
 export default function PendingPayments({ store, onUpdate }: Props) {
   const summary = useMemo(() => getPendingSummary(store), [store]);
-  const [filter, setFilter] = useState<'all' | 'overdue' | 'paid'>('all');
+  const [filter, setFilter] = useState<'all' | 'collection' | 'overdue' | 'paid'>('all');
   const [partialFor, setPartialFor] = useState<PendingPayment | null>(null);
   const [partialAmt, setPartialAmt] = useState('');
   const [pendingDeleteRecord, setPendingDeleteRecord] = useState<PendingPayment | null>(null);
@@ -32,9 +32,13 @@ export default function PendingPayments({ store, onUpdate }: Props) {
   const all = store.pendingPayments || [];
   const list = useMemo(() => {
     if (filter === 'paid') return all.filter(p => p.status === 'paid' || p.status === 'written_off');
-    if (filter === 'overdue') return all.filter(p => p.status === 'pending' && p.dueDate && new Date(p.dueDate) < new Date());
-    return all.filter(p => p.status === 'pending');
-  }, [all, filter]);
+    // Owed, and to be paid on collection, are two lists (src/lib/owed.ts).
+    if (filter === 'collection') return summary.onCollection.list;
+    if (filter === 'overdue') return summary.overdue;
+    return summary.list;
+  }, [all, filter, summary]);
+
+  const heldIds = useMemo(() => new Set(summary.onCollection.list.map(p => p.id)), [summary]);
 
   // Learned per-customer repayment intelligence
   const repayInsights = useMemo(() => getRepaymentInsights(store), [store]);
@@ -100,6 +104,11 @@ export default function PendingPayments({ store, onUpdate }: Props) {
             <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-display font-semibold">Total Owed</p>
             <p className="font-display text-[32px] leading-none font-bold text-warning mt-1">₦{summary.totalOwed.toLocaleString()}</p>
             <p className="text-[11px] text-muted-foreground mt-1.5">Across {summary.customerCount} customer{summary.customerCount === 1 ? '' : 's'}</p>
+            {summary.onCollection.count > 0 && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                + ₦{Math.round(summary.onCollection.total).toLocaleString()} to pay on collection
+              </p>
+            )}
           </div>
           <div className="text-right">
             <div className="inline-flex flex-col items-end px-3 py-1.5 rounded-xl bg-success/15 border border-success/30">
@@ -142,12 +151,12 @@ export default function PendingPayments({ store, onUpdate }: Props) {
 
       {/* Filter chips */}
       <div className="flex gap-2">
-        {(['all', 'overdue', 'paid'] as const).map(f => (
+        {((summary.onCollection.count > 0 ? ['all', 'collection', 'overdue', 'paid'] : ['all', 'overdue', 'paid']) as ('all' | 'collection' | 'overdue' | 'paid')[]).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-3 py-1.5 rounded-full text-xs font-display font-semibold border transition-colors ${
               filter === f ? 'bg-primary text-primary-foreground border-primary shadow-sm' : 'bg-card text-muted-foreground border-border hover:bg-surface-2'
             }`}>
-            {f === 'all' ? 'Pending' : f === 'overdue' ? 'Overdue' : 'Paid'}
+            {f === 'all' ? 'Owed' : f === 'collection' ? 'On collection' : f === 'overdue' ? 'Overdue' : 'Paid'}
           </button>
         ))}
       </div>
@@ -164,7 +173,9 @@ export default function PendingPayments({ store, onUpdate }: Props) {
         <div className="space-y-2.5">
           {list.map(p => {
             const days = daysFromNow(p.dueDate);
-            const isOverdue = days !== null && days < 0;
+            // Clothes still in the shop are not late in paying: they pay when they collect.
+            const held = heldIds.has(p.id);
+            const isOverdue = !held && days !== null && days < 0;
             const tone = p.status === 'paid' ? 'text-success' : isOverdue ? 'text-destructive' : 'text-warning';
             const ins = insightFor(p.customerName);
             const rel = ins?.reliabilityScore ?? null;
@@ -191,7 +202,7 @@ export default function PendingPayments({ store, onUpdate }: Props) {
                     <p className={`font-display font-bold ${tone}`}>₦{p.balance.toLocaleString()}</p>
                     {p.dueDate && (
                       <p className={`text-[10px] ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>
-                        {isOverdue ? `Overdue ${Math.abs(days!)}d` : days === 0 ? 'Due today' : `${days}d left`}
+                        {held ? 'To pay on collection' : isOverdue ? `Overdue ${Math.abs(days!)}d` : days === 0 ? 'Due today' : `${days}d left`}
                       </p>
                     )}
                   </div>

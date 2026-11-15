@@ -54,7 +54,7 @@ describe('the shop as it really is', () => {
 
   it('tells it in words', () => {
     expect(flow.story[0]).toBe('In the last 30 days, 6 bundles (30 pieces) worth ₦21,700 came in.');
-    expect(flow.story[1]).toBe('₦4,000 of that has been paid (18%), and ₦17,700 is still owed.');
+    expect(flow.story[1]).toBe('₦4,000 of that has been paid (18%), and ₦17,700 is not paid yet.');
     expect(flow.story[2]).toBe('1 of the 6 customers who brought clothes has paid something.');
   });
 });

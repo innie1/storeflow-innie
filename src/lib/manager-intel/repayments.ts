@@ -1,6 +1,7 @@
 import { StoreData, FlowNotification } from '@/types/store';
 import { allowedNotifications } from '@/lib/notification-gate';
 import { wasEverOwed } from '@/lib/store-data';
+import { heldBundleDebtIds } from '@/lib/owed';
 
 // ─── Customer Repayment Insights ──────────────────────────────────────────────
 export interface CustomerRepaymentInsight {
@@ -35,7 +36,10 @@ export interface RepaymentInsightsSummary {
 export function getRepaymentInsights(store: StoreData): RepaymentInsightsSummary {
   // Bundles paid in full on the day are not debts, and scoring them as
   // repayments filled this with customers who never owed anything.
-  const all = (store.pendingPayments || []).filter(wasEverOwed);
+  // Nor is a balance on clothes still in the shop: that customer has not
+  // been asked to pay yet, so there is no repayment habit to read from it.
+  const held = heldBundleDebtIds(store);
+  const all = (store.pendingPayments || []).filter(wasEverOwed).filter(payment => !held.has(payment.id));
   const groups = new Map<string, typeof all>();
   all.forEach(p => {
     // Group by phone number when available — it's a much more reliable

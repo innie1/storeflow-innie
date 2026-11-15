@@ -19,7 +19,7 @@ import { requestLaundryWorkspace } from '@/lib/laundry-workspace';
  * filtered.
  */
 
-const EMPTY_BOARD: DayBoard = { dueToday: 0, late: 0, ready: 0, owed: 0, owedCount: 0, waitingCount: 0, waitingValue: 0, waitingUnpaid: 0, empty: true };
+const EMPTY_BOARD: DayBoard = { dueToday: 0, late: 0, ready: 0, owed: 0, owedCount: 0, waitingCount: 0, waitingValue: 0, waitingUnpaid: 0, waitingUnpaidCount: 0, empty: true };
 
 /**
  * The day's figures, worked out once for the whole home screen.
@@ -53,7 +53,10 @@ export function useLaundryDayBoard(store: StoreData, orders: any[], enabled = tr
 /** Short enough for a quarter of a phone: ₦9,500, ₦23k, ₦1.2M. */
 export function compactNaira(value: number): string {
   const amount = Math.round(value);
-  if (amount < 10_000) return `₦${amount.toLocaleString()}`;
+  if (amount < 1_000) return `₦${amount.toLocaleString()}`;
+  // "₦7,500" is one character too wide for a quarter of a phone and was cut
+  // to "₦7,…". Thousands are said the short way too, to one decimal.
+  if (amount < 10_000) return `₦${(amount / 1000).toFixed(1).replace(/\.0$/, '')}k`;
   if (amount < 1_000_000) return `₦${Math.round(amount / 1000)}k`;
   return `₦${(amount / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
 }
@@ -125,14 +128,26 @@ export function LaundryMoneyLines({ board, onNavigate }: { board: DayBoard; onNa
   const stillWashing = Math.max(0, board.waitingCount - board.ready);
   const lines: { key: string; dot: string; title: string; note: string; action: string; filter: string }[] = [];
 
+  // Owed: collected and not paid. The money to chase.
   if (board.owed > 0) {
     lines.push({
       key: 'owed',
-      dot: 'bg-primary',
-      title: `₦${board.owed.toLocaleString()} still owed`,
-      note: `Across ${board.owedCount} ${board.owedCount === 1 ? 'bundle' : 'bundles'}`,
+      dot: 'bg-destructive',
+      title: `₦${board.owed.toLocaleString()} owed`,
+      note: `${board.owedCount} ${board.owedCount === 1 ? 'bundle' : 'bundles'} collected, not paid`,
       action: 'See who',
       filter: 'all',
+    });
+  }
+  // Not a debt: the clothes are still here, and this is paid when they go.
+  if (board.waitingUnpaid > 0) {
+    lines.push({
+      key: 'on-collection',
+      dot: 'bg-primary',
+      title: `₦${board.waitingUnpaid.toLocaleString()} to pay on collection`,
+      note: `${board.waitingUnpaidCount} ${board.waitingUnpaidCount === 1 ? 'bundle' : 'bundles'} still with you`,
+      action: 'Open',
+      filter: 'active',
     });
   }
   if (board.ready > 0) {

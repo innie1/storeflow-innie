@@ -13,7 +13,7 @@
  */
 
 import type { StoreData } from '@/types/store';
-import { receivedBetween } from '@/lib/money-figures';
+import { receivedBetween, receivedBySource } from '@/lib/money-figures';
 
 export type Range = 'today' | 'week' | 'month' | 'lastMonth' | 'all';
 
@@ -71,6 +71,34 @@ export function revenueInRange(store: StoreData, range: Range, now: number = Dat
   const window = rangeWindow(range, now);
   // Money received, from the one definition every screen shares.
   return receivedBetween(store, window.from, window.to);
+}
+
+/**
+ * How much of a stretch's revenue paid for clothes brought in before it began.
+ *
+ * Revenue counts money in the stretch it is paid, so part of a good week is
+ * often last week's clothes being paid for. The figure alone cannot say how
+ * much; this is that part, so the card can say it in a line. Nothing for
+ * Lifetime, where there is no "before", and nothing for a shop whose payments
+ * are not tied to bundles.
+ */
+export function olderWorkInRange(store: StoreData, range: Range, now: number = Date.now()): number {
+  if (range === 'all') return 0;
+  const { from, to } = rangeWindow(range, now);
+  // With the stretch before set to start where this one does, everything
+  // earlier lands in one pile: older.
+  return receivedBySource(store, from, to, from).fromOlder;
+}
+
+/** "this week", "today" - the stretch, as it reads in the middle of a sentence. */
+export function rangeInWords(range: Range): string {
+  switch (range) {
+    case 'today': return 'today';
+    case 'week': return 'this week';
+    case 'month': return 'this month';
+    case 'lastMonth': return 'last month';
+    default: return 'the start';
+  }
 }
 
 /** The dates under the figure: "Mon 2 Nov – Sun 8 Nov", "1 Nov – 30 Nov". */

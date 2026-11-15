@@ -105,3 +105,16 @@ describe('the week view', () => {
     expect(week.sources).toMatchObject({ fromThese: 3_000, fromPrevious: 5_000, fromOlder: 2_000, other: 500 });
   });
 });
+
+describe('the Home revenue card', () => {
+  it('says how much of the stretch paid for clothes brought in before it', async () => {
+    const { olderWorkInRange, rangeInWords } = await import('@/lib/revenue-window');
+    // This week: ₦5,000 for last week's clothes and ₦2,000 for a month-old bundle.
+    expect(olderWorkInRange(shop(), 'week', NOW)).toBe(7_000);
+    expect(rangeInWords('week')).toBe('this week');
+    // Lifetime has no "before".
+    expect(olderWorkInRange(shop(), 'all', NOW)).toBe(0);
+    const card = (await import('node:fs')).readFileSync('src/components/RevenueCard.tsx', 'utf8');
+    expect(card).toContain('of it for clothes brought in before {rangeInWords(range)}');
+  });
+});

@@ -6,7 +6,7 @@ import { CreditCard } from 'lucide-react';
 // ─── Money Owed Card ──────────────────────────────────────────────────────────
 export default function MoneyOwedCard({ store, onClick }: { store: StoreData; onClick?: () => void }) {
   const s = getPendingSummary(store);
-  if (s.list.length === 0) return null;
+  if (s.list.length === 0 && s.onCollection.count === 0) return null;
   const advices: string[] = [];
   if (s.totalOwed > 0) advices.push(`Collecting 50% would add ₦${Math.round(s.totalOwed * 0.5).toLocaleString()} this month.`);
   if (s.overdue.length > 0) advices.push(`${s.overdue.length} customer${s.overdue.length === 1 ? ' is' : 's are'} overdue.`);
@@ -33,7 +33,7 @@ export default function MoneyOwedCard({ store, onClick }: { store: StoreData; on
       className={`w-full text-left p-4 rounded-2xl bg-card shadow-card space-y-3 border border-transparent transition-colors ${onClick ? 'cursor-pointer hover:border-warning/30' : ''}`}
     >
       <div className="flex items-start justify-between">
-        <div><h3 className="font-display font-bold text-sm flex items-center gap-1.5"><CreditCard className="w-4 h-4" /> Money Owed To You</h3><p className="text-[11px] text-muted-foreground">Outstanding customer balances</p></div>
+        <div><h3 className="font-display font-bold text-sm flex items-center gap-1.5"><CreditCard className="w-4 h-4" /> Money Owed To You</h3><p className="text-[11px] text-muted-foreground">Collected and not paid for</p></div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-display font-bold ${s.recoveryRate >= 70 ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'}`}>{s.recoveryRate}% recovered</span>
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -41,6 +41,12 @@ export default function MoneyOwedCard({ store, onClick }: { store: StoreData; on
         <div className="p-2.5 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Customers</p><p className="font-display font-bold text-sm">{s.customerCount}</p></div>
         <div className="p-2.5 rounded-lg bg-surface-2"><p className="text-[10px] text-muted-foreground uppercase">Overdue</p><p className="font-display font-bold text-sm text-destructive">{s.overdue.length}</p></div>
       </div>
+      {/* Not owed: the clothes are still in the shop, and this is paid when they go. */}
+      {s.onCollection.count > 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          <b className="text-foreground">₦{Math.round(s.onCollection.total).toLocaleString()}</b> more is to be paid on collection, on {s.onCollection.count} {s.onCollection.count === 1 ? 'bundle' : 'bundles'} still with you.
+        </p>
+      )}
       {advices.length > 0 && <div className="space-y-1">{advices.map((a, i) => (<p key={i} className="text-[10px] text-foreground/90 leading-tight flex gap-1"><span className="flex-1">{a}</span></p>))}</div>}
     </div>
   );

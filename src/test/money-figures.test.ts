@@ -187,7 +187,7 @@ describe('the month report', () => {
     expect(report.workTakenIn).toBe(10_000);
     expect(report.owed).toBe(6_000);
     expect(report.summary).toContain('received');
-    expect(report.summary).toContain('still owed');
+    expect(report.summary).toContain('not paid yet');
   });
 
   it('prices the average drop-off from the work, not from the payments', () => {

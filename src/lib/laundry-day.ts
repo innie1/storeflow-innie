@@ -27,16 +27,18 @@ export interface DayBoard {
   late: number;
   /** Washed, folded, and waiting for someone to come for it. */
   ready: number;
-  /** Money the shop is owed across every bundle that still carries a balance. */
+  /** Money owed: balances on bundles already handed back. */
   owed: number;
-  /** How many bundles that money is spread across. */
+  /** How many handed-back bundles that money is spread across. */
   owedCount: number;
   /** Bundles still in the shop - not yet handed back. */
   waitingCount: number;
   /** What those bundles are priced at, paid or not. */
   waitingValue: number;
-  /** How much of that is not paid yet - money not realised. */
+  /** How much of that is not paid yet: to be paid on collection, not owed. */
   waitingUnpaid: number;
+  /** How many bundles still in the shop carry a balance. */
+  waitingUnpaidCount: number;
   /** Nothing to show. A shop with no records should not see four zeros. */
   empty: boolean;
 }
@@ -62,6 +64,7 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
   let waitingCount = 0;
   let waitingValue = 0;
   let waitingUnpaid = 0;
+  let waitingUnpaidCount = 0;
 
   for (const record of records) {
     /*
@@ -88,12 +91,17 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
       waitingCount += 1;
       waitingValue += Number(record.total) || 0;
       waitingUnpaid += Math.max(0, Number(record.balance) || 0);
+      if (record.balance > 0) waitingUnpaidCount += 1;
     }
 
-    // Owed counts a handed-over bundle too. Money does not stop being owed
-    // because the clothes left the shop - that is exactly when it gets
-    // forgotten on paper.
-    if (record.balance > 0) {
+    /*
+     * Owed is a handed-over bundle with a balance: the customer has the
+     * clothes and the shop does not have the money. A balance on a bundle
+     * still in the shop was counted here too, so somebody whose clothes were
+     * in the wash read as a debtor; that is counted above, as what is to be
+     * paid on collection.
+     */
+    if (record.stage === 'collected' && record.balance > 0) {
       owed += record.balance;
       owedCount += 1;
     }
@@ -108,6 +116,7 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
     waitingCount,
     waitingValue: Math.round(waitingValue),
     waitingUnpaid: Math.round(waitingUnpaid),
+    waitingUnpaidCount,
     empty: records.length === 0,
   };
 }
