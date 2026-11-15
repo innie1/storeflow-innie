@@ -39,7 +39,7 @@ export default function NotificationPreferences() {
         <div className={row}><SettingToggle label="All notifications" description="Master switch for StoreFlow background notifications." checked={prefs.enabled} onChange={v => patch('enabled', v)} /></div>
         <div className={row}><SettingToggle label="Order notifications" description="New customer orders and important order updates." checked={prefs.orders} onChange={v => patch('orders', v)} /></div>
         <div className={row}><SettingToggle label="Flow check-ins" description="Personalized questions and reminders from Flow." checked={prefs.flowCheckins} onChange={v => patch('flowCheckins', v)} /></div>
-        <div className={row}><SettingToggle label="Business insights" description="Low stock, sales trends and opportunities worth noticing." checked={prefs.businessInsights} onChange={v => patch('businessInsights', v)} /></div>
+        <div className={row}><SettingToggle label="Business insights" description="Trends, warnings and opportunities worth noticing." checked={prefs.businessInsights} onChange={v => patch('businessInsights', v)} /></div>
         <div className={row}><SettingToggle label="Debt reminders" description="Useful reminders about outstanding customer balances." checked={prefs.debtReminders} onChange={v => patch('debtReminders', v)} /></div>
         <div className={row}><SettingToggle label="Notification sounds" description="Allow sound and vibration where the device supports it." checked={prefs.sounds} onChange={v => patch('sounds', v)} /></div>
         <div className={row}><SettingToggle label="Critical alerts" description="Allow important order alerts to bypass quiet hours." checked={prefs.criticalAlerts} onChange={v => patch('criticalAlerts', v)} /></div>

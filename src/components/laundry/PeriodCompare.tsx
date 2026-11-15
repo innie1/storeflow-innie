@@ -12,6 +12,7 @@ import {
   periodsSoFar,
   type Change,
   type PeriodBundle,
+  type PeriodReport,
   type PeriodUnit,
 } from '@/lib/period-report';
 
@@ -44,6 +45,51 @@ function Figure({ label, value, change, before }: { label: string; value: string
       <p className="font-display font-black text-xl mt-1">{value}</p>
       <div className="mt-1"><ChangeBadge change={change} /></div>
       <p className="text-[10px] text-muted-foreground mt-0.5">{before}</p>
+    </div>
+  );
+}
+
+/**
+ * Where the money received in the week (or month) came from.
+ *
+ * "Money received" counts a payment in the week it was paid, so a good week
+ * can be new work or old debts coming home, and one figure cannot say which.
+ * This splits the same total by when the clothes it paid for were brought in.
+ */
+function MoneySourcesBlock({ report, unit }: { report: PeriodReport; unit: PeriodUnit }) {
+  const { sources } = report;
+  if (sources.total <= 0) return null;
+  const word = unit === 'week' ? 'week' : 'month';
+  const rows = [
+    { key: 'these', label: `Clothes brought in this ${word}`, amount: sources.fromThese, tone: 'bg-success' },
+    { key: 'previous', label: `Clothes from the ${word} before`, amount: sources.fromPrevious, tone: 'bg-primary' },
+    { key: 'older', label: 'Older clothes', amount: sources.fromOlder, tone: 'bg-orange-500' },
+    { key: 'other', label: 'Not tied to a bundle', amount: sources.other, tone: 'bg-muted-foreground' },
+  ].filter(row => row.amount > 0);
+  const old = sources.fromPrevious + sources.fromOlder;
+  return (
+    <div className="rounded-xl border border-border p-3 space-y-2.5" data-testid="money-sources">
+      <div>
+        <p className="text-xs font-bold">Where the {naira(sources.total)} came from</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          {old > 0
+            ? `${naira(old)} of it paid for clothes brought in earlier. Money counts in the ${word} it is paid.`
+            : `All of it paid for clothes brought in this ${word}.`}
+        </p>
+      </div>
+      <div className="flex h-2 rounded-full overflow-hidden bg-surface-2 gap-px">
+        {rows.map(row => (
+          <div key={row.key} className={row.tone} style={{ width: `${(row.amount / sources.total) * 100}%` }} />
+        ))}
+      </div>
+      <ul className="space-y-1">
+        {rows.map(row => (
+          <li key={row.key} className="flex items-baseline justify-between gap-2 text-xs">
+            <span className="flex items-center gap-1.5 text-muted-foreground"><span className={`w-2 h-2 rounded-sm ${row.tone}`} />{row.label}</span>
+            <span className="tabular-nums"><b>{naira(row.amount)}</b> · {Math.round((row.amount / sources.total) * 100)}%</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -179,16 +225,18 @@ export default function PeriodCompare({ store, now: at }: { store: StoreData; no
           <div className="rounded-xl border border-border p-3 space-y-1.5">
             <div className="flex items-baseline justify-between text-xs">
               <span className="text-muted-foreground">Paid on these clothes</span>
-              <span className="tabular-nums"><b>{report.paidShare}%</b> · {naira(report.owed)} still owed</span>
+              <span className="tabular-nums"><b>{naira(report.paid)}</b> of {naira(report.workTakenIn)} · {report.paidShare}%</span>
             </div>
             <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
               <div className="h-full rounded-full bg-success" style={{ width: `${report.paidShare}%` }} />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {report.collected} of {report.bundles} {report.bundles === 1 ? 'bundle' : 'bundles'} collected · {report.customers} {report.customers === 1 ? 'customer' : 'customers'}
+              {naira(report.owed)} still owed · {report.collected} of {report.bundles} {report.bundles === 1 ? 'bundle' : 'bundles'} collected · {report.customers} {report.customers === 1 ? 'customer' : 'customers'}
             </p>
           </div>
         )}
+
+        <MoneySourcesBlock report={report} unit={unit} />
 
         <div>
           <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-2">

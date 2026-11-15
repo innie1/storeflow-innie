@@ -1053,11 +1053,14 @@ export function useIndexScreen() {
         // These open a tab directly instead of expanding, so they are gated on
         // that tab rather than on having any children. The checks used to sit
         // after the map's return statement, where they never ran — every role
-        // saw every category. Role only, as originally intended: business type
-        // already decides which tabs exist, and gating here too would drop
-        // Marketplace for service businesses that can still reach it.
+        // saw every category.
+        //
+        // By trade as well as by role. This was role only, on the belief that
+        // a service business could still reach Marketplace. It cannot: the tab
+        // is refused for any shop that keeps no stock, so a laundry had a
+        // Marketplace button that closed the menu and went back to Home.
         const directTab = FLAT_CATEGORY_TABS[cat.id];
-        if (directTab) return isTabAllowed(directTab, currentUser);
+        if (directTab) return isTabAllowed(directTab, currentUser) && isBusinessTabAllowed(store, directTab);
         return cat.subItems.length > 0;
       });
   }, [currentUser, isGames, store]);

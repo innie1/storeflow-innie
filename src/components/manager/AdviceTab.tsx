@@ -115,6 +115,7 @@ export default function AdviceTab({ s }: { s: ManagerState }) {
     setAdviceReportVisible, showMoreInsights, setShowMoreInsights, handleGetAdvice, visibleAdvice,
     handleDismissAdvice, handleHelpfulAdvice, advicePriorityColor, adviceIconBg,
   } = s;
+  const serviceShop = isServiceFirstBusiness(store);
   return (
     <div className="space-y-4 animate-fade-in">
       {/* The two things you came here to do. Purchase Orders, Ratings and
@@ -266,18 +267,18 @@ export default function AdviceTab({ s }: { s: ManagerState }) {
       {/* Recommendations, suppliers and customer requests are background
           reading. They used to sit open below the advice, so the page kept
           going long after it had said anything actionable. */}
-      <div className="pt-1">
+      {(!serviceShop || recs.length > 0) && <div className="pt-1">
         <button
           onClick={() => setShowMoreInsights(v => !v)}
           aria-expanded={showMoreInsights}
           className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-border bg-surface-2/30 text-left hover:bg-surface-2/60 transition-colors"
         >
           <span className="text-xs font-display font-bold">
-            {showMoreInsights ? 'Hide extras' : 'Recommendations, suppliers & requests'}
+            {showMoreInsights ? 'Hide extras' : serviceShop ? 'Recommendations' : 'Recommendations, suppliers & requests'}
           </span>
           <ChevronDown className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${showMoreInsights ? 'rotate-180' : ''}`} />
         </button>
-      </div>
+      </div>}
 
       {showMoreInsights && (
         <div className="space-y-4 animate-fade-in">
@@ -298,7 +299,8 @@ export default function AdviceTab({ s }: { s: ManagerState }) {
           )}
 
           {/* Supplier management */}
-          <SupplierPanel />
+          {/* Suppliers are who a shop buys stock from. A laundry keeps none. */}
+          {!serviceShop && <SupplierPanel />}
 
           {/* Customer requests */}
           {settings.customerRequests && !isServiceFirstBusiness(store) && requests.length > 0 && (
@@ -326,12 +328,14 @@ export default function AdviceTab({ s }: { s: ManagerState }) {
       {/* Secondary destinations, out of the way at the end. The archive in
           particular was the second thing on the page. */}
       <div className="pt-2 mt-2 border-t border-border/60 flex flex-wrap gap-x-4 gap-y-2 justify-center">
-        <button
-          onClick={() => setPoListOpen(true)}
-          className="py-1.5 text-[11px] font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
-        >
-          <Package className="w-3.5 h-3.5" /> Purchase Orders
-        </button>
+        {!serviceShop && (
+          <button
+            onClick={() => setPoListOpen(true)}
+            className="py-1.5 text-[11px] font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
+          >
+            <Package className="w-3.5 h-3.5" /> Purchase Orders
+          </button>
+        )}
         <button
           onClick={() => setRatingsOpen(true)}
           className="py-1.5 text-[11px] font-display font-semibold text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"

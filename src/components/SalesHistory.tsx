@@ -12,6 +12,7 @@ import ConfirmAccessCode from '@/components/ConfirmAccessCode';
 import RecentlyDeleted from '@/components/RecentlyDeleted';
 import { Search, Trash2, FileText, FileSpreadsheet, Wallet, Package, Receipt, ListFilter, X, ChevronDown } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 
 interface SalesHistoryProps {
   store: StoreData;
@@ -331,8 +332,9 @@ export default function SalesHistory({ store, onUpdate, currentUser }: SalesHist
 
   const filters: { key: HistoryFilter; label: string; icon: React.ReactNode }[] = [
     { key: 'all', label: 'All', icon: <ListFilter className="w-3.5 h-3.5" /> },
-    { key: 'sales', label: 'Sales', icon: <Wallet className="w-3.5 h-3.5" /> },
-    { key: 'restocks', label: 'Restocks', icon: <Package className="w-3.5 h-3.5" /> },
+    { key: 'sales', label: isServiceFirstBusiness(store) ? 'Payments' : 'Sales', icon: <Wallet className="w-3.5 h-3.5" /> },
+    // A shop that keeps no stock has nothing to restock.
+    ...(isServiceFirstBusiness(store) ? [] : [{ key: 'restocks' as HistoryFilter, label: 'Restocks', icon: <Package className="w-3.5 h-3.5" /> }]),
     { key: 'expenses', label: 'Expenses', icon: <Receipt className="w-3.5 h-3.5" /> },
   ];
 

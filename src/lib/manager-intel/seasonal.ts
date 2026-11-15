@@ -192,8 +192,8 @@ export function serviceWeatherInsight(store: StoreData, month: number): WeatherI
   };
 }
 
-export function getWeatherInsights(store: StoreData): WeatherInsight {
-  const month = new Date().getMonth(); // 0-11
+export function getWeatherInsights(store: StoreData, at: Date = new Date()): WeatherInsight {
+  const month = at.getMonth(); // 0-11
   const service = serviceWeatherInsight(store, month);
   if (service) return service;
 

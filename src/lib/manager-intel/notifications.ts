@@ -6,6 +6,36 @@ import { stockCoverLabel, inventoryIntelligence } from './stock';
 import { expenseAnalysis } from './costs';
 import { healthScore } from './health';
 import { restockQualityNote, laundryFlowNote } from './flow-notes';
+import { getWeatherInsights } from './seasonal';
+
+/**
+ * The season, said once when it starts.
+ *
+ * This was a card on Flow's Overview that never changed for four months at a
+ * stretch: by the second visit it was furniture. A season is news on the day
+ * it begins, so it is a notice now - one per season, in the bell, read once.
+ * Its id carries the season and the year it began, so the next season raises
+ * its own and the same one is never raised twice.
+ */
+export function seasonNotice(store: StoreData, now: string): FlowNotification | null {
+  if (store.managerSettings?.weatherImpactEnabled === false) return null;
+  const date = new Date(now);
+  const insight = getWeatherInsights(store, date);
+  if (!insight) return null;
+  // Harmattan runs November to February: January belongs to the season that began last year.
+  const began = date.getMonth() <= 1 ? date.getFullYear() - 1 : date.getFullYear();
+  const slug = insight.weatherCondition.toLowerCase().replace(/\(.*?\)/g, '').trim().replace(/[^a-z]+/g, '-');
+  return {
+    id: `season-${slug}-${began}`,
+    icon: '✨',
+    text: `${insight.weatherCondition}: ${insight.effect}`,
+    tone: 'info',
+    date: now,
+    read: false,
+    title: insight.weatherCondition,
+    description: `${insight.effect} ${insight.suggestedAction}`,
+  };
+}
 
 export function generateNotifications(store: StoreData): FlowNotification[] {
   if (isStoreOnboarding(store)) {
@@ -25,6 +55,9 @@ export function generateNotifications(store: StoreData): FlowNotification[] {
   // still this week's and does not tidy it away once read.
   const flowNote = laundryFlowNote(store, now);
   if (flowNote) notes.push(flowNote);
+
+  const season = seasonNotice(store, now);
+  if (season) notes.push(season);
 
   stock.filter(f => f.urgency === 'critical').forEach(f => {
     notes.push({

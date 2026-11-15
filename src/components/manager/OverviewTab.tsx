@@ -5,8 +5,6 @@ import {
   stockCoverLabel,
   getTopOpportunities,
   getProfitLeaks,
-  getSeasonalPredictions,
-  getWeatherInsights,
   generateWeeklyRecap,
 } from '@/lib/manager-intel';
 import { getLowStockThreshold } from '@/lib/settings';
@@ -26,47 +24,27 @@ import {
 import BreakEvenCard from '@/components/BreakEvenCard';
 import MonthReportCard from '@/components/MonthReportCard';
 import { isServiceShop } from '@/lib/flow-service-brain';
-import MessageIcon from '@/components/MessageIcon';
 import { Ring } from './ui';
 import StoreHealthCard from './StoreHealthCard';
 import MoneyOwedCard from './MoneyOwedCard';
 import type { ManagerState } from './useManager';
 
 /**
- * Flow's Overview tab, in the order an owner asks: what to do next, how the
- * month stands, who owes what, how last week went, then ideas and the rest.
+ * Flow's Overview tab, in the order an owner asks: how healthy the shop is,
+ * how the month stands, who owes what, how last week went, then the rest.
+ * What to do next lives on the Advice tab; the season is a notice.
  */
 export default function OverviewTab({ s }: { s: ManagerState }) {
   const {
-    store, onUpdate, onNavigate, setTab, requestText, setRequestText, setShowBreakdown,
-    setShowPerformanceCalendar, settings, requests, savings, addRequest, advice,
-    advicePriorityColor, adviceIconBg,
+    store, onUpdate, onNavigate, requestText, setRequestText, setShowBreakdown,
+    setShowPerformanceCalendar, settings, requests, savings, addRequest,
   } = s;
   const isService = isServiceFirstBusiness(store);
   return (
     <div className="space-y-4 animate-fade-in text-left">
-      {/* The one thing to do, first: it used to sit below the health score,
-          the recap and a calendar link. */}
-      {advice.length > 0 && (
-        <div className={`p-4 rounded-2xl border ${advicePriorityColor[advice[0].priority]} shadow-card`}>
-          <p className="text-[11px] text-muted-foreground mb-2 font-display font-semibold">Do this next</p>
-          <div className="flex items-start gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${adviceIconBg[advice[0].priority]}`}><MessageIcon emoji={advice[0].icon} className="w-5 h-5" /></div>
-            <div className="flex-1 min-w-0">
-              <p className="font-display font-bold text-sm text-foreground">{advice[0].title}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{advice[0].detail}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 mt-3">
-            {advice[0].goTo && (
-              <button onClick={() => onNavigate?.(advice[0].goTo!, advice[0].focus)} className="text-xs text-primary font-display font-bold">Go there →</button>
-            )}
-            <button onClick={() => setTab('advice')} className="text-xs text-muted-foreground font-display font-semibold">
-              All advice{advice.length > 1 ? ` (${advice.length})` : ''}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Store Health leads: it is the one figure that sums the shop up, and
+          the month's detail reads as its breakdown underneath. */}
+      <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} animate={settings.numericAnimations !== false} />
 
       {/* What the month must take, and how it went. Here rather than on
           the home screen: this is where somebody has come to think about
@@ -78,7 +56,6 @@ export default function OverviewTab({ s }: { s: ManagerState }) {
         </>
       )}
 
-      <StoreHealthCard store={store} onOpenBreakdown={() => setShowBreakdown(true)} animate={settings.numericAnimations !== false} />
 
       <MoneyOwedCard store={store} onClick={() => onNavigate?.('pending')} />
 
@@ -374,48 +351,6 @@ export default function OverviewTab({ s }: { s: ManagerState }) {
                   </div>
                 ))
               )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Seasonal & Climate Insights Card — was built but never shown anywhere; now wired in */}
-      {(() => {
-        const seasonal = getSeasonalPredictions(store);
-        const weatherEnabled = store.managerSettings?.weatherImpactEnabled !== false;
-        const weather = weatherEnabled ? getWeatherInsights(store) : null;
-        if (seasonal.length === 0 && !weather) return null;
-        return (
-          <div className="p-4 rounded-2xl bg-card border border-primary/20 shadow-card space-y-3">
-            <div className="flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-primary" />
-              <div>
-                <h3 className="font-display font-bold text-sm">Seasonal &amp; Climate Insights</h3>
-                <p className="text-[10px] text-muted-foreground font-semibold">General patterns for this time of year — not personalized predictions</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {weather && (
-                <div className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
-                  <p className="font-display font-bold text-xs text-foreground">{weather.weatherCondition}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{weather.effect}</p>
-                  <p className="text-[10px] text-emerald-400 mt-1 bg-emerald-500/5 p-1 rounded border border-emerald-500/10">
-                    {weather.suggestedAction}
-                  </p>
-                </div>
-              )}
-              {seasonal.map((s, idx) => (
-                <div key={idx} className="p-2.5 rounded-xl bg-surface-2 border border-border text-left">
-                  <p className="font-display font-bold text-xs text-foreground">{s.periodName}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1 leading-normal">{s.details}</p>
-                  {s.suggestedItems.length > 0 && (
-                    <p className="text-[10px] text-primary mt-1.5">
-                      {s.itemsFromYourCatalog ? 'From your catalog: ' : 'Example items (not in your catalog yet): '}
-                      {s.suggestedItems.join(', ')}
-                    </p>
-                  )}
-                </div>
-              ))}
             </div>
           </div>
         );

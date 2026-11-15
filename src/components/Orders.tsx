@@ -555,7 +555,7 @@ export default function Orders({ store, orders, onUpdateOrderStatus, onUpdate, f
       {/* Orders List */}
       {filteredOrders.length === 0 ? (
         <div className="bg-card border border-border rounded-2xl p-8 text-center text-sm text-muted-foreground shadow-sm">
-          No orders found matching the filter criteria.
+          {orders.length === 0 ? 'No orders yet. Orders customers place from your storefront show up here.' : 'No orders match this filter.'}
         </div>
       ) : (
         <div className="space-y-3.5">

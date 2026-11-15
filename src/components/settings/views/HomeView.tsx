@@ -29,6 +29,7 @@ import { card, ProgressRing, SettingTile } from '../ui';
 import SavingsModal from '../SavingsModal';
 import ContactOptionsSheet from '../ContactOptionsSheet';
 import type { SettingsState } from '../useSettings';
+import { hasBusinessModule } from '@/lib/business-runtime';
 
 export default function HomeView({ s }: { s: SettingsState }) {
   const {
@@ -105,7 +106,10 @@ export default function HomeView({ s }: { s: SettingsState }) {
 
         {/* Right column — settings tiles */}
         <div className="md:col-span-7 space-y-3">
-          <SettingTile
+          {/* Its one setting for a shop without stock is a discount applied in
+              the sales cart, and a laundry has no cart: the tile opened a page
+              about "the shopping cart" in a trade that never sees one. */}
+          {hasBusinessModule(store, 'sales') && <SettingTile
             icon={<Tag className="w-5 h-5" />}
             color="#F2C94C"
             title="Pricing & Discounts"
@@ -125,7 +129,7 @@ export default function HomeView({ s }: { s: SettingsState }) {
               </div>
             }
             onClick={() => setView('pricing')}
-          />
+          />}
           {keepsStock && <SettingTile icon={<Package className="w-5 h-5" />} color="#27AE60" title="Inventory" desc="Stock alerts and restock preferences." right={<><p className="text-[10px] text-muted-foreground">Low Stock</p><p className="text-base font-display font-bold text-success">{lowStockCount} Items</p></>} onClick={() => setView('inventory')} />}
           {keepsStock && <SettingTile icon={<Star className="w-5 h-5" />} color="#FFD700" title="Wishlist" desc="Track products you want to add or stock." right={<><p className="text-[10px] text-muted-foreground">Wishlist</p><p className="text-base font-display font-bold text-yellow-500">{(store.wishlist || []).length} Items</p></>} onClick={() => setView('wishlist')} />}
           <SettingTile icon={<PiggyBank className="w-5 h-5" />} color="#9B6BFB" title="Savings Plan" desc="Set goals and automation rules." onClick={() => setView('savings')}

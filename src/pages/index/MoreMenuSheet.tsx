@@ -5,6 +5,7 @@ import { Settings as SettingsIcon, ChevronDown, BarChart3 } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import { FLAT_CATEGORY_TABS, renderTabIcon, isTabAllowed } from './navigation';
 import type { IndexScreenReady } from './useIndexScreen';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 
 /**
  * The More sheet on phones: every screen that is not on the bottom bar, by group.
@@ -133,7 +134,7 @@ export default function MoreMenuSheet({ s }: { s: IndexScreenReady }) {
                 setShowMoreMenu(false);
               }}
               label="Simple Mode"
-              description="One big mic button for quick voice sales. Switch back here anytime."
+              description={isServiceFirstBusiness(store) ? 'A plainer home screen with only what you use every day.' : 'One big mic button for quick voice sales.'}
             />
           </div>
         </div>

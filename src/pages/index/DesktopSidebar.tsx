@@ -5,6 +5,7 @@ import StoreLogo from '@/components/StoreLogo';
 import { Settings as SettingsIcon, Lock, ChevronDown, BarChart3 } from 'lucide-react';
 import { FLAT_CATEGORY_TABS, renderTabIcon, isTabAllowed } from './navigation';
 import type { IndexScreenReady } from './useIndexScreen';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 
 /**
  * The left-hand navigation on tablets and computers (768px and wider).
@@ -162,7 +163,7 @@ export default function DesktopSidebar({ s }: { s: IndexScreenReady }) {
               setStore(updated);
             }}
             label="Simple Mode"
-            description="One big mic button for quick voice sales."
+            description={isServiceFirstBusiness(store) ? 'A plainer home screen with only what you use every day.' : 'One big mic button for quick voice sales.'}
           />
         </div>
         <button

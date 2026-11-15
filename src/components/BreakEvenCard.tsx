@@ -91,17 +91,19 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
 
   if (!canSeeMoney) return null;
 
+  const hasWorking = state.target > 0 && (state.workTakenIn > 0 || state.variableCostPerPiece !== null || !!soapLine || !!powerLine);
+
   return (
-    <div ref={cardRef} className={`rounded-2xl border border-border bg-card p-4 text-left ${lit ? SPOTLIGHT_CLASS : ''}`}>
+    <div ref={cardRef} className={`rounded-2xl border border-border bg-card p-3 text-left ${lit ? SPOTLIGHT_CLASS : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] uppercase font-black text-muted-foreground flex items-center gap-1.5">
             <Target className="w-3 h-3" /> Received this month
           </p>
-          <p className="font-display font-black text-xl mt-1">
+          <p className="font-display font-black text-base mt-0.5">
             {state.target > 0 ? money(state.revenue) : '—'}
             {state.target > 0 && (
-              <span className="text-sm text-muted-foreground font-bold"> of {money(state.target)}</span>
+              <span className="text-xs text-muted-foreground font-bold"> of {money(state.target)}</span>
             )}
           </p>
         </div>
@@ -113,7 +115,7 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
       </div>
 
       {state.target > 0 && (
-        <div className="mt-2.5 h-2 rounded-full bg-surface-2 overflow-hidden">
+        <div className="mt-2 h-1.5 rounded-full bg-surface-2 overflow-hidden">
           <div
             className={`h-full rounded-full transition-[width] duration-700 ${state.reached ? 'bg-success' : 'bg-primary'}`}
             style={{ width: `${Math.round(state.progress * 100)}%` }}
@@ -121,26 +123,11 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
         </div>
       )}
 
-      <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+      <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">
         {breakEvenSentence(state)}
       </p>
 
-      {/* The price of the work beside the money for it, so a busy month with
-          little paid shows as exactly that. */}
-      {state.target > 0 && state.workTakenIn > 0 && (
-        <p className="text-[10px] text-muted-foreground mt-1">
-          {money(state.workTakenIn)} of work taken in this month.
-        </p>
-      )}
-
-      {/*
-        Said where the number is, so it is never mistaken for something the
-        owner typed. It is derived from real spending divided by real pieces
-        and sharpens every month the shop trades.
-      */}
-      {state.variableCostPerPiece !== null && pieceCost && (
-        <p className="text-[10px] text-muted-foreground mt-1.5">{pieceCost}</p>
-      )}
+      {/* A warning stays in the open: it is the one line here that asks for something. */}
       {state.costsDoubtful && (
         <p className="text-[10px] text-amber-500 mt-1.5">
           Soap and electricity came to most of the price of the work, which usually means some bundles are
@@ -148,12 +135,40 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
         </p>
       )}
 
-      {/* What a piece of soap-work costs, which is what its share above comes from. */}
-      {state.target > 0 && soapLine && (
-        <p className="text-[10px] text-muted-foreground mt-1">{soapLine}</p>
-      )}
-      {state.target > 0 && powerLine && (
-        <p className="text-[10px] text-muted-foreground mt-1">{powerLine}</p>
+      {/*
+        The working, folded away. It used to sit open under the figure - the
+        work taken in, what a piece costs, the soap line, the light line - and
+        made this the tallest card on the page for one number. It is one tap
+        away for whoever wants to check it.
+      */}
+      {hasWorking && (
+        <details className="mt-1.5 group">
+          <summary className="text-[10px] font-bold text-primary cursor-pointer list-none">How this is worked out</summary>
+          {/* The price of the work beside the money for it, so a busy month with
+              little paid shows as exactly that. */}
+          {state.target > 0 && state.workTakenIn > 0 && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {money(state.workTakenIn)} of work taken in this month.
+            </p>
+          )}
+
+          {/*
+            Said where the number is, so it is never mistaken for something the
+            owner typed. It is derived from real spending divided by real pieces
+            and sharpens every month the shop trades.
+          */}
+          {state.variableCostPerPiece !== null && pieceCost && (
+            <p className="text-[10px] text-muted-foreground mt-1.5">{pieceCost}</p>
+          )}
+
+          {/* What a piece of soap-work costs, which is what its share above comes from. */}
+          {state.target > 0 && soapLine && (
+            <p className="text-[10px] text-muted-foreground mt-1">{soapLine}</p>
+          )}
+          {state.target > 0 && powerLine && (
+            <p className="text-[10px] text-muted-foreground mt-1">{powerLine}</p>
+          )}
+        </details>
       )}
 
       {/* Each lot on its own, so one that went much faster than usual can be asked about. */}

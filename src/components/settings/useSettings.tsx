@@ -497,7 +497,7 @@ export function useSettings(props: SettingsProps) {
         if (error) {
           console.error("Cloud status check failed query:", error);
           if (!cachedQR) {
-            setCloudStatusError("Failed to verify cloud connection: " + error.message);
+            setCloudStatusError('Could not check the cloud connection. Sign in to your StoreFlow account, then try again.');
             setStoreExistsInCloud(false);
           }
           setCheckingCloudStatus(false);

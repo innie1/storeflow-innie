@@ -9,7 +9,7 @@ import { Clock } from 'lucide-react';
 import { fmtPlusInterval } from './ui';
 
 const RANGES: { id: ActivityRange; label: string }[] = [
-  { id: 'today', label: 'Today' }, { id: '7d', label: '7 days' },
+  { id: '7d', label: '7 days' }, { id: 'today', label: 'Today' },
   { id: '30d', label: '30 days' }, { id: '1y', label: 'Year' }, { id: 'lifetime', label: 'All' },
 ];
 
@@ -30,7 +30,7 @@ const short = (value: number) => {
  * are all green.
  */
 export default function MostActivePeriodsCard({ store }: { store: StoreData }) {
-  const [range, setRange] = useState<ActivityRange>('today');
+  const [range, setRange] = useState<ActivityRange>('7d');
   const [selected, setSelected] = useState<SlotActivity | null>(null);
   const interval = (store.managerSettings || DEFAULT_MANAGER_SETTINGS).graphInterval || 30;
   const isLaundry = resolveBusinessType(store) === 'laundry';

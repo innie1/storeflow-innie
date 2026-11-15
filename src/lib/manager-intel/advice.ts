@@ -12,6 +12,7 @@ import { stockCoverLabel, inventoryIntelligence } from './stock';
 import { expenseAnalysis, pricingAlerts } from './costs';
 import { getProductInsightBadges } from './insights';
 import { healthScore } from './health';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 
 // ─── Business Advice ──────────────────────────────────────────────────────────
 export interface AdviceCard {
@@ -356,7 +357,7 @@ export function generateAdvice(store: StoreData, orders: any[] = []): AdviceCard
 
   // Low: set a savings goal
   if (!store.savingsGoal) {
-    advice.push({ id: 'save', icon: '💰', title: 'Set a savings goal', detail: 'Saving even 5% of revenue weekly builds a safety net for rent, restocking, and emergencies.', priority: 'low' });
+    advice.push({ id: 'save', icon: '💰', title: 'Set a savings goal', detail: isServiceFirstBusiness(store) ? 'Saving even 5% of what comes in each week builds a safety net for rent, repairs and emergencies.' : 'Saving even 5% of revenue weekly builds a safety net for rent, restocking, and emergencies.', priority: 'low' });
   }
 
   return advice.sort((a, b) => {

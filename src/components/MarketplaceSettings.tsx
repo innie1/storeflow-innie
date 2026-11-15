@@ -12,6 +12,7 @@ import {
   Calendar, Bell, UserCheck, ShieldAlert, Check, X,
   ExternalLink, ChevronRight, Phone, Tag, Award
 } from 'lucide-react';
+import { isServiceFirstBusiness } from '@/lib/business-runtime';
 
 interface MarketplaceSettingsProps {
   store: StoreData;
@@ -41,6 +42,7 @@ function clearPlaceholderBankDetails<T extends Record<string, any>>(settings: T)
 }
 
 export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSettingsProps) {
+  const serviceShop = isServiceFirstBusiness(store);
   // Load initial settings or fallback to defaults
   const settings = useMemo(() => {
     const defaultSettings = {
@@ -470,18 +472,20 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                   checked={form.onlineOrdersEnabled}
                   onChange={v => handleChange('onlineOrdersEnabled', v)}
                 />
-                <ToggleRow
+                {/* Scan-and-buy, table ordering and stock warnings are for shops
+                    with goods on a shelf. A laundry has none of the three. */}
+                {!serviceShop && <ToggleRow
                   label="Accept Scan & Buy Orders"
                   description="Allow in-store customer checkout by scanning product barcodes."
                   checked={form.scanBuyEnabled}
                   onChange={v => handleChange('scanBuyEnabled', v)}
-                />
-                <ToggleRow
+                />}
+                {!serviceShop && <ToggleRow
                   label="Accept In-Store Scan Orders"
                   description="Allow customers to scan a QR code at their table/counter to order."
                   checked={form.inStoreScanEnabled}
                   onChange={v => handleChange('inStoreScanEnabled', v)}
-                />
+                />}
                 <ToggleRow
                   label="Temporarily Hide Store"
                   description="Delist the store immediately from all public search lists."
@@ -494,12 +498,12 @@ export default function MarketplaceSettings({ store, onUpdate }: MarketplaceSett
                   checked={form.storeOpen}
                   onChange={v => handleChange('storeOpen', v)}
                 />
-                <ToggleRow
+                {!serviceShop && <ToggleRow
                   label="Show Low-Stock Warnings to Customers"
                   description="When on, customers see a 'Limited' badge on products with 5 or fewer left — useful for urgency, but reveals your stock levels. Off by default."
                   checked={!!form.showLimitedStock}
                   onChange={v => handleChange('showLimitedStock', v)}
-                />
+                />}
               </div>
 
               {/* Store Type — editable anytime, drives what customers see when they scan */}

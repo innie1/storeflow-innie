@@ -13,7 +13,8 @@ export default function NotificationsView({ s }: { s: SettingsState }) {
         <ToggleRow label="Weekly Recaps" checked={mgr.notifyWeeklyRecap} onChange={v => updateMgr({ notifyWeeklyRecap: v })} />
         <ToggleRow label="Monthly Reports" checked={mgr.notifyMonthlyReports} onChange={v => updateMgr({ notifyMonthlyReports: v })} />
         <ToggleRow label="Savings Reminders" checked={mgr.notifySavingsReminders} onChange={v => updateMgr({ notifySavingsReminders: v })} />
-        <ToggleRow label="Customer Request Alerts" checked={mgr.notifyCustomerRequests} onChange={v => updateMgr({ notifyCustomerRequests: v })} />
+        {/* Customer requests are for stock a shop could carry; a service shop records none. */}
+        {keepsStock && <ToggleRow label="Customer Request Alerts" checked={mgr.notifyCustomerRequests} onChange={v => updateMgr({ notifyCustomerRequests: v })} />}
         {keepsStock && <ToggleRow label="Low Stock Alerts" checked={mgr.notifyLowStock} onChange={v => updateMgr({ notifyLowStock: v })} />}
       </div>
     </SubPage>

@@ -7,6 +7,7 @@ import { showToast } from '@/components/Toast';
 import { 
   MessageSquare, Users, Warehouse, Briefcase, PlusCircle, History, Send, Trash2, Search, Sparkles
 } from 'lucide-react';
+import { hasBusinessModule } from '@/lib/business-runtime';
 
 interface CommunicationCenterProps {
   store: StoreData;
@@ -267,13 +268,13 @@ export default function CommunicationCenter({ store, onUpdate, currentUser }: Co
         <h2 className="font-display font-bold text-2xl text-foreground flex items-center gap-2">
           <MessageSquare className="w-6 h-6 text-yellow-500" /> WhatsApp Message Center
         </h2>
-        <p className="text-sm text-muted-foreground">WhatsApp messages to customers, suppliers and staff. Works offline.</p>
+        <p className="text-sm text-muted-foreground">{hasBusinessModule(store, 'suppliers') ? 'WhatsApp messages to customers, suppliers and staff. Works offline.' : 'WhatsApp messages to customers and staff. Works offline.'}</p>
       </div>
 
       {/* Navigation Headers */}
       <div className="flex flex-wrap gap-2.5">
         {navItem('customers', 'Customers', <Users className="w-4 h-4" />)}
-        {navItem('suppliers', 'Suppliers', <Warehouse className="w-4 h-4" />)}
+        {hasBusinessModule(store, 'suppliers') && navItem('suppliers', 'Suppliers', <Warehouse className="w-4 h-4" />)}
         {navItem('employees', 'Staff Members', <Briefcase className="w-4 h-4" />)}
         {navItem('custom', 'Custom Message', <PlusCircle className="w-4 h-4" />)}
         {navItem('history', 'Log History', <History className="w-4 h-4" />)}

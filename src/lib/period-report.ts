@@ -21,7 +21,7 @@
  */
 
 import type { StoreData } from '@/types/store';
-import { receivedBetween } from '@/lib/money-figures';
+import { receivedBetween, receivedBySource, type MoneySources } from '@/lib/money-figures';
 import { laundryBalance } from '@/lib/laundry-money';
 import { dayKey } from '@/lib/day-records';
 
@@ -76,8 +76,12 @@ export interface PeriodReport extends PeriodFigures {
   current: boolean;
   /** Still owed on the clothes that came in during it. */
   owed: number;
+  /** Paid so far on the clothes that came in during it, whenever it was paid. */
+  paid: number;
   /** Of what those clothes are priced at, how much is paid, 0-100. */
   paidShare: number;
+  /** The money received in it, by how old the clothes it paid for were. */
+  sources: MoneySources;
   collected: number;
   customers: number;
   /** The days of a week, or the weeks of a month. */
@@ -250,7 +254,9 @@ export function periodReport(
     workTakenIn: these.workTakenIn,
     received: these.received,
     owed: Math.round(owed),
+    paid: Math.round(paid),
     paidShare: these.workTakenIn > 0 ? Math.round((paid / these.workTakenIn) * 100) : 0,
+    sources: receivedBySource(store, start, end, previousStart),
     collected,
     customers: people.size,
     parts,

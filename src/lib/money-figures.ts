@@ -67,6 +67,63 @@ export function receivedByChannel(
   return { counter, online };
 }
 
+/** Money received in a stretch, by when the clothes it paid for came in. */
+export interface MoneySources {
+  /** Paid on clothes brought in during this same stretch. */
+  fromThese: number;
+  /** Paid on clothes brought in during the stretch before. */
+  fromPrevious: number;
+  /** Paid on clothes older than that. */
+  fromOlder: number;
+  /** Money with no bundle behind it: a sale or payment not tied to one. */
+  other: number;
+  total: number;
+}
+
+/**
+ * Where the money received in a stretch came from.
+ *
+ * Money counts in the week it is paid, whenever the clothes came in. That is
+ * right - it is the day the cash arrived - but it leaves a question a single
+ * figure cannot answer: was this a good week for new work, or a week of old
+ * debts coming home? Each payment names its bundle, and the bundle knows the
+ * day it was dropped off, so the same total is split here by how old the work
+ * behind it was.
+ *
+ * The parts always add up to the money received in the stretch.
+ */
+export function receivedBySource(
+  store: Pick<StoreData, 'sales' | 'accessCode' | 'pendingPayments'>,
+  from: number,
+  to: number,
+  previousFrom: number,
+): MoneySources {
+  const droppedOff = new Map<string, number>();
+  const accessCode = String(store.accessCode || '');
+  try {
+    for (const record of accessCode ? shopLaundryRecords(accessCode) : []) {
+      droppedOff.set(`laundry-${record.clientRef}`, timeOf(record.createdAt));
+    }
+  } catch { /* no bundles readable: everything falls under "other" */ }
+  // A bundle taken in on another phone is known here only by its debt record.
+  for (const debt of store.pendingPayments || []) {
+    if (!droppedOff.has(debt.id) && !debt.takenInElsewhere) droppedOff.set(debt.id, timeOf(debt.createdAt));
+  }
+
+  const sources: MoneySources = { fromThese: 0, fromPrevious: 0, fromOlder: 0, other: 0, total: 0 };
+  for (const sale of store.sales || []) {
+    if (!inside(timeOf(sale?.date), from, to)) continue;
+    const amount = Number(sale.total) || 0;
+    sources.total += amount;
+    const at = droppedOff.get(String(sale.pendingPaymentId || ''));
+    if (at === undefined || !Number.isFinite(at)) sources.other += amount;
+    else if (at >= from) sources.fromThese += amount;
+    else if (at >= previousFrom) sources.fromPrevious += amount;
+    else sources.fromOlder += amount;
+  }
+  return sources;
+}
+
 /** Bundles dropped off inside a window. */
 export function bundlesBetween(store: Pick<StoreData, 'accessCode'>, from: number, to: number): LocalLaundryRecord[] {
   const accessCode = String(store.accessCode || '');
