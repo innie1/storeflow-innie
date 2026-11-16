@@ -140,3 +140,60 @@ export function busyTimes(
   }
   return { slots, peakWindow, total, paid, unpaid };
 }
+
+/** The chart is never narrower than this, so two bars are not blown up to fill a card. */
+export const MIN_HOURS_SHOWN = 8;
+
+/**
+ * The part of the day worth drawing.
+ *
+ * A shop open from eight to six had a chart running midnight to midnight, so
+ * two thirds of it was empty night and each bar was a few pixels wide. This is
+ * the stretch from an hour before the first busy slot to an hour after the
+ * last, on whole hours, and at least MIN_HOURS_SHOWN wide.
+ */
+export function busyWindow(slots: SlotActivity[], interval: number = 30): SlotActivity[] {
+  const busy = slots.map((slot, index) => (slot.paid + slot.unpaid > 0 ? index : -1)).filter(index => index >= 0);
+  if (!busy.length) return slots;
+  const perHour = Math.max(1, Math.round(60 / interval));
+  const hours = Math.ceil(slots.length / perHour);
+  let from = Math.max(0, Math.floor(busy[0] / perHour) - 1);
+  let to = Math.min(hours, Math.floor(busy[busy.length - 1] / perHour) + 2);
+  // Widen evenly, then whichever way there is room.
+  while (to - from < Math.min(MIN_HOURS_SHOWN, hours)) {
+    if (from > 0) from -= 1;
+    if (to - from < MIN_HOURS_SHOWN && to < hours) to += 1;
+  }
+  return slots.slice(from * perHour, to * perHour);
+}
+
+/** Which slots carry an hour label, so there are a handful across the chart and never a crowd. */
+export function hourLabel(slot: SlotActivity, shown: number, interval: number = 30): string {
+  const hours = (shown * interval) / 60;
+  const every = hours <= 8 ? 1 : hours <= 14 ? 2 : 3;
+  if (slot.minute % (every * 60) !== 0) return '';
+  const hour = Math.floor(slot.minute / 60);
+  return `${hour % 12 === 0 ? 12 : hour % 12} ${hour >= 12 ? 'PM' : 'AM'}`;
+}
+
+/**
+ * The bar a tap was meant for.
+ *
+ * A bar on a phone is a few pixels wide with a gap beside it, so a finger
+ * lands between bars, or on an empty slot next to a busy one, as often as on
+ * the bar itself. `across` is how far across the chart the tap was, 0 to 1,
+ * and the answer is the nearest slot that has anything in it.
+ */
+export function nearestBusySlot(slots: SlotActivity[], across: number): SlotActivity | null {
+  if (!slots.length || !Number.isFinite(across)) return null;
+  // Slot i covers i/N to (i+1)/N, so its middle is at i + 0.5.
+  const at = Math.min(1, Math.max(0, across)) * slots.length - 0.5;
+  let best: SlotActivity | null = null;
+  let bestGap = Infinity;
+  slots.forEach((slot, index) => {
+    if (slot.paid + slot.unpaid <= 0) return;
+    const gap = Math.abs(index - at);
+    if (gap < bestGap) { best = slot; bestGap = gap; }
+  });
+  return best;
+}

@@ -125,6 +125,12 @@ export default function PricingAdvisor({ store, onUpdate }: Props) {
             {/* The arithmetic, always. A recommendation without its reasoning
                 is just an instruction. */}
             <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">{item.why}</p>
+            {/* What the cost is made of, so the figure can be checked rather than taken on trust. */}
+            {item.costLine && item.unitCost !== null && (
+              <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                <b className="text-foreground">{money(item.unitCost)} a piece to do.</b> {item.costLine}
+              </p>
+            )}
 
             {item.suggested !== null && (
               <p className="text-[11px] mt-1.5">

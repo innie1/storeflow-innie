@@ -27,7 +27,7 @@ import { shopLaundryRecords } from '@/lib/shop-laundry';
 
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
 import { monthWindow, breakEven } from '@/lib/service-breakeven';
-import { estimateUnitCost } from '@/lib/cost-estimator';
+import { serviceCosting, serviceCostSentence, type ServiceCosting } from '@/lib/cost-estimator';
 
 /**
  * Enough sales that a margin means something.
@@ -55,6 +55,8 @@ export interface PriceAdvice {
   volume: number;
   /** The sentence explaining the finding. */
   why: string;
+  /** What the cost is made of, in words: "Light ₦129 for ironing. No detergent: nothing is washed." */
+  costLine: string;
   /** A price worth considering, or null when none is being proposed. */
   suggested: number | null;
   /** What the suggestion would have been worth at this month's volume. */
@@ -124,24 +126,30 @@ function monthlyVolume(store: StoreData): Map<string, number> {
  * What one unit costs the shop.
  *
  * A retailer knows exactly: it is on the product. A service shop does not buy
- * its work in, so the cost is what it uses up doing it - derived from real
- * consumable spending over real pieces, shared across everything it does,
- * because nothing records which soap went on which shirt.
+ * its work in, so the cost is what it uses up doing it - and that depends on
+ * the service. Ironing uses light and no soap; a full service uses both, and
+ * twice the light. One shared figure for all of them told a shop its ironing
+ * barely paid, on the strength of soap the ironing never used.
  */
-function unitCostFor(store: StoreData, product: Product, sharedCost: number | null): number | null {
+function unitCostFor(store: StoreData, product: Product, costing: ServiceCosting | null): { cost: number | null; line: string } {
   const own = Number(product.costPrice || 0);
-  if (own > 0) return own;
-  return sharedCost;
+  if (own > 0) return { cost: own, line: '' };
+  if (!costing) return { cost: null, line: '' };
+  const cost = costing.costFor({ serviceId: String(product.id), serviceName: product.name });
+  return { cost: cost.perPiece, line: serviceCostSentence(store, cost) };
 }
 
 export function pricingAdvice(store: StoreData): AdvisorState {
-  const estimate = isServiceFirstBusiness(store) ? estimateUnitCost(store) : null;
+  const all = isServiceFirstBusiness(store) ? serviceCosting(store) : null;
+  const estimate = all?.estimate || null;
   /*
    * The starting soap figure is enough to keep a month's target honest, not to
    * tell a shop its price is wrong. With nothing but that behind the cost, the
    * advisor says it does not know yet.
    */
-  const shared = estimate && estimate.spend > estimate.guessedSpend ? estimate.perPiece : null;
+  const known = !!estimate && estimate.spend > estimate.guessedSpend;
+  const costing = known ? all : null;
+  const shared = known ? estimate!.perPiece : null;
   const volume = monthlyVolume(store);
   const seen = Array.from(volume.values()).reduce((sum, count) => sum + count, 0);
   const products = sellable(store);
@@ -157,7 +165,8 @@ export function pricingAdvice(store: StoreData): AdvisorState {
         name: product.name,
         kind: 'learning' as const,
         price: Number(product.sellingPrice || 0),
-        unitCost: unitCostFor(store, product, shared),
+        unitCost: unitCostFor(store, product, costing).cost,
+        costLine: '',
         margin: null,
         volume: volume.get(String(product.id)) || 0,
         why: `Still learning what this costs you. ${MIN_SALES_TO_ADVISE - seen} more sales and I can tell you whether the price works.`,
@@ -172,14 +181,14 @@ export function pricingAdvice(store: StoreData): AdvisorState {
   const advice: PriceAdvice[] = products.map(product => {
     const id = String(product.id);
     const price = Number(product.sellingPrice || 0);
-    const cost = unitCostFor(store, product, shared);
+    const { cost, line: costLine } = unitCostFor(store, product, costing);
     const sold = volume.get(id) || 0;
     const margin = cost === null ? null : price - cost;
 
     if (cost === null || price <= 0) {
       return {
         productId: id, name: product.name, kind: 'learning', price, unitCost: cost,
-        margin: null, volume: sold,
+        margin: null, volume: sold, costLine,
         why: 'No cost recorded for this yet, so I cannot say whether the price works.',
         suggested: null, monthlyImpact: null,
       };
@@ -194,7 +203,7 @@ export function pricingAdvice(store: StoreData): AdvisorState {
       const suggested = suggestPrice(cost);
       return {
         productId: id, name: product.name, kind: 'losing', price, unitCost: cost,
-        margin, volume: sold,
+        margin, volume: sold, costLine,
         why: `Each one costs you about ₦${round(cost).toLocaleString()} and you charge ₦${round(price).toLocaleString()}. You lose money on every one.`,
         suggested,
         monthlyImpact: sold > 0 ? (suggested - price) * sold : null,
@@ -205,7 +214,7 @@ export function pricingAdvice(store: StoreData): AdvisorState {
       const suggested = suggestPrice(cost);
       return {
         productId: id, name: product.name, kind: 'thin', price, unitCost: cost,
-        margin, volume: sold,
+        margin, volume: sold, costLine,
         why: `₦${round(margin!).toLocaleString()} of every ₦${round(price).toLocaleString()} is yours. The rest is what it costs to do.`,
         suggested: suggested > price ? suggested : null,
         monthlyImpact: sold > 0 && suggested > price ? (suggested - price) * sold : null,
@@ -220,7 +229,7 @@ export function pricingAdvice(store: StoreData): AdvisorState {
     if (sold === 0) {
       return {
         productId: id, name: product.name, kind: 'quiet', price, unitCost: cost,
-        margin, volume: 0,
+        margin, volume: 0, costLine,
         why: 'Nobody has bought this yet this month. Worth asking whether customers know you offer it.',
         suggested: null, monthlyImpact: null,
       };
@@ -228,7 +237,7 @@ export function pricingAdvice(store: StoreData): AdvisorState {
 
     return {
       productId: id, name: product.name, kind: 'healthy', price, unitCost: cost,
-      margin, volume: sold,
+      margin, volume: sold, costLine,
       why: `₦${round(margin!).toLocaleString()} of every ₦${round(price).toLocaleString()} is yours${state.target > 0 ? ', which is helping cover the month' : ''}.`,
       suggested: null, monthlyImpact: null,
     };
@@ -248,7 +257,7 @@ export function pricingAdvice(store: StoreData): AdvisorState {
  * honest basis available, and it is not a forecast. Whether selling more or
  * fewer at the new price is exactly what cannot be known from this data.
  */
-export function simulatePrice(item: PriceAdvice, newPrice: number): {
+export function simulatePrice(item: Pick<PriceAdvice, 'unitCost' | 'price' | 'volume'>, newPrice: number): {
   margin: number | null;
   monthlyChange: number | null;
   marginShare: number | null;

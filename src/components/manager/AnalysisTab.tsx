@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { saveStore, updateProduct, undoAutoPrice } from '@/lib/store-data';
 import {
   expenseAnalysis,
@@ -8,12 +8,12 @@ import {
   getProductInsightBadges,
 } from '@/lib/manager-intel';
 import { isServiceFirstBusiness, resolveBusinessType } from '@/lib/business-runtime';
-import { shopLaundryRecords } from '@/lib/shop-laundry';
-import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { showToast } from '@/components/Toast';
 import MessageIcon from '@/components/MessageIcon';
-import { ShoppingCart, Flame, Moon, Receipt, Home, Undo2, BarChart3, Shirt, Wand2 } from 'lucide-react';
+import { ShoppingCart, Flame, Moon, Receipt, Home, Undo2, BarChart3, Wand2 } from 'lucide-react';
 import MostActivePeriodsCard from './MostActivePeriodsCard';
+import ServicesCard from './ServicesCard';
+import AverageJobCard from './AverageJobCard';
 import type { ManagerState } from './useManager';
 
 const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
@@ -34,62 +34,6 @@ const TONE_TILE: Record<string, string> = {
   info: 'bg-primary/10 text-primary',
   danger: 'bg-destructive/10 text-destructive',
 };
-
-/**
- * What a laundry's customers bring, by service, over the last 30 days.
- *
- * Every laundry payment is recorded as one product called "Laundry", so the
- * shop's sales breakdown was a single line reading "Laundry: 41 sold". The
- * bundles themselves know which service they were for.
- */
-function ServicesCard({ store }: { store: ManagerState['store'] }) {
-  const version = useShopLaundryVersion();
-  const rows = useMemo(() => {
-    const since = Date.now() - 30 * 86400000;
-    let bundles: ReturnType<typeof shopLaundryRecords> = [];
-    try { bundles = shopLaundryRecords(String(store.accessCode || '')); } catch { /* none readable */ }
-    const by = new Map<string, { name: string; bundles: number; pieces: number; value: number }>();
-    for (const bundle of bundles) {
-      if (new Date(String(bundle.createdAt || '')).getTime() < since) continue;
-      const name = String(bundle.serviceName || 'Other').trim() || 'Other';
-      const row = by.get(name) || { name, bundles: 0, pieces: 0, value: 0 };
-      row.bundles += 1;
-      row.pieces += Number(bundle.pieceCount) || 0;
-      row.value += Number(bundle.total) || 0;
-      by.set(name, row);
-    }
-    return [...by.values()].sort((a, b) => b.value - a.value);
-  }, [store, version]);
-  const total = rows.reduce((sum, row) => sum + row.value, 0);
-
-  return (
-    <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
-      <div>
-        <h3 className="font-display font-bold text-sm flex items-center gap-1.5"><Shirt className="w-4 h-4" /> What customers bring</h3>
-        <p className="text-[11px] text-muted-foreground">By service, last 30 days</p>
-      </div>
-      {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-2">No bundles in the last 30 days.</p>
-      ) : (
-        <div className="space-y-2.5">
-          {rows.map(row => (
-            <div key={row.name}>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-display font-semibold truncate">{row.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {row.bundles} {row.bundles === 1 ? 'bundle' : 'bundles'} · {row.pieces} pcs · <b className="text-foreground">{naira(row.value)}</b>
-                </span>
-              </div>
-              <div className="h-1.5 mt-1.5 rounded-full bg-surface-2 overflow-hidden">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${total > 0 ? (row.value / total) * 100 : 0}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function SalesCard({ store }: { store: ManagerState['store'] }) {
   const sa = analyzeSales(store);
@@ -168,7 +112,12 @@ export default function AnalysisTab({ s }: { s: ManagerState }) {
       </Section>
 
       <Section title="What sells">
-        {isLaundry ? <ServicesCard store={store} /> : <SalesCard store={store} />}
+        {isLaundry ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <ServicesCard store={store} />
+            <AverageJobCard store={store} />
+          </div>
+        ) : <SalesCard store={store} />}
       </Section>
 
       {((ea && ea.byCat.length > 0) || rent) && (

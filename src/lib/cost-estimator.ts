@@ -86,6 +86,10 @@ export interface CostEstimate {
   soapGuessed: boolean;
   /** How much of `spend` is that starting figure rather than anything recorded. */
   guessedSpend: number;
+  /** Of `pieces`, how many were washed, and so used soap. */
+  washedPieces: number;
+  /** Powered work across `pieces`: one for each piece washed, one for each ironed. */
+  steps: number;
 }
 
 const DAY = 86400000;
@@ -140,6 +144,34 @@ export function washesClothes(record: { serviceId?: string; serviceName?: string
   if (/wash|full|clean|laund|express/.test(name)) return true;
   if (/iron|press/.test(name)) return false;
   return record.serviceId !== 'iron-only';
+}
+
+/**
+ * Whether a bundle is ironed, and so used the iron.
+ *
+ * The other half of the same question. "Wash Only" is named for the one thing
+ * it is; "Full Service" and anything with iron or press in its name is ironed.
+ * A service the shop named something else is taken to get the full treatment,
+ * so it is never costed as cheaper than it might be.
+ */
+export function ironsClothes(record: { serviceId?: string; serviceName?: string }): boolean {
+  const name = String(record.serviceName || '').toLowerCase();
+  if (/iron|press|full|complete/.test(name)) return true;
+  if (/only/.test(name)) return false;
+  return record.serviceId !== 'wash-only';
+}
+
+/**
+ * How much powered work a piece goes through: washing is one, ironing is one.
+ *
+ * One meter runs the machines and the irons, so a light bill cannot be read
+ * off per service. Spread evenly over pieces, a shirt that was only ironed
+ * carried as much light as one that was washed and ironed, and ironing looked
+ * as though it barely paid. Spread over the work instead, a piece that is
+ * washed and ironed carries twice the light of one that is only ironed.
+ */
+export function powerSteps(record: { serviceId?: string; serviceName?: string }): number {
+  return (washesClothes(record) ? 1 : 0) + (ironsClothes(record) ? 1 : 0) || 1;
 }
 
 /** "Ariel × 3" is three packs. Only the soap question writes the count. */
@@ -415,10 +447,12 @@ export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
   const accessCode = String(store.accessCode || '');
   let pieces = 0;
   let washedPieces = 0;
+  let steps = 0;
   for (const record of accessCode ? shopLaundryRecords(accessCode) : []) {
     if (!within(record.createdAt)) continue;
     pieces += Number(record.pieceCount) || 0;
     if (washesClothes(record)) washedPieces += Number(record.pieceCount) || 0;
+    steps += (Number(record.pieceCount) || 0) * powerSteps(record);
   }
 
   /*
@@ -484,6 +518,8 @@ export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
     waitingOn,
     soapGuessed,
     guessedSpend,
+    washedPieces,
+    steps,
   };
 }
 
@@ -537,6 +573,22 @@ export interface PieceCostPart {
   perPiece: number;
   /** A figure the app is still assuming rather than one the shop recorded. */
   assumed: boolean;
+  /** What the money went on, for a part that depends on the service: "washing and ironing". */
+  note?: string;
+}
+
+/** A cost category in the shop's own words: "detergent", "light", "piece-work pay". */
+function costLabel(store: StoreData, category: ExpenseCategory): string {
+  if (category === 'Consumables') return consumableAsk(store).noun.toLowerCase();
+  if (category === PIECE_WORK_CATEGORY) return 'piece-work pay';
+  if (category !== 'Utilities') return category.toLowerCase();
+  const bills = new Set(
+    (store.expenses || [])
+      .filter(expense => expense.category === 'Utilities')
+      .map(expense => utilityKey(expense)),
+  );
+  const names = [...bills].map(key => (key === 'electricity' ? 'light' : key));
+  return names.length ? names.join(' and ') : 'light';
 }
 
 /**
@@ -549,23 +601,10 @@ export interface PieceCostPart {
  */
 export function pieceCostParts(store: StoreData, estimate: CostEstimate): PieceCostPart[] {
   if (estimate.learning || estimate.pieces <= 0) return [];
-  const noun = consumableAsk(store).noun.toLowerCase();
-  const bills = new Set(
-    (store.expenses || [])
-      .filter(expense => expense.category === 'Utilities')
-      .map(expense => utilityKey(expense)),
-  );
-  const billNames = [...bills].map(key => (key === 'electricity' ? 'light' : key));
-  const labelFor = (category: ExpenseCategory) => {
-    if (category === 'Consumables') return noun;
-    if (category === 'Utilities') return billNames.length ? billNames.join(' and ') : 'light';
-    if (category === PIECE_WORK_CATEGORY) return 'piece-work pay';
-    return category.toLowerCase();
-  };
   return estimate.breakdown
     .filter(entry => entry.amount > 0)
     .map(entry => ({
-      label: labelFor(entry.category),
+      label: costLabel(store, entry.category),
       perPiece: entry.amount / estimate.pieces,
       // Soap is assumed while it still runs on the starting figure, and only
       // when nothing measured was added to it.
@@ -580,6 +619,148 @@ export function pieceCostSentence(store: StoreData, estimate: CostEstimate): str
   const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
   const list = parts.map(part => `${part.label} ${naira(part.perPiece)}${part.assumed ? ' (starting figure)' : ''}`).join(', ');
   return `${naira(estimate.perPiece)} a piece to do the work: ${list}. From the last ${estimate.days} days, ${estimate.pieces.toLocaleString()} pieces.`;
+}
+
+/* ── What each service costs ────────────────────────────────────────────── */
+
+export interface ServiceCost {
+  /** The service's id, or its name where a bundle carries no id. */
+  key: string;
+  name: string;
+  bundles: number;
+  /** Pieces of it taken in during the window. */
+  pieces: number;
+  /** What those bundles were priced at. */
+  value: number;
+  washes: boolean;
+  irons: boolean;
+  /** What one piece costs to do, part by part. Empty while nothing is known. */
+  parts: PieceCostPart[];
+  /** The parts added up, or null while there is nothing to go on. */
+  perPiece: number | null;
+}
+
+export interface ServiceCosting {
+  estimate: CostEstimate;
+  /** Every service with work in the window, the one that brought most first. */
+  services: ServiceCost[];
+  /** The same reckoning for any service, whether or not it had work in the window. */
+  costFor(service: { serviceId?: string; serviceName?: string }): Pick<ServiceCost, 'parts' | 'perPiece' | 'washes' | 'irons'>;
+}
+
+/**
+ * What a piece costs to do, service by service.
+ *
+ * One figure used to stand for every service. A shop was told its ironing left
+ * ₦45 of every ₦300, when most of the ₦255 "cost" was soap that ironing never
+ * touches and light for a washing machine the shirt never went in.
+ *
+ * Each cost goes only to the work that uses it:
+ *
+ *   Soap           - to pieces that were washed. Ironing carries none.
+ *   Light          - by the powered work a piece goes through (see powerSteps).
+ *   Piece-work pay - to the service of the bundle the work was done on, because
+ *                    every claim names its bundle.
+ *
+ * Nothing is added or lost: each service's cost times its pieces comes back to
+ * the same total the month's target is worked out from.
+ */
+export function serviceCosting(store: StoreData, days = 30): ServiceCosting {
+  const estimate = estimateUnitCost(store, days);
+  const now = Date.now();
+  const since = now - days * DAY;
+  const accessCode = String(store.accessCode || '');
+  const records = accessCode ? shopLaundryRecords(accessCode) : [];
+  const keyOf = (service: { serviceId?: string; serviceName?: string }) =>
+    String(service.serviceId || '').trim() || String(service.serviceName || '').trim().toLowerCase() || 'other';
+
+  const groups = new Map<string, { name: string; bundles: number; pieces: number; value: number; latest: number }>();
+  const serviceOfBundle = new Map<string, string>();
+  for (const record of records) {
+    const key = keyOf(record);
+    serviceOfBundle.set(String(record.clientRef || ''), key);
+    const at = new Date(String(record.createdAt || '')).getTime();
+    if (!Number.isFinite(at) || at < since) continue;
+    const group = groups.get(key) || { name: '', bundles: 0, pieces: 0, value: 0, latest: 0 };
+    group.bundles += 1;
+    group.pieces += Number(record.pieceCount) || 0;
+    group.value += Number(record.total) || 0;
+    // A renamed service goes by the name on its latest bundle.
+    if (at >= group.latest) { group.latest = at; group.name = String(record.serviceName || '').trim() || group.name; }
+    groups.set(key, group);
+  }
+
+  const amount = (category: ExpenseCategory) => estimate.breakdown.find(entry => entry.category === category)?.amount || 0;
+  const soap = amount('Consumables');
+  const power = amount('Utilities');
+  const soapPerWashed = estimate.washedPieces > 0 ? soap / estimate.washedPieces : 0;
+  const powerPerStep = estimate.steps > 0 ? power / estimate.steps : 0;
+  const soapAssumed = estimate.soapGuessed && soap <= estimate.guessedSpend + 0.5;
+
+  // Approved work, on the service of the bundle it was done on.
+  const labourBy = new Map<string, number>();
+  let labourUnplaced = 0;
+  for (const entry of store.pieceWork || []) {
+    if (!entry.approved) continue;
+    const at = new Date(entry.at).getTime();
+    if (!Number.isFinite(at) || at < since || at >= now) continue;
+    const key = serviceOfBundle.get(String(entry.clientRef || ''));
+    const value = Number(entry.amount) || 0;
+    if (key && (groups.get(key)?.pieces || 0) > 0) labourBy.set(key, (labourBy.get(key) || 0) + value);
+    else labourUnplaced += value;
+  }
+
+  const costFor: ServiceCosting['costFor'] = service => {
+    const washes = washesClothes(service);
+    const irons = ironsClothes(service);
+    if (estimate.learning) return { parts: [], perPiece: null, washes, irons };
+    const parts: PieceCostPart[] = [];
+    if (powerPerStep > 0) {
+      parts.push({
+        label: costLabel(store, 'Utilities'),
+        perPiece: powerPerStep * powerSteps(service),
+        assumed: false,
+        note: washes && irons ? 'washing and ironing' : irons ? 'ironing' : 'washing',
+      });
+    }
+    if (washes && soapPerWashed > 0) {
+      parts.push({ label: costLabel(store, 'Consumables'), perPiece: soapPerWashed, assumed: soapAssumed });
+    }
+    const group = groups.get(keyOf(service));
+    const labour = (group && group.pieces > 0 ? (labourBy.get(keyOf(service)) || 0) / group.pieces : 0)
+      + (estimate.pieces > 0 ? labourUnplaced / estimate.pieces : 0);
+    if (labour > 0) parts.push({ label: costLabel(store, PIECE_WORK_CATEGORY as ExpenseCategory), perPiece: labour, assumed: false });
+    parts.sort((a, b) => b.perPiece - a.perPiece);
+    return {
+      parts,
+      perPiece: parts.length ? parts.reduce((total, part) => total + part.perPiece, 0) : null,
+      washes,
+      irons,
+    };
+  };
+
+  const services: ServiceCost[] = Array.from(groups, ([key, group]) => {
+    const cost = costFor({ serviceId: key, serviceName: group.name });
+    return { key, name: group.name || 'Other', bundles: group.bundles, pieces: group.pieces, value: group.value, ...cost };
+  }).sort((a, b) => b.value - a.value);
+
+  return { estimate, services, costFor };
+}
+
+/**
+ * "Light ₦129 for ironing. No detergent: nothing is washed."
+ *
+ * Says what a service's cost is made of, and for ironing says the thing an
+ * owner would otherwise have to wonder about - that no soap was charged to it.
+ */
+export function serviceCostSentence(store: StoreData, cost: Pick<ServiceCost, 'parts' | 'washes'>): string {
+  if (!cost.parts.length) return '';
+  const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
+  const list = cost.parts
+    .map(part => `${part.label} ${naira(part.perPiece)}${part.note ? ` for ${part.note}` : ''}${part.assumed ? ' (starting figure)' : ''}`)
+    .join(', ');
+  const noSoap = cost.washes ? '' : ` No ${consumableAsk(store).noun.toLowerCase()}: nothing is washed.`;
+  return `${list[0].toUpperCase()}${list.slice(1)}.${noSoap}`;
 }
 
 /** "₦38 a piece — soap and electricity over the last 30 days, across 214 pieces." */
