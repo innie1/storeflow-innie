@@ -19,6 +19,7 @@
  */
 
 import type { DecoratedRecord } from '@/lib/laundry-records';
+import { daysBetween, readySince } from '@/lib/uncollected';
 
 export interface DayBoard {
   /** Promised for today and not finished. */
@@ -27,6 +28,8 @@ export interface DayBoard {
   late: number;
   /** Washed, folded, and waiting for someone to come for it. */
   ready: number;
+  /** Days the longest-waiting ready bundle has sat on the shelf. */
+  longestReadyDays: number;
   /** Money owed: balances on bundles already handed back. */
   owed: number;
   /** How many handed-back bundles that money is spread across. */
@@ -59,6 +62,7 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
   let dueToday = 0;
   let late = 0;
   let ready = 0;
+  let longestReadyDays = 0;
   let owed = 0;
   let owedCount = 0;
   let waitingCount = 0;
@@ -79,7 +83,11 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
       dueToday += 1;
     }
 
-    if (record.stage === 'ready') ready += 1;
+    if (record.stage === 'ready') {
+      ready += 1;
+      const since = readySince({ steps: record.steps, stageUpdatedAt: record.order?.updated_at, createdAt: record.createdAt });
+      if (since > 0) longestReadyDays = Math.max(longestReadyDays, daysBetween(since, now));
+    }
 
     /*
      * Still in the shop: everything not yet handed back. Its price is work
@@ -111,6 +119,7 @@ export function laundryDayBoard(records: DecoratedRecord[], now: number = Date.n
     dueToday,
     late,
     ready,
+    longestReadyDays,
     owed: Math.round(owed),
     owedCount,
     waitingCount,

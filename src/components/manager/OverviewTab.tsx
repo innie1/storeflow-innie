@@ -27,6 +27,7 @@ import { isServiceShop } from '@/lib/flow-service-brain';
 import { Ring } from './ui';
 import StoreHealthCard from './StoreHealthCard';
 import MoneyOwedCard from './MoneyOwedCard';
+import UncollectedCard from './UncollectedCard';
 import type { ManagerState } from './useManager';
 
 /**
@@ -58,6 +59,9 @@ export default function OverviewTab({ s }: { s: ManagerState }) {
 
 
       <MoneyOwedCard store={store} onClick={() => onNavigate?.('pending')} />
+
+      {/* The other pile of money not in hand yet: finished clothes nobody has come for. */}
+      {isService && <UncollectedCard store={store} onNavigate={onNavigate} />}
 
       {/* A laundry takes money at a counter but never opens a drawer, floats
           it or tallies a shift against it, so this is for till shops only.

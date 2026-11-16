@@ -819,7 +819,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
                   </div>
                 ) : createdPayment.balance > 0 ? (
                   <div className="flex items-center justify-between gap-3 text-amber-500">
-                    <span className="font-bold">Balance owing</span>
+                    <span className="font-bold">To pay on collection</span>
                     <span className="font-black">₦{createdPayment.balance.toLocaleString()}</span>
                   </div>
                 ) : created.total > 0 ? (
@@ -1149,7 +1149,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
                 const payment = settleLaundryPayment(price, Number(paidNow) || 0);
                 if (deposit > 0 && payment.applied < deposit) return <p className="text-[10px] text-destructive font-bold">This shop asks for ₦{deposit.toLocaleString()} before clothes are left.</p>;
                 if (payment.change > 0) return <p className="text-[10px] text-emerald-500 font-bold">Customer gave ₦{payment.tendered.toLocaleString()} — give ₦{payment.change.toLocaleString()} change.</p>;
-                if (payment.balance > 0) return <p className="text-[10px] text-amber-500 font-bold">₦{payment.balance.toLocaleString()} owing — it will show in Money Owed.</p>;
+                if (payment.balance > 0) return <p className="text-[10px] text-amber-500 font-bold">₦{payment.balance.toLocaleString()} to pay on collection.</p>;
                 if (price > 0) return <p className="text-[10px] text-emerald-500 font-bold">Paid in full.</p>;
                 return null;
               })()}

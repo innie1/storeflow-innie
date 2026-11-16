@@ -799,11 +799,11 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                               {record.due.text}
                             </span>
                           )}
-                          {/* What is still owed, where the attendant looks
-                              before handing clothes over. */}
+                          {/* What is to be paid, where the attendant looks before
+                              handing clothes over. Owed only once they have gone. */}
                           {record.balance > 0 && (
                             <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 text-[10px] font-black">
-                              ₦{record.balance.toLocaleString()} owing
+                              ₦{record.balance.toLocaleString()} {record.stage === 'collected' ? 'owed' : 'to pay'}
                             </span>
                           )}
                           {record.shelfLocation && (

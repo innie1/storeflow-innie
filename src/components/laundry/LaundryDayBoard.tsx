@@ -4,6 +4,7 @@ import { getLocalLaundryRecords, LAUNDRY_LOCAL_CHANGED_EVENT, mergeLaundryRecord
 import { decorateRecord } from '@/lib/laundry-records';
 import { laundryDayBoard, type DayBoard } from '@/lib/laundry-day';
 import { requestLaundryWorkspace } from '@/lib/laundry-workspace';
+import { LONG_WAIT_DAYS } from '@/lib/uncollected';
 
 /**
  * The day's work, at the top of the first screen.
@@ -19,7 +20,7 @@ import { requestLaundryWorkspace } from '@/lib/laundry-workspace';
  * filtered.
  */
 
-const EMPTY_BOARD: DayBoard = { dueToday: 0, late: 0, ready: 0, owed: 0, owedCount: 0, waitingCount: 0, waitingValue: 0, waitingUnpaid: 0, waitingUnpaidCount: 0, empty: true };
+const EMPTY_BOARD: DayBoard = { dueToday: 0, late: 0, ready: 0, longestReadyDays: 0, owed: 0, owedCount: 0, waitingCount: 0, waitingValue: 0, waitingUnpaid: 0, waitingUnpaidCount: 0, empty: true };
 
 /**
  * The day's figures, worked out once for the whole home screen.
@@ -155,7 +156,10 @@ export function LaundryMoneyLines({ board, onNavigate }: { board: DayBoard; onNa
       key: 'ready',
       dot: 'bg-success',
       title: `${board.ready} ready to collect`,
-      note: stillWashing > 0 ? `${stillWashing} more still being washed` : 'Nothing else in the wash',
+      // Clothes a week on the shelf are the thing to know about, ahead of what is in the wash.
+      note: board.longestReadyDays >= LONG_WAIT_DAYS
+        ? `The longest has waited ${board.longestReadyDays} days`
+        : stillWashing > 0 ? `${stillWashing} more still being washed` : 'Nothing else in the wash',
       action: 'Open',
       filter: 'ready',
     });
