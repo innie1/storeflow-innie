@@ -10,6 +10,7 @@ import WorkerPassPrompt from '@/components/staff/WorkerPassPrompt';
 import InviteSwitchPrompt from '@/components/staff/InviteSwitchPrompt';
 import { clearInvite } from '@/lib/staff-join';
 import StaffExpenseButton from '@/components/staff/StaffExpenseButton';
+import PaydayPrompt from '@/components/staff/PaydayPrompt';
 import { saveStore } from '@/lib/store-data';
 import StreakRewardReveal from '@/components/streaks/StreakRewardReveal';
 import StoreAccess from '@/components/StoreAccess';
@@ -256,6 +257,11 @@ export default function Index() {
             practised={hasPractised(store.accessCode) && (store.sales || []).length === 0}
             onDone={() => { markCelebrationShown(store.accessCode); setShowReady(false); }}
           />
+        )}
+        {/* On payday, whether each salary was paid - from the staff settings,
+            so a tap records it. The owner's question, on the owner's phone. */}
+        {currentUser?.role === 'owner' && !store.staffDevice && !showReady && !milestoneShowing && !inviteAsk && (
+          <PaydayPrompt store={store} onUpdate={setStore} />
         )}
 
         <main className={`flex-1 ${store.uiMode === 'simple' && tab === 'dashboard' ? 'px-3 pt-1 pb-16 md:pt-2 space-y-3' : 'px-4 pt-2 pb-20 md:px-6 md:pt-3 md:pb-6 space-y-4'} w-full max-w-5xl lg:max-w-6xl mx-auto`} style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))', paddingRight: 'max(0.75rem, env(safe-area-inset-right))', paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))' }}>

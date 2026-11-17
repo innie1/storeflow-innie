@@ -245,6 +245,10 @@ export interface Expense {
    * the same thing are measured against each other to see how long one lasts.
    */
   supply?: string;
+  /** For a salary: which staff member it paid, by id. */
+  paidTo?: string;
+  /** For a salary: the month it was for, "2026-11". */
+  payMonth?: string;
 }
 
 export type ExpensePaidFrom = 'cash' | 'bank' | 'wallet';
@@ -629,6 +633,14 @@ export interface StaffMember {
    * answer rather than a missing one.
    */
   monthlySalary?: number;
+  /**
+   * The day of the month the salary is paid, 1 to 31. Absent means the last
+   * day of the month. A 31 in a 30-day month is the 30th. On that day the
+   * owner is asked whether it was paid, and a yes records it.
+   */
+  payDay?: number;
+  /** When this person was added, so they are never asked about a payday from before. */
+  addedAt?: string;
   /**
    * How this person is paid.
    *

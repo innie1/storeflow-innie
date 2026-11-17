@@ -3,7 +3,9 @@ import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
 
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
-import { ArrowLeft, BarChart3, CheckCircle2, ChevronRight, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, X, XCircle, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, BarChart3, CheckCircle2, ChevronRight, Clock, Eye, Globe2, RefreshCw, ShoppingBag, UserPlus, UserRound, Users, X, XCircle, type LucideIcon } from 'lucide-react';
+import { customerWeeks, serviceSpeed, type ServiceBundle } from '@/lib/manager-intel';
+import { CustomersCard, ServiceSpeedCard, TopCustomersCard } from '@/components/manager/ServiceFiguresCards';
 import { receivedBetween, receivedByChannel, waitingToCollect } from '@/lib/money-figures';
 import { dayKey, describeDay, getDayHistory, recordDays, type DayRecord } from '@/lib/day-records';
 import type { StoreData } from '@/types/store';
@@ -28,7 +30,7 @@ type AnyRecord = Record<string, any>;
 
 /** A figure, and - for anything measured over time - the stretch it covers. */
 /** `onOpen` makes the figure a button: tapping it opens what is behind the number. */
-type Card = { label: string; value: string | number; icon: LucideIcon; period?: string; onOpen?: () => void };
+type Card = { label: string; value: string | number; icon: LucideIcon; period?: string; onOpen?: () => void; openLabel?: string };
 
 function listFromStore(store: StoreData, names: string[]): AnyRecord[] {
   const root = store as any;
@@ -103,6 +105,8 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
   const [pickedDay, setPickedDay] = useState('');
   // The Average job figure opens its weeks and months; it used to do nothing when tapped.
   const [showAverage, setShowAverage] = useState(false);
+  // Ready on time and New customers open what is behind them the same way.
+  const [sheet, setSheet] = useState<null | 'speed' | 'customers'>(null);
   // A long-running shop has hundreds of days: show a month, then more on a tap.
   const [dayCount, setDayCount] = useState(30);
   const laundryVersion = useShopLaundryVersion();
@@ -230,6 +234,14 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
     };
   }, [store, range, laundryVersion]);
 
+  // Ready on time and new customers, from the bundles as they stand.
+  const service = useMemo(() => {
+    if (!isLaundry) return null;
+    let bundles: ServiceBundle[] = [];
+    try { bundles = shopLaundryRecords(String(store.accessCode || '')) as ServiceBundle[]; } catch { /* none readable */ }
+    return { speed: serviceSpeed(bundles, 30), customers: customerWeeks(bundles, 8) };
+  }, [store, isLaundry, laundryVersion]);
+
   const isService = isServiceFirstBusiness(store);
   // Said on every figure measured over time, so no number is read as a different stretch.
   const period = range === 'week' ? 'This week' : range === 'month' ? 'This month' : 'All time';
@@ -260,7 +272,25 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       icon: ShoppingBag,
       period: analytics.waiting.unpaid > 0 ? `Right now · ${money(analytics.waiting.unpaid)} not paid yet` : 'Right now',
     },
-    { label: 'Average job', value: money(average), icon: BarChart3, period, ...(isLaundry ? { onOpen: () => setShowAverage(true) } : {}) },
+    { label: 'Average job', value: money(average), icon: BarChart3, period, ...(isLaundry ? { onOpen: () => setShowAverage(true), openLabel: 'See weeks and months' } : {}) },
+    ...(service ? [
+      {
+        label: 'Ready on time',
+        value: service.speed.now.onTimeShare !== null ? `${service.speed.now.onTimeShare}%` : '—',
+        icon: Clock,
+        period: service.speed.now.promised > 0 ? `Last 30 days · ${service.speed.now.onTime} of ${service.speed.now.promised}` : 'Last 30 days · no ready times set',
+        onOpen: () => setSheet('speed'),
+        openLabel: 'See how fast',
+      },
+      {
+        label: 'New customers',
+        value: service.customers.soFar.newCustomers,
+        icon: UserPlus,
+        period: `This week so far · ${service.customers.sameDaysLastWeek.newCustomers} on the same days last week`,
+        onOpen: () => setSheet('customers'),
+        openLabel: 'See new and returning',
+      },
+    ] as Card[] : []),
     // A balance, not a flow: what is owed right now, whichever stretch is chosen.
     { label: 'Still owed', value: money(analytics.outstanding), icon: UserRound, period: 'Right now' },
   ];
@@ -340,7 +370,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       {isLaundry && <LaundryFlowCard store={store} range={range} />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {cards.map(({ label, value, icon: Icon, period: stretch, onOpen }) => {
+        {cards.map(({ label, value, icon: Icon, period: stretch, onOpen, openLabel }) => {
           const inside = (
             <>
               <span className="flex items-center justify-between">
@@ -350,7 +380,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
               <p className="font-display font-black text-2xl mt-2">{value}</p>
               <p className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</p>
               {stretch && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{stretch}</p>}
-              {onOpen && <p className="text-[10px] text-primary font-bold mt-1">See weeks and months</p>}
+              {onOpen && <p className="text-[10px] text-primary font-bold mt-1">{openLabel || 'See more'}</p>}
             </>
           );
           return onOpen
@@ -366,6 +396,23 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
               <button type="button" onClick={() => setShowAverage(false)} aria-label="Close" className="p-1.5 text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
             <AverageJobCard store={store} startWith={range === 'week' ? 'week' : 'month'} bare />
+          </div>
+        </div>
+      )}
+
+      {sheet && (
+        <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setSheet(null)}>
+          <div className="w-full max-w-md max-h-[85vh] overflow-y-auto bg-card border border-border rounded-t-3xl sm:rounded-3xl p-4 pb-8 animate-slide-up space-y-5" onClick={event => event.stopPropagation()} data-figure-sheet={sheet}>
+            <div className="flex justify-end -mb-3">
+              <button type="button" onClick={() => setSheet(null)} aria-label="Close" className="p-1.5 text-muted-foreground"><X className="w-5 h-5" /></button>
+            </div>
+            {sheet === 'speed' && <ServiceSpeedCard store={store} bare />}
+            {sheet === 'customers' && (
+              <>
+                <CustomersCard store={store} bare />
+                <TopCustomersCard store={store} bare />
+              </>
+            )}
           </div>
         </div>
       )}
@@ -459,6 +506,12 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
         );
       })()}
 
+      {tab === 'customers' && isLaundry && (
+        <div className="grid md:grid-cols-2 gap-3 items-start">
+          <section className="rounded-2xl border border-border bg-card p-4"><CustomersCard store={store} bare /></section>
+          <section className="rounded-2xl border border-border bg-card p-4"><TopCustomersCard store={store} bare /></section>
+        </div>
+      )}
       {tab === 'customers' && <section className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="p-4 border-b border-border"><h2 className="font-display font-bold">Customer purchase history</h2><p className="text-xs text-muted-foreground mt-1">See how often each buyer successfully purchased.</p></div>
         {analytics.customerRows.length === 0 ? <div className="p-8 text-center text-sm text-muted-foreground">No order customer history is available yet.</div> : <div className="divide-y divide-border">{analytics.customerRows.slice(0, 50).map(c => <div key={c.key} className="p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black">{c.guest ? 'G' : String(c.name).slice(0, 1).toUpperCase()}</div><div className="flex-1 min-w-0"><p className="font-bold text-sm truncate">{c.name}</p><p className="text-xs text-muted-foreground truncate">{c.guest ? 'Guest buyer' : c.phone || 'Customer'} · {c.orders} order{c.orders === 1 ? '' : 's'}</p></div><div className="text-right"><p className="font-display font-black text-sm">{c.successful} successful</p><p className="text-xs text-primary">₦{Math.round(c.spent).toLocaleString()}</p></div></div>)}</div>}

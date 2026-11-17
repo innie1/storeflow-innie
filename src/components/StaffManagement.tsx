@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { showToast } from '@/components/Toast';
 import { ANY_GARMENT, hasMonthlySalary, isPerPieceWorker, pendingClaims, setPieceRate, taskLabel, WORK_TASKS } from '@/lib/piece-work';
+import { isSalaried, payDayInWords } from '@/lib/payday';
 import { getLaundryPricingConfig } from '@/lib/laundry-pricing';
 import RecordWork from '@/components/laundry/RecordWork';
 import WorkerEarnings from '@/components/laundry/WorkerEarnings';
@@ -132,6 +133,8 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
   const [phone, setPhone] = useState('');
   /** What they are paid a month. Feeds the shop's fixed costs. */
   const [salary, setSalary] = useState('');
+  /** The day of the month the salary is paid. Empty means the last day. */
+  const [payDay, setPayDay] = useState('');
   const [payType, setPayType] = useState<'monthly' | 'per_piece' | 'salary_piece' | 'none'>('monthly');
   const [pieceRates, setPieceRates] = useState<PieceRate[]>([]);
   const [newRateTask, setNewRateTask] = useState<string>(WORK_TASKS[0].id);
@@ -236,6 +239,8 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
       pin: pin.trim(),
       phone: phone.trim(),
       monthlySalary: hasMonthlySalary({ payType }) ? Math.max(0, Number(salary) || 0) : 0,
+      payDay: hasMonthlySalary({ payType }) && Number(payDay) >= 1 && Number(payDay) <= 31 ? Number(payDay) : undefined,
+      addedAt: new Date().toISOString(),
       payType,
       pieceRates: isPerPieceWorker({ payType }) ? pieceRates.filter(r => r.rate > 0) : [],
       role,
@@ -272,6 +277,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
       pin: pin.trim(),
       phone: phone.trim(),
       monthlySalary: hasMonthlySalary({ payType }) ? Math.max(0, Number(salary) || 0) : 0,
+      payDay: hasMonthlySalary({ payType }) && Number(payDay) >= 1 && Number(payDay) <= 31 ? Number(payDay) : undefined,
       payType,
       pieceRates: isPerPieceWorker({ payType }) ? pieceRates.filter(r => r.rate > 0) : [],
       role,
@@ -339,6 +345,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
     setPin('');
     setPhone('');
     setSalary('');
+    setPayDay('');
     setPayType('monthly');
     setPieceRates([]);
     setNewRateGarment('');
@@ -360,6 +367,7 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
     setPin(s.pin);
     setPhone(s.phone || '');
     setSalary(s.monthlySalary ? String(s.monthlySalary) : '');
+    setPayDay(s.payDay ? String(s.payDay) : '');
     setPayType(s.payType || 'monthly');
     setPieceRates(s.pieceRates || []);
     setRateDraft('');
@@ -544,6 +552,11 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                           {isPerPieceWorker(s) && (
                             <span className="inline-block px-1.5 py-0.5 rounded bg-primary/15 border border-primary/30 text-[8px] font-bold text-primary uppercase">
                               {s.payType === 'salary_piece' ? 'salary + piece' : 'per piece'}
+                            </span>
+                          )}
+                          {seesMoney && isSalaried(s) && (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-surface-2 border border-border/80 text-[8px] font-bold text-muted-foreground uppercase">
+                              paid {payDayInWords(s).replace(/ of every month$/, '').replace(/^the /, '')}
                             </span>
                           )}
                           {s.role === 'supervisor' && s.permissions.money && (
@@ -895,6 +908,23 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                     className="w-full bg-transparent text-foreground text-sm focus:outline-none"
                   />
                 </div>
+                {Number(salary) > 0 && (
+                  <div className="pt-2 space-y-1" data-payday-field>
+                    <label htmlFor="staff-pay-day" className="text-xs text-muted-foreground uppercase font-bold">Payday</label>
+                    <select
+                      id="staff-pay-day"
+                      value={payDay}
+                      onChange={e => setPayDay(e.target.value)}
+                      className="w-full p-2.5 rounded-lg bg-surface-2 border border-border text-foreground text-sm focus:outline-none focus:border-yellow-500"
+                    >
+                      <option value="">Last day of the month</option>
+                      {Array.from({ length: 28 }, (_, index) => index + 1).map(day => (
+                        <option key={day} value={String(day)}>{payDayInWords({ payDay: day }).replace(/ of every month$/, '').replace(/^the /, 'The ')} of the month</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground leading-snug">On this day you are asked whether {name.trim() || 'they'} {name.trim() ? 'was' : 'were'} paid. One tap records it.</p>
+                  </div>
+                )}
               </div>
               )}
 

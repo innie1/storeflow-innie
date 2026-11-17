@@ -18,6 +18,7 @@ export * from './manager-intel/notifications';
 export * from './manager-intel/insights';
 export * from './manager-intel/activity';
 export * from './manager-intel/average-job';
+export * from './manager-intel/service-figures';
 export * from './manager-intel/flow-report';
 export * from './manager-intel/opportunities';
 export * from './manager-intel/seasonal';

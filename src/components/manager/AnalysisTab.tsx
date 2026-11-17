@@ -15,6 +15,7 @@ import MostActivePeriodsCard from './MostActivePeriodsCard';
 import ServicesCard from './ServicesCard';
 import AverageJobCard from './AverageJobCard';
 import WhereMoneyGoesCard from './WhereMoneyGoesCard';
+import { BusiestDaysCard, CustomersCard, ServiceSpeedCard, TopCustomersCard } from './ServiceFiguresCards';
 import type { ManagerState } from './useManager';
 
 const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
@@ -109,8 +110,28 @@ export default function AnalysisTab({ s }: { s: ManagerState }) {
   return (
     <div className="space-y-4 animate-fade-in">
       <Section title="When you are busy">
-        <MostActivePeriodsCard store={store} />
+        {isLaundry ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <MostActivePeriodsCard store={store} />
+            <BusiestDaysCard store={store} />
+          </div>
+        ) : <MostActivePeriodsCard store={store} />}
       </Section>
+
+      {isLaundry && (
+        <Section title="Customers">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <CustomersCard store={store} />
+            <TopCustomersCard store={store} />
+          </div>
+        </Section>
+      )}
+
+      {isLaundry && (
+        <Section title="How fast the work goes">
+          <ServiceSpeedCard store={store} />
+        </Section>
+      )}
 
       <Section title="What sells">
         {isLaundry ? (
