@@ -61,7 +61,7 @@ describe('who received the money', () => {
   });
 
   it('is what the counter and intake both record', () => {
-    expect(readSource('src/components/laundry/LaundryWorkspace.tsx')).toMatch(/laterPayment: true,\s+takenBy: currentUser\?\.name,/);
+    expect(readSource('src/components/laundry/LaundryWorkspace.tsx')).toMatch(/laterPayment: true,\s+method,\s+takenBy: currentUser\?\.name,/);
     expect(readSource('src/components/laundry/LaundryWalkInIntakeV3.tsx')).toMatch(/promisedFor,\s+takenBy: currentUser\?\.name,/);
   });
 });
@@ -96,12 +96,13 @@ describe('the receipt', () => {
 });
 
 describe('the WhatsApp message', () => {
-  it('names both people', () => {
+  // The shop's record of who did what stays on the ticket and the bundle's page.
+  it("names neither of them: that is the shop's record, not the customer's", () => {
     const paid = recordLaundryPayment(shop, { ...bundle, amountPaid: 4000, at: AT, laterPayment: true, takenBy: 'Amaka' });
     const order = { client_ref: REF, customer_phone: '08020000000', customer_name: 'Ada', total: 4000, workflow_stage: 'ready', status: 'Ready', service_metadata: { recorded_by_name: 'Destiny', tag_code: 'C6JYNQ' } };
     const message = buildLaundryWhatsAppPayload(paid, order)?.message || '';
-    expect(message).toContain('Taken in by: Destiny');
-    expect(message).toMatch(/4,000 received by Amaka/);
+    expect(message).not.toMatch(/Destiny|Amaka|taken in by|received by/i);
+    expect(message).toContain('Paid in full');
   });
 });
 

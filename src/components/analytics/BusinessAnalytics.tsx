@@ -3,12 +3,13 @@ import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
 
 import { isServiceFirstBusiness } from '@/lib/business-runtime';
-import { ArrowLeft, BarChart3, CheckCircle2, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, XCircle, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, BarChart3, CheckCircle2, ChevronRight, Eye, Globe2, RefreshCw, ShoppingBag, UserRound, Users, X, XCircle, type LucideIcon } from 'lucide-react';
 import { receivedBetween, receivedByChannel, waitingToCollect } from '@/lib/money-figures';
 import { dayKey, describeDay, getDayHistory, recordDays, type DayRecord } from '@/lib/day-records';
 import type { StoreData } from '@/types/store';
 import LaundryFlowCard from '@/components/laundry/LaundryFlowCard';
 import PeriodCompare from '@/components/laundry/PeriodCompare';
+import AverageJobCard from '@/components/manager/AverageJobCard';
 import DateField from '@/components/DateField';
 
 // Calendar stretches, the same as the Revenue card: Monday to now, the 1st to now.
@@ -26,7 +27,8 @@ function rangeStart(range: Range, now: number = Date.now()): number {
 type AnyRecord = Record<string, any>;
 
 /** A figure, and - for anything measured over time - the stretch it covers. */
-type Card = { label: string; value: string | number; icon: LucideIcon; period?: string };
+/** `onOpen` makes the figure a button: tapping it opens what is behind the number. */
+type Card = { label: string; value: string | number; icon: LucideIcon; period?: string; onOpen?: () => void };
 
 function listFromStore(store: StoreData, names: string[]): AnyRecord[] {
   const root = store as any;
@@ -99,6 +101,8 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
    */
   const [days, setDays] = useState<DayRecord[]>(() => getDayHistory(String(store.accessCode || '')));
   const [pickedDay, setPickedDay] = useState('');
+  // The Average job figure opens its weeks and months; it used to do nothing when tapped.
+  const [showAverage, setShowAverage] = useState(false);
   // A long-running shop has hundreds of days: show a month, then more on a tap.
   const [dayCount, setDayCount] = useState(30);
   const laundryVersion = useShopLaundryVersion();
@@ -256,7 +260,7 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       icon: ShoppingBag,
       period: analytics.waiting.unpaid > 0 ? `Right now · ${money(analytics.waiting.unpaid)} not paid yet` : 'Right now',
     },
-    { label: 'Average job', value: money(average), icon: BarChart3, period },
+    { label: 'Average job', value: money(average), icon: BarChart3, period, ...(isLaundry ? { onOpen: () => setShowAverage(true) } : {}) },
     // A balance, not a flow: what is owed right now, whichever stretch is chosen.
     { label: 'Still owed', value: money(analytics.outstanding), icon: UserRound, period: 'Right now' },
   ];
@@ -336,8 +340,35 @@ export default function BusinessAnalytics({ store, onBack }: { store: StoreData;
       {isLaundry && <LaundryFlowCard store={store} range={range} />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {cards.map(({ label, value, icon: Icon, period: stretch }) => <div key={label} className="rounded-2xl border border-border bg-card p-4"><Icon className="w-4 h-4 text-primary" /><p className="font-display font-black text-2xl mt-2">{value}</p><p className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</p>{stretch && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{stretch}</p>}</div>)}
+        {cards.map(({ label, value, icon: Icon, period: stretch, onOpen }) => {
+          const inside = (
+            <>
+              <span className="flex items-center justify-between">
+                <Icon className="w-4 h-4 text-primary" />
+                {onOpen && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+              </span>
+              <p className="font-display font-black text-2xl mt-2">{value}</p>
+              <p className="text-[11px] text-muted-foreground mt-1 leading-tight">{label}</p>
+              {stretch && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{stretch}</p>}
+              {onOpen && <p className="text-[10px] text-primary font-bold mt-1">See weeks and months</p>}
+            </>
+          );
+          return onOpen
+            ? <button key={label} type="button" onClick={onOpen} className="rounded-2xl border border-border bg-card p-4 text-left active:bg-surface-2 transition-colors">{inside}</button>
+            : <div key={label} className="rounded-2xl border border-border bg-card p-4">{inside}</div>;
+        })}
       </div>
+
+      {showAverage && (
+        <div className="fixed inset-0 z-[60] bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowAverage(false)}>
+          <div className="w-full max-w-md max-h-[85vh] overflow-y-auto bg-card border border-border rounded-t-3xl sm:rounded-3xl p-4 pb-8 animate-slide-up" onClick={event => event.stopPropagation()}>
+            <div className="flex justify-end -mb-1">
+              <button type="button" onClick={() => setShowAverage(false)} aria-label="Close" className="p-1.5 text-muted-foreground"><X className="w-5 h-5" /></button>
+            </div>
+            <AverageJobCard store={store} startWith={range === 'week' ? 'week' : 'month'} bare />
+          </div>
+        </div>
+      )}
 
       {isLaundry && whereTheWorkComesFrom}
 

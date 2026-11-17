@@ -6,6 +6,7 @@ import { getPendingSummary } from '@/lib/store-data';
 import { startOfDay, daysAgo } from './dates';
 import { dailySeries } from './forecast';
 import { computeStockForecasts } from './stock';
+import { receivedToNow } from '@/lib/fair-compare';
 
 // ─── Store Health (6-factor per spec) ─────────────────────────────────────────
 export interface HealthScore {
@@ -73,7 +74,9 @@ export function healthScore(store: StoreData): HealthScore {
   const last7 = dailySeries(store, 7);
   const prev7 = dailySeries(store, 14).slice(0, 7);
   const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
-  const revPrev = prev7.reduce((s, d) => s + d.revenue, 0);
+  // The seven days before, cut at this time of day, so a morning is not set
+  // against a whole day (see src/lib/fair-compare.ts).
+  const revPrev = prev7.length ? receivedToNow(store, 7).before : 0;
   const profit7 = last7.reduce((s, d) => s + d.profit, 0);
   const exp7 = last7.reduce((s, d) => s + d.expenses, 0);
 
@@ -84,7 +87,7 @@ export function healthScore(store: StoreData): HealthScore {
     revenueScore = Math.max(0, Math.min(100, 60 + growth * 150));
   } else if (rev7 > 0) revenueScore = 65;
   const revDetail = revPrev > 0
-    ? `Revenue ${rev7 >= revPrev ? '↑' : '↓'} ${Math.abs(((rev7 - revPrev) / revPrev) * 100).toFixed(1)}% vs last week`
+    ? `Revenue ${rev7 >= revPrev ? '↑' : '↓'} ${Math.abs(((rev7 - revPrev) / revPrev) * 100).toFixed(1)}% vs the same days last week`
     : rev7 > 0 ? `₦${rev7.toLocaleString()} this week` : 'No sales this week';
 
   // 25%: Profit Performance

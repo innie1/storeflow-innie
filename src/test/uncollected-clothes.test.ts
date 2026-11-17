@@ -154,15 +154,15 @@ describe('the reminder', () => {
     const message = collectionReminderMessage(shop(), waiting);
     expect(message).toContain('Hello Ada Obi,');
     expect(message).toContain('Your laundry at Shine Laundry has been ready since Tuesday 10 November.');
-    expect(message).toContain('Laundry code: T-204');
+    expect(message).toContain('*Laundry code: T-204*');
     expect(message).toContain('6 pieces');
     expect(message).toContain('To pay on collection: ₦4,500');
-    expect(message).toContain('Address: 4 Market Road');
+    expect(message.split('\n').slice(-3)).toEqual(['*Shine Laundry*', '4 Market Road', 'Tel: 0700 000 0000']);
   });
 
   it('does not ask for money on a bundle that is paid', () => {
     const message = collectionReminderMessage(shop(), { ...waiting, balance: 0 });
-    expect(message).toContain('It is fully paid.');
+    expect(message).toContain('Paid in full');
     expect(message).not.toContain('To pay on collection');
   });
 

@@ -76,6 +76,8 @@ export interface LaundryPaymentInput {
   takenByRole?: string;
   /** Money on a bundle already taken in, here or on another phone - never the taking-in. */
   laterPayment?: boolean;
+  /** Cash or transfer, when the counter said. Left off when it did not. */
+  method?: 'cash' | 'transfer';
 }
 
 const money = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
@@ -184,6 +186,16 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
       date: at,
       pendingPaymentId: `laundry-${input.clientRef}`,
       channel: 'in_store',
+      // Change given means cash, whatever was picked: nobody gives change on a transfer.
+      ...(settlement.change > 0 || input.method
+        ? (() => {
+            const method = settlement.change > 0 ? 'cash' as const : input.method!;
+            return {
+              paymentMethod: method,
+              paymentAllocation: method === 'cash' ? { cash: actuallyTaken, bank: 0 } : { cash: 0, bank: actuallyTaken },
+            };
+          })()
+        : {}),
       ...attribution({ name: input.takenBy, role: input.takenByRole }),
     };
     next = { ...next, sales: [...(next.sales || []), sale] };
@@ -194,6 +206,7 @@ export function recordLaundryPayment(store: StoreData, input: LaundryPaymentInpu
     ? [{
         date: at,
         amount: actuallyTaken,
+        ...(settlement.change > 0 ? { method: 'cash' as const } : input.method ? { method: input.method } : {}),
         ...(input.takenBy ? { takenBy: input.takenBy } : {}),
         note: (settlement.change > 0
           ? `${input.tagCode} payment — ₦${settlement.tendered.toLocaleString()} tendered, ₦${settlement.change.toLocaleString()} change`

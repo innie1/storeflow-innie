@@ -30,7 +30,7 @@ import {
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
-import { AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, Ticket, X } from 'lucide-react';
+import { AlertTriangle, Banknote, Landmark, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, Ticket, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
 import ClaimTicket from '@/components/laundry/ClaimTicket';
 import ChangeServiceSheet from '@/components/laundry/ChangeServiceSheet';
@@ -42,6 +42,7 @@ import { Bike } from 'lucide-react';
 import LaundryEquipmentPanel from '@/components/laundry/LaundryEquipmentPanel';
 import { bundleTimeline, decorateRecord, type DecoratedRecord } from '@/lib/laundry-records';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
+import { methodLabel, type CounterMethod } from '@/lib/payment-method';
 
 interface Props {
   store: StoreData;
@@ -319,7 +320,7 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
    * possible at drop-off, so this does not need to ask for an amount and slow
    * the queue down.
    */
-  const collectPayment = useCallback((record: DecoratedRecord) => {
+  const collectPayment = useCallback((record: DecoratedRecord, method: CounterMethod) => {
     if (record.balance <= 0) return;
     // onUpdate only moves React state; without saveStore the payment is lost
     // on the next reload, which for money is the worst possible failure.
@@ -333,12 +334,13 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
       total: record.total,
       amountPaid: record.balance,
       laterPayment: true,
+      method,
       takenBy: currentUser?.name,
       takenByRole: currentUser?.role,
     });
     saveStore(next);
     onUpdate(next);
-    showToast(`₦${record.balance.toLocaleString()} received for ${record.tagCode}`);
+    showToast(`₦${record.balance.toLocaleString()} received ${method === 'cash' ? 'in cash' : 'by transfer'} for ${record.tagCode}`);
   }, [store, onUpdate, currentUser]);
 
   /**
@@ -386,8 +388,8 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
     }
   }, [store.accessCode]);
 
-  const settleAndCollect = (record: DecoratedRecord) => {
-    collectPayment(record);
+  const settleAndCollect = (record: DecoratedRecord, method: CounterMethod) => {
+    collectPayment(record, method);
     setCollectGuard(null);
     changeStage(record, 'collected', true);
   };
@@ -551,13 +553,21 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
             </div>
 
             <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => settleAndCollect(collectGuard)}
-                className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm active:scale-95 transition"
-              >
-                Take ₦{collectGuard.balance.toLocaleString()} and collect
-              </button>
+              {/* Two buttons where there was one: saying how it was paid is the
+                  same tap that took the money before. */}
+              <p className="text-xs font-bold">Take ₦{collectGuard.balance.toLocaleString()} and hand over. Paid by:</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(['cash', 'transfer'] as const).map(method => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => settleAndCollect(collectGuard, method)}
+                    className="h-11 rounded-xl bg-primary text-primary-foreground font-display font-black text-sm active:scale-95 transition flex items-center justify-center gap-1.5"
+                  >
+                    {method === 'cash' ? <Banknote className="w-4 h-4" /> : <Landmark className="w-4 h-4" />} {methodLabel(method)}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={() => { const record = collectGuard; setCollectGuard(null); changeStage(record, 'collected', true); }}
@@ -933,15 +943,18 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                         </button>
                       )}
 
-                      {record.balance > 0 && (
+                      {record.balance > 0 && (['cash', 'transfer'] as const).map(method => (
                         <button
-                          onClick={() => collectPayment(record)}
+                          key={method}
+                          onClick={() => collectPayment(record, method)}
                           disabled={busy}
-                          className="h-10 px-4 rounded-xl bg-amber-500 text-black text-xs font-display font-black disabled:opacity-40"
+                          aria-label={`Take ₦${record.balance.toLocaleString()} ${method === 'cash' ? 'in cash' : 'by transfer'}`}
+                          className="h-10 px-3 rounded-xl bg-amber-500 text-black text-xs font-display font-black disabled:opacity-40 flex items-center gap-1.5"
                         >
-                          Take ₦{record.balance.toLocaleString()}
+                          {method === 'cash' ? <Banknote className="w-4 h-4" /> : <Landmark className="w-4 h-4" />}
+                          {methodLabel(method)} ₦{record.balance.toLocaleString()}
                         </button>
-                      )}
+                      ))}
 
                       {record.whatsapp && (
                         <button onClick={() => sendWhatsApp(record.order)} className="h-10 px-4 rounded-xl bg-emerald-600 text-white text-xs font-display font-black flex items-center justify-center gap-2">

@@ -94,6 +94,50 @@ function MoneySourcesBlock({ report, unit }: { report: PeriodReport; unit: Perio
   );
 }
 
+/**
+ * How the money received was paid: into the drawer, or into the bank.
+ *
+ * The figure an owner needs to check either one. Payments from before the
+ * method was kept are shown as that, not counted as cash.
+ */
+function MoneyMethodBlock({ report }: { report: PeriodReport }) {
+  const { methods } = report;
+  if (methods.total <= 0) return null;
+  const rows = [
+    { key: 'cash', label: 'Cash', amount: methods.cash, tone: 'bg-success' },
+    { key: 'transfer', label: 'Transfer', amount: methods.transfer, tone: 'bg-primary' },
+    { key: 'none', label: 'Not recorded', amount: methods.notRecorded, tone: 'bg-muted-foreground' },
+  ].filter(row => row.amount > 0);
+  const known = methods.cash + methods.transfer;
+  return (
+    <div className="rounded-xl border border-border p-3 space-y-2.5" data-testid="money-methods">
+      <div>
+        <p className="text-xs font-bold">How the {naira(methods.total)} was paid</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          {known <= 0
+            ? 'These payments were recorded before cash and transfer were kept apart. New payments will say which.'
+            : methods.cash >= methods.transfer
+              ? `More in cash than by transfer: ${naira(methods.cash)} should have gone through the drawer.`
+              : `More by transfer than in cash: ${naira(methods.transfer)} should be in the bank.`}
+        </p>
+      </div>
+      <div className="flex h-2 rounded-full overflow-hidden bg-surface-2 gap-px">
+        {rows.map(row => (
+          <div key={row.key} className={row.tone} style={{ width: `${(row.amount / methods.total) * 100}%` }} />
+        ))}
+      </div>
+      <ul className="space-y-1">
+        {rows.map(row => (
+          <li key={row.key} className="flex items-baseline justify-between gap-2 text-xs">
+            <span className="flex items-center gap-1.5 text-muted-foreground"><span className={`w-2 h-2 rounded-sm ${row.tone}`} />{row.label}</span>
+            <span className="tabular-nums"><b>{naira(row.amount)}</b> · {Math.round((row.amount / methods.total) * 100)}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function PeriodCompare({ store, now: at }: { store: StoreData; now?: number }) {
   // Fixed while the page is open, so the figures are not worked out again on every render.
   const [now] = useState(() => at ?? Date.now());
@@ -237,6 +281,8 @@ export default function PeriodCompare({ store, now: at }: { store: StoreData; no
         )}
 
         <MoneySourcesBlock report={report} unit={unit} />
+
+        <MoneyMethodBlock report={report} />
 
         <div>
           <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-2">

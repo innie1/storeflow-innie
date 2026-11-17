@@ -76,7 +76,7 @@ function AllClear({ s }: { s: ManagerState }) {
   if (costs.totalLast30 > 0) {
     rows.push({
       ok: costs.trendPct <= 25,
-      text: `${naira(costs.totalLast30)} spent in the last 30 days${costs.trendPct > 0 ? `, ${Math.round(costs.trendPct)}% more than the month before` : ''}.`,
+      text: `${naira(costs.totalLast30)} spent in the last 30 days${costs.trendPct > 0 ? `, ${Math.round(costs.trendPct)}% more than the 30 days before` : ''}.`,
       goTo: 'expenses',
     });
   }

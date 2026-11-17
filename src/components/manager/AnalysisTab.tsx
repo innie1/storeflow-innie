@@ -14,6 +14,7 @@ import { ShoppingCart, Flame, Moon, Receipt, Home, Undo2, BarChart3, Wand2 } fro
 import MostActivePeriodsCard from './MostActivePeriodsCard';
 import ServicesCard from './ServicesCard';
 import AverageJobCard from './AverageJobCard';
+import WhereMoneyGoesCard from './WhereMoneyGoesCard';
 import type { ManagerState } from './useManager';
 
 const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
@@ -123,7 +124,8 @@ export default function AnalysisTab({ s }: { s: ManagerState }) {
       {((ea && ea.byCat.length > 0) || rent) && (
         <Section title="What it costs">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            {ea && ea.byCat.length > 0 && (
+            {isService && <WhereMoneyGoesCard store={store} />}
+            {!isService && ea && ea.byCat.length > 0 && (
               <div className="p-4 rounded-2xl bg-card shadow-card space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -132,7 +134,7 @@ export default function AnalysisTab({ s }: { s: ManagerState }) {
                   </div>
                   {ea.trendPct !== 0 && (
                     <span className={`text-[10px] font-display font-bold shrink-0 ${ea.trendPct > 0 ? 'text-destructive' : 'text-success'}`}>
-                      {ea.trendPct > 0 ? '↑' : '↓'} {Math.abs(ea.trendPct).toFixed(0)}% on last month
+                      {ea.trendPct > 0 ? '↑' : '↓'} {Math.abs(ea.trendPct).toFixed(0)}% on the 30 days before
                     </span>
                   )}
                 </div>

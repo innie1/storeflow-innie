@@ -31,6 +31,7 @@ import { LAUNDRY_MODIFIERS, describeModifiers, toggleModifier } from '@/lib/laun
 import { orderedDueChips, recordDueChoice } from '@/lib/laundry-due-usage';
 import { markPractised } from '@/lib/setup-guide';
 import { filterGarments, findSimilarGarment } from '@/lib/garment-match';
+import { likelyMethod, methodLabel, type CounterMethod } from '@/lib/payment-method';
 
 interface Props {
   store: StoreData;
@@ -186,6 +187,8 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
   const [saving, setSaving] = useState(false);
   const [paidNow, setPaidNow] = useState('');
   const [paidTouched, setPaidTouched] = useState(false);
+  // Cash or transfer. Null until somebody taps: the likely one is lit meanwhile.
+  const [paidBy, setPaidBy] = useState<CounterMethod | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
@@ -370,6 +373,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
     // The due date is the one intentional exception: promisedFor and
     // promisedTouched stay untouched until the merchant changes them.
     setPaidNow('');
+    setPaidBy(null);
     setPaidTouched(false);
     setShowSuggestions(false);
     setAskingNumber(false);
@@ -614,6 +618,7 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
         serviceName: selectedService.name,
         total,
         amountPaid: payment.tendered,
+        method: payment.change > 0 ? 'cash' : paidBy || likelyMethod(store, { customerId, phone }),
         promisedFor,
         takenBy: currentUser?.name,
         takenByRole: currentUser?.role,
@@ -1143,6 +1148,29 @@ export default function LaundryWalkInIntakeV3({ store, onUpdate, currentUser, on
               <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input value={totalPrice} onChange={event => { setTotalPrice(event.target.value.replace(/[^0-9.]/g, '')); setPriceTouched(true); }} inputMode="decimal" className="w-full bg-transparent outline-none font-black" placeholder="Total price" /></div>
               {priceTouched && calculated.total !== Number(totalPrice) && <p className="text-[10px] text-muted-foreground">Manually adjusted. Calculated price is ₦{calculated.total.toLocaleString()}.</p>}
               <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-surface-2 border border-border"><span className="font-black">₦</span><input inputMode="numeric" value={paidNow} onChange={event => { setPaidTouched(true); setPaidNow(event.target.value.replace(/[^0-9]/g, '')); }} placeholder="Paid now (0 if paying later)" className="flex-1 bg-transparent outline-none text-sm" /></div>
+              {Number(paidNow) > 0 && (() => {
+                const fee = fulfillment === 'walk_in' ? 0 : Math.max(0, Number(deliveryFee) || 0);
+                const gaveChange = settleLaundryPayment(totalWithDelivery(Number(totalPrice) || 0, fee), Number(paidNow) || 0).change > 0;
+                // Change given is cash and nothing is asked; otherwise the likely one is lit.
+                const lit: CounterMethod = gaveChange ? 'cash' : paidBy || likelyMethod(store, { phone: customerPhone });
+                return (
+                  <div className="flex items-center gap-2" data-paid-by>
+                    <span className="text-[10px] uppercase font-black text-muted-foreground">Paid by</span>
+                    {(['cash', 'transfer'] as const).map(method => (
+                      <button
+                        key={method}
+                        type="button"
+                        disabled={gaveChange && method === 'transfer'}
+                        aria-pressed={lit === method}
+                        onClick={() => setPaidBy(method)}
+                        className={`h-9 px-3 rounded-xl text-xs font-display font-bold border disabled:opacity-40 ${lit === method ? 'bg-primary/15 text-primary border-primary/40' : 'bg-surface-2 text-muted-foreground border-border'}`}
+                      >
+                        {methodLabel(method)}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
               {(() => {
                 const fee = fulfillment === 'walk_in' ? 0 : Math.max(0, Number(deliveryFee) || 0);
                 const price = totalWithDelivery(Number(totalPrice) || 0, fee);

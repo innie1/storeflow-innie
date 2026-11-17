@@ -8,6 +8,7 @@ import { dailySeries } from './forecast';
 import { inventoryIntelligence } from './stock';
 import { expenseAnalysis } from './costs';
 import { healthScore } from './health';
+import { receivedToNow } from '@/lib/fair-compare';
 
 // ─── Structured Get Advice report ─────────────────────────────────────────────
 //
@@ -66,7 +67,8 @@ export function buildFlowReport(store: StoreData): FlowReport {
   const last7 = dailySeries(store, 7);
   const prev7 = dailySeries(store, 14).slice(0, 7);
   const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
-  const revPrev = prev7.reduce((s, d) => s + d.revenue, 0);
+  // Cut at this time of day, so today so far is not set against a whole day.
+  const revPrev = prev7.length ? receivedToNow(store, 7).before : 0;
   const profit7 = last7.reduce((s, d) => s + d.profit, 0);
 
   // Restock spend is money turned into resellable stock, not a cost leak, so it
@@ -102,14 +104,14 @@ export function buildFlowReport(store: StoreData): FlowReport {
       if (revPrev > 0) {
         const growth = ((rev7 - revPrev) / revPrev) * 100;
         if (growth < -10) {
-          detail.push(`Down ${Math.abs(growth).toFixed(1)}% on last week (${money(revPrev)}).`);
+          detail.push(`Down ${Math.abs(growth).toFixed(1)}% on the same days last week (${money(revPrev)}).`);
           tone = 'warning';
           rank = Math.max(rank, 68);
         } else if (growth > 10) {
-          detail.push(`Up ${growth.toFixed(1)}% on last week.`);
+          detail.push(`Up ${growth.toFixed(1)}% on the same days last week.`);
           tone = 'good';
         } else {
-          detail.push('Level with last week.');
+          detail.push('Level with the same days last week.');
         }
       }
       if (margin <= 0) {
@@ -278,7 +280,8 @@ export function generateFlowReport(store: StoreData): string {
   const last7 = dailySeries(store, 7);
   const prev7 = dailySeries(store, 14).slice(0, 7);
   const rev7 = last7.reduce((s, d) => s + d.revenue, 0);
-  const revPrev = prev7.reduce((s, d) => s + d.revenue, 0);
+  // Cut at this time of day, so today so far is not set against a whole day.
+  const revPrev = prev7.length ? receivedToNow(store, 7).before : 0;
   const profit7 = last7.reduce((s, d) => s + d.profit, 0);
   // "Expense Audit" below is about controllable operating costs (rent,
   // utilities, salaries, etc.). Restock spend is money converted into
@@ -317,11 +320,11 @@ export function generateFlowReport(store: StoreData): string {
     if (revPrev > 0) {
       const growth = ((rev7 - revPrev) / revPrev) * 100;
       if (growth < -10) {
-        text += `This is a significant **decline of ${Math.abs(growth).toFixed(1)}%** compared to last week (₦${revPrev.toLocaleString()}). `;
+        text += `This is a significant **decline of ${Math.abs(growth).toFixed(1)}%** compared to the same days last week (₦${revPrev.toLocaleString()}). `;
       } else if (growth > 10) {
-        text += `This is a strong **growth of ${growth.toFixed(1)}%** compared to last week! `;
+        text += `This is a strong **growth of ${growth.toFixed(1)}%** compared to the same days last week! `;
       } else {
-        text += `This is stable compared to last week. `;
+        text += `This is stable compared to the same days last week. `;
       }
     }
 

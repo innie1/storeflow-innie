@@ -14,15 +14,17 @@
  * A week with lots of clothes and little money is a different week from one
  * with little of either, and reading money alone hides which it was.
  *
- * A week still running is set against the same days of the week before -
- * Monday to Wednesday against Monday to Wednesday - so Wednesday does not read
- * as a collapse next to last week's seven full days. Last week's full total is
- * given beside it.
+ * A week still running is set against the same days of the week before, up
+ * to the same time of day - Monday to Wednesday at noon against Monday to
+ * Wednesday at noon - so Wednesday does not read as a collapse next to last
+ * week's seven full days, and a Monday morning does not read as one next to
+ * the whole of last Monday. Last week's full total is given beside it.
  */
 
 import type { StoreData } from '@/types/store';
 import { receivedBetween, receivedBySource, type MoneySources } from '@/lib/money-figures';
 import { laundryBalance } from '@/lib/laundry-money';
+import { receivedByMethod, type ReceivedByMethod } from '@/lib/payment-method';
 import { dayKey } from '@/lib/day-records';
 
 export type PeriodUnit = 'week' | 'month';
@@ -82,6 +84,8 @@ export interface PeriodReport extends PeriodFigures {
   paidShare: number;
   /** The money received in it, by how old the clothes it paid for were. */
   sources: MoneySources;
+  /** The same money, by how it was paid: cash, transfer, or not recorded. */
+  methods: ReceivedByMethod;
   collected: number;
   customers: number;
   /** The days of a week, or the weeks of a month. */
@@ -165,6 +169,17 @@ function figures(store: StoreData, bundles: PeriodBundle[], from: number, to: nu
   };
 }
 
+/** "Mon 9 Nov – Wed 11 Nov, 2:30pm", or "Mon 9 Nov, to 9am" when it is one day. */
+function sameStretch(from: number, to: number, weekday: boolean): string {
+  const at = new Date(to);
+  const hours = at.getHours();
+  const minutes = at.getMinutes();
+  const clock = `${hours % 12 === 0 ? 12 : hours % 12}${minutes ? `:${pad(minutes)}` : ''}${hours < 12 ? 'am' : 'pm'}`;
+  return startOfDay(from) === startOfDay(to)
+    ? `${day(from, weekday)}, to ${clock}`
+    : `${day(from, weekday)} – ${day(to, weekday)}, ${clock}`;
+}
+
 export function compare(now: number, before: number): Change {
   if (before <= 0) return { now, before, percent: null, direction: now > 0 ? 'new' : 'none' };
   const percent = Math.round(((now - before) / before) * 100);
@@ -188,16 +203,22 @@ export function periodReport(
   const previous = figures(store, bundles, previousStart, start);
 
   /*
-   * The same stretch of the period before. A week is measured to the same
-   * weekday; a month to the same date, or its last day when it is shorter.
+   * The same stretch of the period before, to this time of day. A week is
+   * measured to the same weekday and hour; a month to the same date and hour,
+   * or its last day when it is shorter. Measuring to the end of the day set a
+   * Monday morning against the whole of last Monday.
    */
   let sameStretchEnd = start;
   if (current) {
-    if (unit === 'week') sameStretchEnd = addDays(previousStart, Math.round((reached - start) / 86400000));
+    if (unit === 'week') sameStretchEnd = addDays(now, -7) + 1;
     else {
-      const daysIn = new Date(startOfDay(now)).getDate();
+      const at = new Date(now);
       const lastOfPrevious = new Date(new Date(start).getFullYear(), new Date(start).getMonth(), 0).getDate();
-      sameStretchEnd = addDays(previousStart, Math.min(daysIn, lastOfPrevious));
+      const before = new Date(previousStart);
+      sameStretchEnd = new Date(
+        before.getFullYear(), before.getMonth(), Math.min(at.getDate(), lastOfPrevious),
+        at.getHours(), at.getMinutes(), at.getSeconds(), at.getMilliseconds(),
+      ).getTime() + 1;
     }
   }
   const against = current ? figures(store, bundles, previousStart, sameStretchEnd) : previous;
@@ -238,8 +259,8 @@ export function periodReport(
   const before = unit === 'week' ? 'last week' : 'last month';
   const comparedWith = current
     ? unit === 'week'
-      ? `the same days of ${before} (${periodDates('week', previousStart).split(' – ')[0]} – ${day(addDays(sameStretchEnd, -1), true)})`
-      : `the same dates of ${before} (${day(previousStart, false)} – ${day(addDays(sameStretchEnd, -1), false)})`
+      ? `the same days of ${before}, up to the same time (${sameStretch(previousStart, sameStretchEnd - 1, true)})`
+      : `the same dates of ${before}, up to the same time (${sameStretch(previousStart, sameStretchEnd - 1, false)})`
     : `${periodLabel(unit, previousStart, now).replace(/^Last/, 'last')} (${periodDates(unit, previousStart)})`;
 
   return {
@@ -257,6 +278,7 @@ export function periodReport(
     paid: Math.round(paid),
     paidShare: these.workTakenIn > 0 ? Math.round((paid / these.workTakenIn) * 100) : 0,
     sources: receivedBySource(store, start, end, previousStart),
+    methods: receivedByMethod(store, start, end),
     collected,
     customers: people.size,
     parts,

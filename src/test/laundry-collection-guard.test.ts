@@ -30,9 +30,12 @@ describe('handing over a bundle with money owed', () => {
   });
 
   it('offers to take the money and collect in one tap', () => {
-    expect(workspace).toContain('Take ₦{collectGuard.balance.toLocaleString()} and collect');
+    // Still one tap. It is two buttons now, cash and transfer, so the tap that
+    // takes the money also says how it was paid.
+    expect(workspace).toContain('Take ₦{collectGuard.balance.toLocaleString()} and hand over. Paid by:');
     expect(workspace).toContain('const settleAndCollect');
-    expect(workspace).toContain('collectPayment(record)');
+    expect(workspace).toContain('settleAndCollect(collectGuard, method)');
+    expect(workspace).toContain('collectPayment(record, method)');
   });
 
   it('still lets the clothes go, deliberately', () => {

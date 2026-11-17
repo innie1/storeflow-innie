@@ -18,7 +18,7 @@ import type { StoreData } from '@/types/store';
 import type { LaundryStageStep, LocalLaundryRecord } from '@/lib/laundry-offline';
 import { shopLaundryRecords } from '@/lib/shop-laundry';
 import { laundryBalance } from '@/lib/laundry-money';
-import { normalizeWhatsAppPhone } from '@/lib/laundry-whatsapp';
+import { customerGreeting, normalizeWhatsAppPhone, shopSignature } from '@/lib/laundry-whatsapp';
 import { shopStorage } from '@/lib/shop-storage';
 
 const DAY = 86400000;
@@ -216,8 +216,6 @@ export function collectionReminderMessage(
   store: Pick<StoreData, 'storeName' | 'profile'>,
   bundle: Pick<UncollectedBundle, 'customerName' | 'tagCode' | 'pieceCount' | 'balance' | 'readySince' | 'daysWaiting'>,
 ): string {
-  const name = String(bundle.customerName || '').trim();
-  const greeting = name && name !== 'Walk-in Customer' ? `Hello ${name},` : 'Hello,';
   const shop = String(store.storeName || 'our shop');
   const since = new Date(bundle.readySince).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const ready = bundle.daysWaiting >= 1 && bundle.readySince > 0
@@ -225,21 +223,19 @@ export function collectionReminderMessage(
     : `Your laundry at ${shop} is ready for collection.`;
   const pay = bundle.balance > 0
     ? `To pay on collection: ₦${Math.round(bundle.balance).toLocaleString()}`
-    : 'It is fully paid.';
+    : 'Paid in full';
   const lines = [
-    greeting,
+    customerGreeting(bundle.customerName),
     '',
     ready,
     '',
-    ...(bundle.tagCode ? [`Laundry code: ${bundle.tagCode}`] : []),
+    ...(bundle.tagCode ? [`*Laundry code: ${bundle.tagCode}*`] : []),
     ...(bundle.pieceCount > 0 ? [`${bundle.pieceCount} ${bundle.pieceCount === 1 ? 'piece' : 'pieces'}`] : []),
     pay,
     '',
     'Please come by when you can, or reply to tell us when to expect you.',
     '',
-    shop,
-    ...(store.profile?.location ? [`Address: ${store.profile.location}`] : []),
-    ...(store.profile?.phone ? [`Phone: ${store.profile.phone}`] : []),
+    ...shopSignature(store),
   ];
   return lines.join('\n');
 }

@@ -28,6 +28,7 @@ import { Ring } from './ui';
 import StoreHealthCard from './StoreHealthCard';
 import MoneyOwedCard from './MoneyOwedCard';
 import UncollectedCard from './UncollectedCard';
+import WhereMoneyGoesCard from './WhereMoneyGoesCard';
 import type { ManagerState } from './useManager';
 
 /**
@@ -163,8 +164,13 @@ export default function OverviewTab({ s }: { s: ManagerState }) {
         );
       })()}
 
+      {/* A shop that sells work has no products priced too close to cost and
+          no stock to go missing, so the card below told it nothing. It gets
+          its own: soap, light, the people and the rent, against what came in. */}
+      {isService && <WhereMoneyGoesCard store={store} compact />}
+
       {/* Profit Leak Detector Card */}
-      {(() => {
+      {!isService && (() => {
         const leaks = getProfitLeaks(store);
         if (leaks.length === 0) return null;
         const leaking = leaks.filter(l => l.kind === 'leaking');

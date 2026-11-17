@@ -4,6 +4,7 @@ import { productMarkup } from '@/lib/pricing-math';
 import { daysAgo, daysBetween, isStoreOnboarding } from './dates';
 import { dailySeries } from './forecast';
 import { expenseAnalysis, rentAnalysis } from './costs';
+import { receivedToNow } from '@/lib/fair-compare';
 
 // ─── Insights (enhanced) ──────────────────────────────────────────────────────
 export interface Insight {
@@ -19,18 +20,22 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
   const out: Insight[] = [];
   const days = range === '7d' ? 7 : range === '1m' ? 30 : 365;
   const cur = dailySeries(store, days);
-  const prev = dailySeries(store, days * 2).slice(0, days);
   const curRev = cur.reduce((s, d) => s + d.revenue, 0);
-  const prevRev = prev.reduce((s, d) => s + d.revenue, 0);
+  /*
+   * The stretch before, cut at this time of day. "The last 7 days" is today
+   * so far and six whole days; against seven whole days it was always a
+   * little short, and first thing in the morning it was a day short.
+   */
+  const prevRev = receivedToNow(store, days).before;
   const periodWord = range === '7d' ? 'week' : range === '1m' ? 'month' : 'period';
   if (prevRev > 0) {
     const pct = ((curRev - prevRev) / prevRev) * 100;
     if (Math.abs(pct) >= 1) {
       out.push({
         id: 'rev', icon: pct >= 0 ? '📈' : '📉',
-        text: `Revenue ${pct >= 0 ? 'increased' : 'decreased'} ${Math.abs(pct).toFixed(1)}% vs previous ${periodWord}`,
+        text: `Money in is ${pct >= 0 ? 'up' : 'down'} ${Math.abs(pct).toFixed(1)}% on the same days of the ${periodWord} before`,
         tone: pct >= 0 ? 'success' : 'warning',
-        explain: `Compares total revenue this ${periodWord} (₦${curRev.toLocaleString()}) to the previous one (₦${prevRev.toLocaleString()}).`,
+        explain: `The last ${days} days up to now (₦${curRev.toLocaleString()}) against the ${days} days before, up to the same time of day (₦${prevRev.toLocaleString()}).`,
       });
     }
   } else if (curRev > 0) {
@@ -74,8 +79,8 @@ export function generateInsights(store: StoreData, range: '7d' | '1m' | 'lifetim
   const ea = expenseAnalysis(store, ['Restock']);
   if (ea.trendPct > 20) {
     out.push({
-      id: 'exp', icon: '🧾', text: `Expenses rose ${ea.trendPct.toFixed(0)}% this month. Largest: ${ea.largestCategory}`, tone: 'warning',
-      explain: `${ea.largestCategory} spending grew ${ea.trendPct.toFixed(0)}% month-over-month, more than any other category.`,
+      id: 'exp', icon: '🧾', text: `Spending is up ${ea.trendPct.toFixed(0)}% on the 30 days before. Largest: ${ea.largestCategory}`, tone: 'warning',
+      explain: `The last 30 days of spending against the 30 days before. ${ea.largestCategory} is the largest part of it.`,
     });
   }
   const rent = rentAnalysis(store);

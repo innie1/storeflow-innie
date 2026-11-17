@@ -1,4 +1,5 @@
 import { StoreData } from '@/types/store';
+import { periodStart, shiftPeriod } from '@/lib/period-report';
 
 // ─── Weekly Recap ──────────────────────────────────────────────────────────
 // A short "how last week went" summary — gated behind Settings > Flow >
@@ -12,19 +13,19 @@ export interface WeeklyRecap {
   bestSeller: string | null;
 }
 
-export function generateWeeklyRecap(store: StoreData): WeeklyRecap | null {
+export function generateWeeklyRecap(store: StoreData, now: number = Date.now()): WeeklyRecap | null {
   if (store.sales.length === 0) return null;
 
-  const now = new Date();
-  const dayOfWeek = now.getDay();
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - dayOfWeek - 7); // start of last full week (Sun-Sat)
-  weekStart.setHours(0, 0, 0, 0);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 7);
-
-  const prevWeekStart = new Date(weekStart);
-  prevWeekStart.setDate(weekStart.getDate() - 7);
+  /*
+   * The last whole week, Monday to Sunday, against the whole week before it.
+   * Two finished weeks are a fair comparison as they stand. It used to run
+   * Sunday to Saturday while Clothes and money ran Monday to Sunday, so the
+   * shop had two different figures both called "last week".
+   */
+  const thisWeek = periodStart('week', now);
+  const weekStart = new Date(shiftPeriod('week', thisWeek, -1));
+  const weekEnd = new Date(thisWeek);
+  const prevWeekStart = new Date(shiftPeriod('week', thisWeek, -2));
 
   const lastWeekSales = store.sales.filter(s => {
     const d = new Date(s.date);
