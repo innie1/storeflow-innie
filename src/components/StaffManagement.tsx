@@ -10,6 +10,7 @@ import {
 import { showToast } from '@/components/Toast';
 import { ANY_GARMENT, hasMonthlySalary, isPerPieceWorker, pendingClaims, setPieceRate, taskLabel, WORK_TASKS } from '@/lib/piece-work';
 import { isSalaried, payDayInWords } from '@/lib/payday';
+import WorkerReportSheet from '@/components/staff/WorkerReportSheet';
 import { getLaundryPricingConfig } from '@/lib/laundry-pricing';
 import RecordWork from '@/components/laundry/RecordWork';
 import WorkerEarnings from '@/components/laundry/WorkerEarnings';
@@ -143,6 +144,8 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
   const [rateDraft, setRateDraft] = useState('');
   const [recordingFor, setRecordingFor] = useState<StaffMember | null>(null);
   const [earningsFor, setEarningsFor] = useState<StaffMember | null>(null);
+  /** Whose work report is open: what they did over a stretch, to send on WhatsApp. */
+  const [reportFor, setReportFor] = useState<StaffMember | null>(null);
 
   /** Claims this worker has waiting, so an owner can see there is something. */
   const pendingFor = (workerId: string) =>
@@ -396,6 +399,14 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
           onClose={() => setRecordingFor(null)}
         />
       )}
+      {reportFor && (
+        <WorkerReportSheet
+          store={store}
+          person={{ id: reportFor.id, name: reportFor.name, role: reportFor.role }}
+          sendTo={{ phone: reportFor.phone, label: reportFor.phone ? `Send to ${reportFor.name}` : 'Send on WhatsApp' }}
+          onClose={() => setReportFor(null)}
+        />
+      )}
       {earningsFor && seesMoney && (
         <WorkerEarnings
           store={store}
@@ -579,6 +590,9 @@ export default function StaffManagement({ store, onUpdate, currentUser, orders }
                               <Share2 className="w-3 h-3" /> Invite
                             </button>
                           )}
+                          <button onClick={() => setReportFor(s)} aria-label={`Work report for ${s.name}`} className="h-7 px-2 rounded bg-surface-2 border border-border text-foreground text-[11px] font-display font-bold flex items-center gap-1 transition-all">
+                            <FileText className="w-3 h-3" /> Report
+                          </button>
                           <button onClick={() => startEdit(s)} className="p-1.5 rounded bg-surface-2 border border-border text-muted-foreground hover:text-yellow-500 transition-all">
                             <Edit className="w-3 h-3" />
                           </button>

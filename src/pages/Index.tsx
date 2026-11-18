@@ -11,6 +11,7 @@ import InviteSwitchPrompt from '@/components/staff/InviteSwitchPrompt';
 import { clearInvite } from '@/lib/staff-join';
 import StaffExpenseButton from '@/components/staff/StaffExpenseButton';
 import PaydayPrompt from '@/components/staff/PaydayPrompt';
+import MyReportButton from '@/components/staff/MyReportButton';
 import { saveStore } from '@/lib/store-data';
 import StreakRewardReveal from '@/components/streaks/StreakRewardReveal';
 import StoreAccess from '@/components/StoreAccess';
@@ -127,6 +128,8 @@ export default function Index() {
             )}
             {/* Any worker can say what they spent without seeing the money. */}
             <StaffExpenseButton store={store} currentUser={currentUser} onUpdate={setStore} />
+            {/* What a worker did over a stretch, sent on WhatsApp in place of typing it out. */}
+            <MyReportButton store={store} currentUser={currentUser} />
             {store.uiMode === 'simple' ? (
               <SimpleModeHome store={store} setStore={setStore} currentUser={currentUser} onNavigate={handleNavigate} orders={orders} />
             ) : (
