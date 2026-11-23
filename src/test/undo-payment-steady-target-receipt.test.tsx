@@ -168,3 +168,43 @@ describe("cash or transfer on a worker's phone reaches the owner", () => {
     expect(sql).toContain('staff_role, method)');
   });
 });
+
+describe('every buy of soap, light or anything used up, side by side', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('each buy closes the one before; light bills get the same list as soap, marked more or less than usual', async () => {
+    const { supplyHistories } = await import('@/lib/cost-estimator');
+    const code = 'LOTS02';
+    const records: unknown[] = [];
+    const work = (pieces: number, at: Date) => records.push({
+      clientRef: `r${records.length}`, accessCode: code, tagCode: `T${records.length}`, customerName: 'A',
+      serviceId: 'svc', serviceName: 'Wash & Iron', garments: [{ garmentType: 'Shirt', quantity: pieces }],
+      pieceCount: pieces, total: pieces * 500, createdAt: at.toISOString(), workflowStage: 'collected', syncStatus: 'synced',
+    });
+    // Light: 5 Oct to 20 Nov covers 800 pieces across both months; the next
+    // two bills cover the same, and the one after goes twice as far.
+    work(300, new Date(2026, 9, 10)); work(300, new Date(2026, 9, 28)); work(200, new Date(2026, 10, 10));
+    work(800, new Date(2026, 10, 22)); work(800, new Date(2026, 10, 26)); work(1_600, new Date(2026, 10, 29));
+    localStorage.setItem(`storeflow_laundry_local_records_${code}`, JSON.stringify(records));
+    const bill = (id: string, at: Date) => ({ id, amount: 24_000, category: 'Utilities', note: 'Light bill', date: at.toISOString() });
+    const s = store({ accessCode: code, expenses: [
+      bill('l1', new Date(2026, 9, 5)), bill('l2', new Date(2026, 10, 20)), bill('l3', new Date(2026, 10, 24)),
+      bill('l4', new Date(2026, 10, 27)), bill('l5', new Date(2026, 10, 30)),
+    ] as any });
+
+    const light = supplyHistories(s).find(supply => supply.key === 'electricity')!;
+    expect(light).toMatchObject({ label: 'light bill', kind: 'bill' });
+    expect(light.lots.map(lot => [lot.washed, lot.perPiece, lot.finished])).toEqual([
+      [800, 30, true], [800, 30, true], [800, 30, true], [1_600, 15, true], [0, null, false],
+    ]);
+    expect(light.lots[3]).toMatchObject({ low: true, high: false });
+    expect(light.lots[0]).toMatchObject({ low: false, high: false });
+  });
+
+  it('is on the target card for every supply, not soap alone', () => {
+    const source = readSource('src/components/BreakEvenCard.tsx');
+    expect(source).toContain('data-supply-history');
+    expect(source).toContain('went further than usual');
+    expect(source).toContain('used more than usual');
+  });
+});

@@ -3,8 +3,7 @@ import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { Target } from 'lucide-react';
 import type { StoreData } from '@/types/store';
 import { breakEven, breakEvenSentence, lastMonthName, monthSpan, monthWindow, previousMonthWindow } from '@/lib/service-breakeven';
-import { consumablePace, estimateUnitCost, pieceCostSentence, powerPaceSentence, soapPaceSentence } from '@/lib/cost-estimator';
-import { consumableAsk } from '@/lib/trade-supplies';
+import { estimateUnitCost, pieceCostSentence, powerPaceSentence, soapPaceSentence, supplyHistories } from '@/lib/cost-estimator';
 import { claimSpotlight, scrollSpotlightIntoView, SPOTLIGHT_CLASS, SPOTLIGHT_MS, SPOTLIGHT_SIGNAL } from '@/lib/spotlight';
 
 /** What the month ring asks for when it sends somebody here. */
@@ -46,11 +45,8 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
     const estimate = estimateUnitCost(store, month.daysInMonth, month.end, month.start);
     return pieceCostSentence(store, estimate, state.steady ? `all of ${lastMonthName(now)}` : 'this month so far');
   }, [store, laundryVersion, state.steady]);
-  const soapNoun = consumableAsk(store).noun;
-  const soapLots = useMemo(
-    () => consumablePace(store).find(pace => pace.key === soapNoun.toLowerCase())?.lots || [],
-    [store, soapNoun, laundryVersion],
-  );
+  // Soap, light, fuel, anything bought more than once: every buy, and how far it went.
+  const supplies = useMemo(() => supplyHistories(store), [store, laundryVersion]);
 
   /*
    * Lit, briefly, when the ring on the home screen sent somebody here.
@@ -187,12 +183,18 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
         </details>
       )}
 
-      {/* Each lot on its own, so one that went much faster than usual can be asked about. */}
-      {soapLots.length > 1 && (
-        <details className="mt-1.5">
-          <summary className="text-[10px] font-bold text-primary cursor-pointer">Each lot of {soapNoun}</summary>
+      {/*
+        Each buy on its own, for every supply, so one that went much faster -
+        or much further - than usual can be asked about. Each new buy closes
+        the one before it and gives it its figure.
+      */}
+      {supplies.map(supply => (
+        <details key={`${supply.kind}-${supply.key}`} className="mt-1.5" data-supply-history={supply.key}>
+          <summary className="text-[10px] font-bold text-primary cursor-pointer">
+            Each {supply.kind === 'bill' ? '' : 'lot of '}{supply.label}{supply.kind === 'bill' ? ' paid' : ''}
+          </summary>
           <ul className="mt-1.5 space-y-1.5">
-            {[...soapLots].reverse().map(lot => (
+            {[...supply.lots].reverse().map(lot => (
               <li key={lot.boughtAt} className="text-[10px] text-muted-foreground leading-relaxed">
                 <span className="font-bold text-foreground">
                   {new Date(lot.boughtAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {money(lot.amount)}
@@ -200,10 +202,11 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
                 </span>
                 {' - '}
                 {lot.finished
-                  ? `washed ${lot.washed} pieces${lot.perPiece !== null ? `, ${money(lot.perPiece)} a piece` : ''}`
+                  ? `${supply.kind === 'bill' ? 'covered' : 'washed'} ${lot.washed} pieces${lot.perPiece !== null ? `, ${money(lot.perPiece)} a piece` : ''}`
                   : `in use, ${lot.washed} pieces so far`}
                 {lot.high && <span className="text-amber-500 font-bold"> · used more than usual</span>}
-                {lot.washers.length > 0 && (
+                {lot.low && <span className="text-success font-bold"> · went further than usual</span>}
+                {supply.kind === 'consumable' && lot.washers.length > 0 && (
                   <span className="block">
                     Washed by {lot.washers.map(washer => `${washer.name} (${washer.pieces})`).join(', ')}
                   </span>
@@ -212,7 +215,7 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
             ))}
           </ul>
         </details>
-      )}
+      ))}
     </div>
   );
 }

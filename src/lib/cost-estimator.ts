@@ -186,6 +186,9 @@ export const RECENT_LOTS = 3;
 /** A lot that cost this much more a piece than the shop's usual is worth asking about. */
 export const HIGH_LOT_SHARE = 1.25;
 
+/** And one that cost this much less a piece went further than usual - also worth knowing. */
+export const LOW_LOT_SHARE = 1 / HIGH_LOT_SHARE;
+
 export interface SupplyLot {
   boughtAt: number;
   amount: number;
@@ -200,6 +203,8 @@ export interface SupplyLot {
   washers: { name: string; pieces: number }[];
   /** Used noticeably more a piece than the other finished lots. */
   high: boolean;
+  /** Went noticeably further - cost less a piece - than the other finished lots. */
+  low: boolean;
 }
 
 export interface SupplyPace {
@@ -343,6 +348,7 @@ function lotPaces(
         perPiece: finished && pieces >= MIN_PIECES_TO_ESTIMATE ? trip.amount / pieces : null,
         washers: Array.from(byName, ([name, count]) => ({ name, pieces: count })).sort((a, b) => b.pieces - a.pieces),
         high: false,
+        low: false,
       };
     });
 
@@ -353,6 +359,7 @@ function lotPaces(
       if (!others.length) continue;
       const middle = others.length % 2 ? others[(others.length - 1) / 2] : (others[others.length / 2 - 1] + others[others.length / 2]) / 2;
       lot.high = lot.perPiece! > middle * HIGH_LOT_SHARE;
+      lot.low = lot.perPiece! < middle * LOW_LOT_SHARE;
     }
 
     const latest = lots[lots.length - 1];
@@ -574,6 +581,38 @@ export function powerPaceSentence(store: StoreData): string {
   const recent = Math.min(RECENT_LOTS, pace.lots.filter(lot => lot.finished).length);
   const which = recent === 1 ? 'your last bill' : `your last ${recent} bills`;
   return `Light costs about ${naira(pace.perPiece)} a piece: ${which} covered ${Math.round(pace.usedWashed).toLocaleString()} pieces.`;
+}
+
+/** One thing the shop buys and uses up, with every buy of it, for a list a person reads. */
+export interface SupplyHistory {
+  key: string;
+  /** In the shop's words: "detergent", "light bill", "generator fuel". */
+  label: string;
+  /** Soap is spread over washed pieces only; bills over every piece. */
+  kind: 'consumable' | 'bill';
+  lots: SupplyLot[];
+}
+
+const BILL_LABELS: Record<string, string> = { electricity: 'light bill', fuel: 'generator fuel', water: 'water' };
+
+/**
+ * Every supply bought more than once, soap first, then the bills.
+ *
+ * Each buy closes the one before it, so with two or more there is something
+ * to compare: what each one cost a piece, and whether it went faster or
+ * further than the shop's usual.
+ */
+export function supplyHistories(store: StoreData): SupplyHistory[] {
+  const noun = consumableAsk(store).noun.toLowerCase();
+  const consumables = consumablePace(store)
+    .filter(pace => pace.lots.length > 1)
+    .sort((a, b) => Number(b.key === noun) - Number(a.key === noun) || b.lastBoughtAt - a.lastBoughtAt)
+    .map(pace => ({ key: pace.key, label: pace.key, kind: 'consumable' as const, lots: pace.lots }));
+  const bills = utilityPace(store)
+    .filter(pace => pace.lots.length > 1)
+    .sort((a, b) => Number(b.key === 'electricity') - Number(a.key === 'electricity') || b.lastBoughtAt - a.lastBoughtAt)
+    .map(pace => ({ key: pace.key, label: BILL_LABELS[pace.key] || pace.key, kind: 'bill' as const, lots: pace.lots }));
+  return [...consumables, ...bills];
 }
 
 export interface PieceCostPart {
