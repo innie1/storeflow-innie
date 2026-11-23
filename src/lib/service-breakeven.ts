@@ -41,6 +41,26 @@ export interface MonthWindow {
   dayOfMonth: number;
 }
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "1-30 November": the month a target is for, its 1st to its last day. */
+export function monthSpan(at: Date = new Date()): string {
+  const last = new Date(at.getFullYear(), at.getMonth() + 1, 0).getDate();
+  return `1-${last} ${MONTHS[at.getMonth()]}`;
+}
+
+/** "October": the whole month before, that the margin is read from. */
+export function lastMonthName(at: Date = new Date()): string {
+  return MONTHS[(at.getMonth() + 11) % 12];
+}
+
+/** The calendar month before this one: its 1st to its last day. */
+export function previousMonthWindow(window: MonthWindow): MonthWindow {
+  const first = new Date(window.start);
+  const start = new Date(first.getFullYear(), first.getMonth() - 1, 1).getTime();
+  return { start, end: window.start, daysInMonth: Math.round((window.start - start) / DAY), dayOfMonth: 1 };
+}
+
 export function monthWindow(at: Date = new Date()): MonthWindow {
   const start = new Date(at.getFullYear(), at.getMonth(), 1).getTime();
   const end = new Date(at.getFullYear(), at.getMonth() + 1, 1).getTime();
@@ -72,11 +92,19 @@ function inWindow(dateish: unknown, window: MonthWindow): boolean {
  * wrong as not charging it at all.
  */
 export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthWindow()): number {
+  const rent = store.profile?.rent;
+  const profileRentSet = !!rent?.isRented && Number(rent.amount) > 0;
+  const isRent = (expense: { category?: string; note?: string }) =>
+    expense.category === 'Rent' || /rent/i.test(String(expense.note || ''));
+
   const spent = (store.expenses || [])
     .filter(expense => inWindow(expense.date, window))
     // Anything used up doing the work is taken off the revenue side instead,
     // so counting it here as well would charge the shop twice for its soap.
     .filter(expense => !isStockPurchase(expense) && !isVariableCost(store, expense))
+    // Salaries and the profile's rent are counted below, each its own way.
+    .filter(expense => expense.category !== 'Salaries')
+    .filter(expense => !(profileRentSet && isRent(expense)))
     .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
 
   // A recurring bill already paid this month is in `spent` above, so only the
@@ -106,10 +134,20 @@ export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthW
     (sum, member) => sum + Math.max(0, Number((member as any).monthlySalary) || 0),
     0,
   );
+  /*
+   * A salary belongs to the month it pays for. October's wage handed over on
+   * the 1st of November was counted as November's, so November's own wage then
+   * looked paid - and when it was paid at the end of the month the target
+   * jumped by a whole salary. Payday records say which month; one typed by
+   * hand goes by its date, as before.
+   */
+  const thisMonth = monthOf(window.start);
   const salariesPaid = (store.expenses || [])
-    .filter(expense => inWindow(expense.date, window) && expense.category === 'Salaries')
+    .filter(expense => expense.category === 'Salaries')
+    .filter(expense => (expense.payMonth ? expense.payMonth === thisMonth : inWindow(expense.date, window)))
     .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
-  const wagesOwed = Math.max(0, payroll - salariesPaid);
+  // What the wages come to: the settings, or more if more was paid.
+  const wages = Math.max(payroll, salariesPaid);
 
   /*
    * Rent from the shop's own profile.
@@ -125,22 +163,38 @@ export function monthlyFixedCosts(store: StoreData, window: MonthWindow = monthW
    * its rent and books the expense would otherwise be charged for it twice in
    * the same month, which is the opposite error and just as wrong.
    */
-  const rent = store.profile?.rent;
-  let profileRent = 0;
-  if (rent?.isRented && Number(rent.amount) > 0) {
-    // Monthly, quarterly or yearly - the three the profile offers. Unset is
-    // yearly, because that is what the form showed when it was filled in.
-    const monthly = monthlyRent(rent);
+  /*
+   * And always as its monthly share.
+   *
+   * Paying the rent used to be added on top: a year's rent paid this month
+   * made this month's target a year's rent higher, and next month's dropped
+   * back. Rent is paid in lumps but the shop uses the place every month, so
+   * each month carries one month of it, paid or not.
+   */
+  // Monthly, quarterly or yearly - the three the profile offers. Unset is
+  // yearly, because that is what the form showed when it was filled in.
+  const profileRent = profileRentSet && rent ? monthlyRent(rent) : 0;
 
-    const rentPaid = (store.expenses || [])
-      .filter(expense => inWindow(expense.date, window))
-      .filter(expense => expense.category === 'Rent' || /rent/i.test(String(expense.note || '')))
-      .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+  return Math.max(0, spent + upcoming + wages + profileRent);
+}
 
-    profileRent = Math.max(0, monthly - rentPaid);
+function monthOf(time: number): string {
+  const date = new Date(time);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** The price of the work taken in between two moments, and its pieces. */
+function workBetween(store: StoreData, from: number, to: number): { pieces: number; work: number } {
+  const accessCode = String(store.accessCode || '');
+  let pieces = 0;
+  let work = 0;
+  for (const record of accessCode ? shopLaundryRecords(accessCode) : []) {
+    const time = new Date(String(record.createdAt || '')).getTime();
+    if (!Number.isFinite(time) || time < from || time >= to) continue;
+    pieces += Number(record.pieceCount) || 0;
+    work += Number(record.total) || 0;
   }
-
-  return Math.max(0, spent + upcoming + wagesOwed + profileRent);
+  return { pieces, work };
 }
 
 export interface PiecesAndRevenue {
@@ -216,6 +270,8 @@ export interface BreakEven {
   variableCostPerPiece: number | null;
   /** The costs per piece came to more of the work's price than they can, so were left out. */
   costsDoubtful: boolean;
+  /** The margin came from last month, 1st to last day, so the target holds all month. */
+  steady: boolean;
 }
 
 /**
@@ -230,10 +286,36 @@ export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
   const window = monthWindow(at);
   const fixedCosts = monthlyFixedCosts(store, window);
   const { pieces, revenue, workTakenIn } = monthToDate(store, window);
-  const perPiece = variableCostPerPiece(store);
+
+  /*
+   * Everything is by the calendar month. The costs and the money are this
+   * month's, the 1st to the last day. The margin - how much of each naira the
+   * work uses up - is read from last month, its 1st to its last day, and held.
+   * A month that has ended no longer changes.
+   *
+   * It used to come from this month so far: every bundle taken in and every
+   * bag of soap bought moved it, and with it the target - so the figure the
+   * shop was aiming at changed value through the day, most of all in the first
+   * week, when a handful of bundles decided it. Read from a stretch that has
+   * already ended, it stays the same all month and changes only when a new
+   * cost is recorded.
+   *
+   * A shop without enough work last month - its first month in the app -
+   * has nothing settled to read, so until it does the margin is learnt from
+   * this month as it goes, as it always was.
+   */
+  const lastMonth = previousMonthWindow(window);
+  const before = estimateUnitCost(store, lastMonth.daysInMonth, lastMonth.end, lastMonth.start);
+  const earlier = workBetween(store, lastMonth.start, lastMonth.end);
+  const steady = before.perPiece !== null && earlier.pieces >= MIN_PIECES_FOR_UNIT_COST && earlier.work > 0;
+  // Learnt from this month alone, the 1st to now, not from the 30 days before today.
+  const perPiece = steady ? before.perPiece : estimateUnitCost(store, window.daysInMonth, window.end, window.start).perPiece;
 
   const consumed = perPiece === null ? 0 : perPiece * pieces;
   const contribution = revenue - consumed;
+  // The work the margin is read from, and what that work used up.
+  const marginWork = steady ? earlier.work : workTakenIn;
+  const consumedBefore = steady ? (perPiece ?? 0) * earlier.pieces : consumed;
 
   /*
    * The share of each naira left after what the work consumed. Without enough
@@ -253,9 +335,9 @@ export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
    * the price of the work is bundles missing from the app, so the target falls
    * back to the fixed costs and says why.
    */
-  const costsDoubtful = workTakenIn > 0 && consumed > MAX_COST_SHARE * workTakenIn;
-  const marginRate = workTakenIn > 0 && consumed > 0 && !costsDoubtful
-    ? Math.max(0.05, (workTakenIn - consumed) / workTakenIn)
+  const costsDoubtful = marginWork > 0 && consumedBefore > MAX_COST_SHARE * marginWork;
+  const marginRate = marginWork > 0 && consumedBefore > 0 && !costsDoubtful
+    ? Math.max(0.05, (marginWork - consumedBefore) / marginWork)
     : 1;
   const target = marginRate > 0 ? fixedCosts / marginRate : fixedCosts;
 
@@ -288,6 +370,7 @@ export function breakEven(store: StoreData, at: Date = new Date()): BreakEven {
     pace,
     surplus: Math.max(0, revenue - target),
     variableCostPerPiece: costsDoubtful ? null : perPiece,
+    steady,
     costsDoubtful,
   };
 }

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import { SubPage } from '../ui';
+import { hasBusinessModule } from '@/lib/business-runtime';
 import ProductQRRow from '../ProductQRRow';
 import type { SettingsState } from '../useSettings';
 
@@ -27,6 +28,7 @@ export default function BarcodeView({ s }: { s: SettingsState }) {
     checkingCloudStatus, cloudStatusError, cachedQR, setView,
   } = s;
   const storeId = store.storeId || store.accessCode;
+  const keepsStock = hasBusinessModule(store, 'inventory');
   const storeUrl = generateStoreUrl(storeId);
   const handlePrint = () => {
     if (typeof window === 'undefined') return;
@@ -577,8 +579,11 @@ export default function BarcodeView({ s }: { s: SettingsState }) {
           </div>
         </div>
 
-        {/* Product QR Codes Section */}
-        <div className="space-y-4 pt-2 text-left">
+        {/* Product QR Codes Section.
+            A shop with no stock - a laundry - has no products to put a code
+            on, and its Add Product sent the owner to a Stock tab it does not
+            have. The shop's own code above is the one its customers scan. */}
+        {(keepsStock || store.products.length > 0) && <div className="space-y-4 pt-2 text-left">
           <div className="flex items-center justify-between">
             <h3 className="font-display font-bold text-sm text-foreground">{serviceBusiness ? 'Product & Service QR Codes' : 'Product QR Codes'}</h3>
             {store.products.length > 0 && (
@@ -615,7 +620,7 @@ export default function BarcodeView({ s }: { s: SettingsState }) {
               </button>
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* View All Modal */}

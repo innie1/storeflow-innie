@@ -16,6 +16,7 @@ import SaleReceipt from '@/components/SaleReceipt';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { printReceipt } from '@/lib/print-engine';
 import { getSmartDiscounts } from '@/lib/manager-intel';
+import { receiptTradeLine } from '@/lib/business-runtime';
 import {
   Search,
   SlidersHorizontal,
@@ -497,7 +498,7 @@ export default function Sales({ store, onUpdate, managerSettings, isActive = tru
       if (managerSettings?.autoPrintReceipt) {
         const receiptData = {
           storeName: store.storeName,
-          storeType: store.profile?.storeType,
+          storeType: receiptTradeLine(store),
           location: store.profile?.location,
           phone: store.profile?.phone,
           email: store.profile?.email,

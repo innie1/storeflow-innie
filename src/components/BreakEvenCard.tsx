@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useShopLaundryVersion } from '@/hooks/use-shop-laundry';
 import { Target } from 'lucide-react';
 import type { StoreData } from '@/types/store';
-import { breakEven, breakEvenSentence } from '@/lib/service-breakeven';
+import { breakEven, breakEvenSentence, lastMonthName, monthSpan, monthWindow, previousMonthWindow } from '@/lib/service-breakeven';
 import { consumablePace, estimateUnitCost, pieceCostSentence, powerPaceSentence, soapPaceSentence } from '@/lib/cost-estimator';
 import { consumableAsk } from '@/lib/trade-supplies';
 import { claimSpotlight, scrollSpotlightIntoView, SPOTLIGHT_CLASS, SPOTLIGHT_MS, SPOTLIGHT_SIGNAL } from '@/lib/spotlight';
@@ -39,7 +39,13 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
   const state = useMemo(() => breakEven(store), [store, laundryVersion]);
   const soapLine = useMemo(() => soapPaceSentence(store), [store, laundryVersion]);
   const powerLine = useMemo(() => powerPaceSentence(store), [store, laundryVersion]);
-  const pieceCost = useMemo(() => pieceCostSentence(store, estimateUnitCost(store)), [store, laundryVersion]);
+  // The same month the target is read from: all of last month, or this month while there is none.
+  const pieceCost = useMemo(() => {
+    const now = new Date();
+    const month = state.steady ? previousMonthWindow(monthWindow(now)) : monthWindow(now);
+    const estimate = estimateUnitCost(store, month.daysInMonth, month.end, month.start);
+    return pieceCostSentence(store, estimate, state.steady ? `all of ${lastMonthName(now)}` : 'this month so far');
+  }, [store, laundryVersion, state.steady]);
   const soapNoun = consumableAsk(store).noun;
   const soapLots = useMemo(
     () => consumablePace(store).find(pace => pace.key === soapNoun.toLowerCase())?.lots || [],
@@ -91,7 +97,8 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
 
   if (!canSeeMoney) return null;
 
-  const hasWorking = state.target > 0 && (state.workTakenIn > 0 || state.variableCostPerPiece !== null || !!soapLine || !!powerLine);
+  // Always something to say once there is a target: why it stays where it is.
+  const hasWorking = state.target > 0;
 
   return (
     <div ref={cardRef} className={`rounded-2xl border border-border bg-card p-3 text-left ${lit ? SPOTLIGHT_CLASS : ''}`}>
@@ -131,7 +138,7 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
       {state.costsDoubtful && (
         <p className="text-[10px] text-amber-500 mt-1.5">
           Soap and electricity came to most of the price of the work, which usually means some bundles are
-          not in the app yet. The target is your fixed costs alone until they are.
+          not in the app yet. This month's target is your fixed costs alone.
         </p>
       )}
 
@@ -144,6 +151,15 @@ export default function BreakEvenCard({ store, canSeeMoney }: Props) {
       {hasWorking && (
         <details className="mt-1.5 group">
           <summary className="text-[10px] font-bold text-primary cursor-pointer list-none">How this is worked out</summary>
+          {/* Said, because a target that used to move now holds still. */}
+          <p className="text-[10px] text-muted-foreground mt-1" data-target-steady>
+            {money(state.target)} is the target for {monthSpan(new Date())}: this month's rent, salaries and bills
+            {state.target > state.fixedCosts + 1 ? `, plus what the work uses up${state.steady ? `, going by all of ${lastMonthName(new Date())}` : ''}` : ''}.
+            {' It starts again on the 1st of next month.'}
+            {state.steady
+              ? ' It stays the same all month and only changes when a new cost is recorded.'
+              : ' Until there is a month of work in the app it adjusts as bundles come in. After that it holds still all month.'}
+          </p>
           {/* The price of the work beside the money for it, so a busy month with
               little paid shows as exactly that. */}
           {state.target > 0 && state.workTakenIn > 0 && (

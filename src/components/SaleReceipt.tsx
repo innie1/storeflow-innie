@@ -3,6 +3,7 @@ import ContactPickButton from '@/components/ContactPickButton';
 import { StoreData, Sale, ManagerSettings } from '@/types/store';
 import { printReceipt } from '@/lib/print-engine';
 import { recordedByLabel } from '@/lib/recorded-by';
+import { receiptTradeLine } from '@/lib/business-runtime';
 import { showToast } from '@/components/Toast';
 import StoreLogo from '@/components/StoreLogo';
 import { drawQRCode, encodeQRData } from '@/lib/qr-code';
@@ -21,6 +22,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   // Overlay: hold the page behind it still while this is open.
   useBodyScrollLock();
   const profile = store.profile;
+  const tradeLine = receiptTradeLine(store);
   const salesList = Array.isArray(sale) ? sale : [sale];
   const date = new Date(salesList[0]?.date || Date.now());
   const [buyerPhone, setBuyerPhone] = useState('');
@@ -44,7 +46,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   const generateReceiptText = () => {
     let receipt = `==============================\n`;
     receipt += `       ${settings.receiptStoreName || store.storeName}\n`;
-    if (profile?.storeType) receipt += `       ${profile.storeType}\n`;
+    if (tradeLine) receipt += `       ${tradeLine}\n`;
     if (settings.receiptAddress || profile?.location) receipt += `  ${settings.receiptAddress || profile?.location}\n`;
     if (settings.receiptPhone || profile?.phone) receipt += `  Tel: ${settings.receiptPhone || profile?.phone}\n`;
     if (profile?.email) receipt += `  ${profile.email}\n`;
@@ -98,7 +100,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
   const handlePrint = () => {
     const receiptData = {
       storeName: settings.receiptStoreName || store.storeName,
-      storeType: profile?.storeType,
+      storeType: tradeLine,
       storeAddress: settings.receiptAddress || profile?.location,
       storePhone: settings.receiptPhone || profile?.phone,
       email: profile?.email,
@@ -225,7 +227,7 @@ export default function SaleReceipt({ store, sale, onClose, onUpdateStore }: Sal
             )}
 
             <div className="text-center space-y-0.5">
-              {profile?.storeType && <p className="text-muted-foreground">{profile.storeType}</p>}
+              {tradeLine && <p className="text-muted-foreground">{tradeLine}</p>}
               {(settings.receiptAddress || profile?.location) && (
                 <p className="text-muted-foreground">{settings.receiptAddress || profile?.location}</p>
               )}

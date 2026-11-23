@@ -1,5 +1,6 @@
-import type { PendingPayment, Sale, StoreData } from '@/types/store';
+import type { PaymentMethod, PendingPayment, Sale, StoreData } from '@/types/store';
 import { attribution } from '@/lib/recorded-by';
+import { recordActivityLog } from '@/lib/activity-log';
 
 /**
  * Money on a laundry bundle.
@@ -291,6 +292,13 @@ export interface PaymentTakenHere {
   clientRef: string;
   amount: number;
   at: string;
+  /** Cash or transfer, as tapped - sent along so the owner's phone knows too. */
+  method?: 'cash' | 'transfer' | 'pos';
+}
+
+/** A method the cloud keeps: one of the three a payment can be taken by. */
+function sentMethod(method: unknown): PaymentTakenHere['method'] {
+  return method === 'cash' || method === 'transfer' || method === 'pos' ? method : undefined;
 }
 
 /** Every payment recorded on this phone, by bundle - the deposit at intake, then each one after. */
@@ -309,12 +317,15 @@ export function laundryPaymentsTakenHere(store: StoreData): PaymentTakenHere[] {
      */
     const elsewhere = owed.takenInElsewhere === true;
     if (!elsewhere) {
-      const deposit = events.filter(event => event.date === owed.createdAt).reduce((sum, event) => sum + (Number(event.amount) || 0), 0);
-      out.push({ id: `${owed.id}-in`, kind: 'intake', clientRef, amount: money(deposit), at: owed.createdAt });
+      const atIntake = events.filter(event => event.date === owed.createdAt);
+      const deposit = atIntake.reduce((sum, event) => sum + (Number(event.amount) || 0), 0);
+      const method = sentMethod(atIntake.find(event => Number(event.amount) > 0)?.method);
+      out.push({ id: `${owed.id}-in`, kind: 'intake', clientRef, amount: money(deposit), at: owed.createdAt, ...(method ? { method } : {}) });
     }
     for (const event of events) {
       if ((!elsewhere && event.date === owed.createdAt) || !(Number(event.amount) > 0)) continue;
-      out.push({ id: `${owed.id}-${Date.parse(event.date)}`, kind: 'payment', clientRef, amount: Number(event.amount), at: event.date });
+      const method = sentMethod(event.method);
+      out.push({ id: `${owed.id}-${Date.parse(event.date)}`, kind: 'payment', clientRef, amount: Number(event.amount), at: event.date, ...(method ? { method } : {}) });
     }
   }
   return out;
@@ -364,4 +375,73 @@ export function repriceLaundryDebt(store: StoreData, clientRef: string, newTotal
 export function laundryBalance(store: StoreData, clientRef: string): number {
   const entry = (store.pendingPayments || []).find(item => item.id === `laundry-${clientRef}`);
   return entry ? money(entry.balance) : 0;
+}
+
+/** The last money recorded on a bundle on this phone, which is what an undo takes back. */
+export interface LastLaundryPayment {
+  amount: number;
+  at: string;
+  method?: PaymentMethod;
+  takenBy?: string;
+}
+
+export function lastLaundryPayment(store: StoreData, clientRef: string): LastLaundryPayment | null {
+  const entry = (store.pendingPayments || []).find(item => item.id === `laundry-${clientRef}`);
+  const events = (entry?.events || []).filter(event => Number(event.amount) > 0);
+  const last = events[events.length - 1];
+  if (!last) return null;
+  return {
+    amount: money(Number(last.amount)),
+    at: last.date,
+    ...(last.method ? { method: last.method } : {}),
+    ...(last.takenBy ? { takenBy: last.takenBy } : {}),
+  };
+}
+
+/**
+ * Takes back the last payment recorded on a bundle: a Cash or Transfer tapped
+ * by mistake, or the wrong amount.
+ *
+ * The money comes out of the takings (its sale goes) and goes back onto what
+ * the customer owes, so the bundle reads exactly as it did before the tap.
+ * Only the last one, so payments are always undone in the order they were
+ * taken and nothing in the middle can go missing. Written to the activity log,
+ * because money that disappears without a trace is the thing a shop owner most
+ * needs to be able to see.
+ */
+export function undoLaundryPayment(store: StoreData, clientRef: string, by?: { name?: string; role?: string }): StoreData {
+  const id = `laundry-${clientRef}`;
+  const entry = (store.pendingPayments || []).find(item => item.id === id);
+  if (!entry) return store;
+  const events = entry.events || [];
+  let index = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (Number(events[i].amount) > 0) { index = i; break; }
+  }
+  if (index < 0) return store;
+  const event = events[index];
+  const amount = money(Number(event.amount));
+
+  // The sale this payment made: same bundle, same moment. One only, should two share it.
+  const sales = store.sales || [];
+  const saleIndex = sales.findIndex(sale => sale.pendingPaymentId === id && sale.date === event.date);
+  const nextSales = saleIndex >= 0 ? sales.filter((_, i) => i !== saleIndex) : sales;
+
+  const paid = money(Math.max(0, money(entry.paid) - amount));
+  const balance = money(Math.max(0, money(entry.total) - paid));
+  const undone: PendingPayment = {
+    ...entry,
+    paid,
+    balance,
+    status: balance <= 0 ? 'paid' : 'pending',
+    events: events.filter((_, i) => i !== index),
+  } as PendingPayment;
+
+  const tag = String(entry.items?.[0]?.productName || '').split(' · ').pop() || clientRef.slice(0, 8).toUpperCase();
+  const next: StoreData = {
+    ...store,
+    sales: nextSales,
+    pendingPayments: (store.pendingPayments || []).map(item => item.id === id ? undone : item),
+  };
+  return recordActivityLog(next, by?.name || 'Owner', by?.role || 'owner', `Undid a ₦${amount.toLocaleString()} payment on ${tag}`);
 }

@@ -13,7 +13,7 @@ import {
   type LaundryWorkspaceView,
 } from '@/lib/laundry-workspace';
 import { describeDue, type DueLabel } from '@/lib/laundry-due';
-import { laundryBalance, recordLaundryPayment } from '@/lib/laundry-money';
+import { laundryBalance, lastLaundryPayment, recordLaundryPayment, undoLaundryPayment } from '@/lib/laundry-money';
 import {
   getLocalLaundryRecords,
   LAUNDRY_LOCAL_CHANGED_EVENT,
@@ -30,7 +30,7 @@ import {
 import { buildLaundryWhatsAppPayload, openLaundryWhatsApp } from '@/lib/laundry-whatsapp';
 import { showToast } from '@/components/Toast';
 import { saveStore } from '@/lib/store-data';
-import { AlertTriangle, Banknote, Landmark, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, Ticket, X } from 'lucide-react';
+import { AlertTriangle, Undo2, Banknote, Landmark, ChevronDown, ChevronUp, ClipboardList, Clock, MapPin, MessageCircle, Plus, Search, Ticket, X } from 'lucide-react';
 import BundlePhotos from '@/components/laundry/BundlePhotos';
 import ClaimTicket from '@/components/laundry/ClaimTicket';
 import ChangeServiceSheet from '@/components/laundry/ChangeServiceSheet';
@@ -112,6 +112,16 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
   const [collectorAsk, setCollectorAsk] = useState<{ record: DecoratedRecord; force: boolean } | null>(null);
   /** The person chosen for the hand-over under way, so the money check after it does not ask again. */
   const handedTo = useRef<{ key: string; name: string } | null>(null);
+  // The store as it is now, for an undo tapped seconds after the payment it takes back.
+  const latestStore = useRef(store);
+  latestStore.current = store;
+  /*
+   * Undo is the owner's phone only. A worker's phone has already sent the
+   * payment to the owner, and taking it back there would leave the two
+   * phones disagreeing about what the customer owes.
+   */
+  const canUndoPayment = !store.staffDevice && (!currentUser?.role || currentUser.role === 'owner');
+  const [undoAsk, setUndoAsk] = useState<string | null>(null);
   /** The bundle whose list of people who may collect is being changed. */
   const [collectorEdit, setCollectorEdit] = useState<{ record: DecoratedRecord; list: { name: string; phone: string }[] } | null>(null);
   const [ticket, setTicket] = useState<DecoratedRecord | null>(null);
@@ -340,8 +350,23 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
     });
     saveStore(next);
     onUpdate(next);
-    showToast(`₦${record.balance.toLocaleString()} received ${method === 'cash' ? 'in cash' : 'by transfer'} for ${record.tagCode}`);
+    const said = `₦${record.balance.toLocaleString()} received ${method === 'cash' ? 'in cash' : 'by transfer'} for ${record.tagCode}`;
+    // Tapped by mistake is found out at once, so the way back is right there.
+    if (store.staffDevice) showToast(said);
+    else showToast(`${said} · Tap to undo`, 'success', 8000, () => undoPayment(record, true));
   }, [store, onUpdate, currentUser]);
+
+  /** Takes back the last payment on a bundle: the bundle owes again what it owed before. */
+  const undoPayment = (record: Pick<DecoratedRecord, 'clientRef' | 'tagCode'>, fromToast = false) => {
+    const current = latestStore.current;
+    const last = lastLaundryPayment(current, record.clientRef);
+    if (!last) return;
+    const next = undoLaundryPayment(current, record.clientRef, { name: currentUser?.name || 'Owner', role: currentUser?.role || 'owner' });
+    saveStore(next);
+    onUpdate(next);
+    setUndoAsk(null);
+    showToast(`Undone: ₦${last.amount.toLocaleString()} taken off ${record.tagCode}. It is owed again.`, fromToast ? 'info' : 'success');
+  };
 
   /**
    * Handing the clothes back is the last moment anyone can ask for the money.
@@ -955,6 +980,27 @@ export default function LaundryWorkspace({ store, orders, onUpdate, currentUser 
                           {methodLabel(method)} ₦{record.balance.toLocaleString()}
                         </button>
                       ))}
+
+                      {/* A payment tapped by mistake, taken back. Asks once more first,
+                          because it is money coming off the day's takings. */}
+                      {canUndoPayment && (() => {
+                        const last = lastLaundryPayment(store, record.clientRef);
+                        if (!last) return null;
+                        const asking = undoAsk === record.key;
+                        return (
+                          <button
+                            type="button"
+                            data-undo-payment
+                            onClick={() => (asking ? undoPayment(record) : setUndoAsk(record.key))}
+                            onBlur={() => asking && setUndoAsk(null)}
+                            aria-label={`Undo the ₦${last.amount.toLocaleString()} payment on ${record.tagCode}`}
+                            className={`h-10 px-3 rounded-xl text-xs font-display font-black flex items-center gap-1.5 border ${asking ? 'bg-destructive text-destructive-foreground border-destructive' : 'bg-surface-2 border-border text-muted-foreground'}`}
+                          >
+                            <Undo2 className="w-4 h-4" />
+                            {asking ? `Tap again to undo ₦${last.amount.toLocaleString()}` : `Undo ₦${last.amount.toLocaleString()} paid`}
+                          </button>
+                        );
+                      })()}
 
                       {record.whatsapp && (
                         <button onClick={() => sendWhatsApp(record.order)} className="h-10 px-4 rounded-xl bg-emerald-600 text-white text-xs font-display font-black flex items-center justify-center gap-2">

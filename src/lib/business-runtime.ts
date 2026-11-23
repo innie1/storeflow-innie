@@ -115,6 +115,18 @@ export function getBusinessTemplate(store?: Partial<StoreData> | null): Business
   return BUSINESS_TEMPLATES[resolveBusinessType(store)] || BUSINESS_TEMPLATES.other;
 }
 
+/**
+ * The line under the shop's name on a receipt: what the shop is.
+ *
+ * Receipts printed `profile.storeType`, which loading the store overwrites
+ * with its category - one of four buckets the app sorts shops into - so every
+ * laundry's receipt said "retail" under its name. The trade is what a
+ * customer should read there.
+ */
+export function receiptTradeLine(store?: Partial<StoreData> | null): string {
+  return getBusinessTemplate(store).name;
+}
+
 export function hasBusinessModule(store: Partial<StoreData> | null | undefined, module: BusinessModule): boolean {
   return getBusinessTemplate(store).modules.includes(module);
 }

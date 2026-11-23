@@ -402,11 +402,20 @@ function lotPaces(
  * trade, and a drum of detergent bought on the 1st would land on whatever few
  * pieces happened to follow it.
  */
-export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
-  const since = Date.now() - days * DAY;
+export function estimateUnitCost(store: StoreData, days = 30, until?: number, from?: number): CostEstimate {
+  /*
+   * `until` ends the window somewhere other than now, and `from` starts it on
+   * a set day instead of counting days back. The month's target reads its
+   * costs from the whole of last month, the 1st to its last day, so that the
+   * target holds still all month instead of moving with every bundle and
+   * every bag of soap.
+   */
+  const end = until ?? Date.now();
+  const since = from ?? end - days * DAY;
+  if (from !== undefined) days = Math.round((end - from) / DAY);
   const within = (value: unknown) => {
     const time = new Date(String(value || '')).getTime();
-    return Number.isFinite(time) && time >= since;
+    return Number.isFinite(time) && time >= since && (until === undefined || time < end);
   };
 
   const categories = variableCategories(store);
@@ -438,7 +447,7 @@ export function estimateUnitCost(store: StoreData, days = 30): CostEstimate {
    * costs nothing all month and everything on payday, and it would price the
    * work wrong on both days.
    */
-  const labour = approvedLabourBetween(store, since, Date.now());
+  const labour = approvedLabourBetween(store, since, end);
   if (labour > 0) {
     spend += labour;
     totals.set(PIECE_WORK_CATEGORY as ExpenseCategory, labour);
@@ -613,12 +622,12 @@ export function pieceCostParts(store: StoreData, estimate: CostEstimate): PieceC
 }
 
 /** "₦49 a piece to do the work: soap ₦30, light ₦19." */
-export function pieceCostSentence(store: StoreData, estimate: CostEstimate): string {
+export function pieceCostSentence(store: StoreData, estimate: CostEstimate, from?: string): string {
   const parts = pieceCostParts(store, estimate);
   if (!parts.length || estimate.perPiece === null) return '';
   const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
   const list = parts.map(part => `${part.label} ${naira(part.perPiece)}${part.assumed ? ' (starting figure)' : ''}`).join(', ');
-  return `${naira(estimate.perPiece)} a piece to do the work: ${list}. From the last ${estimate.days} days, ${estimate.pieces.toLocaleString()} pieces.`;
+  return `${naira(estimate.perPiece)} a piece to do the work: ${list}. From ${from ?? `the last ${estimate.days} days`}, ${estimate.pieces.toLocaleString()} pieces.`;
 }
 
 /* ── What each service costs ────────────────────────────────────────────── */

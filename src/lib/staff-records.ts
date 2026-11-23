@@ -27,6 +27,8 @@ export interface ArrivedPayment {
   at: string;
   staffName?: string;
   staffRole?: string;
+  /** Cash, transfer or POS, from the worker's tap. Absent from older phones. */
+  method?: string | null;
   total?: number;
   tagCode?: string;
   customerName?: string;
@@ -82,6 +84,9 @@ export function addArrivedPayments(store: StoreData, payments: ArrivedPayment[] 
       at: payment.at,
       takenBy: payment.staffName,
       takenByRole: payment.staffRole,
+      // How it was paid, so it lands under cash or transfer and not "not recorded".
+      // A card machine pays into the bank, so POS is counted as transfer, as everywhere else.
+      ...(payment.method === 'cash' ? { method: 'cash' as const } : payment.method === 'transfer' || payment.method === 'pos' ? { method: 'transfer' as const } : {}),
     });
   }
   next = { ...next, appliedStaffPayments: [...(store.appliedStaffPayments || []), ...booked].slice(-APPLIED_KEPT) };
