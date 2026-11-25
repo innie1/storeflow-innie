@@ -14,10 +14,32 @@ export function same(a: unknown, b: unknown): boolean {
  * The same rule as the cloud's merge_inventory_snapshot
  * (supabase/migrations/20261012131342_staff_records_and_record_merge.sql).
  */
-export const RECORD_FIELDS = ['customers', 'staffExpenseRequests', 'pieceWork'] as const;
+export const RECORD_FIELDS = ['customers', 'staffExpenseRequests', 'pieceWork', 'serviceChangeRequests'] as const;
 const MERGE_FINANCIAL = FINANCIAL_FIELDS.filter(key => !(RECORD_FIELDS as readonly string[]).includes(key));
 
 type Rec = { id?: string };
+
+/**
+ * One record both sides changed, settled field by field.
+ *
+ * The owner's phone writing a worker's bundle into the books moves a
+ * service's sales count; a manager's phone saving the price list stamps the
+ * same service as edited. Different fields, so both are kept. Only the same
+ * field changed two different ways is a real disagreement: null.
+ */
+export function mergeRecordFields(was: Rec | undefined, now: Rec, there: Rec): Rec | null {
+  const b = (was || {}) as Record<string, unknown>, n = now as Record<string, unknown>, r = there as Record<string, unknown>;
+  const merged: Record<string, unknown> = {};
+  for (const field of new Set([...Object.keys(b), ...Object.keys(n), ...Object.keys(r)])) {
+    let value: unknown;
+    if (same(n[field], b[field])) value = r[field];
+    else if (same(r[field], b[field]) || same(r[field], n[field])) value = n[field];
+    else return null;
+    if (value !== undefined) merged[field] = value;
+  }
+  return merged as Rec;
+}
+
 export function mergeRecordsById(base: unknown, next: unknown, remote: unknown, key: string): Rec[] {
   const b = Array.isArray(base) ? base as Rec[] : [];
   const n = Array.isArray(next) ? next as Rec[] : [];
@@ -31,8 +53,13 @@ export function mergeRecordsById(base: unknown, next: unknown, remote: unknown, 
     const now = n.find(item => item.id === id);
     if (same(was, now)) continue;
     const there = result.find(item => item.id === id);
-    if (!same(there, was) && !same(there, now)) throw new Error(`Another device changed the same record in ${key}. Your local copy is kept; reconcile the two copies before syncing.`);
     const at = result.findIndex(item => item.id === id);
+    if (!same(there, was) && !same(there, now)) {
+      const merged = now && there ? mergeRecordFields(was, now, there) : null;
+      if (!merged) throw new Error(`Another device changed the same record in ${key}. Your local copy is kept; reconcile the two copies before syncing.`);
+      result[at] = merged;
+      continue;
+    }
     if (!now) { if (at >= 0) result.splice(at, 1); }
     else if (at >= 0) result[at] = now;
     else result = [now, ...result];

@@ -1,4 +1,5 @@
-import type { Customer, PieceWorkEntry, StaffExpenseRequest, StoreData } from '@/types/store';
+import type { Customer, PieceWorkEntry, ServiceChangeRequest, StaffExpenseRequest, StoreData } from '@/types/store';
+import { addArrivedServiceChanges } from '@/lib/service-changes';
 import { rpcAheadOfTypes } from '@/integrations/supabase/client';
 import { settleArrivedStaffExpenses } from '@/lib/staff-expenses';
 import { storeRefOf } from '@/lib/device-request-watch';
@@ -43,6 +44,8 @@ export interface Arrived {
   staffExpenseRequests?: StaffExpenseRequest[];
   pieceWork?: PieceWorkEntry[];
   payments?: ArrivedPayment[];
+  /** A manager's service and price changes, for the owner to approve. */
+  serviceChangeRequests?: ServiceChangeRequest[];
 }
 
 /** How many booked ids are remembered: each payment arrives once, near the last ask. */
@@ -128,6 +131,7 @@ export async function collectStaffRecords(store: StoreData): Promise<StoreData |
   if (!reply?.ok) return null;
   const result = addArrivedRecords(store, reply as Arrived);
   const paid = addArrivedPayments(result.store, (reply as Arrived).payments);
+  const changes = addArrivedServiceChanges(paid.store, (reply as Arrived).serviceChangeRequests);
   try { localStorage.setItem(sinceKey(code), String(reply.as_of)); } catch { /* private mode */ }
-  return result.added || paid.added ? paid.store : null;
+  return result.added || paid.added || changes.added ? changes.store : null;
 }

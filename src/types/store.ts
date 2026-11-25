@@ -289,6 +289,41 @@ export interface StaffExpenseRequest {
   expenseId?: string;
 }
 
+/** What a service says, as a manager may change it. */
+export interface ServiceFields {
+  name?: string;
+  description?: string;
+  sellingPrice?: number;
+  turnaround?: string;
+  servicePricing?: string;
+  discontinued?: boolean;
+  /** Item prices, only the items that change. */
+  garmentPrices?: Record<string, number>;
+  /** Items renamed, for the whole price list: Pillowcase to Uniform. */
+  itemRenames?: { from: string; to: string }[];
+  /** Items the shop does not have yet. */
+  addItems?: string[];
+}
+
+/**
+ * A change to a service or its prices from a manager's phone, waiting for the
+ * owner. The cloud never applies one itself: prices decide the shop, so the
+ * owner is told and the change counts only once they approve it.
+ */
+export interface ServiceChangeRequest {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  /** A service the shop does not have yet. */
+  isNew?: boolean;
+  before: ServiceFields;
+  proposed: ServiceFields;
+  _fromStaff: { staffId: string; name: string; at: string };
+  status: 'pending' | 'approved' | 'rejected' | 'superseded';
+  decidedAt?: string;
+  decidedBy?: string;
+}
+
 export interface StoreProfile {
   /*
    * Optional for the same reason as ManagerSettings.enabled: every reader
@@ -1174,6 +1209,8 @@ export interface StoreData {
   serviceChangesNoticed?: string[];
   /** Expenses workers reported, waiting or decided. See StaffExpenseRequest. */
   staffExpenseRequests?: StaffExpenseRequest[];
+  /** Managers' service and price changes, waiting for the owner. */
+  serviceChangeRequests?: ServiceChangeRequest[];
   /**
    * Set only on a worker's own phone: this is the slim copy of a shop the
    * cloud gave them, not a shop of their own. See staff-session.

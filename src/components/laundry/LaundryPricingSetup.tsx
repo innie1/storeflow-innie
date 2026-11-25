@@ -22,6 +22,7 @@ import { getStoredServicePricing, type ServicePricing } from '@/lib/service-pric
 import { publishStorefrontToCloud } from '@/lib/marketplace-publish';
 import { Check, ChevronDown, ChevronUp, Pencil, Plus, Power, Shirt, Trash2, X } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
+import ServiceChangeApprovals from '@/components/laundry/ServiceChangeApprovals';
 
 interface Props {
   store: StoreData;
@@ -80,14 +81,21 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
   useEffect(() => {
     const seeded = seedLaundryGarmentPrices(store);
     const published = publishLaundryPricingToTemplate(seeded);
-    // STOREFLOW_LAUNDRY_OPEN_PUBLISH: opening Price List repairs older local-only stores.
-    void publishStorefrontToCloud(published).catch(error =>
-      console.warn('[StoreFlow Laundry] Initial storefront publish failed:', error)
-    );
     if (JSON.stringify((published as any).laundryPricing) !== JSON.stringify((store as any).laundryPricing) ||
         JSON.stringify((published as any).businessTemplate?.laundryPricing) !== JSON.stringify((store as any).businessTemplate?.laundryPricing)) {
       saveStore(published);
       onUpdate(published);
+      /*
+       * STOREFLOW_LAUNDRY_OPEN_PUBLISH: opening Price List repairs older
+       * local-only stores - but only when there was something to repair.
+       * It used to publish on every opening, whole, straight to the cloud:
+       * a phone with an older price list put it back over newer prices just
+       * by being looked at, even while its own sync was held for review
+       * (Washlie, 25 Nov, 4:43pm). And it cost a cloud call each time.
+       */
+      void publishStorefrontToCloud(published).catch(error =>
+        console.warn('[StoreFlow Laundry] Initial storefront publish failed:', error)
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.products]);
@@ -287,6 +295,7 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
 
   return (
     <div className="px-4 py-4 max-w-2xl mx-auto pb-24 space-y-5">
+      <ServiceChangeApprovals store={store} persist={persist} currentUser={currentUser} />
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-display font-black text-xl text-foreground">Laundry Price List</h2>

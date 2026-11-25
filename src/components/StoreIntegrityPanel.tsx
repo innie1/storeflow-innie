@@ -23,7 +23,9 @@ export default function StoreIntegrityPanel({ store, owner }: { store: StoreData
     const retry = () => { const held = getPendingStoreSync(store.accessCode); if (held && held.state !== 'conflict') void retryStoreSync(store.accessCode).catch(() => {}); };
     // On opening and on coming back online, a held sync with no agreed copy is
     // looked at again: if the cloud's copy is only older it settles itself.
-    const settle = () => { const held = getPendingStoreSync(store.accessCode); if (held?.state === 'conflict' && !held.base) void retryStoreSync(store.accessCode, { settleOlderCloud: true }).catch(() => {}); else retry(); };
+    // A held change with an agreed copy is offered again too: the cloud now
+    // keeps both phones' changes when they touched different things.
+    const settle = () => { const held = getPendingStoreSync(store.accessCode); if (held?.state === 'conflict') void retryStoreSync(store.accessCode, held.base ? { askAgain: true } : { settleOlderCloud: true }).catch(() => {}); else retry(); };
     update(); settle();
     window.addEventListener(STORE_SYNC_EVENT, update);
     window.addEventListener('storage', update);

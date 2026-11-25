@@ -148,7 +148,7 @@ export function cloudIsOlderCopy(remote: Record<string, any> | null | undefined,
   return RECORD_LISTS.every(key => (Array.isArray(remote[key]) ? remote[key] : []).every((record: any) => held.has(recordKey(record))));
 }
 
-export async function retryStoreSync(code: string, options: { settleOlderCloud?: boolean } = {}): Promise<void> {
+export async function retryStoreSync(code: string, options: { settleOlderCloud?: boolean; askAgain?: boolean } = {}): Promise<void> {
   return serializeStoreSync(code, async () => {
     const held = getPendingStoreSync(code);
     if (!held) return;
@@ -164,7 +164,15 @@ export async function retryStoreSync(code: string, options: { settleOlderCloud?:
      * turns out to be only older. That is asked again (when the shop opens,
      * not on every tick), and settles itself below if so.
      */
-    if (held.state === 'conflict' && (held.base || !options.settleOlderCloud)) return;
+    if (held.state === 'conflict' && (held.base || !options.settleOlderCloud) && !options.askAgain) return;
+    /*
+     * askAgain: once when the shop opens, a held change with an agreed copy is
+     * offered to the cloud again, unchanged. The cloud's rule for two phones
+     * changing one record got kinder (field by field), and a hold from before
+     * that may now go through by itself. Refused again, it is held as before,
+     * with its reason. Offline it is left exactly as it is.
+     */
+    if (held.state === 'conflict' && options.askAgain && ((typeof navigator !== 'undefined' && !navigator.onLine) || cloudRecentlyUnreachable())) return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) { writePending(code, { ...held, state: 'pending' }); return; }
     // A sale waits on this before it saves; a cloud that just failed is not
     // asked again for half a minute. See cloud-reach.

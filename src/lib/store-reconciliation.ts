@@ -29,7 +29,9 @@ export function inspectStoreRecords(store: StoreData): ReconciliationIssue[] {
     if (!(p.id.startsWith('laundry-')) && (p.saleIds || []).some(id => !saleIds.has(id))) add(`links-${p.id}`, p.customerName, 'Some sales linked to this debt are missing.', 'Recover the missing sale from a backup; do not create a second payment.');
   }
   for (const c of store.customers || []) {
-    const linked = (store.pendingPayments || []).filter(p => p.customerId === c.id);
+    // A laundry bundle's debt lives on the bundle and never touches
+    // outstandingDebt (see customer-directory), so it is no evidence here.
+    const linked = (store.pendingPayments || []).filter(p => p.customerId === c.id && !p.id.startsWith('laundry-'));
     const ambiguous = (store.pendingPayments || []).some(p => !p.customerId && (p.customerName.toLowerCase() === c.name.toLowerCase() || (!!p.customerPhone && p.customerPhone === c.phone)));
     if (linked.length && !ambiguous) {
       const balance = money(linked.reduce((sum, p) => sum + p.balance, 0));
