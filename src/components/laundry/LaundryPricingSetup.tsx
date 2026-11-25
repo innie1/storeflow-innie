@@ -19,7 +19,6 @@ import {
   setLaundryServicePriceForAll,
 } from '@/lib/laundry-pricing';
 import { getStoredServicePricing, type ServicePricing } from '@/lib/service-pricing';
-import { publishStorefrontToCloud } from '@/lib/marketplace-publish';
 import { Check, ChevronDown, ChevronUp, Pencil, Plus, Power, Shirt, Trash2, X } from 'lucide-react';
 import ScrollLock from '@/components/ScrollLock';
 import ServiceChangeApprovals from '@/components/laundry/ServiceChangeApprovals';
@@ -71,10 +70,15 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
     const published = publishLaundryPricingToTemplate(next);
     saveStore(published);
     onUpdate(published);
-    // STOREFLOW_LAUNDRY_PRICE_PUBLISH
-    void publishStorefrontToCloud(published).catch(error =>
-      console.warn('[StoreFlow Laundry] Price-list publish failed:', error)
-    );
+    /*
+     * STOREFLOW_LAUNDRY_PRICE_SYNC: the price list reaches the cloud, and the
+     * customers' storefront, with the shop's own save - one at a time, in
+     * order. It used to be sent straight to the cloud as well, on every edit.
+     * Two quick edits (Washlie, 25 Nov, 5:57pm: a price, then a rename) went
+     * up side by side, the older landed last, and the shop's next save found
+     * a price list it had never sent - "Another device changed laundryPricing".
+     * The other device was the same phone.
+     */
     return published;
   };
 
@@ -86,16 +90,13 @@ export default function LaundryPricingSetup({ store, onUpdate, currentUser }: Pr
       saveStore(published);
       onUpdate(published);
       /*
-       * STOREFLOW_LAUNDRY_OPEN_PUBLISH: opening Price List repairs older
-       * local-only stores - but only when there was something to repair.
-       * It used to publish on every opening, whole, straight to the cloud:
-       * a phone with an older price list put it back over newer prices just
-       * by being looked at, even while its own sync was held for review
-       * (Washlie, 25 Nov, 4:43pm). And it cost a cloud call each time.
+       * STOREFLOW_LAUNDRY_OPEN_REPAIR: opening Price List repairs older
+       * stores, only when there is something to repair, and the repair goes
+       * up with the shop's own save. It used to publish straight to the
+       * cloud on every opening: a phone with an older price list put it back
+       * over newer prices just by being looked at, even while its own sync
+       * was held for review (Washlie, 25 Nov, 4:43pm).
        */
-      void publishStorefrontToCloud(published).catch(error =>
-        console.warn('[StoreFlow Laundry] Initial storefront publish failed:', error)
-      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.products]);

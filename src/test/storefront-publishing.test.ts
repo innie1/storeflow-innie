@@ -42,11 +42,14 @@ describe('customer storefront publishing', () => {
     expect(source).toContain('STOREFLOW_AUTO_STOREFRONT_PUBLISH');
   });
 
-  it('publishes a laundry price list when it opens and whenever prices change', () => {
+  it('sends a laundry price list with the shop save, never straight to the cloud beside it', () => {
+    // Two quick edits sent straight up raced, and the shop's own save was
+    // then refused for a price list it had never sent (Washlie, 25 Nov).
     const source = readSource('src/components/laundry/LaundryPricingSetup.tsx');
-    expect(source).toContain('STOREFLOW_LAUNDRY_OPEN_PUBLISH');
-    expect(source).toContain('STOREFLOW_LAUNDRY_PRICE_PUBLISH');
-    expect(source).toContain('publishStorefrontToCloud(published)');
+    expect(source).toContain('STOREFLOW_LAUNDRY_OPEN_REPAIR');
+    expect(source).toContain('STOREFLOW_LAUNDRY_PRICE_SYNC');
+    expect(source).toContain('saveStore(published)');
+    expect(source).not.toMatch(/publishStorefrontToCloud\(/);
   });
 
   it('keeps every garment edit and delete handler wired up', () => {
