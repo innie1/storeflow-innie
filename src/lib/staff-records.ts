@@ -1,4 +1,4 @@
-import type { Customer, PieceWorkEntry, ServiceChangeRequest, StaffExpenseRequest, StoreData } from '@/types/store';
+import type { Customer, PendingPayment, PieceWorkEntry, Sale, ServiceChangeRequest, StaffExpenseRequest, StoreData } from '@/types/store';
 import { addArrivedServiceChanges } from '@/lib/service-changes';
 import { rpcAheadOfTypes } from '@/integrations/supabase/client';
 import { settleArrivedStaffExpenses } from '@/lib/staff-expenses';
@@ -37,6 +37,14 @@ export interface ArrivedPayment {
   serviceId?: string;
   serviceName?: string;
   promisedFor?: string;
+  /**
+   * The cloud already wrote it into the books (since 25 Nov: the trigger in
+   * 20261125180000_cloud_books_worker_payments). Its sale and the bundle's
+   * Money Owed line come with it, as the cloud has them.
+   */
+  booked?: boolean;
+  sale?: Sale | null;
+  owed?: PendingPayment | null;
 }
 
 export interface Arrived {
@@ -70,6 +78,28 @@ export function addArrivedPayments(store: StoreData, payments: ArrivedPayment[] 
   const booked: string[] = [];
   for (const payment of fresh) {
     booked.push(payment.id);
+    if (payment.booked && payment.owed?.id) {
+      const cloudOwed = payment.owed;
+      const list = next.pendingPayments || [];
+      const here = list.find(entry => entry.id === cloudOwed.id);
+      // The cloud's line has every payment this phone has on the bundle: it
+      // is the same line, further on. Taken as it is - booking it again here
+      // would count the money twice.
+      const covered = !here || (here.events || []).every(event =>
+        (cloudOwed.events || []).some(cloud => cloud.date === event.date && Number(cloud.amount) === Number(event.amount)));
+      if (covered) {
+        const line = here?.customerId && !cloudOwed.customerId ? { ...cloudOwed, customerId: here.customerId } : cloudOwed;
+        next = { ...next, pendingPayments: here ? list.map(entry => entry.id === line.id ? line : entry) : [...list, line] };
+        const sale = payment.sale;
+        if (sale?.id) {
+          const sales = next.sales || [];
+          next = { ...next, sales: sales.some(item => item.id === sale.id) ? sales.map(item => item.id === sale.id ? sale : item) : [...sales, sale] };
+        }
+        continue;
+      }
+      // This phone took money on the same bundle that the cloud has not seen:
+      // booked here as before, and the sync will ask about the difference.
+    }
     const amount = Math.max(0, Number(payment.amount) || 0);
     const owedHere = (next.pendingPayments || []).some(entry => entry.id === `laundry-${payment.clientRef}`);
     // Taken in with nothing paid, on a bundle this phone already owes on: nothing new.
